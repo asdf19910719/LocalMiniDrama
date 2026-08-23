@@ -10,9 +10,16 @@ const {
 describe('Director host acceptance orchestration', () => {
   it('records running -> interrupted -> pending -> running recovery', () => {
     const calls = [];
+    let reads = 0;
     const service = {
       reconcileRunningJobs() { calls.push('interrupted'); return 1; },
-      getDirectorJob() { calls.push('pending'); return { id: 'job-1', status: 'pending', attempt_number: 1 }; },
+      getDirectorJob() {
+        reads += 1;
+        calls.push(reads === 1 ? 'running' : 'interrupted');
+        return reads === 1
+          ? { id: 'job-1', status: 'running', attempt_number: 1 }
+          : { id: 'job-1', status: 'interrupted', attempt_number: 1 };
+      },
       retryDirectorJob() { calls.push('retry'); return { id: 'job-1', status: 'pending', attempt_number: 1 }; },
       startDirectorJob() { calls.push('running'); return { id: 'job-1', status: 'running', attempt_number: 2 }; },
     };
@@ -21,7 +28,7 @@ describe('Director host acceptance orchestration', () => {
       now: '2026-08-23T00:01:00.000Z',
     });
     assert.deepEqual(result.transitions, ['running', 'interrupted', 'pending', 'running']);
-    assert.deepEqual(calls, ['interrupted', 'pending', 'retry', 'running']);
+    assert.deepEqual(calls, ['running', 'interrupted', 'interrupted', 'retry', 'running']);
   });
 
   it('builds a real timeline command from two selected clips', () => {
