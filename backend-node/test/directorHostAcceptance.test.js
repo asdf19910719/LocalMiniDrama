@@ -10,6 +10,7 @@ const {
   validateTimelineResult,
   validateSourceArtifact,
   createFailureEvidence,
+  completeH3Stage,
 } = require('../scripts/directorHostAcceptance');
 
 describe('Director host acceptance orchestration', () => {
@@ -146,5 +147,18 @@ describe('Director host acceptance orchestration', () => {
     assert.equal(report.gates.timeline_composition, 'failed');
     assert.equal(report.host.baseUrl, 'http://127.0.0.1:8188');
     assert.equal(report.errors[0].message, 'ffmpeg failed');
+  });
+
+  it('moves to timeline preparation immediately after H3 succeeds', () => {
+    const progress = {
+      gates: { restartRetryOnHost: 'passed', realVerifiedH3: 'pending', timelineComposition: 'pending', mp4AndFfprobe: 'pending' },
+      currentGate: 'realVerifiedH3',
+    };
+    completeH3Stage(progress, { status: 'passed' });
+    const report = createFailureEvidence(progress, new Error('source artifact hash mismatch'));
+    assert.equal(report.gates.restart_retry_on_host, 'passed');
+    assert.equal(report.gates.real_verified_h3, 'passed');
+    assert.equal(report.gates.timeline_composition, 'failed');
+    assert.equal(report.gates.mp4_and_ffprobe, 'pending');
   });
 });

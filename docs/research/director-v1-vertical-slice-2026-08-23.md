@@ -20,7 +20,7 @@ node --test test/*.test.js
 npm run build                         # from frontweb
 ```
 
-The backend suite completed with 94 passing tests and 0 failures after the
+The backend suite completed with 95 passing tests and 0 failures after the
 Tasks 5-8 implementation and host-acceptance hardening. The frontend production build completed successfully with Vite after
 installing the locked dependencies with `npm ci`.
 

@@ -6,7 +6,7 @@
   "offline": {
     "backend_tests": {
       "command": "node --test test/*.test.js",
-      "passed": 94,
+      "passed": 95,
       "failed": 0
     },
     "frontend_build": {

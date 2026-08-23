@@ -162,6 +162,11 @@ function createFailureEvidence(progress = {}, error) {
   });
 }
 
+function completeH3Stage(progress, validation) {
+  progress.gates.realVerifiedH3 = validation.status;
+  progress.currentGate = 'timelineComposition';
+}
+
 function loadDirectorSchema(db) {
   const migration = fs.readFileSync(path.resolve(__dirname, '../migrations/23_director_v1.sql'), 'utf8');
   db.exec(migration);
@@ -322,13 +327,13 @@ async function executeAcceptance(options = {}, progress = {}) {
   };
   const h3Validation = validateH3Result({ queue: generated.queue, history: generated.history, ffprobe: generatedProbe });
   progress.workflow.validation = h3Validation;
-  progress.gates.realVerifiedH3 = h3Validation.status;
   const completedJob = service.succeedDirectorJob(db, job.id, {
     artifactPath: generated.artifactPath,
     ffprobe: generatedProbe,
     metadata: { promptId: generated.promptId, workflowId: generated.workflowId, workflowSha256: generated.workflowSha256 },
   });
   progress.completedJob = completedJob;
+  completeH3Stage(progress, h3Validation);
   const generatedArtifact = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(completedJob.artifact_id);
 
   const sourceJob = service.createDirectorJob(db, { input: { imported: true, sourceArtifact }, workflowId: workflow.id, maxAttempts: 1 });
@@ -443,6 +448,7 @@ module.exports = {
   buildTimelineAcceptance,
   createEvidenceReport,
   createFailureEvidence,
+  completeH3Stage,
   applyH3Inputs,
   validateH3Result,
   validateTimelineResult,
