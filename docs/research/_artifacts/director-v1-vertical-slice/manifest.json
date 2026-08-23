@@ -2,7 +2,7 @@
   "schema": "director-v1-evidence-manifest",
   "date": "2026-08-23",
   "branch": "ai-director-v1",
-  "status": "external_validation_partial",
+  "status": "external_validation_passed",
   "offline": {
     "backend_tests": {
       "command": "node --test test/*.test.js",
@@ -51,6 +51,16 @@
     "output_file_size": 1966064,
     "ffprobe_json": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-ffprobe.json",
     "evidence": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json"
+    ,"host_acceptance": {
+      "status": "passed",
+      "evidence": "docs/research/_artifacts/director-v1-vertical-slice/host-acceptance.json",
+      "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
+      "timeline_id": "c91ab268-1892-4aa6-9248-b280f95eaecd",
+      "h3_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+      "timeline_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-timeline.mp4",
+      "h3_output_sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+      "timeline_output_sha256": "3722534d856a7f0a930fa9c6d3c35415e6f5cf0b1d289a52abcf8993eb4528cc"
+    }
   },
   "gates": {
     "workflow_registry": "passed_offline",
@@ -58,7 +68,8 @@
     "candidate_selection": "passed_offline",
     "timeline_validation": "passed_offline",
     "real_verified_h3": "passed",
-    "restart_retry_on_host": "pending",
+    "restart_retry_on_host": "passed",
+    "timeline_composition": "passed",
     "mp4_and_ffprobe": "passed_external"
   }
 }

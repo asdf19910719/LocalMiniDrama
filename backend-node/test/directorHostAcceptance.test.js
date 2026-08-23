@@ -64,4 +64,13 @@ describe('Director host acceptance orchestration', () => {
     assert.equal(report.gates.timeline_composition, 'passed');
     assert.deepEqual(report.timeline.ffprobe, { streams: [], format: { duration: '4' } });
   });
+
+  it('uses the completed job snapshot in the final recovery evidence', () => {
+    const report = createEvidenceReport({
+      recovery: { transitions: ['running', 'interrupted', 'pending', 'running'], job: { status: 'running' } },
+      completedJob: { status: 'succeeded', artifact_id: 'artifact-1' },
+    });
+    assert.equal(report.recovery.job.status, 'succeeded');
+    assert.equal(report.recovery.job.artifact_id, 'artifact-1');
+  });
 });

@@ -1,0 +1,331 @@
+{
+  "schema": "director-v1-host-acceptance",
+  "startedAt": "2026-08-23T05:50:30.331Z",
+  "completedAt": "2026-08-23T06:04:19.269Z",
+  "host": {
+    "baseUrl": "http://127.0.0.1:8188",
+    "systemStatsStatus": 200,
+    "comfyuiVersion": "0.33.1",
+    "gpu": "cuda:0 NVIDIA GeForce RTX 5070 Ti : cudaMallocAsync"
+  },
+  "workflow": {
+    "id": "h3-continuity-v1",
+    "sha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+    "promptId": "d4b26d93-cde7-4623-977d-47733474a1ba",
+    "queue": {
+      "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
+      "number": 45,
+      "node_errors": {}
+    },
+    "history": {
+      "prompt": [
+        45,
+        "d4b26d93-cde7-4623-977d-47733474a1ba",
+        {
+          "1": {
+            "class_type": "UNETLoader",
+            "inputs": {
+              "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "weight_dtype": "default"
+            }
+          },
+          "2": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+              "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+              "type": "minimax",
+              "device": "default"
+            }
+          },
+          "3": {
+            "class_type": "VAELoader",
+            "inputs": {
+              "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+            }
+          },
+          "4": {
+            "class_type": "VAELoader",
+            "inputs": {
+              "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          },
+          "5": {
+            "class_type": "MiniMaxH3Director",
+            "inputs": {
+              "model": [
+                "1",
+                0
+              ],
+              "video_vae": [
+                "3",
+                0
+              ],
+              "audio_vae": [
+                "4",
+                0
+              ],
+              "clip": [
+                "2",
+                0
+              ],
+              "task_type": "t2v — 文生视频(Text to Video)",
+              "global_prompt": "Live-action cinematic short film at a Chinese street-corner steamed-bun stall at dawn. Consistent characters across all shots: a stocky middle-aged vendor in a white apron and grey beanie; a young woman in a beige trench coat with a black shoulder bag. Warm bulb light under a canvas awning, thin morning mist, natural color grade.",
+              "bd_grp_sample": "采样设置",
+              "cfg": 1,
+              "seed": 42,
+              "frame_rate": 24,
+              "width": 864,
+              "height": 480,
+              "ref_max_size": 864,
+              "total_frames": 372,
+              "timeline_data": "{\"version\": 4, \"editMode\": \"segment\", \"timelineMode\": \"gen_blank\", \"totalFrames\": 372, \"frameRate\": 24.0, \"width\": 864, \"height\": 480, \"refMaxSize\": 864, \"output\": {\"mode\": \"fixed\", \"longEdge\": 864, \"width\": 864, \"height\": 480, \"maxExportFrames\": 0, \"exportMode\": \"all\", \"continuityEnabled\": true, \"continuityOverlapFrames\": 22}, \"videoClips\": [], \"video\": {\"fileName\": \"\", \"videoFile\": \"\", \"subfolder\": \"\", \"type\": \"input\", \"frames\": [], \"frameMap\": []}, \"global\": {\"taskType\": \"t2v — 文生视频(Text to Video)\", \"prompt\": \"Live-action cinematic short film at a Chinese street-corner steamed-bun stall at dawn. Consistent characters across all shots: a stocky middle-aged vendor in a white apron and grey beanie; a young woman in a beige trench coat with a black shoulder bag. Warm bulb light under a canvas awning, thin morning mist, natural color grade.\", \"refs\": [], \"referenceVideo\": {}, \"continuousReference\": false, \"genImage\": {\"imageFile\": \"\"}}, \"segments\": [{\"id\": \"s0\", \"start\": 0, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, early-morning blue-hour light with thin mist over a quiet city street corner. A medium shot frames a steamed-bun stall with stacked bamboo steamers, warm bulb light glowing under its canvas awning. A red paper sign reading \\\"老街包子\\\" hangs on the stall front. The stocky middle-aged vendor in a white apron and grey beanie (S1) lifts the lid off the top steamer, releasing a thick cloud of white steam, and calls out with a hearty voice: <d>[Chinese] 刚出锅的包子，热乎的!</d> [Shot 2] At 00:03.000, the camera cuts to a close-up of the open steamer as the vendor's hand picks up a bun with bamboo tongs, steam curling around his wrist.\\n\\noverall_soundscape: The street is quiet with distant bicycle bells and a passing bus. The steamer lid scrapes open with a wooden clatter, followed by the soft hiss of rushing steam and the light clink of bamboo tongs.\\n\\nnon_diegetic_music: A gentle guzheng-and-flute motif at a slow tempo enters quietly under the steam and holds a warm sustained note.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": false}, {\"id\": \"s1\", \"start\": 124, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, the same street-corner bun stall continues under the canvas awning, morning mist thinning as the sky brightens. A young woman in a beige trench coat with a black shoulder bag hurries into frame and stops at the stall counter, slightly out of breath. The stocky vendor in the white apron and grey beanie (S1) looks up and says warmly: <d>[Chinese] 姑娘，来几个?</d> [Shot 2] At 00:02.500, the camera cuts to a medium close-up as she hands over a folded bill and answers with a smile: <d>[Chinese] 两个，谢谢叔!</d> The vendor drops two buns into a paper bag and passes it across the counter.\\n\\noverall_soundscape: Hurried footsteps approach over the pavement, followed by the rustle of a paper bag, the clink of coins in a tin box, and soft morning traffic passing behind them.\\n\\nnon_diegetic_music: The gentle guzheng-and-flute motif continues at a slow tempo, rising slightly in brightness as the exchange completes.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": true}, {\"id\": \"s2\", \"start\": 248, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, at the same bun stall counter, the young woman in the beige trench coat holds the warm paper bag with both hands. She takes a bite of a bun, cheeks rounding, and her eyes narrow with satisfaction as she chews. [Shot 2] At 00:02.000, the camera cuts to a low-angle wide shot as she turns and walks down the street into softening golden dawn light, her breath visible in the cool air. Behind her, the vendor lifts the next steamer lid and another burst of white steam rises into the brightening sky.\\n\\noverall_soundscape: A soft crunch as she bites the bun, followed by light cheerful footsteps moving away. Behind her, the steamer lid scrapes again and steam hisses, under a gradually waking street with distant scooter engines.\\n\\nnon_diegetic_music: The guzheng-and-flute motif resolves into a warm closing phrase at a slow tempo, fading out as she walks into the dawn light.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": true}], \"gen\": {\"defaultFrameCount\": 124}, \"runSelectEnabled\": false, \"runSelection\": []}",
+              "bd_grp_advanced": "高级采样 Advanced",
+              "steps": 25,
+              "sampler": "res_multistep",
+              "scheduler": "simple",
+              "shift_video": 12,
+              "shift_audio": 3,
+              "bd_grp_perf": "性能 Performance",
+              "clear_vram_between_segments": true,
+              "export_source_images": false
+            }
+          },
+          "6": {
+            "class_type": "CreateVideo",
+            "inputs": {
+              "images": [
+                "5",
+                0
+              ],
+              "fps": [
+                "5",
+                2
+              ],
+              "audio": [
+                "5",
+                1
+              ],
+              "bit_depth": 8
+            }
+          },
+          "7": {
+            "class_type": "SaveVideo",
+            "inputs": {
+              "video": [
+                "6",
+                0
+              ],
+              "filename_prefix": "video/H3Director_baozi_test",
+              "format": "auto",
+              "codec": "auto"
+            }
+          }
+        },
+        {
+          "director_workflow_id": "h3-continuity-v1",
+          "director_workflow_sha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+          "inputs": {
+            "prompt": "director host acceptance",
+            "seed": 42,
+            "continuityEnabled": true,
+            "continuityOverlapFrames": 22
+          },
+          "client_id": "director-04650b59-9df0-4ea2-b491-e32cc399d73c",
+          "create_time": 1787464230364
+        },
+        [
+          "7"
+        ]
+      ],
+      "outputs": {
+        "7": {
+          "images": [
+            {
+              "filename": "H3Director_baozi_test_00003_.mp4",
+              "subfolder": "video",
+              "type": "output"
+            }
+          ],
+          "animated": [
+            true
+          ]
+        }
+      },
+      "status": {
+        "status_str": "success",
+        "completed": true,
+        "messages": [
+          [
+            "execution_start",
+            {
+              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
+              "timestamp": 1787464230365
+            }
+          ],
+          [
+            "execution_cached",
+            {
+              "nodes": [
+                "2",
+                "3",
+                "4"
+              ],
+              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
+              "timestamp": 1787464230366
+            }
+          ],
+          [
+            "execution_success",
+            {
+              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
+              "timestamp": 1787465057529
+            }
+          ]
+        ]
+      },
+      "meta": {
+        "7": {
+          "node_id": "7",
+          "display_node": "7",
+          "parent_node": null,
+          "real_node_id": "7"
+        }
+      }
+    },
+    "inputs": {
+      "seed": 42,
+      "continuityEnabled": true,
+      "continuityOverlapFrames": 22
+    }
+  },
+  "recovery": {
+    "transitions": [
+      "running",
+      "interrupted",
+      "pending",
+      "running"
+    ],
+    "job": {
+      "id": "a6d9ff15-6e24-478c-95bc-328bef6c174b",
+      "status": "succeeded",
+      "attempt_number": 2,
+      "max_attempts": 2,
+      "lease_expires_at": null,
+      "error_code": null,
+      "error_message": null,
+      "input_json": "{\"prompt\":\"director host acceptance\",\"seed\":42,\"continuityEnabled\":true,\"continuityOverlapFrames\":22}",
+      "workflow_id": "h3-continuity-v1",
+      "workflow_version": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+      "artifact_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+      "artifact_id": "d0643895-8b7d-4788-837f-6ad1b8468fde",
+      "created_at": "2026-08-23T05:50:30.359Z",
+      "updated_at": "2026-08-23T06:04:19.269Z",
+      "started_at": "2026-08-23T00:00:00.000Z",
+      "completed_at": "2026-08-23T06:04:19.269Z",
+      "input": {
+        "prompt": "director host acceptance",
+        "seed": 42,
+        "continuityEnabled": true,
+        "continuityOverlapFrames": 22
+      }
+    }
+  },
+  "artifact": {
+    "path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+    "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+    "fileSize": 1966064,
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "profile": "High",
+          "codec_type": "video",
+          "width": 864,
+          "height": 480,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "avg_frame_rate": "24/1"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "profile": "LC",
+          "codec_type": "audio",
+          "sample_rate": "32000",
+          "channels": 2,
+          "channel_layout": "stereo",
+          "r_frame_rate": "0/0",
+          "avg_frame_rate": "0/0"
+        }
+      ],
+      "format": {
+        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "15.292000",
+        "size": "1966064",
+        "bit_rate": "1028545"
+      }
+    }
+  },
+  "timeline": {
+    "id": "c91ab268-1892-4aa6-9248-b280f95eaecd",
+    "outputPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-timeline.mp4",
+    "outputSha256": "3722534d856a7f0a930fa9c6d3c35415e6f5cf0b1d289a52abcf8993eb4528cc",
+    "clips": [
+      {
+        "artifactId": "2f6f8a14-895b-49e0-93c4-c2c56a9550bd",
+        "artifactPath": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+        "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+        "startTime": 0,
+        "duration": 4,
+        "sourceOffset": 0,
+        "sourceDuration": 4,
+        "transition": null
+      },
+      {
+        "artifactId": "d0643895-8b7d-4788-837f-6ad1b8468fde",
+        "artifactPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+        "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+        "startTime": 4,
+        "duration": 4,
+        "sourceOffset": 0,
+        "sourceDuration": 4,
+        "transition": null
+      }
+    ],
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "profile": "High",
+          "codec_type": "video",
+          "width": 864,
+          "height": 480,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "avg_frame_rate": "24/1"
+        }
+      ],
+      "format": {
+        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-timeline.mp4",
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "8.000000",
+        "size": "752794",
+        "bit_rate": "752794"
+      }
+    }
+  },
+  "gates": {
+    "real_verified_h3": "passed",
+    "restart_retry_on_host": "passed",
+    "timeline_composition": "passed",
+    "mp4_and_ffprobe": "passed"
+  },
+  "errors": []
+}

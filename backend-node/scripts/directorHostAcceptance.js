@@ -117,6 +117,7 @@ function createEvidenceReport({
   host = {},
   workflow = {},
   recovery = {},
+  completedJob = null,
   artifact = {},
   timeline = {},
   ffprobe = null,
@@ -129,7 +130,7 @@ function createEvidenceReport({
     completedAt,
     host,
     workflow,
-    recovery,
+    recovery: completedJob ? { ...recovery, job: completedJob } : recovery,
     artifact,
     timeline: { ...timeline, ffprobe },
     gates: {
@@ -265,6 +266,7 @@ async function runAcceptance(options = {}) {
       inputs: { seed: 42, continuityEnabled: true, continuityOverlapFrames: 22 },
     },
     recovery,
+    completedJob,
     artifact: {
       path: generated.artifactPath,
       sha256: generated.sha256,
