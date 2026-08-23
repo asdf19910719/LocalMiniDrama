@@ -82,6 +82,7 @@ async function createGroup() {
   error.value = ''
   try {
     group.value = await directorAPI.createCandidateGroup(props.shotId, candidates)
+    group.value = await directorAPI.reviewCandidateGroup(group.value.id)
   } catch (err) {
     error.value = err?.message || 'Unable to create candidate group'
   } finally {

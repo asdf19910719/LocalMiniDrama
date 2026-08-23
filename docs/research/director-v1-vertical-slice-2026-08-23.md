@@ -70,13 +70,21 @@ at `/drama/2/canvas`. The canvas rendered the existing drama, and clicking the
 real storyboard node opened the `Director candidate review` panel for shot 3.
 Submitting a nonexistent artifact ID displayed the backend validation error
 `Artifact not found` in the panel, confirming the UI error path. The local
-database contained no Director artifact rows, so the positive candidate
-creation/selection path was not exercised without fabricating test data.
+database was temporarily populated with the two real r4 MP4 artifacts listed
+above (then restored from an online SQLite backup after the smoke run). The UI
+created a two-candidate group, automatically advanced it from `pending` through
+`running` to `review`, and selecting the first candidate changed the group to
+`selected`, with the selected candidate marked `selected` and the other marked
+`rejected`. The browser network log confirmed the calls to
+`POST /director/shots/3/candidates`, `POST /director/candidates/:groupId/review`,
+and `POST /director/candidates/:groupId/select`. A final database check found
+zero temporary Director jobs, artifacts, groups, or candidates.
 
 ## Known Limitations
 
 - `state_anchor` and `composition_only` remain role-gated experimental paths.
-- The browser smoke positive path still requires a populated candidate artifact
-  set; the panel rendering and invalid-artifact error path are verified.
+- Browser smoke used a temporary, backed-up artifact set; the positive path is
+  verified, but the normal production workflow still needs a Director job
+  runner to populate artifacts without test-data injection.
 - `docs/research/go-no-go-review.md` remains a separate product-level review;
   this report now contains the complete Director V1 host evidence.

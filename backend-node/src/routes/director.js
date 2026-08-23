@@ -26,6 +26,25 @@ function routes(db, log) {
         response.internalError(res, error.message);
       }
     },
+    reviewCandidates: (req, res) => {
+      try {
+        let group = candidateService.getCandidateGroup(db, req.params.groupId);
+        if (!group) return response.notFound(res, 'candidate group not found');
+        if (group.status === 'pending') {
+          group = candidateService.startCandidateGroup(db, group.id);
+        }
+        if (group.status === 'running') {
+          group = candidateService.moveCandidateGroupToReview(db, group.id);
+        }
+        if (group.status !== 'review') {
+          throw new Error(`Candidate group cannot enter review from ${group.status}`);
+        }
+        response.success(res, group);
+      } catch (error) {
+        log.error('director candidate group review', { error: error.message });
+        response.badRequest(res, error.message);
+      }
+    },
     selectCandidate: (req, res) => {
       try {
         const group = candidateService.selectCandidate(db, req.params.groupId, req.body?.candidateId || req.body?.candidate_id, {
