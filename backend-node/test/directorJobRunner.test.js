@@ -7,7 +7,7 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 
 const { createGpuMutex } = require('../src/director/gpuMutex');
-const { runDirectorJob } = require('../src/director/directorJobRunner');
+const { createDirectorJobRunner, runDirectorJob } = require('../src/director/directorJobRunner');
 
 const SCHEMA = `
   CREATE TABLE director_jobs (
@@ -309,5 +309,39 @@ describe('Director job runner', () => {
     assert.equal(getArtifact(db, successful.jobId).status, 'ready');
     assert.equal(getGroup(db, successful.groupId).status, 'review');
     assert.equal(gpuMutex.inspect(), null);
+  });
+
+  it('queues GPU jobs in FIFO order and drain waits for all queued work', async () => {
+    const first = seedPendingJob(db, { shotId: 'shot-queue', groupId: id() });
+    const second = seedPendingJob(db, { shotId: 'shot-queue', groupId: first.groupId });
+    const events = [];
+    let active = 0;
+    const service = {
+      async runWorkflow(input) {
+        active += 1;
+        assert.equal(active, 1);
+        events.push(`start:${input.candidateId}`);
+        await new Promise((resolve) => setImmediate(resolve));
+        const artifactPath = path.join(outputDir, `${input.candidateId}.mp4`);
+        fs.writeFileSync(artifactPath, input.candidateId);
+        events.push(`finish:${input.candidateId}`);
+        active -= 1;
+        return { artifactPath, workflowId: 'h3-continuity-v1', workflowSha256: 'sha256:test' };
+      },
+    };
+    const runner = createDirectorJobRunner({ db, service, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
+
+    assert.equal(runner.enqueue(first.jobId), first.jobId);
+    assert.equal(runner.enqueue(second.jobId), second.jobId);
+    await runner.drain();
+
+    assert.deepEqual(events, [
+      `start:${first.candidateId}`,
+      `finish:${first.candidateId}`,
+      `start:${second.candidateId}`,
+      `finish:${second.candidateId}`,
+    ]);
+    assert.equal(getJob(db, first.jobId).status, 'succeeded');
+    assert.equal(getJob(db, second.jobId).status, 'succeeded');
   });
 });

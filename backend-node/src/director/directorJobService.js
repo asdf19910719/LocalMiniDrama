@@ -30,6 +30,15 @@ function getDirectorJob(db, jobId) {
   return rowToJob(db.prepare('SELECT * FROM director_jobs WHERE id = ?').get(jobId));
 }
 
+function getDirectorJobDetails(db, jobId) {
+  const job = getDirectorJob(db, jobId);
+  if (!job) return null;
+  return {
+    ...job,
+    artifacts: db.prepare('SELECT * FROM director_artifacts WHERE job_id = ? ORDER BY version, created_at').all(jobId),
+  };
+}
+
 function requireJob(db, jobId) {
   const job = getDirectorJob(db, jobId);
   if (!job) throw new Error(`Director job not found: ${jobId}`);
@@ -159,6 +168,7 @@ function reconcileRunningJobs(db, { now } = {}) {
 module.exports = {
   createDirectorJob,
   getDirectorJob,
+  getDirectorJobDetails,
   startDirectorJob,
   failDirectorJob,
   retryDirectorJob,

@@ -98,6 +98,46 @@ function retryFailedCandidate(db, groupId, candidateId, now) {
   return db.prepare('SELECT * FROM director_candidates WHERE id = ?').get(candidateId);
 }
 
+function markCandidateFailed(db, jobId, error = {}, now) {
+  const updatedAt = timestamp(now);
+  const code = error.code || 'DIRECTOR_JOB_FAILED';
+  const message = error.message || String(error || 'Director job failed');
+  db.prepare(`UPDATE director_candidates
+    SET status = 'failed', error_code = ?, error_message = ?, updated_at = ?
+    WHERE job_id = ?`).run(code, message, updatedAt, jobId);
+  return db.prepare('SELECT * FROM director_candidates WHERE job_id = ?').get(jobId) || null;
+}
+
+function finalizeCandidateGroup(db, groupId, now) {
+  const group = requireGroup(db, groupId);
+  if (group.status === 'selected') return group;
+
+  const candidates = db.prepare(`SELECT candidate.*, artifact.status AS artifact_status
+    FROM director_candidates candidate
+    LEFT JOIN director_artifacts artifact ON artifact.id = candidate.artifact_id
+    WHERE candidate.group_id = ?`).all(groupId);
+  if (candidates.some((candidate) => ['pending', 'running'].includes(candidate.status))) {
+    return getCandidateGroup(db, groupId);
+  }
+
+  const updatedAt = timestamp(now);
+  const hasReady = candidates.some((candidate) => candidate.artifact_status === 'ready');
+  const transaction = db.transaction(() => {
+    if (hasReady) {
+      db.prepare(`UPDATE director_candidates SET status = 'review', updated_at = ?
+        WHERE group_id = ? AND artifact_id IN
+          (SELECT id FROM director_artifacts WHERE status = 'ready')`).run(updatedAt, groupId);
+      db.prepare("UPDATE director_candidate_groups SET status = 'review', updated_at = ? WHERE id = ? AND status <> 'selected'")
+        .run(updatedAt, groupId);
+    } else {
+      db.prepare("UPDATE director_candidate_groups SET status = 'failed', updated_at = ? WHERE id = ? AND status <> 'selected'")
+        .run(updatedAt, groupId);
+    }
+  });
+  transaction();
+  return getCandidateGroup(db, groupId);
+}
+
 module.exports = {
   createCandidateGroup,
   startCandidateGroup,
@@ -105,4 +145,6 @@ module.exports = {
   getCandidateGroup,
   selectCandidate,
   retryFailedCandidate,
+  markCandidateFailed,
+  finalizeCandidateGroup,
 };
