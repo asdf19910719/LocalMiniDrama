@@ -23,6 +23,10 @@ function loadConfig() {
   if (!parsed?.app?.name) {
     throw new Error('Invalid config: missing app section');
   }
+  parsed.director = {
+    workflow_registry_path: parsed.director?.workflow_registry_path || './configs/director-workflows.json',
+    allow_experimental: parsed.director?.allow_experimental === true,
+  };
   return parsed;
 }
 

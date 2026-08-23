@@ -46,3 +46,6 @@ image_proxy:
   upload_timeout_seconds: 180
   upload_max_attempts: 2
   # upload_url: https://imageproxy.zhongzhuan.chat/api/upload
+director:
+  workflow_registry_path: ./configs/director-workflows.json
+  allow_experimental: false
