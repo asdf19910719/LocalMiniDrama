@@ -20,8 +20,8 @@ node --test test/*.test.js
 npm run build                         # from frontweb
 ```
 
-The backend suite completed with 79 passing tests and 0 failures after the
-Tasks 5-8 offline implementation. The frontend production build completed successfully with Vite after
+The backend suite completed with 95 passing tests and 0 failures after the
+Tasks 5-8 implementation and host-acceptance hardening. The frontend production build completed successfully with Vite after
 installing the locked dependencies with `npm ci`.
 
 Migration verification used an in-memory SQLite database and created:
@@ -49,13 +49,24 @@ temporary FFmpeg Essentials 9.0.1 `ffprobe.exe` supplied the JSON metadata.
 The probe binary is external and intentionally not committed.
 
 Restart/retry recovery on the live host and an actual `timeline_v1` composition
-remain pending. The offline tests cover those contracts, but they are not a
-substitute for a host restart and a real composed timeline output.
+were then exercised by the repeatable host acceptance runner. The final run used
+seed `1726082341`, queue number 48, and prompt ID
+`2eb0865b-ee2a-4591-9d64-e41e90fc4358`. Its ComfyUI history cached only model
+loader nodes 1-4; `MiniMaxH3Director` node 5 executed freshly. The run recorded
+the exact `running -> interrupted -> pending -> running` recovery sequence,
+completed the retry successfully, composed two selected four-second clips into
+an eight-second MP4, and probed the final output. Full evidence is in
+[`host-acceptance.json`](./_artifacts/director-v1-vertical-slice/host-acceptance.json).
+
+The final host-acceptance H3 output hash is
+`cef5578d55f0ca17c1f53dbd9d7ea7b6a9af396cc95947f7d3696141d83ce166` and the
+timeline output hash is
+`5d71073c539edccf9333b09ba4f4fddcff7d1be9c7b4044b486dedd36c1c199d`.
 
 ## Known Limitations
 
 - `state_anchor` and `composition_only` remain role-gated experimental paths.
 - The browser smoke flow still requires a running backend plus a populated
   candidate artifact set.
-- `docs/research/go-no-go-review.md` is intentionally not changed while the
-  live restart/retry and composed timeline gates remain pending.
+- `docs/research/go-no-go-review.md` remains a separate product-level review;
+  this report now contains the complete Director V1 host evidence.

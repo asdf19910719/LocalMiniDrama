@@ -2,11 +2,11 @@
   "schema": "director-v1-evidence-manifest",
   "date": "2026-08-23",
   "branch": "ai-director-v1",
-  "status": "external_validation_partial",
+  "status": "external_validation_passed",
   "offline": {
     "backend_tests": {
       "command": "node --test test/*.test.js",
-      "passed": 79,
+      "passed": 95,
       "failed": 0
     },
     "frontend_build": {
@@ -50,7 +50,22 @@
     "output_sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
     "output_file_size": 1966064,
     "ffprobe_json": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-ffprobe.json",
-    "evidence": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json"
+    "evidence": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json",
+    "host_acceptance": {
+      "status": "passed",
+      "evidence": "docs/research/_artifacts/director-v1-vertical-slice/host-acceptance.json",
+      "prompt_id": "2eb0865b-ee2a-4591-9d64-e41e90fc4358",
+      "queue_number": 48,
+      "seed": 1726082341,
+      "h3_node_id": "5",
+      "cached_node_ids": ["1", "2", "3", "4"],
+      "h3_node_fresh_execution": true,
+      "timeline_id": "f4057ec7-a89d-475c-9aeb-5f355766f79c",
+      "h3_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r4\\director-host-acceptance-h3.mp4",
+      "timeline_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r4\\director-host-acceptance-timeline.mp4",
+      "h3_output_sha256": "cef5578d55f0ca17c1f53dbd9d7ea7b6a9af396cc95947f7d3696141d83ce166",
+      "timeline_output_sha256": "5d71073c539edccf9333b09ba4f4fddcff7d1be9c7b4044b486dedd36c1c199d"
+    }
   },
   "gates": {
     "workflow_registry": "passed_offline",
@@ -58,7 +73,8 @@
     "candidate_selection": "passed_offline",
     "timeline_validation": "passed_offline",
     "real_verified_h3": "passed",
-    "restart_retry_on_host": "pending",
+    "restart_retry_on_host": "passed",
+    "timeline_composition": "passed",
     "mp4_and_ffprobe": "passed_external"
   }
 }
