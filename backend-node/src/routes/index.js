@@ -21,6 +21,7 @@ const assetRoutes = require('./assets');
 const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
+const directorRoutes = require('./director');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -47,6 +48,7 @@ function setupRouter(cfg, db, log) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
+  const director = directorRoutes(db, log);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -309,6 +311,11 @@ function setupRouter(cfg, db, log) {
   r.get('/settings/prompts', promptOverrides.list);
   r.put('/settings/prompts/:key', promptOverrides.update);
   r.delete('/settings/prompts/:key', promptOverrides.reset);
+
+  // ---------- AI Director candidate review ----------
+  r.post('/director/shots/:shotId/candidates', director.createCandidates);
+  r.get('/director/candidates/:groupId', director.getCandidates);
+  r.post('/director/candidates/:groupId/select', director.selectCandidate);
 
   // ---------- scene model map ----------
   r.get('/scene-model-map', sceneModelMap.list);

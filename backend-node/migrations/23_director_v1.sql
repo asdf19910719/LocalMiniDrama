@@ -39,3 +39,32 @@ CREATE TABLE IF NOT EXISTS director_artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_director_artifacts_job
   ON director_artifacts(job_id, version);
+
+CREATE TABLE IF NOT EXISTS director_candidate_groups (
+  id TEXT PRIMARY KEY,
+  shot_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  selected_candidate_id TEXT,
+  selected_artifact_id TEXT,
+  selected_by TEXT,
+  selected_at TEXT,
+  selection_reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS director_candidates (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  job_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_code TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(group_id, artifact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_director_candidates_group
+  ON director_candidates(group_id, status);
