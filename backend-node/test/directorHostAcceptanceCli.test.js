@@ -15,6 +15,7 @@ describe('Director host acceptance CLI utilities', () => {
       '--evidence', 'evidence.json',
       '--source-artifact', 'source.mp4',
       '--source-sha256', 'abc123',
+      '--seed', '123456',
       '--force',
     ]);
     assert.deepEqual(options, {
@@ -23,6 +24,7 @@ describe('Director host acceptance CLI utilities', () => {
       evidence: 'evidence.json',
       sourceArtifact: 'source.mp4',
       sourceSha256: 'abc123',
+      seed: 123456,
       force: true,
     });
   });

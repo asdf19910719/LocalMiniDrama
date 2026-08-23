@@ -9,6 +9,7 @@ const {
   validateH3Result,
   validateTimelineResult,
   validateSourceArtifact,
+  createFailureEvidence,
 } = require('../scripts/directorHostAcceptance');
 
 describe('Director host acceptance orchestration', () => {
@@ -117,5 +118,33 @@ describe('Director host acceptance orchestration', () => {
   it('verifies source artifact provenance when an expected hash is supplied', () => {
     assert.throws(() => validateSourceArtifact({ actualSha256: 'a'.repeat(64), expectedSha256: 'b'.repeat(64) }), /hash/i);
     assert.doesNotThrow(() => validateSourceArtifact({ actualSha256: 'a'.repeat(64), expectedSha256: 'A'.repeat(64) }));
+  });
+
+  it('rejects host evidence when the H3 generation node was cached', () => {
+    assert.throws(() => validateH3Result({
+      queue: { node_errors: {} },
+      history: {
+        prompt: [1, 'prompt-id', { '5': { class_type: 'MiniMaxH3Director' } }],
+        status: { status_str: 'success', completed: true, messages: [['execution_cached', { nodes: ['5'] }]] },
+      },
+      ffprobe: {
+        streams: [{ codec_type: 'video', codec_name: 'h264', width: 864, height: 480 }, { codec_type: 'audio', codec_name: 'aac' }],
+        format: { duration: '15' },
+      },
+    }), /cached/i);
+  });
+
+  it('preserves passed stages and marks only the active gate failed', () => {
+    const report = createFailureEvidence({
+      host: { baseUrl: 'http://127.0.0.1:8188' },
+      recovery: { transitions: ['running', 'interrupted', 'pending', 'running'] },
+      gates: { restartRetryOnHost: 'passed', realVerifiedH3: 'passed', timelineComposition: 'pending', mp4AndFfprobe: 'pending' },
+      currentGate: 'timelineComposition',
+    }, new Error('ffmpeg failed'));
+    assert.equal(report.gates.restart_retry_on_host, 'passed');
+    assert.equal(report.gates.real_verified_h3, 'passed');
+    assert.equal(report.gates.timeline_composition, 'failed');
+    assert.equal(report.host.baseUrl, 'http://127.0.0.1:8188');
+    assert.equal(report.errors[0].message, 'ffmpeg failed');
   });
 });

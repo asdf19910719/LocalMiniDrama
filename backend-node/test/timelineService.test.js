@@ -58,6 +58,7 @@ describe('Director timeline v1', () => {
     const row = createTimeline(db, timeline, { outputPath: '/tmp/timeline.mp4' });
     assert.equal(row.version, 'timeline_v1');
     assert.equal(JSON.parse(row.input_json).clips[1].startTime, 2);
+    assert.deepEqual(JSON.parse(row.manifest_json).commandArgs, command.args);
   });
 
   it('rejects gaps, overlaps, non-selected artifacts, duplicate audio, and mismatched media', () => {

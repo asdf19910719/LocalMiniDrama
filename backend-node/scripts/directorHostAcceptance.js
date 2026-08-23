@@ -29,6 +29,7 @@ function parseArgs(argv) {
     '--source-sha256': 'sourceSha256',
     '--ffprobe': 'ffprobePath',
     '--ffmpeg': 'ffmpegPath',
+    '--seed': 'seed',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -40,7 +41,13 @@ function parseArgs(argv) {
     if (!key) throw new Error(`Unknown argument: ${arg}`);
     const value = argv[index + 1];
     if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
-    result[key] = value;
+    if (key === 'seed') {
+      const seed = Number(value);
+      if (!Number.isSafeInteger(seed)) throw new Error('--seed requires an integer');
+      result[key] = seed;
+    } else {
+      result[key] = value;
+    }
     index += 1;
   }
   return result;
@@ -144,6 +151,17 @@ function createEvidenceReport({
   };
 }
 
+function createFailureEvidence(progress = {}, error) {
+  const gates = { ...(progress.gates || {}) };
+  if (progress.currentGate) gates[progress.currentGate] = 'failed';
+  return createEvidenceReport({
+    ...progress,
+    completedAt: new Date().toISOString(),
+    gates,
+    errors: [{ message: error.message, stack: error.stack }],
+  });
+}
+
 function loadDirectorSchema(db) {
   const migration = fs.readFileSync(path.resolve(__dirname, '../migrations/23_director_v1.sql'), 'utf8');
   db.exec(migration);
@@ -186,6 +204,17 @@ function validateH3Result({ queue, history, ffprobe, width = 864, height = 480 }
   const historyStatus = history?.status || {};
   if (historyStatus.status_str !== 'success' || historyStatus.completed !== true) throw new Error('H3 output history did not complete successfully');
   if (queue?.node_errors && Object.keys(queue.node_errors).length > 0) throw new Error('H3 output contains node errors');
+  const prompt = history?.prompt?.[2] || {};
+  const h3NodeIds = Object.entries(prompt)
+    .filter(([, node]) => node?.class_type === 'MiniMaxH3Director')
+    .map(([nodeId]) => String(nodeId));
+  const cachedNodeIds = new Set((historyStatus.messages || [])
+    .filter(message => message?.[0] === 'execution_cached')
+    .flatMap(message => message?.[1]?.nodes || [])
+    .map(String));
+  if (h3NodeIds.some(nodeId => cachedNodeIds.has(nodeId))) {
+    throw new Error('H3 generation node was cached; fresh host inference is required');
+  }
   const video = (ffprobe?.streams || []).find(stream => stream.codec_type === 'video');
   const audio = (ffprobe?.streams || []).find(stream => stream.codec_type === 'audio');
   if (!video || video.codec_name !== 'h264' || Number(video.width) !== width || Number(video.height) !== height) {
@@ -215,14 +244,23 @@ function validateSourceArtifact({ actualSha256, expectedSha256 } = {}) {
   return { status: 'passed', sha256: String(actualSha256).toLowerCase() };
 }
 
-async function executeAcceptance(options = {}) {
-  const startedAt = new Date().toISOString();
+async function executeAcceptance(options = {}, progress = {}) {
+  const startedAt = progress.startedAt || new Date().toISOString();
+  progress.startedAt = startedAt;
+  progress.gates ||= {
+    realVerifiedH3: 'pending',
+    restartRetryOnHost: 'pending',
+    timelineComposition: 'pending',
+    mp4AndFfprobe: 'pending',
+  };
+  progress.currentGate ||= 'realVerifiedH3';
   const comfyui = options.comfyui || DEFAULT_COMFYUI;
   const outputDir = path.resolve(options.outputDir || path.join(process.cwd(), 'director-v1-acceptance-output'));
   const evidencePath = path.resolve(options.evidence || path.join(process.cwd(), 'director-v1-host-acceptance.json'));
   const sourceArtifact = options.sourceArtifact ? path.resolve(options.sourceArtifact) : null;
   const ffmpegPath = options.ffmpegPath || getFfmpegPath();
   const ffprobePath = options.ffprobePath || getFfprobePath();
+  const seed = Number.isSafeInteger(options.seed) ? options.seed : crypto.randomInt(0, 2_147_483_648);
   ensureEvidencePathAvailable(evidencePath, { force: options.force });
   if (!sourceArtifact || !fs.existsSync(sourceArtifact)) throw new Error(`Existing source artifact is required: ${sourceArtifact || '(missing)'}`);
   fs.mkdirSync(outputDir, { recursive: true });
@@ -230,26 +268,37 @@ async function executeAcceptance(options = {}) {
   const statsResponse = await (options.fetchImpl || globalThis.fetch)(`${comfyui.replace(/\/$/, '')}/system_stats`);
   if (!statsResponse.ok) throw new Error(`ComfyUI /system_stats returned HTTP ${statsResponse.status}`);
   const stats = await statsResponse.json();
+  progress.host = {
+    baseUrl: comfyui,
+    systemStatsStatus: statsResponse.status,
+    comfyuiVersion: stats.system?.comfyui_version || null,
+    gpu: stats.devices?.[0]?.name || null,
+  };
   const registry = loadRegistry(options.registryPath || DEFAULT_REGISTRY);
   const workflow = registry.workflows.find(item => item.id === DIRECTOR_WORKFLOW_ID);
   if (!workflow) throw new Error(`Verified workflow not found: ${DIRECTOR_WORKFLOW_ID}`);
+  progress.workflow = { id: workflow.id, sha256: workflow.workflowSha256, inputs: { seed } };
   const workflowDocument = JSON.parse(fs.readFileSync(workflow.workflowPath, 'utf8'));
   const db = options.db || new Database(':memory:');
   loadDirectorSchema(db);
   const service = options.jobService || jobService;
   const now = new Date().toISOString();
   const job = service.createDirectorJob(db, {
-    input: { prompt: 'director host acceptance', seed: 42, continuityEnabled: true, continuityOverlapFrames: 22 },
+    input: { prompt: 'director host acceptance', seed, continuityEnabled: true, continuityOverlapFrames: 22 },
     workflowId: workflow.id,
     workflowVersion: workflow.workflowSha256,
     maxAttempts: 2,
     now,
   });
   service.startDirectorJob(db, job.id, { leaseMs: 1, now: '2026-08-23T00:00:00.000Z' });
+  progress.currentGate = 'restartRetryOnHost';
   const recovery = reconcileAndRetry(db, job.id, { service, now: new Date(Date.now() + 60_000).toISOString() });
+  progress.recovery = recovery;
+  progress.gates.restartRetryOnHost = recovery.transitions.join('->') === 'running->interrupted->pending->running' ? 'passed' : 'failed';
+  progress.currentGate = 'realVerifiedH3';
 
   const client = options.client || createComfyUIClient({ baseUrl: comfyui, fetchImpl: options.fetchImpl || globalThis.fetch, outputDir, pollIntervalMs: options.pollIntervalMs ?? 5000, timeoutMs: options.timeoutMs ?? 30 * 60 * 1000 });
-  const h3Inputs = { prompt: 'director host acceptance', seed: 42, continuityEnabled: true, continuityOverlapFrames: 22, width: 864, height: 480 };
+  const h3Inputs = { prompt: 'director host acceptance', seed, continuityEnabled: true, continuityOverlapFrames: 22, width: 864, height: 480 };
   const generated = await client.runWorkflow({
     registry,
     workflowId: workflow.id,
@@ -258,12 +307,28 @@ async function executeAcceptance(options = {}) {
     outputFileName: 'director-host-acceptance-h3.mp4',
   });
   const generatedProbe = await probeMedia(generated.artifactPath, { ffprobePath, runCommand: options.runCommand });
+  progress.workflow = {
+    ...progress.workflow,
+    promptId: generated.promptId,
+    queue: generated.queue,
+    history: generated.history,
+    inputs: h3Inputs,
+  };
+  progress.artifact = {
+    path: generated.artifactPath,
+    sha256: generated.sha256,
+    fileSize: generated.fileSize,
+    ffprobe: generatedProbe,
+  };
   const h3Validation = validateH3Result({ queue: generated.queue, history: generated.history, ffprobe: generatedProbe });
+  progress.workflow.validation = h3Validation;
+  progress.gates.realVerifiedH3 = h3Validation.status;
   const completedJob = service.succeedDirectorJob(db, job.id, {
     artifactPath: generated.artifactPath,
     ffprobe: generatedProbe,
     metadata: { promptId: generated.promptId, workflowId: generated.workflowId, workflowSha256: generated.workflowSha256 },
   });
+  progress.completedJob = completedJob;
   const generatedArtifact = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(completedJob.artifact_id);
 
   const sourceJob = service.createDirectorJob(db, { input: { imported: true, sourceArtifact }, workflowId: workflow.id, maxAttempts: 1 });
@@ -271,6 +336,7 @@ async function executeAcceptance(options = {}) {
   const sourceProbe = await probeMedia(sourceArtifact, { ffprobePath, runCommand: options.runCommand });
   const sourceHash = hashFile(sourceArtifact).sha256;
   const sourceValidation = validateSourceArtifact({ actualSha256: sourceHash, expectedSha256: options.sourceSha256 });
+  progress.workflow.sourceValidation = sourceValidation;
   validateH3Result({ queue: { node_errors: {} }, history: { status: { status_str: 'success', completed: true } }, ffprobe: sourceProbe, width: mediaShape(sourceProbe).width, height: mediaShape(sourceProbe).height });
   const sourceCompleted = service.succeedDirectorJob(db, sourceJob.id, { artifactPath: sourceArtifact, ffprobe: sourceProbe, metadata: { imported: true } });
   const sourceDbArtifact = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(sourceCompleted.artifact_id);
@@ -297,65 +363,41 @@ async function executeAcceptance(options = {}) {
   const timelineOutput = path.join(outputDir, 'director-host-acceptance-timeline.mp4');
   const timelineRow = timelineService.createTimeline(db, timeline, { outputPath: timelineOutput, ffmpegPath });
   const timelineCommand = timelineService.buildFfmpegCommand(timeline, { ffmpegPath, outputPath: timelineOutput });
+  progress.currentGate = 'timelineComposition';
+  progress.timeline = {
+    id: timelineRow.id,
+    outputPath: timelineOutput,
+    clips: timeline.clips,
+    command: timelineCommand,
+  };
   const timelineResult = await processDirectorTimeline(db, null, timelineRow.id, {
-    runCommand: async ({ timeline: persisted }) => {
-      const normalized = JSON.parse(persisted.input_json);
-      const command = timelineCommand;
-      const result = await (options.runCommand || runCommand)(ffmpegPath, command.args);
-      if (result.code !== 0) return { ok: false, error: result.stderr || result.error || `ffmpeg exited ${result.code}` };
-      const probe = await probeMedia(persisted.output_path, { ffprobePath, runCommand: options.runCommand });
-      return { ok: true, outputSha256: hashFile(persisted.output_path).sha256, ffprobe: probe, command: command.command };
-    },
+    runProcess: options.runProcess || options.runCommand,
+    ffmpegPath,
+    ffprobePath,
   });
   if (timelineResult.status !== 'completed') throw new Error('timeline_v1 composition failed');
+  progress.gates.timelineComposition = 'passed';
+  progress.currentGate = 'mp4AndFfprobe';
   const timelineProbe = JSON.parse(timelineResult.ffprobe_json);
+  progress.timeline = {
+    ...progress.timeline,
+    outputSha256: timelineResult.output_sha256,
+  };
+  progress.ffprobe = timelineProbe;
   const timelineValidation = validateTimelineResult({
     outputSha256: timelineResult.output_sha256,
     ffprobe: timelineProbe,
     expectedDuration: timeline.totalDuration,
   });
+  progress.timeline = {
+    ...progress.timeline,
+    validation: timelineValidation,
+  };
+  progress.gates.mp4AndFfprobe = timelineValidation.status;
+  progress.currentGate = null;
   const report = createEvidenceReport({
-    startedAt,
+    ...progress,
     completedAt: new Date().toISOString(),
-    host: {
-      baseUrl: comfyui,
-      systemStatsStatus: statsResponse.status,
-      comfyuiVersion: stats.system?.comfyui_version || null,
-      gpu: stats.devices?.[0]?.name || null,
-    },
-    workflow: {
-      id: workflow.id,
-      sha256: workflow.workflowSha256,
-      promptId: generated.promptId,
-      queue: generated.queue,
-      history: generated.history,
-      inputs: h3Inputs,
-      validation: h3Validation,
-      sourceValidation,
-    },
-    recovery,
-    completedJob,
-    artifact: {
-      path: generated.artifactPath,
-      sha256: generated.sha256,
-      fileSize: generated.fileSize,
-      ffprobe: generatedProbe,
-    },
-    timeline: {
-      id: timelineRow.id,
-      outputPath: timelineOutput,
-      outputSha256: timelineResult.output_sha256,
-      clips: timeline.clips,
-      command: timelineCommand,
-      validation: timelineValidation,
-    },
-    ffprobe: timelineProbe,
-    gates: {
-      realVerifiedH3: h3Validation.status,
-      restartRetryOnHost: recovery.transitions.join('->') === 'running->interrupted->pending->running' ? 'passed' : 'failed',
-      timelineComposition: timelineValidation.status,
-      mp4AndFfprobe: timelineValidation.status,
-    },
   });
   fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
   fs.writeFileSync(evidencePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -364,17 +406,18 @@ async function executeAcceptance(options = {}) {
 }
 
 async function runAcceptance(options = {}) {
+  const progress = {
+    startedAt: new Date().toISOString(),
+    gates: { realVerifiedH3: 'pending', restartRetryOnHost: 'pending', timelineComposition: 'pending', mp4AndFfprobe: 'pending' },
+    currentGate: 'realVerifiedH3',
+  };
   try {
-    return await executeAcceptance(options);
+    return await executeAcceptance(options, progress);
   } catch (error) {
     const evidencePath = path.resolve(options.evidence || path.join(process.cwd(), 'director-v1-host-acceptance.json'));
     if (options.force || !fs.existsSync(evidencePath)) {
       fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
-      fs.writeFileSync(evidencePath, `${JSON.stringify(createEvidenceReport({
-        completedAt: new Date().toISOString(),
-        gates: { realVerifiedH3: 'failed', restartRetryOnHost: 'pending', timelineComposition: 'pending', mp4AndFfprobe: 'pending' },
-        errors: [{ message: error.message, stack: error.stack }],
-      }), null, 2)}\n`, 'utf8');
+      fs.writeFileSync(evidencePath, `${JSON.stringify(createFailureEvidence(progress, error), null, 2)}\n`, 'utf8');
     }
     throw error;
   }
@@ -399,6 +442,7 @@ module.exports = {
   reconcileAndRetry,
   buildTimelineAcceptance,
   createEvidenceReport,
+  createFailureEvidence,
   applyH3Inputs,
   validateH3Result,
   validateTimelineResult,

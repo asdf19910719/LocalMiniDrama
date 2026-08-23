@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('node:crypto');
 const { getFfmpegPath, getFfprobePath, hasLocalFfmpeg } = require('../utils/ffmpegPath');
 const storageLayout = require('./storageLayout');
 
@@ -72,19 +73,67 @@ function deleteById(db, log, id) {
   return result.changes > 0;
 }
 
+function runProcess(file, args) {
+  const { spawn } = require('node:child_process');
+  return new Promise((resolve) => {
+    const child = spawn(file, args, { windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', chunk => { stdout += chunk.toString(); });
+    child.stderr?.on('data', chunk => { stderr += chunk.toString(); });
+    child.once('error', error => resolve({ code: null, stdout, stderr, error: error.message }));
+    child.once('exit', code => resolve({ code, stdout, stderr, error: null }));
+  });
+}
+
+function hashFile(filePath) {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest('hex');
+}
+
+async function executePersistedTimeline(timeline, {
+  runProcess: runner = runProcess,
+  ffmpegPath = getFfmpegPath(),
+  ffprobePath = getFfprobePath(),
+} = {}) {
+  let manifest;
+  try {
+    manifest = JSON.parse(timeline.manifest_json || '{}');
+  } catch (error) {
+    return { ok: false, error: `Invalid Director timeline manifest: ${error.message}` };
+  }
+  if (!Array.isArray(manifest.commandArgs)) {
+    return { ok: false, error: 'Director timeline manifest is missing commandArgs' };
+  }
+  const ffmpeg = await runner(ffmpegPath, manifest.commandArgs);
+  if (ffmpeg.code !== 0) {
+    return { ok: false, error: ffmpeg.stderr || ffmpeg.error || `ffmpeg exited ${ffmpeg.code}` };
+  }
+  const probeArgs = ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', timeline.output_path];
+  const probe = await runner(ffprobePath, probeArgs);
+  if (probe.code !== 0) {
+    return { ok: false, error: probe.stderr || probe.error || `ffprobe exited ${probe.code}` };
+  }
+  let ffprobe;
+  try {
+    ffprobe = JSON.parse(probe.stdout);
+  } catch (error) {
+    return { ok: false, error: `ffprobe returned invalid JSON: ${error.message}` };
+  }
+  if (!fs.existsSync(timeline.output_path)) {
+    return { ok: false, error: `Director timeline output is missing: ${timeline.output_path}` };
+  }
+  return { ok: true, outputSha256: hashFile(timeline.output_path), ffprobe };
+}
+
 /** Execute a persisted Director timeline without changing the legacy scene merge path. */
-async function processDirectorTimeline(db, log, timelineId, { runCommand } = {}) {
+async function processDirectorTimeline(db, log, timelineId, options = {}) {
   const timeline = db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
   if (!timeline) throw new Error(`Director timeline not found: ${timelineId}`);
-  const runner = runCommand || (async () => {
-    const { spawn } = require('node:child_process');
-    return new Promise((resolve) => {
-      const child = spawn(require('../utils/ffmpegPath').getFfmpegPath(), String(timeline.ffmpeg_command || '').split(/\s+/).slice(1), { stdio: 'ignore' });
-      child.once('error', (error) => resolve({ ok: false, error: error.message }));
-      child.once('exit', (code) => resolve({ ok: code === 0, error: code === 0 ? null : `ffmpeg exited ${code}` }));
-    });
-  });
-  const result = await runner({ timeline, command: timeline.ffmpeg_command });
+  const result = options.runCommand
+    ? await options.runCommand({ timeline, command: timeline.ffmpeg_command })
+    : await executePersistedTimeline(timeline, options);
   const now = new Date().toISOString();
   if (!result?.ok) {
     db.prepare("UPDATE director_timelines SET status = 'failed', manifest_json = ?, created_at = created_at WHERE id = ?")

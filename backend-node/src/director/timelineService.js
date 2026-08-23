@@ -126,6 +126,7 @@ function createTimeline(db, timeline, { outputPath, ffmpegPath = 'ffmpeg', now }
     output: timeline.output,
     ffmpegPath,
     command: command.command,
+    commandArgs: command.args,
     createdAt,
   };
   db.prepare(`INSERT INTO director_timelines
