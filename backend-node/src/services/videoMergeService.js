@@ -72,6 +72,32 @@ function deleteById(db, log, id) {
   return result.changes > 0;
 }
 
+/** Execute a persisted Director timeline without changing the legacy scene merge path. */
+async function processDirectorTimeline(db, log, timelineId, { runCommand } = {}) {
+  const timeline = db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
+  if (!timeline) throw new Error(`Director timeline not found: ${timelineId}`);
+  const runner = runCommand || (async () => {
+    const { spawn } = require('node:child_process');
+    return new Promise((resolve) => {
+      const child = spawn(require('../utils/ffmpegPath').getFfmpegPath(), String(timeline.ffmpeg_command || '').split(/\s+/).slice(1), { stdio: 'ignore' });
+      child.once('error', (error) => resolve({ ok: false, error: error.message }));
+      child.once('exit', (code) => resolve({ ok: code === 0, error: code === 0 ? null : `ffmpeg exited ${code}` }));
+    });
+  });
+  const result = await runner({ timeline, command: timeline.ffmpeg_command });
+  const now = new Date().toISOString();
+  if (!result?.ok) {
+    db.prepare("UPDATE director_timelines SET status = 'failed', manifest_json = ?, created_at = created_at WHERE id = ?")
+      .run(JSON.stringify({ error: result?.error || 'FFmpeg failed', failedAt: now }), timelineId);
+    if (log?.warn) log.warn('Director timeline failed', { timeline_id: timelineId, error: result?.error });
+    return db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
+  }
+  db.prepare("UPDATE director_timelines SET status = 'completed', output_sha256 = ?, ffprobe_json = ? WHERE id = ?")
+    .run(result.outputSha256 || null, result.ffprobe ? JSON.stringify(result.ffprobe) : null, timelineId);
+  if (log?.info) log.info('Director timeline completed', { timeline_id: timelineId, output: timeline.output_path });
+  return db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
+}
+
 /** 获取 storage 根目录（绝对路径） */
 function getStorageRoot() {
   const loadConfig = require('../config').loadConfig;
@@ -177,6 +203,20 @@ async function processVideoMerge(db, log, mergeId, baseUrl) {
   const now = new Date().toISOString();
   db.prepare('UPDATE video_merges SET status = ? WHERE id = ?').run('processing', mergeId);
   const taskService = require('./taskService');
+  let mergeOpts = {};
+  try { mergeOpts = JSON.parse(r.merge_options || '{}'); } catch (_) { mergeOpts = {}; }
+  if (mergeOpts.timeline_id) {
+    const timeline = await processDirectorTimeline(db, log, mergeOpts.timeline_id);
+    const completed = timeline.status === 'completed';
+    const outputUrl = timeline.output_path || null;
+    db.prepare('UPDATE video_merges SET status = ?, merged_url = ?, completed_at = ?, error_msg = ? WHERE id = ?')
+      .run(completed ? 'completed' : 'failed', completed ? outputUrl : null, completed ? now : null, completed ? null : 'Director timeline failed', mergeId);
+    if (taskId) {
+      if (completed) taskService.updateTaskResult(db, taskId, { merge_id: mergeId, video_url: outputUrl });
+      else taskService.updateTaskError(db, taskId, 'Director timeline failed');
+    }
+    return;
+  }
   if (scenes.length === 0) {
     db.prepare('UPDATE video_merges SET status = ?, error_msg = ? WHERE id = ?').run('failed', '无有效视频片段', mergeId);
     if (taskId) taskService.updateTaskError(db, taskId, '无有效视频片段');
@@ -240,12 +280,6 @@ async function processVideoMerge(db, log, mergeId, baseUrl) {
     }
   }
 
-  let mergeOpts = {};
-  try {
-    mergeOpts = JSON.parse(r.merge_options || '{}');
-  } catch (_) {
-    mergeOpts = {};
-  }
   const postNeed =
     !!mergeOpts.burn_narration_subtitles
     || !!mergeOpts.burn_dialogue_audio
@@ -293,4 +327,5 @@ module.exports = {
   create,
   deleteById,
   processVideoMerge,
+  processDirectorTimeline,
 };

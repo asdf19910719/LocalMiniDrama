@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "id": "h3-continuity-v1",
+      "status": "verified",
+      "workflowPath": "E:/AI/h3_director_test/workflow_api.json",
+      "workflowSha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+      "requiredNodes": [
+        "UNETLoader",
+        "CLIPLoader",
+        "SaveVideo"
+      ],
+      "modelFiles": [
+        "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+      ],
+      "customNodes": [
+        "MiniMaxH3Director",
+        "CreateVideo",
+        "SaveVideo"
+      ],
+      "inputSchema": {
+        "prompt": "string",
+        "seed": "integer",
+        "segments": "array",
+        "continuityEnabled": "boolean",
+        "continuityOverlapFrames": "integer"
+      },
+      "verifiedEvidence": "docs/research/h3-continuity-test-report.md"
+    }
+  ]
+}

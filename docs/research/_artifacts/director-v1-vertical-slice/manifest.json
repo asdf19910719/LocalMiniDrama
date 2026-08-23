@@ -1,0 +1,64 @@
+{
+  "schema": "director-v1-evidence-manifest",
+  "date": "2026-08-23",
+  "branch": "ai-director-v1",
+  "status": "external_validation_partial",
+  "offline": {
+    "backend_tests": {
+      "command": "node --test test/*.test.js",
+      "passed": 79,
+      "failed": 0
+    },
+    "frontend_build": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "migration_tables": [
+      "director_jobs",
+      "director_artifacts",
+      "director_candidate_groups",
+      "director_candidates",
+      "director_anchors",
+      "director_timelines"
+    ]
+  },
+  "external": {
+    "comfyui": {
+      "status": "passed",
+      "base_url": "http://127.0.0.1:8188",
+      "version": "0.33.1",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti"
+    },
+    "ffmpeg": {
+      "status": "passed",
+      "path": "backend-node/tools/ffmpeg/ffmpeg.exe",
+      "version": "8.0.1"
+    },
+    "ffprobe": {
+      "status": "passed_external",
+      "version": "9.0.1",
+      "binary_committed": false
+    },
+    "real_h3_job": {
+      "status": "passed",
+      "prompt_id": "02f3c625-ab67-492a-8165-09232ba8a981",
+      "queue_number": 41,
+      "history_status": "success"
+    },
+    "playable_mp4": "passed",
+    "output_path": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+    "output_sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+    "output_file_size": 1966064,
+    "ffprobe_json": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-ffprobe.json",
+    "evidence": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json"
+  },
+  "gates": {
+    "workflow_registry": "passed_offline",
+    "durable_recovery": "passed_offline",
+    "candidate_selection": "passed_offline",
+    "timeline_validation": "passed_offline",
+    "real_verified_h3": "passed",
+    "restart_retry_on_host": "pending",
+    "mp4_and_ffprobe": "passed_external"
+  }
+}
