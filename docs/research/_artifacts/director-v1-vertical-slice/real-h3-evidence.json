@@ -1,0 +1,76 @@
+{
+  "schema": "director-v1-real-h3-evidence",
+  "verifiedAt": "2026-08-23T04:27:29.451Z",
+  "comfyui": {
+    "baseUrl": "http://127.0.0.1:8188",
+    "portableRoot": "E:\\AI\\ComfyUI_windows_portable",
+    "version": "0.33.1",
+    "device": "NVIDIA GeForce RTX 5070 Ti",
+    "systemStatsStatus": 200,
+    "queueAfterCompletion": {
+      "running": 0,
+      "pending": 0
+    }
+  },
+  "workflow": {
+    "id": "h3-continuity-v1",
+    "sha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+    "continuityEnabled": true,
+    "continuityOverlapFrames": 22
+  },
+  "job": {
+    "promptId": "02f3c625-ab67-492a-8165-09232ba8a981",
+    "queueNumber": 41,
+    "historyStatus": "success",
+    "completed": true,
+    "nodeErrors": {},
+    "pollCount": 167
+  },
+  "artifact": {
+    "path": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+    "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+    "fileSize": 1966064
+  },
+  "media": {
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "durationSeconds": 15.292,
+    "bitRate": 1028545,
+    "streams": [
+      {
+        "index": 0,
+        "type": "video",
+        "codec": "h264",
+        "profile": "High",
+        "width": 864,
+        "height": 480,
+        "pixelFormat": "yuv420p",
+        "frameRate": "24/1"
+      },
+      {
+        "index": 1,
+        "type": "audio",
+        "codec": "aac",
+        "profile": "LC",
+        "sampleRate": 32000,
+        "channels": 2,
+        "channelLayout": "stereo"
+      }
+    ]
+  },
+  "verification": {
+    "ffmpeg": {
+      "status": "passed",
+      "path": "backend-node/tools/ffmpeg/ffmpeg.exe",
+      "version": "8.0.1"
+    },
+    "ffprobe": {
+      "status": "passed",
+      "version": "9.0.1",
+      "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+      "sha256": "19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52",
+      "command": "ffprobe -v error -show_entries format=filename,format_name,duration,size,bit_rate:stream=index,codec_type,codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,channels,sample_rate,channel_layout -of json director-v1-real.mp4"
+    },
+    "playableMp4": true
+  },
+  "scopeNote": "The MP4 and metadata are external evidence; the binary is intentionally not committed to the repository. Host restart/retry recovery was not exercised by this run."
+}
