@@ -49,7 +49,8 @@
     "output_path": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
     "output_sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
     "output_file_size": 1966064,
-    "ffprobe_json": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json"
+    "ffprobe_json": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-ffprobe.json",
+    "evidence": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-evidence.json"
   },
   "gates": {
     "workflow_registry": "passed_offline",

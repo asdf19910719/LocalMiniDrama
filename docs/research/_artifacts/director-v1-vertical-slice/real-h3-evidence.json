@@ -24,7 +24,23 @@
     "historyStatus": "success",
     "completed": true,
     "nodeErrors": {},
-    "pollCount": 167
+    "pollCount": 167,
+    "request": {
+      "workflowId": "h3-continuity-v1",
+      "workflowSha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+      "inputs": {
+        "prompt": "verified h3 continuity baseline",
+        "seed": 42,
+        "continuityEnabled": true,
+        "continuityOverlapFrames": 22,
+        "width": 864,
+        "height": 480,
+        "totalFrames": 372,
+        "frameRate": 24,
+        "steps": 25
+      },
+      "outputNode": "7"
+    }
   },
   "artifact": {
     "path": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
@@ -68,9 +84,16 @@
       "version": "9.0.1",
       "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
       "sha256": "19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52",
-      "command": "ffprobe -v error -show_entries format=filename,format_name,duration,size,bit_rate:stream=index,codec_type,codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,channels,sample_rate,channel_layout -of json director-v1-real.mp4"
+      "inputPath": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+      "rawOutput": "docs/research/_artifacts/director-v1-vertical-slice/real-h3-ffprobe.json",
+      "command": "ffprobe -v error -show_entries format=filename,format_name,duration,size,bit_rate:stream=index,codec_type,codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,channels,sample_rate,channel_layout -of json E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4"
     },
-    "playableMp4": true
+    "playableMp4": {
+      "status": "passed",
+      "inputPath": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+      "command": "backend-node/tools/ffmpeg/ffmpeg.exe -v error -i E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4 -f null NUL",
+      "exitCode": 0
+    }
   },
   "scopeNote": "The MP4 and metadata are external evidence; the binary is intentionally not committed to the repository. Host restart/retry recovery was not exercised by this run."
 }
