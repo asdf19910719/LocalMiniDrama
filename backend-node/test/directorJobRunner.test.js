@@ -118,6 +118,8 @@ function now() {
 function seedPendingJob(db, { shotId = 'shot-1', jobId = id(), groupId = id(), candidateId = id() } = {}) {
   const timestamp = now();
   const artifactId = `pending-artifact-${jobId}`;
+  const prompt = { '5': { class_type: 'MiniMaxH3Director', inputs: { global_prompt: 'a rainy street' } } };
+  const inputs = { seed: 42, prompt: 'a rainy street' };
   const groupExists = db.prepare('SELECT 1 FROM director_candidate_groups WHERE id = ?').get(groupId);
   if (!groupExists) {
     db.prepare(`
@@ -131,7 +133,9 @@ function seedPendingJob(db, { shotId = 'shot-1', jobId = id(), groupId = id(), c
       (id, status, attempt_number, max_attempts, input_json, workflow_id,
        workflow_version, created_at, updated_at)
     VALUES (?, 'pending', 0, 2, ?, 'h3-continuity-v1', '1', ?, ?)
-  `).run(jobId, JSON.stringify({ shotId, groupId, candidateId, workflowId: 'h3-continuity-v1' }), timestamp, timestamp);
+  `).run(jobId, JSON.stringify({
+    shotId, groupId, candidateId, workflowId: 'h3-continuity-v1', prompt, inputs,
+  }), timestamp, timestamp);
   db.prepare(`
     INSERT INTO director_candidates
       (id, group_id, artifact_id, job_id, status, created_at, updated_at)
@@ -150,6 +154,10 @@ function getCandidate(db, candidateId) {
 
 function getGroup(db, groupId) {
   return db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId);
+}
+
+function getArtifact(db, jobId) {
+  return db.prepare('SELECT * FROM director_artifacts WHERE job_id = ? ORDER BY version DESC LIMIT 1').get(jobId);
 }
 
 describe('Director job runner', () => {
@@ -174,10 +182,18 @@ describe('Director job runner', () => {
     const calls = [];
     const service = {
       async runWorkflow(input) {
+        const runningJob = getJob(db, seeded.jobId);
+        assert.equal(runningJob.status, 'running');
+        assert.equal(runningJob.attempt_number, 1);
+        assert.ok(runningJob.started_at);
         calls.push(input);
         return {
           artifactPath,
           ffprobe: { format: { duration: '4' }, streams: [{ codec_type: 'video' }] },
+          promptId: 'prompt-success',
+          queue: { number: 7 },
+          history: { status: { completed: true, status_str: 'success' } },
+          pollTimestamps: ['2026-08-23T00:00:01.000Z'],
           workflowId: 'h3-continuity-v1',
           workflowSha256: 'sha256:test',
         };
@@ -200,9 +216,11 @@ describe('Director job runner', () => {
     assert.equal(getGroup(db, seeded.groupId).status, 'review');
     assert.equal(getJob(db, seeded.jobId).artifact_path, artifactPath);
     assert.equal(getCandidate(db, seeded.candidateId).artifact_id, getJob(db, seeded.jobId).artifact_id);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_artifacts WHERE job_id = ?').get(seeded.jobId).count, 1);
+    assert.equal(getArtifact(db, seeded.jobId).status, 'ready');
     assert.equal(calls.length, 1);
     assert.equal(calls[0].workflowId, 'h3-continuity-v1');
+    assert.deepEqual(calls[0].prompt, { '5': { class_type: 'MiniMaxH3Director', inputs: { global_prompt: 'a rainy street' } } });
+    assert.deepEqual(calls[0].inputs, { seed: 42, prompt: 'a rainy street' });
     assert.equal(gpuMutex.inspect(), null);
   });
 
@@ -211,6 +229,10 @@ describe('Director job runner', () => {
     const gpuMutex = createGpuMutex();
     const service = {
       async runWorkflow() {
+        const runningJob = getJob(db, seeded.jobId);
+        assert.equal(runningJob.status, 'running');
+        assert.equal(runningJob.attempt_number, 1);
+        assert.ok(runningJob.started_at);
         const error = new Error('poll timed out');
         error.code = 'COMFYUI_TIMEOUT';
         throw error;
@@ -243,11 +265,28 @@ describe('Director job runner', () => {
     const service = {
       async runWorkflow(input) {
         if (input.groupId === failed.groupId && input.candidateId === failed.candidateId) {
+          const runningJob = getJob(db, failed.jobId);
+          assert.equal(runningJob.status, 'running');
+          assert.equal(runningJob.attempt_number, 1);
+          assert.ok(runningJob.started_at);
           const error = new Error('poll timed out');
           error.code = 'COMFYUI_TIMEOUT';
           throw error;
         }
-        return { artifactPath: successfulPath, ffprobe: { streams: [{ codec_type: 'video' }] } };
+        const runningJob = getJob(db, successful.jobId);
+        assert.equal(runningJob.status, 'running');
+        assert.equal(runningJob.attempt_number, 1);
+        assert.ok(runningJob.started_at);
+        return {
+          artifactPath: successfulPath,
+          ffprobe: { streams: [{ codec_type: 'video' }] },
+          promptId: 'prompt-sibling-success',
+          queue: { number: 8 },
+          history: { status: { completed: true, status_str: 'success' } },
+          pollTimestamps: ['2026-08-23T00:00:02.000Z'],
+          workflowId: 'h3-continuity-v1',
+          workflowSha256: 'sha256:sibling-test',
+        };
       },
     };
     const gpuMutex = createGpuMutex();
@@ -267,6 +306,7 @@ describe('Director job runner', () => {
     assert.equal(getJob(db, failed.jobId).status, 'failed');
     assert.equal(getCandidate(db, failed.candidateId).status, 'failed');
     assert.equal(getCandidate(db, failed.candidateId).error_code, 'COMFYUI_TIMEOUT');
+    assert.equal(getArtifact(db, successful.jobId).status, 'ready');
     assert.equal(getGroup(db, successful.groupId).status, 'review');
     assert.equal(gpuMutex.inspect(), null);
   });
