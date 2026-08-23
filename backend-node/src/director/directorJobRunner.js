@@ -14,15 +14,13 @@ function candidateForJob(db, jobId) {
 }
 
 async function runDirectorJob(db, jobId, {
-  service,
   comfyClient,
   gpuMutex,
   registry,
   leaseMs,
   now,
 } = {}) {
-  const client = service || comfyClient;
-  if (!client || typeof client.runWorkflow !== 'function') throw new Error('Director runner requires a ComfyUI client');
+  if (!comfyClient || typeof comfyClient.runWorkflow !== 'function') throw new Error('Director runner requires a ComfyUI client');
   if (!gpuMutex) throw new Error('Director runner requires a GPU mutex');
 
   const job = startDirectorJob(db, jobId, { leaseMs, now });
@@ -41,7 +39,7 @@ async function runDirectorJob(db, jobId, {
   let lease;
   try {
     lease = gpuMutex.acquire(jobId, { leaseMs });
-    const result = await client.runWorkflow({
+    const result = await comfyClient.runWorkflow({
       registry,
       ...job.input,
       workflowId: job.workflow_id,

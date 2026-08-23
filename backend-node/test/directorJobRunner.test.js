@@ -180,7 +180,7 @@ describe('Director job runner', () => {
     const artifactPath = path.join(outputDir, 'success.mp4');
     fs.writeFileSync(artifactPath, 'successful sibling output');
     const calls = [];
-    const service = {
+    const comfyClient = {
       async runWorkflow(input) {
         const runningJob = getJob(db, seeded.jobId);
         assert.equal(runningJob.status, 'running');
@@ -202,7 +202,7 @@ describe('Director job runner', () => {
     const gpuMutex = createGpuMutex();
 
     const result = await runDirectorJob(db, seeded.jobId, {
-      service,
+      comfyClient,
       gpuMutex,
       leaseMs: 60_000,
       now: now(),
@@ -227,7 +227,7 @@ describe('Director job runner', () => {
   it('records COMFYUI_TIMEOUT on failure and releases both job and GPU leases', async () => {
     const seeded = seedPendingJob(db);
     const gpuMutex = createGpuMutex();
-    const service = {
+    const comfyClient = {
       async runWorkflow() {
         const runningJob = getJob(db, seeded.jobId);
         assert.equal(runningJob.status, 'running');
@@ -240,7 +240,7 @@ describe('Director job runner', () => {
     };
 
     await assert.rejects(
-      () => runDirectorJob(db, seeded.jobId, { service, gpuMutex, leaseMs: 60_000, now: now() }),
+      () => runDirectorJob(db, seeded.jobId, { comfyClient, gpuMutex, leaseMs: 60_000, now: now() }),
       /poll timed out/
     );
 
@@ -262,7 +262,7 @@ describe('Director job runner', () => {
     const failed = seedPendingJob(db, { shotId: 'shot-mixed', groupId: successful.groupId });
     const successfulPath = path.join(outputDir, 'sibling-success.mp4');
     fs.writeFileSync(successfulPath, 'successful sibling output');
-    const service = {
+    const comfyClient = {
       async runWorkflow(input) {
         if (input.groupId === failed.groupId && input.candidateId === failed.candidateId) {
           const runningJob = getJob(db, failed.jobId);
@@ -292,10 +292,10 @@ describe('Director job runner', () => {
     const gpuMutex = createGpuMutex();
 
     const successfulResult = await runDirectorJob(db, successful.jobId, {
-      service, gpuMutex, leaseMs: 60_000, now: now(),
+      comfyClient, gpuMutex, leaseMs: 60_000, now: now(),
     });
     const failedResult = await Promise.allSettled([
-      runDirectorJob(db, failed.jobId, { service, gpuMutex, leaseMs: 60_000, now: now() }),
+      runDirectorJob(db, failed.jobId, { comfyClient, gpuMutex, leaseMs: 60_000, now: now() }),
     ]);
 
     assert.equal(successfulResult.status, 'succeeded');
@@ -316,7 +316,7 @@ describe('Director job runner', () => {
     const second = seedPendingJob(db, { shotId: 'shot-queue', groupId: first.groupId });
     const events = [];
     let active = 0;
-    const service = {
+    const comfyClient = {
       async runWorkflow(input) {
         active += 1;
         assert.equal(active, 1);
@@ -329,7 +329,7 @@ describe('Director job runner', () => {
         return { artifactPath, workflowId: 'h3-continuity-v1', workflowSha256: 'sha256:test' };
       },
     };
-    const runner = createDirectorJobRunner({ db, service, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
+    const runner = createDirectorJobRunner({ db, comfyClient, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
 
     assert.equal(runner.enqueue(first.jobId), first.jobId);
     assert.equal(runner.enqueue(second.jobId), second.jobId);
@@ -343,5 +343,25 @@ describe('Director job runner', () => {
     ]);
     assert.equal(getJob(db, first.jobId).status, 'succeeded');
     assert.equal(getJob(db, second.jobId).status, 'succeeded');
+  });
+
+  it('fails only the current job when the GPU is busy and preserves the existing lease', async () => {
+    const seeded = seedPendingJob(db);
+    const gpuMutex = createGpuMutex();
+    const existingLease = gpuMutex.acquire('other-job');
+
+    await assert.rejects(
+      () => runDirectorJob(db, seeded.jobId, {
+        comfyClient: { async runWorkflow() { throw new Error('must not run'); } },
+        gpuMutex,
+        now: now(),
+      }),
+      /GPU_BUSY/
+    );
+
+    assert.equal(getJob(db, seeded.jobId).status, 'failed');
+    assert.equal(getCandidate(db, seeded.candidateId).status, 'failed');
+    assert.equal(gpuMutex.inspect().token, existingLease.token);
+    gpuMutex.release(existingLease);
   });
 });
