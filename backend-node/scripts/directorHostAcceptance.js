@@ -26,6 +26,7 @@ function parseArgs(argv) {
     '--output-dir': 'outputDir',
     '--evidence': 'evidence',
     '--source-artifact': 'sourceArtifact',
+    '--source-sha256': 'sourceSha256',
     '--ffprobe': 'ffprobePath',
     '--ffmpeg': 'ffmpegPath',
   };
@@ -160,7 +161,61 @@ function mediaShape(probe) {
   };
 }
 
-async function runAcceptance(options = {}) {
+function applyH3Inputs(prompt, inputs = {}) {
+  const cloned = JSON.parse(JSON.stringify(prompt));
+  const node = Object.values(cloned).find(item => item?.class_type === 'MiniMaxH3Director');
+  if (!node) throw new Error('H3 workflow does not contain a MiniMaxH3Director node');
+  const nodeInputs = node.inputs || (node.inputs = {});
+  if (inputs.prompt) nodeInputs.global_prompt = String(inputs.prompt);
+  if (Number.isInteger(inputs.seed)) nodeInputs.seed = inputs.seed;
+  if (Number.isInteger(inputs.width)) nodeInputs.width = inputs.width;
+  if (Number.isInteger(inputs.height)) nodeInputs.height = inputs.height;
+  let timelineData = {};
+  try { timelineData = JSON.parse(nodeInputs.timeline_data || '{}'); } catch (_) { timelineData = {}; }
+  timelineData.output = {
+    ...(timelineData.output || {}),
+    continuityEnabled: inputs.continuityEnabled === true,
+    continuityOverlapFrames: Number.isInteger(inputs.continuityOverlapFrames) ? inputs.continuityOverlapFrames : 0,
+  };
+  timelineData.global = { ...(timelineData.global || {}), prompt: inputs.prompt || timelineData.global?.prompt || nodeInputs.global_prompt };
+  nodeInputs.timeline_data = JSON.stringify(timelineData);
+  return cloned;
+}
+
+function validateH3Result({ queue, history, ffprobe, width = 864, height = 480 } = {}) {
+  const historyStatus = history?.status || {};
+  if (historyStatus.status_str !== 'success' || historyStatus.completed !== true) throw new Error('H3 output history did not complete successfully');
+  if (queue?.node_errors && Object.keys(queue.node_errors).length > 0) throw new Error('H3 output contains node errors');
+  const video = (ffprobe?.streams || []).find(stream => stream.codec_type === 'video');
+  const audio = (ffprobe?.streams || []).find(stream => stream.codec_type === 'audio');
+  if (!video || video.codec_name !== 'h264' || Number(video.width) !== width || Number(video.height) !== height) {
+    throw new Error('H3 output video stream does not match expected H.264 dimensions');
+  }
+  if (!audio || audio.codec_name !== 'aac') throw new Error('H3 output audio stream is missing or not AAC');
+  if (!(Number(ffprobe?.format?.duration) > 0)) throw new Error('H3 output duration is invalid');
+  return { status: 'passed', video, audio, duration: Number(ffprobe.format.duration) };
+}
+
+function validateTimelineResult({ outputSha256, ffprobe, expectedDuration, tolerance = 0.1 } = {}) {
+  if (!/^[a-f0-9]{64}$/i.test(String(outputSha256 || ''))) throw new Error('Timeline output hash is missing or invalid');
+  const video = (ffprobe?.streams || []).find(stream => stream.codec_type === 'video');
+  if (!video) throw new Error('Timeline output video stream is missing');
+  const duration = Number(ffprobe?.format?.duration);
+  if (!Number.isFinite(duration) || Math.abs(duration - Number(expectedDuration)) > tolerance) {
+    throw new Error(`Timeline output duration mismatch: expected ${expectedDuration}, got ${duration}`);
+  }
+  return { status: 'passed', duration, expectedDuration: Number(expectedDuration) };
+}
+
+function validateSourceArtifact({ actualSha256, expectedSha256 } = {}) {
+  if (!/^[a-f0-9]{64}$/i.test(String(actualSha256 || ''))) throw new Error('Source artifact hash is invalid');
+  if (expectedSha256 && String(actualSha256).toLowerCase() !== String(expectedSha256).toLowerCase()) {
+    throw new Error(`Source artifact hash mismatch: expected ${expectedSha256}, got ${actualSha256}`);
+  }
+  return { status: 'passed', sha256: String(actualSha256).toLowerCase() };
+}
+
+async function executeAcceptance(options = {}) {
   const startedAt = new Date().toISOString();
   const comfyui = options.comfyui || DEFAULT_COMFYUI;
   const outputDir = path.resolve(options.outputDir || path.join(process.cwd(), 'director-v1-acceptance-output'));
@@ -193,15 +248,17 @@ async function runAcceptance(options = {}) {
   service.startDirectorJob(db, job.id, { leaseMs: 1, now: '2026-08-23T00:00:00.000Z' });
   const recovery = reconcileAndRetry(db, job.id, { service, now: new Date(Date.now() + 60_000).toISOString() });
 
-  const client = options.client || createComfyUIClient({ baseUrl: comfyui, outputDir, pollIntervalMs: options.pollIntervalMs ?? 5000, timeoutMs: options.timeoutMs ?? 30 * 60 * 1000 });
+  const client = options.client || createComfyUIClient({ baseUrl: comfyui, fetchImpl: options.fetchImpl || globalThis.fetch, outputDir, pollIntervalMs: options.pollIntervalMs ?? 5000, timeoutMs: options.timeoutMs ?? 30 * 60 * 1000 });
+  const h3Inputs = { prompt: 'director host acceptance', seed: 42, continuityEnabled: true, continuityOverlapFrames: 22, width: 864, height: 480 };
   const generated = await client.runWorkflow({
     registry,
     workflowId: workflow.id,
-    prompt: workflowDocument.prompt,
-    inputs: { prompt: 'director host acceptance', seed: 42, continuityEnabled: true, continuityOverlapFrames: 22 },
+    prompt: applyH3Inputs(workflowDocument.prompt, h3Inputs),
+    inputs: h3Inputs,
     outputFileName: 'director-host-acceptance-h3.mp4',
   });
   const generatedProbe = await probeMedia(generated.artifactPath, { ffprobePath, runCommand: options.runCommand });
+  const h3Validation = validateH3Result({ queue: generated.queue, history: generated.history, ffprobe: generatedProbe });
   const completedJob = service.succeedDirectorJob(db, job.id, {
     artifactPath: generated.artifactPath,
     ffprobe: generatedProbe,
@@ -212,6 +269,9 @@ async function runAcceptance(options = {}) {
   const sourceJob = service.createDirectorJob(db, { input: { imported: true, sourceArtifact }, workflowId: workflow.id, maxAttempts: 1 });
   service.startDirectorJob(db, sourceJob.id, { leaseMs: 60_000 });
   const sourceProbe = await probeMedia(sourceArtifact, { ffprobePath, runCommand: options.runCommand });
+  const sourceHash = hashFile(sourceArtifact).sha256;
+  const sourceValidation = validateSourceArtifact({ actualSha256: sourceHash, expectedSha256: options.sourceSha256 });
+  validateH3Result({ queue: { node_errors: {} }, history: { status: { status_str: 'success', completed: true } }, ffprobe: sourceProbe, width: mediaShape(sourceProbe).width, height: mediaShape(sourceProbe).height });
   const sourceCompleted = service.succeedDirectorJob(db, sourceJob.id, { artifactPath: sourceArtifact, ffprobe: sourceProbe, metadata: { imported: true } });
   const sourceDbArtifact = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(sourceCompleted.artifact_id);
 
@@ -236,10 +296,11 @@ async function runAcceptance(options = {}) {
   const timeline = timelineService.validateTimeline(db, timelineInput);
   const timelineOutput = path.join(outputDir, 'director-host-acceptance-timeline.mp4');
   const timelineRow = timelineService.createTimeline(db, timeline, { outputPath: timelineOutput, ffmpegPath });
+  const timelineCommand = timelineService.buildFfmpegCommand(timeline, { ffmpegPath, outputPath: timelineOutput });
   const timelineResult = await processDirectorTimeline(db, null, timelineRow.id, {
     runCommand: async ({ timeline: persisted }) => {
       const normalized = JSON.parse(persisted.input_json);
-      const command = timelineService.buildFfmpegCommand(normalized, { ffmpegPath, outputPath: persisted.output_path });
+      const command = timelineCommand;
       const result = await (options.runCommand || runCommand)(ffmpegPath, command.args);
       if (result.code !== 0) return { ok: false, error: result.stderr || result.error || `ffmpeg exited ${result.code}` };
       const probe = await probeMedia(persisted.output_path, { ffprobePath, runCommand: options.runCommand });
@@ -248,6 +309,11 @@ async function runAcceptance(options = {}) {
   });
   if (timelineResult.status !== 'completed') throw new Error('timeline_v1 composition failed');
   const timelineProbe = JSON.parse(timelineResult.ffprobe_json);
+  const timelineValidation = validateTimelineResult({
+    outputSha256: timelineResult.output_sha256,
+    ffprobe: timelineProbe,
+    expectedDuration: timeline.totalDuration,
+  });
   const report = createEvidenceReport({
     startedAt,
     completedAt: new Date().toISOString(),
@@ -263,7 +329,9 @@ async function runAcceptance(options = {}) {
       promptId: generated.promptId,
       queue: generated.queue,
       history: generated.history,
-      inputs: { seed: 42, continuityEnabled: true, continuityOverlapFrames: 22 },
+      inputs: h3Inputs,
+      validation: h3Validation,
+      sourceValidation,
     },
     recovery,
     completedJob,
@@ -278,19 +346,38 @@ async function runAcceptance(options = {}) {
       outputPath: timelineOutput,
       outputSha256: timelineResult.output_sha256,
       clips: timeline.clips,
+      command: timelineCommand,
+      validation: timelineValidation,
     },
     ffprobe: timelineProbe,
     gates: {
-      realVerifiedH3: 'passed',
+      realVerifiedH3: h3Validation.status,
       restartRetryOnHost: recovery.transitions.join('->') === 'running->interrupted->pending->running' ? 'passed' : 'failed',
-      timelineComposition: 'passed',
-      mp4AndFfprobe: 'passed',
+      timelineComposition: timelineValidation.status,
+      mp4AndFfprobe: timelineValidation.status,
     },
   });
   fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
   fs.writeFileSync(evidencePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   if (!options.db) db.close();
   return report;
+}
+
+async function runAcceptance(options = {}) {
+  try {
+    return await executeAcceptance(options);
+  } catch (error) {
+    const evidencePath = path.resolve(options.evidence || path.join(process.cwd(), 'director-v1-host-acceptance.json'));
+    if (options.force || !fs.existsSync(evidencePath)) {
+      fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
+      fs.writeFileSync(evidencePath, `${JSON.stringify(createEvidenceReport({
+        completedAt: new Date().toISOString(),
+        gates: { realVerifiedH3: 'failed', restartRetryOnHost: 'pending', timelineComposition: 'pending', mp4AndFfprobe: 'pending' },
+        errors: [{ message: error.message, stack: error.stack }],
+      }), null, 2)}\n`, 'utf8');
+    }
+    throw error;
+  }
 }
 
 if (require.main === module) {
@@ -312,6 +399,10 @@ module.exports = {
   reconcileAndRetry,
   buildTimelineAcceptance,
   createEvidenceReport,
+  applyH3Inputs,
+  validateH3Result,
+  validateTimelineResult,
+  validateSourceArtifact,
   runAcceptance,
   runCommand,
 };

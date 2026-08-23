@@ -20,7 +20,7 @@ node --test test/*.test.js
 npm run build                         # from frontweb
 ```
 
-The backend suite completed with 79 passing tests and 0 failures after the
+The backend suite completed with 91 passing tests and 0 failures after the
 Tasks 5-8 offline implementation. The frontend production build completed successfully with Vite after
 installing the locked dependencies with `npm ci`.
 
@@ -55,8 +55,8 @@ completed the retry successfully, composed two selected four-second clips into
 an eight-second MP4, and probed the final output. Full evidence is in
 [`host-acceptance.json`](./_artifacts/director-v1-vertical-slice/host-acceptance.json).
 
-The H3 output hash is
-`001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544` and the
+The final host-acceptance H3 output hash is
+`abfbc44c48650051ed2bb990f61cf4aa15c53d91e00b11e6aeee8d26874dee4a` and the
 timeline output hash is
 `3722534d856a7f0a930fa9c6d3c35415e6f5cf0b1d289a52abcf8993eb4528cc`.
 

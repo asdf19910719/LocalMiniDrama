@@ -14,6 +14,7 @@ describe('Director host acceptance CLI utilities', () => {
       '--output-dir', 'E:/out',
       '--evidence', 'evidence.json',
       '--source-artifact', 'source.mp4',
+      '--source-sha256', 'abc123',
       '--force',
     ]);
     assert.deepEqual(options, {
@@ -21,6 +22,7 @@ describe('Director host acceptance CLI utilities', () => {
       outputDir: 'E:/out',
       evidence: 'evidence.json',
       sourceArtifact: 'source.mp4',
+      sourceSha256: 'abc123',
       force: true,
     });
   });

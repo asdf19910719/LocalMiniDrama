@@ -5,6 +5,10 @@ const {
   reconcileAndRetry,
   buildTimelineAcceptance,
   createEvidenceReport,
+  applyH3Inputs,
+  validateH3Result,
+  validateTimelineResult,
+  validateSourceArtifact,
 } = require('../scripts/directorHostAcceptance');
 
 describe('Director host acceptance orchestration', () => {
@@ -72,5 +76,46 @@ describe('Director host acceptance orchestration', () => {
     });
     assert.equal(report.recovery.job.status, 'succeeded');
     assert.equal(report.recovery.job.artifact_id, 'artifact-1');
+  });
+
+  it('injects H3 inputs into the MiniMaxH3Director node and timeline JSON', () => {
+    const prompt = {
+      '5': { class_type: 'MiniMaxH3Director', inputs: { global_prompt: 'old', seed: 1, timeline_data: '{}' } },
+      '7': { class_type: 'SaveVideo', inputs: {} },
+    };
+    const injected = applyH3Inputs(prompt, {
+      prompt: 'new prompt', seed: 42, continuityEnabled: true, continuityOverlapFrames: 22,
+    });
+    assert.equal(injected['5'].inputs.global_prompt, 'new prompt');
+    assert.equal(injected['5'].inputs.seed, 42);
+    assert.equal(JSON.parse(injected['5'].inputs.timeline_data).output.continuityEnabled, true);
+    assert.equal(prompt['5'].inputs.global_prompt, 'old');
+  });
+
+  it('rejects a successful generic MP4 as an H3 result', () => {
+    assert.throws(() => validateH3Result({
+      queue: { node_errors: {} },
+      history: { status: { status_str: 'success', completed: true } },
+      ffprobe: { streams: [{ codec_type: 'video', codec_name: 'vp9', width: 640, height: 360 }] },
+    }), /H3 output/i);
+  });
+
+  it('keeps reproducible timeline command data in the evidence report', () => {
+    const report = createEvidenceReport({ timeline: { command: { args: ['-i', 'a.mp4'], command: 'ffmpeg ...' } } });
+    assert.equal(report.timeline.command.command, 'ffmpeg ...');
+    assert.deepEqual(report.timeline.command.args, ['-i', 'a.mp4']);
+  });
+
+  it('rejects a timeline output with the wrong duration', () => {
+    assert.throws(() => validateTimelineResult({
+      outputSha256: 'a'.repeat(64),
+      ffprobe: { streams: [{ codec_type: 'video' }], format: { duration: '7.5' } },
+      expectedDuration: 8,
+    }), /duration/i);
+  });
+
+  it('verifies source artifact provenance when an expected hash is supplied', () => {
+    assert.throws(() => validateSourceArtifact({ actualSha256: 'a'.repeat(64), expectedSha256: 'b'.repeat(64) }), /hash/i);
+    assert.doesNotThrow(() => validateSourceArtifact({ actualSha256: 'a'.repeat(64), expectedSha256: 'A'.repeat(64) }));
   });
 });

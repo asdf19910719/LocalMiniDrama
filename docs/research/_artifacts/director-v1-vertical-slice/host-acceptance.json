@@ -1,7 +1,7 @@
 {
   "schema": "director-v1-host-acceptance",
-  "startedAt": "2026-08-23T05:50:30.331Z",
-  "completedAt": "2026-08-23T06:04:19.269Z",
+  "startedAt": "2026-08-23T06:31:08.294Z",
+  "completedAt": "2026-08-23T06:31:09.174Z",
   "host": {
     "baseUrl": "http://127.0.0.1:8188",
     "systemStatsStatus": 200,
@@ -11,16 +11,16 @@
   "workflow": {
     "id": "h3-continuity-v1",
     "sha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
-    "promptId": "d4b26d93-cde7-4623-977d-47733474a1ba",
+    "promptId": "8271ae51-347f-4cf7-a879-e79883899fe2",
     "queue": {
-      "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
-      "number": 45,
+      "prompt_id": "8271ae51-347f-4cf7-a879-e79883899fe2",
+      "number": 47,
       "node_errors": {}
     },
     "history": {
       "prompt": [
-        45,
-        "d4b26d93-cde7-4623-977d-47733474a1ba",
+        47,
+        "8271ae51-347f-4cf7-a879-e79883899fe2",
         {
           "1": {
             "class_type": "UNETLoader",
@@ -69,7 +69,7 @@
                 0
               ],
               "task_type": "t2v — 文生视频(Text to Video)",
-              "global_prompt": "Live-action cinematic short film at a Chinese street-corner steamed-bun stall at dawn. Consistent characters across all shots: a stocky middle-aged vendor in a white apron and grey beanie; a young woman in a beige trench coat with a black shoulder bag. Warm bulb light under a canvas awning, thin morning mist, natural color grade.",
+              "global_prompt": "director host acceptance",
               "bd_grp_sample": "采样设置",
               "cfg": 1,
               "seed": 42,
@@ -78,7 +78,7 @@
               "height": 480,
               "ref_max_size": 864,
               "total_frames": 372,
-              "timeline_data": "{\"version\": 4, \"editMode\": \"segment\", \"timelineMode\": \"gen_blank\", \"totalFrames\": 372, \"frameRate\": 24.0, \"width\": 864, \"height\": 480, \"refMaxSize\": 864, \"output\": {\"mode\": \"fixed\", \"longEdge\": 864, \"width\": 864, \"height\": 480, \"maxExportFrames\": 0, \"exportMode\": \"all\", \"continuityEnabled\": true, \"continuityOverlapFrames\": 22}, \"videoClips\": [], \"video\": {\"fileName\": \"\", \"videoFile\": \"\", \"subfolder\": \"\", \"type\": \"input\", \"frames\": [], \"frameMap\": []}, \"global\": {\"taskType\": \"t2v — 文生视频(Text to Video)\", \"prompt\": \"Live-action cinematic short film at a Chinese street-corner steamed-bun stall at dawn. Consistent characters across all shots: a stocky middle-aged vendor in a white apron and grey beanie; a young woman in a beige trench coat with a black shoulder bag. Warm bulb light under a canvas awning, thin morning mist, natural color grade.\", \"refs\": [], \"referenceVideo\": {}, \"continuousReference\": false, \"genImage\": {\"imageFile\": \"\"}}, \"segments\": [{\"id\": \"s0\", \"start\": 0, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, early-morning blue-hour light with thin mist over a quiet city street corner. A medium shot frames a steamed-bun stall with stacked bamboo steamers, warm bulb light glowing under its canvas awning. A red paper sign reading \\\"老街包子\\\" hangs on the stall front. The stocky middle-aged vendor in a white apron and grey beanie (S1) lifts the lid off the top steamer, releasing a thick cloud of white steam, and calls out with a hearty voice: <d>[Chinese] 刚出锅的包子，热乎的!</d> [Shot 2] At 00:03.000, the camera cuts to a close-up of the open steamer as the vendor's hand picks up a bun with bamboo tongs, steam curling around his wrist.\\n\\noverall_soundscape: The street is quiet with distant bicycle bells and a passing bus. The steamer lid scrapes open with a wooden clatter, followed by the soft hiss of rushing steam and the light clink of bamboo tongs.\\n\\nnon_diegetic_music: A gentle guzheng-and-flute motif at a slow tempo enters quietly under the steam and holds a warm sustained note.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": false}, {\"id\": \"s1\", \"start\": 124, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, the same street-corner bun stall continues under the canvas awning, morning mist thinning as the sky brightens. A young woman in a beige trench coat with a black shoulder bag hurries into frame and stops at the stall counter, slightly out of breath. The stocky vendor in the white apron and grey beanie (S1) looks up and says warmly: <d>[Chinese] 姑娘，来几个?</d> [Shot 2] At 00:02.500, the camera cuts to a medium close-up as she hands over a folded bill and answers with a smile: <d>[Chinese] 两个，谢谢叔!</d> The vendor drops two buns into a paper bag and passes it across the counter.\\n\\noverall_soundscape: Hurried footsteps approach over the pavement, followed by the rustle of a paper bag, the clink of coins in a tin box, and soft morning traffic passing behind them.\\n\\nnon_diegetic_music: The gentle guzheng-and-flute motif continues at a slow tempo, rising slightly in brightness as the exchange completes.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": true}, {\"id\": \"s2\", \"start\": 248, \"length\": 124, \"frameCount\": 124, \"durationSec\": 5, \"prompt\": \"integrated_multimodal_description: [Shot 1] Live-action, cinematic, at the same bun stall counter, the young woman in the beige trench coat holds the warm paper bag with both hands. She takes a bite of a bun, cheeks rounding, and her eyes narrow with satisfaction as she chews. [Shot 2] At 00:02.000, the camera cuts to a low-angle wide shot as she turns and walks down the street into softening golden dawn light, her breath visible in the cool air. Behind her, the vendor lifts the next steamer lid and another burst of white steam rises into the brightening sky.\\n\\noverall_soundscape: A soft crunch as she bites the bun, followed by light cheerful footsteps moving away. Behind her, the steamer lid scrapes again and steam hisses, under a gradually waking street with distant scooter engines.\\n\\nnon_diegetic_music: The guzheng-and-flute motif resolves into a warm closing phrase at a slow tempo, fading out as she walks into the dawn light.\", \"taskType\": \"\", \"refs\": [], \"referenceVideo\": {}, \"genImage\": {\"imageFile\": \"\"}, \"negativePrompt\": \"\", \"continuityFromPrev\": true}], \"gen\": {\"defaultFrameCount\": 124}, \"runSelectEnabled\": false, \"runSelection\": []}",
+              "timeline_data": "{\"version\":4,\"editMode\":\"segment\",\"timelineMode\":\"gen_blank\",\"totalFrames\":372,\"frameRate\":24,\"width\":864,\"height\":480,\"refMaxSize\":864,\"output\":{\"mode\":\"fixed\",\"longEdge\":864,\"width\":864,\"height\":480,\"maxExportFrames\":0,\"exportMode\":\"all\",\"continuityEnabled\":true,\"continuityOverlapFrames\":22},\"videoClips\":[],\"video\":{\"fileName\":\"\",\"videoFile\":\"\",\"subfolder\":\"\",\"type\":\"input\",\"frames\":[],\"frameMap\":[]},\"global\":{\"taskType\":\"t2v — 文生视频(Text to Video)\",\"prompt\":\"director host acceptance\",\"refs\":[],\"referenceVideo\":{},\"continuousReference\":false,\"genImage\":{\"imageFile\":\"\"}},\"segments\":[{\"id\":\"s0\",\"start\":0,\"length\":124,\"frameCount\":124,\"durationSec\":5,\"prompt\":\"integrated_multimodal_description: [Shot 1] Live-action, cinematic, early-morning blue-hour light with thin mist over a quiet city street corner. A medium shot frames a steamed-bun stall with stacked bamboo steamers, warm bulb light glowing under its canvas awning. A red paper sign reading \\\"老街包子\\\" hangs on the stall front. The stocky middle-aged vendor in a white apron and grey beanie (S1) lifts the lid off the top steamer, releasing a thick cloud of white steam, and calls out with a hearty voice: <d>[Chinese] 刚出锅的包子，热乎的!</d> [Shot 2] At 00:03.000, the camera cuts to a close-up of the open steamer as the vendor's hand picks up a bun with bamboo tongs, steam curling around his wrist.\\n\\noverall_soundscape: The street is quiet with distant bicycle bells and a passing bus. The steamer lid scrapes open with a wooden clatter, followed by the soft hiss of rushing steam and the light clink of bamboo tongs.\\n\\nnon_diegetic_music: A gentle guzheng-and-flute motif at a slow tempo enters quietly under the steam and holds a warm sustained note.\",\"taskType\":\"\",\"refs\":[],\"referenceVideo\":{},\"genImage\":{\"imageFile\":\"\"},\"negativePrompt\":\"\",\"continuityFromPrev\":false},{\"id\":\"s1\",\"start\":124,\"length\":124,\"frameCount\":124,\"durationSec\":5,\"prompt\":\"integrated_multimodal_description: [Shot 1] Live-action, cinematic, the same street-corner bun stall continues under the canvas awning, morning mist thinning as the sky brightens. A young woman in a beige trench coat with a black shoulder bag hurries into frame and stops at the stall counter, slightly out of breath. The stocky vendor in the white apron and grey beanie (S1) looks up and says warmly: <d>[Chinese] 姑娘，来几个?</d> [Shot 2] At 00:02.500, the camera cuts to a medium close-up as she hands over a folded bill and answers with a smile: <d>[Chinese] 两个，谢谢叔!</d> The vendor drops two buns into a paper bag and passes it across the counter.\\n\\noverall_soundscape: Hurried footsteps approach over the pavement, followed by the rustle of a paper bag, the clink of coins in a tin box, and soft morning traffic passing behind them.\\n\\nnon_diegetic_music: The gentle guzheng-and-flute motif continues at a slow tempo, rising slightly in brightness as the exchange completes.\",\"taskType\":\"\",\"refs\":[],\"referenceVideo\":{},\"genImage\":{\"imageFile\":\"\"},\"negativePrompt\":\"\",\"continuityFromPrev\":true},{\"id\":\"s2\",\"start\":248,\"length\":124,\"frameCount\":124,\"durationSec\":5,\"prompt\":\"integrated_multimodal_description: [Shot 1] Live-action, cinematic, at the same bun stall counter, the young woman in the beige trench coat holds the warm paper bag with both hands. She takes a bite of a bun, cheeks rounding, and her eyes narrow with satisfaction as she chews. [Shot 2] At 00:02.000, the camera cuts to a low-angle wide shot as she turns and walks down the street into softening golden dawn light, her breath visible in the cool air. Behind her, the vendor lifts the next steamer lid and another burst of white steam rises into the brightening sky.\\n\\noverall_soundscape: A soft crunch as she bites the bun, followed by light cheerful footsteps moving away. Behind her, the steamer lid scrapes again and steam hisses, under a gradually waking street with distant scooter engines.\\n\\nnon_diegetic_music: The guzheng-and-flute motif resolves into a warm closing phrase at a slow tempo, fading out as she walks into the dawn light.\",\"taskType\":\"\",\"refs\":[],\"referenceVideo\":{},\"genImage\":{\"imageFile\":\"\"},\"negativePrompt\":\"\",\"continuityFromPrev\":true}],\"gen\":{\"defaultFrameCount\":124},\"runSelectEnabled\":false,\"runSelection\":[]}",
               "bd_grp_advanced": "高级采样 Advanced",
               "steps": 25,
               "sampler": "res_multistep",
@@ -128,10 +128,12 @@
             "prompt": "director host acceptance",
             "seed": 42,
             "continuityEnabled": true,
-            "continuityOverlapFrames": 22
+            "continuityOverlapFrames": 22,
+            "width": 864,
+            "height": 480
           },
-          "client_id": "director-04650b59-9df0-4ea2-b491-e32cc399d73c",
-          "create_time": 1787464230364
+          "client_id": "director-2c96a529-305b-43d9-9b5e-7db228be0abc",
+          "create_time": 1787466668329
         },
         [
           "7"
@@ -141,7 +143,7 @@
         "7": {
           "images": [
             {
-              "filename": "H3Director_baozi_test_00003_.mp4",
+              "filename": "H3Director_baozi_test_00004_.mp4",
               "subfolder": "video",
               "type": "output"
             }
@@ -158,27 +160,31 @@
           [
             "execution_start",
             {
-              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
-              "timestamp": 1787464230365
+              "prompt_id": "8271ae51-347f-4cf7-a879-e79883899fe2",
+              "timestamp": 1787466668330
             }
           ],
           [
             "execution_cached",
             {
               "nodes": [
+                "1",
                 "2",
                 "3",
-                "4"
+                "4",
+                "5",
+                "6",
+                "7"
               ],
-              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
-              "timestamp": 1787464230366
+              "prompt_id": "8271ae51-347f-4cf7-a879-e79883899fe2",
+              "timestamp": 1787466668330
             }
           ],
           [
             "execution_success",
             {
-              "prompt_id": "d4b26d93-cde7-4623-977d-47733474a1ba",
-              "timestamp": 1787465057529
+              "prompt_id": "8271ae51-347f-4cf7-a879-e79883899fe2",
+              "timestamp": 1787466668331
             }
           ]
         ]
@@ -193,9 +199,42 @@
       }
     },
     "inputs": {
+      "prompt": "director host acceptance",
       "seed": 42,
       "continuityEnabled": true,
-      "continuityOverlapFrames": 22
+      "continuityOverlapFrames": 22,
+      "width": 864,
+      "height": 480
+    },
+    "validation": {
+      "status": "passed",
+      "video": {
+        "index": 0,
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "width": 864,
+        "height": 480,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1"
+      },
+      "audio": {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "32000",
+        "channels": 2,
+        "channel_layout": "stereo",
+        "r_frame_rate": "0/0",
+        "avg_frame_rate": "0/0"
+      },
+      "duration": 15.292
+    },
+    "sourceValidation": {
+      "status": "passed",
+      "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544"
     }
   },
   "recovery": {
@@ -206,7 +245,7 @@
       "running"
     ],
     "job": {
-      "id": "a6d9ff15-6e24-478c-95bc-328bef6c174b",
+      "id": "6de86d71-6128-4917-b88d-0be5705bf763",
       "status": "succeeded",
       "attempt_number": 2,
       "max_attempts": 2,
@@ -216,12 +255,12 @@
       "input_json": "{\"prompt\":\"director host acceptance\",\"seed\":42,\"continuityEnabled\":true,\"continuityOverlapFrames\":22}",
       "workflow_id": "h3-continuity-v1",
       "workflow_version": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
-      "artifact_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
-      "artifact_id": "d0643895-8b7d-4788-837f-6ad1b8468fde",
-      "created_at": "2026-08-23T05:50:30.359Z",
-      "updated_at": "2026-08-23T06:04:19.269Z",
+      "artifact_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
+      "artifact_id": "bb630b39-060c-417b-bb47-e2cca433f861",
+      "created_at": "2026-08-23T06:31:08.324Z",
+      "updated_at": "2026-08-23T06:31:08.690Z",
       "started_at": "2026-08-23T00:00:00.000Z",
-      "completed_at": "2026-08-23T06:04:19.269Z",
+      "completed_at": "2026-08-23T06:31:08.690Z",
       "input": {
         "prompt": "director host acceptance",
         "seed": 42,
@@ -231,9 +270,9 @@
     }
   },
   "artifact": {
-    "path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
-    "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
-    "fileSize": 1966064,
+    "path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
+    "sha256": "abfbc44c48650051ed2bb990f61cf4aa15c53d91e00b11e6aeee8d26874dee4a",
+    "fileSize": 1965304,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -262,21 +301,21 @@
         }
       ],
       "format": {
-        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
+        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
         "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
         "duration": "15.292000",
-        "size": "1966064",
-        "bit_rate": "1028545"
+        "size": "1965304",
+        "bit_rate": "1028147"
       }
     }
   },
   "timeline": {
-    "id": "c91ab268-1892-4aa6-9248-b280f95eaecd",
-    "outputPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-timeline.mp4",
+    "id": "d2cfe08a-3bba-4426-b88a-69c4fedf7638",
+    "outputPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-timeline.mp4",
     "outputSha256": "3722534d856a7f0a930fa9c6d3c35415e6f5cf0b1d289a52abcf8993eb4528cc",
     "clips": [
       {
-        "artifactId": "2f6f8a14-895b-49e0-93c4-c2c56a9550bd",
+        "artifactId": "5c56ccb2-e775-45d2-b540-ca919076d9d0",
         "artifactPath": "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
         "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
         "startTime": 0,
@@ -286,9 +325,9 @@
         "transition": null
       },
       {
-        "artifactId": "d0643895-8b7d-4788-837f-6ad1b8468fde",
-        "artifactPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-h3.mp4",
-        "sha256": "001e3e8039562165bad5c959db7646b168ad1226710dbdb5f9186e9775e45544",
+        "artifactId": "bb630b39-060c-417b-bb47-e2cca433f861",
+        "artifactPath": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
+        "sha256": "abfbc44c48650051ed2bb990f61cf4aa15c53d91e00b11e6aeee8d26874dee4a",
         "startTime": 4,
         "duration": 4,
         "sourceOffset": 0,
@@ -296,6 +335,34 @@
         "transition": null
       }
     ],
+    "command": {
+      "args": [
+        "-y",
+        "-i",
+        "E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4",
+        "-i",
+        "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
+        "-filter_complex",
+        "[0:v]trim=start=0:duration=4,setpts=PTS-STARTPTS[v0];[1:v]trim=start=0:duration=4,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[vout]",
+        "-map",
+        "[vout]",
+        "-r",
+        "24",
+        "-s",
+        "864x480",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:v",
+        "libx264",
+        "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-timeline.mp4"
+      ],
+      "command": "\"E:\\AI\\references\\LocalMiniDrama\\.worktrees\\director-host-acceptance\\backend-node\\tools\\ffmpeg\\ffmpeg.exe\" -y -i \"E:\\AI\\comfyui-outputs\\director-v1-real-2026-08-23\\director-v1-real.mp4\" -i \"E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4\" -filter_complex \"[0:v]trim=start=0:duration=4,setpts=PTS-STARTPTS[v0];[1:v]trim=start=0:duration=4,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[vout]\" -map \"[vout]\" -r \"24\" -s \"864x480\" -pix_fmt \"yuv420p\" -c:v \"libx264\" \"E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-timeline.mp4\""
+    },
+    "validation": {
+      "status": "passed",
+      "duration": 8,
+      "expectedDuration": 8
+    },
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -313,7 +380,7 @@
         }
       ],
       "format": {
-        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23\\director-host-acceptance-timeline.mp4",
+        "filename": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-timeline.mp4",
         "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
         "duration": "8.000000",
         "size": "752794",
