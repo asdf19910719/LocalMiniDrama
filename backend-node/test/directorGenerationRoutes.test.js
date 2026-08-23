@@ -224,6 +224,17 @@ describe('Director generation routes', () => {
     assert.equal(res.body.data.groups[0].candidates[0].artifact.artifact_path, undefined);
   });
 
+  it('returns empty history for a valid shot and 404 for a missing shot', () => {
+    const empty = responseCapture();
+    routes.getShotCandidates({ params: { shotId: '1' } }, empty);
+    assert.equal(empty.statusCode, 200);
+    assert.deepEqual(empty.body.data, { groups: [], latest: null });
+
+    const missing = responseCapture();
+    routes.getShotCandidates({ params: { shotId: '999' } }, missing);
+    assert.equal(missing.statusCode, 404);
+  });
+
   it('serves only ready persisted artifacts through the content handler', () => {
     const createdAt = new Date().toISOString();
     const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'director-artifacts-'));

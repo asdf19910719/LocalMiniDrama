@@ -142,6 +142,8 @@ function routes(db, log, {
     },
     getShotCandidates: (req, res) => {
       try {
+        const shot = db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(req.params.shotId);
+        if (!shot) return response.notFound(res, 'storyboard not found');
         const groups = candidateService.getCandidateGroupsByShot(db, req.params.shotId);
         response.success(res, { groups, latest: groups[0] || null });
       } catch (error) {

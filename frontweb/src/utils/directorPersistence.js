@@ -31,3 +31,37 @@ export function createLatestRequestGuard() {
     },
   }
 }
+
+export function createDirectorStateGuard() {
+  const refreshGuard = createLatestRequestGuard()
+  const writeGuard = createLatestRequestGuard()
+
+  return {
+    beginRefresh() {
+      return refreshGuard.begin()
+    },
+    isCurrentRefresh(requestId) {
+      return refreshGuard.isCurrent(requestId)
+    },
+    beginWrite() {
+      refreshGuard.begin()
+      return writeGuard.begin()
+    },
+    isCurrentWrite(requestId) {
+      return writeGuard.isCurrent(requestId)
+    },
+    commitWrite(requestId) {
+      if (!writeGuard.isCurrent(requestId)) return false
+      refreshGuard.begin()
+      return true
+    },
+    invalidateAll() {
+      refreshGuard.begin()
+      writeGuard.begin()
+    },
+  }
+}
+
+export function isSameDirectorShot(activeShotId, requestShotId) {
+  return String(activeShotId) === String(requestShotId)
+}

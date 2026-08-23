@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createLatestRequestGuard, formatArtifactMedia, normalizeDirectorShotState } from '../src/utils/directorPersistence.js'
+import * as directorPersistence from '../src/utils/directorPersistence.js'
+
+const { createLatestRequestGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } = directorPersistence
 
 test('normalizes persisted shot groups with the newest group as the active review state', () => {
   const state = normalizeDirectorShotState({
@@ -51,4 +53,24 @@ test('rejects a stale shot request after a newer refresh starts', () => {
   const shotBRequest = guard.begin()
   assert.equal(guard.isCurrent(shotARequest), false)
   assert.equal(guard.isCurrent(shotBRequest), true)
+})
+
+test('rejects a candidate creation response after the panel changes shots', () => {
+  assert.equal(isSameDirectorShot(7, '7'), true)
+  assert.equal(isSameDirectorShot(8, '7'), false)
+})
+
+test('rejects an older refresh after a candidate write begins', () => {
+  assert.equal(typeof directorPersistence.createDirectorStateGuard, 'function')
+  const guard = directorPersistence.createDirectorStateGuard()
+  const refreshRequest = guard.beginRefresh()
+  const writeRequest = guard.beginWrite()
+
+  assert.equal(guard.isCurrentRefresh(refreshRequest), false)
+  assert.equal(guard.isCurrentWrite(writeRequest), true)
+
+  const overlappingRefresh = guard.beginRefresh()
+  assert.equal(guard.isCurrentRefresh(overlappingRefresh), true)
+  assert.equal(guard.commitWrite(writeRequest), true)
+  assert.equal(guard.isCurrentRefresh(overlappingRefresh), false)
 })

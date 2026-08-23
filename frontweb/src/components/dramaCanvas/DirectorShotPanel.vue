@@ -63,7 +63,7 @@
 import { ref, watch } from 'vue'
 import { Check, Plus, Refresh } from '@element-plus/icons-vue'
 import { directorAPI } from '@/api/director'
-import { createLatestRequestGuard, formatArtifactMedia, normalizeDirectorShotState } from '@/utils/directorPersistence'
+import { createDirectorStateGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } from '@/utils/directorPersistence'
 
 const props = defineProps({
   shotId: { type: [String, Number], required: true },
@@ -77,22 +77,22 @@ const reason = ref('')
 const loading = ref(false)
 const creating = ref(false)
 const error = ref('')
-const refreshGuard = createLatestRequestGuard()
+const stateGuard = createDirectorStateGuard()
 
 async function refresh() {
-  const requestId = refreshGuard.begin()
+  const requestId = stateGuard.beginRefresh()
   loading.value = true
   error.value = ''
   try {
     const state = normalizeDirectorShotState(await directorAPI.getShotCandidates(props.shotId))
-    if (!refreshGuard.isCurrent(requestId)) return
+    if (!stateGuard.isCurrentRefresh(requestId)) return
     groupHistory.value = state.groups
     group.value = state.latest
     activeGroupId.value = state.latest?.id || ''
   } catch (err) {
-    if (refreshGuard.isCurrent(requestId)) error.value = err?.message || 'Unable to load candidates'
+    if (stateGuard.isCurrentRefresh(requestId)) error.value = err?.message || 'Unable to load candidates'
   } finally {
-    if (refreshGuard.isCurrent(requestId)) loading.value = false
+    if (stateGuard.isCurrentRefresh(requestId)) loading.value = false
   }
 }
 
@@ -101,27 +101,45 @@ async function createGroup() {
   if (!candidates.length) return
   creating.value = true
   error.value = ''
+  const requestShotId = props.shotId
+  const requestId = stateGuard.beginWrite()
+  loading.value = false
   try {
-    group.value = await directorAPI.createCandidateGroup(props.shotId, candidates)
-    group.value = await directorAPI.reviewCandidateGroup(group.value.id)
-    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, group.value).groups
-    activeGroupId.value = group.value.id
+    const created = await directorAPI.createCandidateGroup(requestShotId, candidates)
+    const reviewed = await directorAPI.reviewCandidateGroup(created.id)
+    if (!stateGuard.isCurrentWrite(requestId) || !isSameDirectorShot(props.shotId, requestShotId)) return
+    if (!stateGuard.commitWrite(requestId)) return
+    loading.value = false
+    group.value = reviewed
+    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, reviewed).groups
+    activeGroupId.value = reviewed.id
   } catch (err) {
-    error.value = err?.message || 'Unable to create candidate group'
+    if (stateGuard.isCurrentWrite(requestId) && isSameDirectorShot(props.shotId, requestShotId)) {
+      error.value = err?.message || 'Unable to create candidate group'
+    }
   } finally {
-    creating.value = false
+    if (stateGuard.isCurrentWrite(requestId)) creating.value = false
   }
 }
 
 async function select(candidateId) {
   const previous = group.value
+  const requestShotId = props.shotId
+  const requestId = stateGuard.beginWrite()
+  loading.value = false
   error.value = ''
   try {
-    group.value = await directorAPI.selectCandidate(previous.id, candidateId, reason.value)
-    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, group.value).groups
+    const selected = await directorAPI.selectCandidate(previous.id, candidateId, reason.value)
+    if (!stateGuard.isCurrentWrite(requestId) || !isSameDirectorShot(props.shotId, requestShotId)) return
+    if (!stateGuard.commitWrite(requestId)) return
+    loading.value = false
+    group.value = selected
+    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, selected).groups
   } catch (err) {
-    group.value = previous
-    error.value = err?.message || 'Unable to select candidate'
+    if (stateGuard.isCurrentWrite(requestId) && isSameDirectorShot(props.shotId, requestShotId)) {
+      group.value = previous
+      error.value = err?.message || 'Unable to select candidate'
+    }
   }
 }
 
@@ -132,6 +150,9 @@ watch(activeGroupId, async (groupId) => {
 })
 
 watch(() => props.shotId, () => {
+  stateGuard.invalidateAll()
+  loading.value = false
+  creating.value = false
   group.value = null
   groupHistory.value = []
   activeGroupId.value = ''
