@@ -68,3 +68,32 @@ CREATE TABLE IF NOT EXISTS director_candidates (
 
 CREATE INDEX IF NOT EXISTS idx_director_candidates_group
   ON director_candidates(group_id, status);
+
+CREATE TABLE IF NOT EXISTS director_anchors (
+  id TEXT PRIMARY KEY,
+  source_artifact_id TEXT NOT NULL,
+  derived_artifact_id TEXT NOT NULL,
+  frame_number INTEGER NOT NULL,
+  reference_role TEXT NOT NULL,
+  reference_use TEXT NOT NULL,
+  prompt_label TEXT,
+  source_sha256 TEXT NOT NULL,
+  parameters_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_director_anchors_source
+  ON director_anchors(source_artifact_id, frame_number);
+
+CREATE TABLE IF NOT EXISTS director_timelines (
+  id TEXT PRIMARY KEY,
+  version TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'validated',
+  input_json TEXT NOT NULL,
+  manifest_json TEXT NOT NULL,
+  ffmpeg_command TEXT NOT NULL,
+  output_path TEXT,
+  output_sha256 TEXT,
+  ffprobe_json TEXT,
+  created_at TEXT NOT NULL
+);

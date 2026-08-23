@@ -1,5 +1,6 @@
 const response = require('../response');
 const candidateService = require('../director/candidateGroupService');
+const timelineService = require('../director/timelineService');
 
 function routes(db, log) {
   return {
@@ -35,6 +36,16 @@ function routes(db, log) {
       } catch (error) {
         log.error('director candidate select', { error: error.message });
         response.badRequest(res, error.message);
+      }
+    },
+    getTimeline: (req, res) => {
+      try {
+        const timeline = timelineService.getTimeline(db, req.params.timelineId);
+        if (!timeline) return response.notFound(res, 'timeline not found');
+        response.success(res, timeline);
+      } catch (error) {
+        log.error('director timeline get', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
   };

@@ -241,6 +241,7 @@
         <el-empty v-else-if="!loading" description="暂无画布数据" />
         <CanvasFloatingToolbar v-if="drama && nodes.length" />
       </div>
+      <DirectorShotPanel v-if="activeDirectorShotId" :shot-id="activeDirectorShotId" />
     </div>
 
     <CanvasCreateDialog
@@ -317,6 +318,7 @@ import CanvasContextMenu from '@/components/dramaCanvas/CanvasContextMenu.vue'
 import CanvasAddButtonNode from '@/components/dramaCanvas/CanvasAddButtonNode.vue'
 import CanvasFloatingToolbar from '@/components/dramaCanvas/CanvasFloatingToolbar.vue'
 import CanvasFlowAligner from '@/components/dramaCanvas/CanvasFlowAligner.vue'
+import DirectorShotPanel from '@/components/dramaCanvas/DirectorShotPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -377,6 +379,11 @@ const initialViewport = computed(() => {
 })
 
 const hasSavedViewport = computed(() => Boolean(savedLayout.value?.viewport))
+const activeDirectorShotId = computed(() => {
+  if (selectedStoryboardIds.value.length) return selectedStoryboardIds.value[0]
+  const focused = focusedNodeId.value ? storyboardIdFromNodeId(focusedNodeId.value) : null
+  return focused || null
+})
 
 function syncWorkflowFromDrama() {
   workflowGroups.value = parseWorkflowGroups(drama.value?.metadata)

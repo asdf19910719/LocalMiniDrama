@@ -316,6 +316,7 @@ function setupRouter(cfg, db, log) {
   r.post('/director/shots/:shotId/candidates', director.createCandidates);
   r.get('/director/candidates/:groupId', director.getCandidates);
   r.post('/director/candidates/:groupId/select', director.selectCandidate);
+  r.get('/director/timelines/:timelineId', director.getTimeline);
 
   // ---------- scene model map ----------
   r.get('/scene-model-map', sceneModelMap.list);

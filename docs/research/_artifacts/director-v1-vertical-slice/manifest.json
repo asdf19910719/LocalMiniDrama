@@ -1,0 +1,43 @@
+{
+  "schema": "director-v1-evidence-manifest",
+  "date": "2026-08-23",
+  "branch": "ai-director-v1",
+  "status": "external_validation_required",
+  "offline": {
+    "backend_tests": {
+      "command": "node --test test/*.test.js",
+      "passed": 79,
+      "failed": 0
+    },
+    "frontend_build": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "migration_tables": [
+      "director_jobs",
+      "director_artifacts",
+      "director_candidate_groups",
+      "director_candidates",
+      "director_anchors",
+      "director_timelines"
+    ]
+  },
+  "external": {
+    "comfyui": "not_available",
+    "ffmpeg": "not_available",
+    "ffprobe": "not_available",
+    "real_h3_job": "not_run",
+    "playable_mp4": "not_generated",
+    "output_sha256": null,
+    "ffprobe_json": null
+  },
+  "gates": {
+    "workflow_registry": "passed_offline",
+    "durable_recovery": "passed_offline",
+    "candidate_selection": "passed_offline",
+    "timeline_validation": "passed_offline",
+    "real_verified_h3": "blocked_external_dependency",
+    "restart_retry_on_host": "pending",
+    "mp4_and_ffprobe": "blocked_external_dependency"
+  }
+}
