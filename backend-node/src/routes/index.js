@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('node:path');
 const response = require('../response');
 const dramaRoutes = require('./drama');
 const taskRoutes = require('./task');
@@ -22,6 +23,11 @@ const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const directorRoutes = require('./director');
+const { loadRegistry } = require('../director/workflowRegistry');
+const { createComfyUIClient } = require('../director/comfyuiClient');
+const { createGpuMutex } = require('../director/gpuMutex');
+const { createDirectorJobRunner } = require('../director/directorJobRunner');
+const { reconcileRunningJobs } = require('../director/directorJobService');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -48,7 +54,25 @@ function setupRouter(cfg, db, log) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
-  const director = directorRoutes(db, log);
+  const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
+  const directorComfyClient = createComfyUIClient({
+    baseUrl: process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
+    outputDir: path.join(process.cwd(), 'data', 'director-artifacts'),
+    allowExperimental: cfg.director.allow_experimental,
+  });
+  reconcileRunningJobs(db);
+  const directorRunner = createDirectorJobRunner({
+    db,
+    comfyClient: directorComfyClient,
+    gpuMutex: createGpuMutex(),
+    registry: directorRegistry,
+    logger: log,
+  });
+  const director = directorRoutes(db, log, {
+    runner: directorRunner,
+    registry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
+  });
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -313,7 +337,9 @@ function setupRouter(cfg, db, log) {
   r.delete('/settings/prompts/:key', promptOverrides.reset);
 
   // ---------- AI Director candidate review ----------
+  r.post('/director/shots/:shotId/generate', director.generateCandidates);
   r.post('/director/shots/:shotId/candidates', director.createCandidates);
+  r.get('/director/jobs/:jobId', director.getJob);
   r.get('/director/candidates/:groupId', director.getCandidates);
   r.post('/director/candidates/:groupId/review', director.reviewCandidates);
   r.post('/director/candidates/:groupId/select', director.selectCandidate);
