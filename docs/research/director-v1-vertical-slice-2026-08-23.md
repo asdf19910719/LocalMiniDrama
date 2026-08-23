@@ -63,10 +63,20 @@ The final host-acceptance H3 output hash is
 timeline output hash is
 `5d71073c539edccf9333b09ba4f4fddcff7d1be9c7b4044b486dedd36c1c199d`.
 
+## Browser Smoke
+
+The local backend on port `5679` and Vite frontend on port `3013` were opened
+at `/drama/2/canvas`. The canvas rendered the existing drama, and clicking the
+real storyboard node opened the `Director candidate review` panel for shot 3.
+Submitting a nonexistent artifact ID displayed the backend validation error
+`Artifact not found` in the panel, confirming the UI error path. The local
+database contained no Director artifact rows, so the positive candidate
+creation/selection path was not exercised without fabricating test data.
+
 ## Known Limitations
 
 - `state_anchor` and `composition_only` remain role-gated experimental paths.
-- The browser smoke flow still requires a running backend plus a populated
-  candidate artifact set.
+- The browser smoke positive path still requires a populated candidate artifact
+  set; the panel rendering and invalid-artifact error path are verified.
 - `docs/research/go-no-go-review.md` remains a separate product-level review;
   this report now contains the complete Director V1 host evidence.
