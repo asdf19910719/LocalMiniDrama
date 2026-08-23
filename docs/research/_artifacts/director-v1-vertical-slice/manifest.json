@@ -6,7 +6,7 @@
   "offline": {
     "backend_tests": {
       "command": "node --test test/*.test.js",
-      "passed": 91,
+      "passed": 94,
       "failed": 0
     },
     "frontend_build": {
@@ -54,12 +54,17 @@
     "host_acceptance": {
       "status": "passed",
       "evidence": "docs/research/_artifacts/director-v1-vertical-slice/host-acceptance.json",
-      "prompt_id": "8271ae51-347f-4cf7-a879-e79883899fe2",
-      "timeline_id": "d2cfe08a-3bba-4426-b88a-69c4fedf7638",
-      "h3_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-h3.mp4",
-      "timeline_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r3\\director-host-acceptance-timeline.mp4",
-      "h3_output_sha256": "abfbc44c48650051ed2bb990f61cf4aa15c53d91e00b11e6aeee8d26874dee4a",
-      "timeline_output_sha256": "3722534d856a7f0a930fa9c6d3c35415e6f5cf0b1d289a52abcf8993eb4528cc"
+      "prompt_id": "2eb0865b-ee2a-4591-9d64-e41e90fc4358",
+      "queue_number": 48,
+      "seed": 1726082341,
+      "h3_node_id": "5",
+      "cached_node_ids": ["1", "2", "3", "4"],
+      "h3_node_fresh_execution": true,
+      "timeline_id": "f4057ec7-a89d-475c-9aeb-5f355766f79c",
+      "h3_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r4\\director-host-acceptance-h3.mp4",
+      "timeline_output_path": "E:\\AI\\comfyui-outputs\\director-v1-host-acceptance-2026-08-23-r4\\director-host-acceptance-timeline.mp4",
+      "h3_output_sha256": "cef5578d55f0ca17c1f53dbd9d7ea7b6a9af396cc95947f7d3696141d83ce166",
+      "timeline_output_sha256": "5d71073c539edccf9333b09ba4f4fddcff7d1be9c7b4044b486dedd36c1c199d"
     }
   },
   "gates": {
