@@ -10,6 +10,7 @@ const {
   getCandidateGroup,
   selectCandidate,
   retryFailedCandidate,
+  getCandidateGroupsByShot,
 } = require('../src/director/candidateGroupService');
 
 function id() { return crypto.randomUUID(); }
@@ -60,6 +61,7 @@ describe('Director candidate groups', () => {
     assert.equal(review.status, 'review');
     assert.equal(review.candidates.find((candidate) => candidate.artifact_id === readyArtifact).status, 'review');
     assert.equal(review.candidates.find((candidate) => candidate.artifact_id === failedArtifact).status, 'failed');
+    assert.equal(review.candidates.find((candidate) => candidate.artifact_id === failedArtifact).artifact.preview_url, null);
 
     const selected = selectCandidate(db, group.id, review.candidates.find((candidate) => candidate.artifact_id === readyArtifact).id, {
       selectedBy: 'director-user', reason: 'cleaner eyeline',
@@ -81,5 +83,15 @@ describe('Director candidate groups', () => {
     assert.equal(retried.status, 'pending');
     assert.equal(getCandidateGroup(db, group.id).status, 'running');
     assert.throws(() => retryFailedCandidate(db, group.id, candidate.id), /failed candidate/i);
+  });
+
+  it('returns all candidate groups for a shot with the newest group first', () => {
+    const older = createCandidateGroup(db, { shotId: 'shot-persisted', candidates: [{ artifactId: readyArtifact }], now: '2026-08-23T00:00:00.000Z' });
+    const newer = createCandidateGroup(db, { shotId: 'shot-persisted', candidates: [{ artifactId: readyArtifact }], now: '2026-08-23T00:01:00.000Z' });
+
+    const groups = getCandidateGroupsByShot(db, 'shot-persisted');
+
+    assert.deepEqual(groups.map((group) => group.id), [newer.id, older.id]);
+    assert.equal(getCandidateGroupsByShot(db, 'missing-shot').length, 0);
   });
 });

@@ -1,5 +1,8 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const Database = require('better-sqlite3');
 
 const createRoutes = require('../src/routes/director');
@@ -43,6 +46,7 @@ function responseCapture() {
     body: null,
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
+    sendFile(filePath) { this.sentFile = filePath; return this; },
   };
 }
 
@@ -183,5 +187,72 @@ describe('Director generation routes', () => {
     assert.equal(res.body.data.jobs[0].error_code, 'DIRECTOR_QUEUE_ERROR');
     assert.equal(res.body.data.group.status, 'failed');
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 1);
+  });
+
+  it('restores the newest candidate group for a shot with parsed artifact metadata', () => {
+    const createdAt = '2026-08-23T00:00:00.000Z';
+    const groupId = 'group-persisted';
+    const candidateId = 'candidate-persisted';
+    const artifactId = 'artifact-persisted';
+    const jobId = 'job-persisted';
+    db.prepare(`INSERT INTO director_candidate_groups
+      (id, shot_id, status, created_at, updated_at) VALUES (?, ?, 'review', ?, ?)`)
+      .run(groupId, '1', createdAt, createdAt);
+    db.prepare(`INSERT INTO director_jobs
+      (id, status, attempt_number, max_attempts, input_json, created_at, updated_at)
+      VALUES (?, 'succeeded', 1, 3, '{}', ?, ?)`)
+      .run(jobId, createdAt, createdAt);
+    db.prepare(`INSERT INTO director_artifacts
+      (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size,
+       ffprobe_json, manifest_json, created_at, ready_at)
+      VALUES (?, ?, 1, 1, 'ready', 'E:/artifacts/result.mp4', 'sha256:video', 123,
+        ?, ?, ?, ?)`)
+      .run(artifactId, jobId, JSON.stringify({ streams: [{ width: 864, height: 480, r_frame_rate: '24/1' }], format: { duration: '5.0' } }), JSON.stringify({ kind: 'video', sha256: 'sha256:video' }), createdAt, createdAt);
+    db.prepare(`INSERT INTO director_candidates
+      (id, group_id, artifact_id, job_id, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'review', ?, ?)`)
+      .run(candidateId, groupId, artifactId, jobId, createdAt, createdAt);
+
+    const res = responseCapture();
+    routes.getShotCandidates({ params: { shotId: '1' } }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.data.latest.id, groupId);
+    assert.equal(res.body.data.groups[0].candidates[0].artifact.id, artifactId);
+    assert.equal(res.body.data.groups[0].candidates[0].artifact.media.width, 864);
+    assert.equal(res.body.data.groups[0].candidates[0].artifact.preview_url, `/api/v1/director/artifacts/${artifactId}/content`);
+    assert.equal(res.body.data.groups[0].candidates[0].artifact.artifact_path, undefined);
+  });
+
+  it('serves only ready persisted artifacts through the content handler', () => {
+    const createdAt = new Date().toISOString();
+    const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'director-artifacts-'));
+    const readyPath = path.join(artifactRoot, 'ready.mp4');
+    const outsidePath = path.join(os.tmpdir(), `director-outside-${Date.now()}.mp4`);
+    fs.writeFileSync(readyPath, 'test');
+    fs.writeFileSync(outsidePath, 'test');
+    db.prepare(`INSERT INTO director_artifacts
+      (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size,
+       manifest_json, created_at, ready_at)
+      VALUES ('artifact-ready', 'job-ready', 1, 1, 'ready', ?, 'hash', 1, '{}', ?, ?),
+             ('artifact-failed', 'job-failed', 1, 1, 'failed', 'E:/artifacts/failed.mp4', '', 0, '{}', ?, NULL),
+             ('artifact-outside', 'job-outside', 1, 1, 'ready', ?, 'hash', 1, '{}', ?, ?)`)
+      .run(readyPath, createdAt, createdAt, createdAt, outsidePath, createdAt, createdAt);
+    const contentRoutes = createRoutes(db, { error() {} }, { artifactRoot });
+
+    const ready = responseCapture();
+    contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-ready' } }, ready);
+    assert.equal(ready.statusCode, null);
+    assert.equal(ready.sentFile, readyPath);
+
+    const failed = responseCapture();
+    contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-failed' } }, failed);
+    assert.equal(failed.statusCode, 404);
+
+    const outside = responseCapture();
+    contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-outside' } }, outside);
+    assert.equal(outside.statusCode, 404);
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+    fs.rmSync(outsidePath, { force: true });
   });
 });

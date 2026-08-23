@@ -23,12 +23,25 @@
         <el-tag size="small" effect="plain">{{ group.status }}</el-tag>
         <span>{{ group.candidates?.length || 0 }} candidates</span>
       </div>
+      <el-select v-if="groupHistory.length > 1" v-model="activeGroupId" size="small" aria-label="Candidate group history">
+        <el-option v-for="item in groupHistory" :key="item.id" :label="`${item.status} · ${item.id.slice(0, 8)}`" :value="item.id" />
+      </el-select>
       <el-input v-model="reason" placeholder="Selection reason" clearable />
       <div class="candidate-list">
         <div v-for="candidate in group.candidates" :key="candidate.id" class="candidate-row">
+          <video
+            v-if="candidate.artifact?.preview_url"
+            class="candidate-preview"
+            :src="candidate.artifact.preview_url"
+            controls
+            preload="metadata"
+          />
           <div class="candidate-copy">
             <strong>{{ candidate.artifact_id }}</strong>
             <span>{{ candidate.status }}</span>
+            <small v-if="candidate.artifact?.media">
+              {{ formatArtifactMedia(candidate.artifact) }}
+            </small>
           </div>
           <el-button
             circle
@@ -50,28 +63,36 @@
 import { ref, watch } from 'vue'
 import { Check, Plus, Refresh } from '@element-plus/icons-vue'
 import { directorAPI } from '@/api/director'
+import { createLatestRequestGuard, formatArtifactMedia, normalizeDirectorShotState } from '@/utils/directorPersistence'
 
 const props = defineProps({
   shotId: { type: [String, Number], required: true },
 })
 
 const group = ref(null)
+const groupHistory = ref([])
+const activeGroupId = ref('')
 const artifactInput = ref('')
 const reason = ref('')
 const loading = ref(false)
 const creating = ref(false)
 const error = ref('')
+const refreshGuard = createLatestRequestGuard()
 
 async function refresh() {
-  if (!group.value?.id) return
+  const requestId = refreshGuard.begin()
   loading.value = true
   error.value = ''
   try {
-    group.value = await directorAPI.getCandidateGroup(group.value.id)
+    const state = normalizeDirectorShotState(await directorAPI.getShotCandidates(props.shotId))
+    if (!refreshGuard.isCurrent(requestId)) return
+    groupHistory.value = state.groups
+    group.value = state.latest
+    activeGroupId.value = state.latest?.id || ''
   } catch (err) {
-    error.value = err?.message || 'Unable to load candidates'
+    if (refreshGuard.isCurrent(requestId)) error.value = err?.message || 'Unable to load candidates'
   } finally {
-    loading.value = false
+    if (refreshGuard.isCurrent(requestId)) loading.value = false
   }
 }
 
@@ -83,6 +104,8 @@ async function createGroup() {
   try {
     group.value = await directorAPI.createCandidateGroup(props.shotId, candidates)
     group.value = await directorAPI.reviewCandidateGroup(group.value.id)
+    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, group.value).groups
+    activeGroupId.value = group.value.id
   } catch (err) {
     error.value = err?.message || 'Unable to create candidate group'
   } finally {
@@ -95,18 +118,28 @@ async function select(candidateId) {
   error.value = ''
   try {
     group.value = await directorAPI.selectCandidate(previous.id, candidateId, reason.value)
+    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, group.value).groups
   } catch (err) {
     group.value = previous
     error.value = err?.message || 'Unable to select candidate'
   }
 }
 
+watch(activeGroupId, async (groupId) => {
+  if (!groupId || groupId === group.value?.id) return
+  const historical = groupHistory.value.find((item) => item.id === groupId)
+  if (historical) group.value = historical
+})
+
 watch(() => props.shotId, () => {
   group.value = null
+  groupHistory.value = []
+  activeGroupId.value = ''
   artifactInput.value = ''
   reason.value = ''
   error.value = ''
-})
+  refresh()
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -124,8 +157,9 @@ h2 { margin: 3px 0 14px; font-size: 15px; }
 .candidate-create, .candidate-review { display: grid; gap: 10px; }
 .candidate-list { display: grid; gap: 6px; }
 .candidate-row { min-height: 42px; padding: 7px 8px; border: 1px solid var(--border-color, #27272a); border-radius: 6px; }
-.candidate-copy { min-width: 0; display: grid; gap: 3px; }
+.candidate-copy { min-width: 0; display: grid; gap: 3px; flex: 1; }
 .candidate-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.candidate-copy span, .review-meta { color: var(--text-subtle, #71717a); font-size: 11px; }
+.candidate-copy span, .candidate-copy small, .review-meta { color: var(--text-subtle, #71717a); font-size: 11px; }
+.candidate-preview { width: 72px; aspect-ratio: 16 / 9; object-fit: cover; background: #09090b; border-radius: 4px; flex: 0 0 72px; }
 @media (max-width: 900px) { .director-shot-panel { width: auto; flex: 0 0 240px; } }
 </style>

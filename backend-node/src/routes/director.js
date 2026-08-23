@@ -1,4 +1,6 @@
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const response = require('../response');
 const candidateService = require('../director/candidateGroupService');
 const jobService = require('../director/directorJobService');
@@ -45,7 +47,26 @@ function createGenerationBatch(db, {
   return { group: candidateService.getCandidateGroup(db, groupId), jobs };
 }
 
-function routes(db, log, { runner = null, registry = null, allowExperimental = false } = {}) {
+function isFileWithin(rootPath, filePath) {
+  try {
+    const realRoot = fs.realpathSync(rootPath);
+    const realFile = fs.realpathSync(filePath);
+    const relative = path.relative(realRoot, realFile);
+    return Boolean(relative)
+      && !relative.startsWith('..')
+      && !path.isAbsolute(relative)
+      && fs.statSync(realFile).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function routes(db, log, {
+  runner = null,
+  registry = null,
+  allowExperimental = false,
+  artifactRoot = path.join(process.cwd(), 'data', 'director-artifacts'),
+} = {}) {
   return {
     generateCandidates: (req, res) => {
       try {
@@ -116,6 +137,27 @@ function routes(db, log, { runner = null, registry = null, allowExperimental = f
         response.success(res, group);
       } catch (error) {
         log.error('director candidate group get', { error: error.message });
+        response.internalError(res, error.message);
+      }
+    },
+    getShotCandidates: (req, res) => {
+      try {
+        const groups = candidateService.getCandidateGroupsByShot(db, req.params.shotId);
+        response.success(res, { groups, latest: groups[0] || null });
+      } catch (error) {
+        log.error('director shot candidate groups get', { error: error.message });
+        response.internalError(res, error.message);
+      }
+    },
+    getArtifactContent: (req, res) => {
+      try {
+        const artifact = candidateService.getCandidateArtifact(db, req.params.artifactId);
+        if (!artifact || artifact.status !== 'ready' || !isFileWithin(artifactRoot, artifact.artifact_path)) {
+          return response.notFound(res, 'director artifact not found');
+        }
+        res.sendFile(artifact.artifact_path);
+      } catch (error) {
+        log.error('director artifact content get', { error: error.message });
         response.internalError(res, error.message);
       }
     },

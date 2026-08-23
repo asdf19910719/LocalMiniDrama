@@ -1,6 +1,9 @@
 import request from '@/utils/request'
 
 export const directorAPI = {
+  getShotCandidates(shotId) {
+    return request.get(`/director/shots/${shotId}/candidates`)
+  },
   createCandidateGroup(shotId, candidates) {
     return request.post(`/director/shots/${shotId}/candidates`, { candidates })
   },

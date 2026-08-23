@@ -55,9 +55,10 @@ function setupRouter(cfg, db, log) {
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
+  const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorComfyClient = createComfyUIClient({
     baseUrl: process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
-    outputDir: path.join(process.cwd(), 'data', 'director-artifacts'),
+    outputDir: directorArtifactRoot,
     allowExperimental: cfg.director.allow_experimental,
   });
   reconcileRunningJobs(db);
@@ -72,6 +73,7 @@ function setupRouter(cfg, db, log) {
     runner: directorRunner,
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
+    artifactRoot: directorArtifactRoot,
   });
 
   // ---------- dramas ----------
@@ -338,7 +340,9 @@ function setupRouter(cfg, db, log) {
 
   // ---------- AI Director candidate review ----------
   r.post('/director/shots/:shotId/generate', director.generateCandidates);
+  r.get('/director/shots/:shotId/candidates', director.getShotCandidates);
   r.post('/director/shots/:shotId/candidates', director.createCandidates);
+  r.get('/director/artifacts/:artifactId/content', director.getArtifactContent);
   r.get('/director/jobs/:jobId', director.getJob);
   r.get('/director/candidates/:groupId', director.getCandidates);
   r.post('/director/candidates/:groupId/review', director.reviewCandidates);

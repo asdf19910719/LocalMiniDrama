@@ -10,13 +10,100 @@ function candidateRow(row) {
   return row ? { ...row } : null;
 }
 
+function parseJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function artifactMedia(ffprobe) {
+  const video = ffprobe?.streams?.find((stream) => stream.codec_type === 'video')
+    || ffprobe?.streams?.find((stream) => stream.width || stream.height)
+    || null;
+  return {
+    width: video?.width ?? null,
+    height: video?.height ?? null,
+    codec: video?.codec_name ?? null,
+    frame_rate: video?.avg_frame_rate || video?.r_frame_rate || null,
+    duration: ffprobe?.format?.duration ?? null,
+  };
+}
+
+function artifactRow(row, { includePath = false } = {}) {
+  if (!row) return null;
+  const ffprobe = parseJson(row.ffprobe_json);
+  const { artifact_path: artifactPath, ...publicRow } = row;
+  return {
+    ...publicRow,
+    ...(includePath ? { artifact_path: artifactPath } : {}),
+    ffprobe,
+    manifest: parseJson(row.manifest_json),
+    media: artifactMedia(ffprobe),
+    preview_url: row.status === 'ready' ? `/api/v1/director/artifacts/${row.id}/content` : null,
+  };
+}
+
+function candidatesForGroup(db, groupId) {
+  return db.prepare(`SELECT candidate.*, artifact.id AS joined_artifact_id,
+      artifact.job_id AS artifact_job_id, artifact.attempt_number AS artifact_attempt_number,
+      artifact.version AS artifact_version, artifact.status AS artifact_status,
+      artifact.artifact_path, artifact.parent_artifact_id, artifact.sha256,
+      artifact.file_size, artifact.ffprobe_json, artifact.manifest_json,
+      artifact.created_at AS artifact_created_at, artifact.ready_at AS artifact_ready_at
+    FROM director_candidates candidate
+    LEFT JOIN director_artifacts artifact ON artifact.id = candidate.artifact_id
+    WHERE candidate.group_id = ? ORDER BY candidate.created_at, candidate.id`).all(groupId).map((row) => {
+    const candidate = candidateRow({
+      id: row.id,
+      group_id: row.group_id,
+      artifact_id: row.artifact_id,
+      job_id: row.job_id,
+      status: row.status,
+      error_code: row.error_code,
+      error_message: row.error_message,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    });
+    candidate.artifact = artifactRow(row.joined_artifact_id ? {
+      id: row.joined_artifact_id,
+      job_id: row.artifact_job_id,
+      attempt_number: row.artifact_attempt_number,
+      version: row.artifact_version,
+      status: row.artifact_status,
+      artifact_path: row.artifact_path,
+      parent_artifact_id: row.parent_artifact_id,
+      sha256: row.sha256,
+      file_size: row.file_size,
+      ffprobe_json: row.ffprobe_json,
+      manifest_json: row.manifest_json,
+      created_at: row.artifact_created_at,
+      ready_at: row.artifact_ready_at,
+    } : null);
+    return candidate;
+  });
+}
+
 function getCandidateGroup(db, groupId) {
   const group = db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId);
   if (!group) return null;
   return {
     ...group,
-    candidates: db.prepare('SELECT * FROM director_candidates WHERE group_id = ? ORDER BY created_at, id').all(groupId).map(candidateRow),
+    candidates: candidatesForGroup(db, groupId),
   };
+}
+
+function getCandidateGroupsByShot(db, shotId) {
+  if (!shotId) return [];
+  return db.prepare(`SELECT id FROM director_candidate_groups
+    WHERE shot_id = ? ORDER BY created_at DESC, id DESC`).all(String(shotId))
+    .map((row) => getCandidateGroup(db, row.id));
+}
+
+function getCandidateArtifact(db, artifactId) {
+  return artifactRow(db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(artifactId), { includePath: true });
 }
 
 function requireGroup(db, groupId) {
@@ -147,4 +234,6 @@ module.exports = {
   retryFailedCandidate,
   markCandidateFailed,
   finalizeCandidateGroup,
+  getCandidateGroupsByShot,
+  getCandidateArtifact,
 };
