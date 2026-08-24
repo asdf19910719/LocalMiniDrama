@@ -112,3 +112,24 @@ test('thinking stream retries once without thinking when reasoning has no final 
     await server.close();
   }
 });
+
+test('reasoning progress never replays unchanged content to the storyboard stream callback', async () => {
+  const server = await listen((_req, res) => sendSse(res, [
+    { choices: [{ delta: { reasoning_content: '先规划镜头' } }] },
+    { choices: [{ delta: { content: '[{"shot_number":1}]' } }] },
+    { choices: [{ delta: { reasoning_content: '检查完成' }, finish_reason: 'stop' }] },
+  ]));
+  const streamedContents = [];
+
+  try {
+    const result = await aiClient.generateText(
+      createConfigDb(server.baseUrl), silentLog(), 'text', 'prompt', '', {
+        streamCallback: (content) => streamedContents.push(content),
+      }
+    );
+    assert.equal(result, '[{"shot_number":1}]');
+    assert.deepEqual(streamedContents, ['[{"shot_number":1}]']);
+  } finally {
+    await server.close();
+  }
+});

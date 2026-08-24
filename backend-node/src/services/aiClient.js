@@ -379,7 +379,7 @@ async function generateText(db, log, serviceType, userPrompt, systemPrompt, opti
       log.info('AI stream progress', { model, received_chars: receivedLen, elapsed_ms: Date.now() - startMs });
     }
     // 调用者提供的流式回调（如分镜增量解析），传入当前已积累的完整文本
-    if (streamCallback && accumulated) streamCallback(accumulated);
+    if (!event && streamCallback && accumulated) streamCallback(accumulated);
   }, log, model);
   // 流式模式下 res.body 已是拼接好的完整文本内容（非 JSON）
   const content = res.body;
