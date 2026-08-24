@@ -28,6 +28,13 @@ const router = createRouter({
       meta: { title: '画布模式' }
     },
     {
+      // Keep the documented drama URL compatible with the canvas implementation.
+      path: '/drama/:id/canvas',
+      name: 'drama-canvas',
+      component: () => import('@/views/DramaCanvas.vue'),
+      meta: { title: '画布模式' }
+    },
+    {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),

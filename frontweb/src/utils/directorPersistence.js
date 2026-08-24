@@ -1,3 +1,31 @@
+function parseJsonObject(text, fieldName) {
+  try {
+    const value = JSON.parse(String(text || '{}'))
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not an object')
+    return value
+  } catch {
+    throw new Error(`${fieldName} must be valid JSON object`)
+  }
+}
+
+export function buildDirectorGenerationRequest({
+  workflowId = 'h3-continuity-v1',
+  candidateCount = 2,
+  promptText = '{}',
+  inputsText = '{}',
+} = {}) {
+  if (!String(workflowId).trim()) throw new Error('workflowId is required')
+  if (!Number.isInteger(Number(candidateCount)) || Number(candidateCount) < 1 || Number(candidateCount) > 3) {
+    throw new Error('candidateCount must be an integer from 1 through 3')
+  }
+  return {
+    workflowId: String(workflowId).trim(),
+    candidateCount: Number(candidateCount),
+    prompt: parseJsonObject(promptText, 'prompt'),
+    inputs: parseJsonObject(inputsText, 'inputs'),
+  }
+}
+
 export function normalizeDirectorShotState(payload = {}, createdGroup = null) {
   const groups = Array.isArray(payload.groups) ? [...payload.groups] : []
   if (createdGroup) {

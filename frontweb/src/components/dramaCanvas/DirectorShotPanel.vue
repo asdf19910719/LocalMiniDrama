@@ -11,10 +11,13 @@
     </div>
 
     <el-form v-if="!group" class="candidate-create" @submit.prevent="createGroup">
-      <el-input v-model="artifactInput" placeholder="Artifact IDs, comma separated" clearable />
-      <el-button type="primary" :loading="creating" :disabled="!artifactInput.trim()" @click="createGroup">
+      <el-input v-model="workflowId" placeholder="Workflow ID" clearable />
+      <el-input-number v-model="candidateCount" :min="1" :max="3" controls-position="right" aria-label="Candidate count" />
+      <el-input v-model="promptText" type="textarea" :rows="4" placeholder="Prompt JSON" />
+      <el-input v-model="inputsText" type="textarea" :rows="3" placeholder="Inputs JSON (optional)" />
+      <el-button type="primary" :loading="creating" @click="createGroup">
         <el-icon><Plus /></el-icon>
-        Create group
+        Generate candidates
       </el-button>
     </el-form>
 
@@ -63,7 +66,7 @@
 import { ref, watch } from 'vue'
 import { Check, Plus, Refresh } from '@element-plus/icons-vue'
 import { directorAPI } from '@/api/director'
-import { createDirectorStateGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } from '@/utils/directorPersistence'
+import { buildDirectorGenerationRequest, createDirectorStateGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } from '@/utils/directorPersistence'
 
 const props = defineProps({
   shotId: { type: [String, Number], required: true },
@@ -72,7 +75,10 @@ const props = defineProps({
 const group = ref(null)
 const groupHistory = ref([])
 const activeGroupId = ref('')
-const artifactInput = ref('')
+const workflowId = ref('h3-continuity-v1')
+const candidateCount = ref(2)
+const promptText = ref('{}')
+const inputsText = ref('{}')
 const reason = ref('')
 const loading = ref(false)
 const creating = ref(false)
@@ -97,22 +103,26 @@ async function refresh() {
 }
 
 async function createGroup() {
-  const candidates = artifactInput.value.split(',').map((artifactId) => artifactId.trim()).filter(Boolean).map((artifactId) => ({ artifact_id: artifactId }))
-  if (!candidates.length) return
   creating.value = true
   error.value = ''
   const requestShotId = props.shotId
   const requestId = stateGuard.beginWrite()
   loading.value = false
   try {
-    const created = await directorAPI.createCandidateGroup(requestShotId, candidates)
-    const reviewed = await directorAPI.reviewCandidateGroup(created.id)
+    const payload = buildDirectorGenerationRequest({
+      workflowId: workflowId.value,
+      candidateCount: candidateCount.value,
+      promptText: promptText.value,
+      inputsText: inputsText.value,
+    })
+    const generated = await directorAPI.generateCandidates(requestShotId, payload)
     if (!stateGuard.isCurrentWrite(requestId) || !isSameDirectorShot(props.shotId, requestShotId)) return
     if (!stateGuard.commitWrite(requestId)) return
     loading.value = false
-    group.value = reviewed
-    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, reviewed).groups
-    activeGroupId.value = reviewed.id
+    group.value = generated.group
+    groupHistory.value = normalizeDirectorShotState({ groups: groupHistory.value }, generated.group).groups
+    activeGroupId.value = generated.group.id
+    refresh()
   } catch (err) {
     if (stateGuard.isCurrentWrite(requestId) && isSameDirectorShot(props.shotId, requestShotId)) {
       error.value = err?.message || 'Unable to create candidate group'
@@ -156,7 +166,10 @@ watch(() => props.shotId, () => {
   group.value = null
   groupHistory.value = []
   activeGroupId.value = ''
-  artifactInput.value = ''
+  workflowId.value = 'h3-continuity-v1'
+  candidateCount.value = 2
+  promptText.value = '{}'
+  inputsText.value = '{}'
   reason.value = ''
   error.value = ''
   refresh()

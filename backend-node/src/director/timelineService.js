@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { buildPostproductionPlan } = require('./directorPostproductionService');
 
 const ALLOWED_TRANSITIONS = new Set(['cut', 'fade', 'dissolve']);
 
@@ -116,7 +117,7 @@ function buildFfmpegCommand(timeline, { ffmpegPath = 'ffmpeg', outputPath }) {
   return { args, command };
 }
 
-function createTimeline(db, timeline, { outputPath, ffmpegPath = 'ffmpeg', now } = {}) {
+function createTimeline(db, timeline, { outputPath, ffmpegPath = 'ffmpeg', postproduction = null, now } = {}) {
   const createdAt = now || new Date().toISOString();
   const command = buildFfmpegCommand(timeline, { ffmpegPath, outputPath });
   const timelineId = id();
@@ -129,6 +130,16 @@ function createTimeline(db, timeline, { outputPath, ffmpegPath = 'ffmpeg', now }
     commandArgs: command.args,
     createdAt,
   };
+  if (postproduction) {
+    const postInput = postproduction.inputPath || outputPath;
+    const postOutput = postproduction.outputPath || `${outputPath}.post.mp4`;
+    manifest.postproduction = buildPostproductionPlan({
+      ...postproduction,
+      inputPath: postInput,
+      outputPath: postOutput,
+      fps: postproduction.fps || timeline.output.fps,
+    });
+  }
   db.prepare(`INSERT INTO director_timelines
     (id, version, status, input_json, manifest_json, ffmpeg_command, output_path, created_at)
     VALUES (?, ?, 'validated', ?, ?, ?, ?, ?)`).run(

@@ -151,6 +151,46 @@ describe('Director generation routes', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
+  it('rejects downstream continuity generation until its source artifact is selected', () => {
+    const body = {
+      workflowId: 'h3-continuity-v1',
+      candidateCount: 1,
+      prompt: { '5': {} },
+      inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-unselected' },
+    };
+    const rejected = responseCapture();
+    routes.generateCandidates({ params: { shotId: '1' }, body }, rejected);
+    assert.equal(rejected.statusCode, 400);
+    assert.match(rejected.body.error.message, /selected/i);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
+
+    db.prepare(`INSERT INTO director_candidate_groups
+      (id, shot_id, status, selected_artifact_id, created_at, updated_at)
+      VALUES ('source-group', '1', 'review', 'artifact-selected', ?, ?)`)
+      .run(new Date().toISOString(), new Date().toISOString());
+    const stillRejected = responseCapture();
+    routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { ...body, inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-selected' } },
+    }, stillRejected);
+    assert.equal(stillRejected.statusCode, 400);
+    assert.match(stillRejected.body.error.message, /selected/i);
+
+    db.prepare(`INSERT INTO director_artifacts
+      (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size,
+       manifest_json, created_at, ready_at)
+      VALUES ('artifact-selected', 'source-job', 1, 1, 'ready', 'source.mp4', 'hash', 1, '{}', ?, ?)`)
+      .run(new Date().toISOString(), new Date().toISOString());
+    db.prepare("UPDATE director_candidate_groups SET status = 'selected' WHERE id = 'source-group'").run();
+    const accepted = responseCapture();
+    routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { ...body, inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-selected' } },
+    }, accepted);
+    assert.equal(accepted.statusCode, 202);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 1);
+  });
+
   it('returns durable job details and a not-found response', () => {
     const createRes = responseCapture();
     routes.generateCandidates({

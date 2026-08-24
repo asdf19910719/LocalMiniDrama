@@ -1,7 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
 const { selectWorkflow } = require('./workflowRegistry');
+const { getFfmpegPath, getFfprobePath } = require('../utils/ffmpegPath');
+
+const execFileAsync = promisify(execFile);
 
 class ComfyUIClientError extends Error {
   constructor(message, code = 'COMFYUI_ERROR', details = {}) {
@@ -37,23 +42,69 @@ function sha256Buffer(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
+function parseFfmpegProbe(text) {
+  const source = String(text || '');
+  const durationMatch = source.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/i);
+  const streams = [];
+  for (const line of source.split(/\r?\n/)) {
+    const video = line.match(/Video:\s*([^,\s]+)/i);
+    const audio = line.match(/Audio:\s*([^,\s]+)/i);
+    if (video) {
+      const dimensions = line.match(/(\d{2,5})x(\d{2,5})/);
+      const frameRate = line.match(/(\d+(?:\.\d+)?)\s+fps/i);
+      streams.push({
+        codec_type: 'video',
+        codec_name: video[1],
+        ...(dimensions ? { width: Number(dimensions[1]), height: Number(dimensions[2]) } : {}),
+        ...(frameRate ? { r_frame_rate: `${Number(frameRate[1])}/1` } : {}),
+      });
+    } else if (audio) {
+      streams.push({ codec_type: 'audio', codec_name: audio[1] });
+    }
+  }
+  return {
+    streams,
+    format: durationMatch
+      ? { duration: String(Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])) }
+      : {},
+    probe_source: 'ffmpeg-fallback',
+  };
+}
+
 function createComfyUIClient({
   baseUrl,
   fetchImpl = globalThis.fetch,
   outputDir = process.cwd(),
   pollIntervalMs = 1000,
   timeoutMs = 30 * 60 * 1000,
+  requestTimeoutMs = 30 * 1000,
+  ffprobePath = getFfprobePath(),
+  ffmpegPath = getFfmpegPath(),
+  probeMedia = null,
   allowExperimental = false,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('fetch is required for ComfyUI client');
   const root = normalizeBaseUrl(baseUrl);
 
-  async function request(endpoint, { raw = false, ...options } = {}) {
+  async function request(endpoint, { raw = false, timeoutMs: requestTimeout = requestTimeoutMs, ...options } = {}) {
     let response;
+    const controller = new AbortController();
+    const timeout = Number(requestTimeout) > 0
+      ? setTimeout(() => controller.abort(), Number(requestTimeout))
+      : null;
     try {
-      response = await fetchImpl(`${root}${endpoint}`, options);
+      response = await fetchImpl(`${root}${endpoint}`, { ...options, signal: controller.signal });
     } catch (error) {
+      if (error?.name === 'AbortError' && timeout) {
+        throw new ComfyUIClientError(
+          `ComfyUI request timed out after ${Number(requestTimeout)}ms: ${endpoint}`,
+          'COMFYUI_TIMEOUT',
+          { endpoint, timeoutMs: Number(requestTimeout) }
+        );
+      }
       throw new ComfyUIClientError(`ComfyUI request failed: ${error.message}`, 'COMFYUI_NETWORK_ERROR', { cause: error });
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
     if (raw) {
       if (!response.ok) {
@@ -134,12 +185,45 @@ function createComfyUIClient({
     };
   }
 
+  async function probeArtifact(artifactPath) {
+    if (typeof probeMedia === 'function') return probeMedia(artifactPath);
+    try {
+      const result = await execFileAsync(ffprobePath, [
+        '-v', 'error', '-show_streams', '-show_format', '-of', 'json', artifactPath,
+      ], { maxBuffer: 4 * 1024 * 1024 });
+      return JSON.parse(result.stdout);
+    } catch (error) {
+      // Some Windows installs ship ffmpeg without the companion ffprobe binary.
+      // Preserve the media contract with the structured metadata available from
+      // ffmpeg's stderr rather than silently storing null.
+      let result;
+      try {
+        result = await execFileAsync(ffmpegPath, ['-hide_banner', '-i', artifactPath], {
+          maxBuffer: 4 * 1024 * 1024,
+        });
+      } catch (fallbackError) {
+        result = fallbackError;
+      }
+      const parsed = parseFfmpegProbe(`${result.stderr || ''}\n${result.stdout || ''}`);
+      if (!parsed.streams.length && !parsed.format.duration) {
+        throw new ComfyUIClientError(
+          `Media probe failed: ${result.message || error.message}`,
+          'FFPROBE_ERROR',
+          { artifactPath, ffprobeError: error.message },
+        );
+      }
+      return parsed;
+    }
+  }
+
   async function runWorkflow({ registry, workflowId, prompt, inputs = {}, clientId, outputFileName }) {
     const submitted = await submitWorkflow({ registry, workflowId, prompt, inputs, clientId });
     const polled = await pollHistory(submitted.promptId);
     const downloaded = await downloadOutput({ history: polled.history, promptId: submitted.promptId, outputFileName });
+    const ffprobe = await probeArtifact(downloaded.artifactPath);
     return {
       ...downloaded,
+      ffprobe,
       promptId: submitted.promptId,
       workflowId: submitted.workflow.id,
       workflowSha256: submitted.workflow.workflowSha256,
@@ -158,7 +242,7 @@ function createComfyUIClient({
     return { promptId, cancelled: true };
   }
 
-  return { submitWorkflow, pollHistory, downloadOutput, runWorkflow, cancel };
+  return { submitWorkflow, pollHistory, downloadOutput, probeArtifact, runWorkflow, cancel };
 }
 
-module.exports = { ComfyUIClientError, createComfyUIClient, findOutput };
+module.exports = { ComfyUIClientError, createComfyUIClient, findOutput, parseFfmpegProbe };

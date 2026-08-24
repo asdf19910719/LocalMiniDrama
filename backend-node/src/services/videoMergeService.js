@@ -3,6 +3,7 @@ const fs = require('fs');
 const crypto = require('node:crypto');
 const { getFfmpegPath, getFfprobePath, hasLocalFfmpeg } = require('../utils/ffmpegPath');
 const storageLayout = require('./storageLayout');
+const { executePostproduction } = require('../director/directorPostproductionService');
 
 function list(db, query) {
   let sql = 'FROM video_merges WHERE deleted_at IS NULL';
@@ -141,8 +142,46 @@ async function processDirectorTimeline(db, log, timelineId, options = {}) {
     if (log?.warn) log.warn('Director timeline failed', { timeline_id: timelineId, error: result?.error });
     return db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
   }
+  let finalResult = result;
+  let finalOutputPath = timeline.output_path;
+  let manifest = {};
+  try { manifest = JSON.parse(timeline.manifest_json || '{}'); } catch (_) { manifest = {}; }
+  if (manifest.postproduction) {
+    try {
+      const post = await executePostproduction({
+        plan: manifest.postproduction,
+        ffmpegPath: options.ffmpegPath || getFfmpegPath(),
+        probePath: options.ffprobePath || getFfprobePath(),
+        runCommand: async (file, args) => {
+          if (options.runProcess) return options.runProcess(file, args);
+          return runProcess(file, args);
+        },
+      });
+      finalResult = { ok: true, outputSha256: post.outputSha256 || result.outputSha256, ffprobe: result.ffprobe, postproduction: post };
+      finalOutputPath = post.outputPath;
+    } catch (error) {
+      db.prepare("UPDATE director_timelines SET status = 'failed', manifest_json = ? WHERE id = ?")
+        .run(JSON.stringify({ ...manifest, postproductionError: error.message }), timelineId);
+      if (log?.warn) log.warn('Director timeline postproduction failed', { timeline_id: timelineId, error: error.message });
+      return db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
+    }
+  }
+  const outputSha256 = finalResult.outputSha256;
+  const outputProbe = finalResult.postproduction?.probe || finalResult.ffprobe;
+  if (finalResult.postproduction) {
+    manifest.postproductionResult = {
+      outputPath: finalResult.postproduction.outputPath,
+      outputSha256: finalResult.postproduction.outputSha256,
+      quality: finalResult.postproduction.quality,
+    };
+    db.prepare('UPDATE director_timelines SET manifest_json = ? WHERE id = ?')
+      .run(JSON.stringify(manifest), timelineId);
+  }
+  if (finalOutputPath !== timeline.output_path) {
+    db.prepare('UPDATE director_timelines SET output_path = ? WHERE id = ?').run(finalOutputPath, timelineId);
+  }
   db.prepare("UPDATE director_timelines SET status = 'completed', output_sha256 = ?, ffprobe_json = ? WHERE id = ?")
-    .run(result.outputSha256 || null, result.ffprobe ? JSON.stringify(result.ffprobe) : null, timelineId);
+    .run(outputSha256 || null, outputProbe ? JSON.stringify(outputProbe) : null, timelineId);
   if (log?.info) log.info('Director timeline completed', { timeline_id: timelineId, output: timeline.output_path });
   return db.prepare('SELECT * FROM director_timelines WHERE id = ?').get(timelineId);
 }

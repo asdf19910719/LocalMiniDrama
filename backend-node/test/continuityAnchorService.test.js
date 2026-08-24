@@ -104,4 +104,30 @@ describe('Director continuity anchors', () => {
       /composition_only.*first frame/i
     );
   });
+
+  it('runs a declared derived-image operation and records its parameters', async () => {
+    const calls = [];
+    const result = await createContinuityAnchor(db, {
+      artifactId: sourceArtifact.id,
+      frameNumber: 7,
+      referenceRole: 'composition',
+      referenceUse: 'composition_only',
+      operation: 'line_art',
+      parameters: { edgeLow: 0.12, edgeHigh: 0.42 },
+      frameExtractor: async ({ outputPath }) => fs.writeFileSync(outputPath, 'frame-7'),
+      derivedImageProcessor: async ({ operation, inputPath, outputPath, parameters }) => {
+        calls.push({ operation, inputPath, outputPath, parameters });
+        fs.copyFileSync(inputPath, outputPath);
+      },
+      ffprobe: { streams: [{ codec_type: 'video', r_frame_rate: '24/1' }], format: { duration: '2' } },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].operation, 'line_art');
+    assert.deepEqual(calls[0].parameters, { edgeLow: 0.12, edgeHigh: 0.42 });
+    const derived = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(result.derived_artifact_id);
+    const manifest = JSON.parse(derived.manifest_json);
+    assert.equal(manifest.metadata.operation, 'line_art');
+    assert.equal(manifest.metadata.edgeLow, 0.12);
+  });
 });

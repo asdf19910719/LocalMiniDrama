@@ -1,6 +1,9 @@
 import request from '@/utils/request'
 
 export const directorAPI = {
+  generateCandidates(shotId, payload) {
+    return request.post(`/director/shots/${shotId}/generate`, payload)
+  },
   getShotCandidates(shotId) {
     return request.get(`/director/shots/${shotId}/candidates`)
   },

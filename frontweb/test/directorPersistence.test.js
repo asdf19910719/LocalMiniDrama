@@ -3,7 +3,25 @@ import assert from 'node:assert/strict'
 
 import * as directorPersistence from '../src/utils/directorPersistence.js'
 
-const { createLatestRequestGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } = directorPersistence
+const { buildDirectorGenerationRequest, createLatestRequestGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } = directorPersistence
+
+test('builds a validated Director generation request from panel fields', () => {
+  assert.deepEqual(buildDirectorGenerationRequest({
+    workflowId: 'h3-continuity-v1',
+    candidateCount: 2,
+    promptText: '{"1":{"text":"a quiet mountain gate"}}',
+    inputsText: '{"seed":42}',
+  }), {
+    workflowId: 'h3-continuity-v1',
+    candidateCount: 2,
+    prompt: { '1': { text: 'a quiet mountain gate' } },
+    inputs: { seed: 42 },
+  })
+})
+
+test('rejects malformed generation JSON before sending a request', () => {
+  assert.throws(() => buildDirectorGenerationRequest({ promptText: '{broken' }), /prompt must be valid JSON/)
+})
 
 test('normalizes persisted shot groups with the newest group as the active review state', () => {
   const state = normalizeDirectorShotState({

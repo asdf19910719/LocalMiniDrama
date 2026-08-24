@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { createComfyUIClient } = require('../src/director/comfyuiClient');
+const { createComfyUIClient, parseFfmpegProbe } = require('../src/director/comfyuiClient');
 
 describe('ComfyUI Director client', () => {
   let server;
@@ -48,7 +48,15 @@ describe('ComfyUI Director client', () => {
   });
 
   it('submits a registry-selected workflow, polls history, and downloads the output', async () => {
-    const client = createComfyUIClient({ baseUrl, pollIntervalMs: 0, outputDir });
+    const client = createComfyUIClient({
+      baseUrl,
+      pollIntervalMs: 0,
+      outputDir,
+      probeMedia: async (artifactPath) => ({
+        format: { filename: artifactPath, duration: '1.5' },
+        streams: [{ codec_type: 'video', width: 864, height: 480 }],
+      }),
+    });
     const registry = {
       workflows: [
         { id: 'verified-workflow', status: 'verified', workflowSha256: 'sha256:abc', workflowPath: 'unused' },
@@ -67,6 +75,7 @@ describe('ComfyUI Director client', () => {
     assert.equal(result.promptId, 'prompt-1');
     assert.equal(result.workflowId, 'verified-workflow');
     assert.equal(fs.readFileSync(result.artifactPath, 'utf8'), 'fake-mp4');
+    assert.equal(result.ffprobe.format.duration, '1.5');
     const submitted = JSON.parse(requests.find((request) => request.url === '/prompt').body);
     assert.equal(submitted.extra_data.director_workflow_id, 'verified-workflow');
     assert.equal(submitted.extra_data.director_workflow_sha256, 'sha256:abc');
@@ -80,5 +89,39 @@ describe('ComfyUI Director client', () => {
       () => client.runWorkflow({ registry, workflowId: 'configured-workflow', prompt: {} }),
       /experimental/i
     );
+  });
+
+  it('fails a stuck ComfyUI request with a stable timeout error', async () => {
+    const client = createComfyUIClient({
+      fetchImpl: (_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }),
+      requestTimeoutMs: 10,
+    });
+    const registry = {
+      workflows: [{ id: 'verified-workflow', status: 'verified', workflowSha256: 'sha256:abc', workflowPath: 'unused' }],
+    };
+
+    await assert.rejects(
+      () => client.submitWorkflow({
+        registry,
+        workflowId: 'verified-workflow',
+        prompt: { '1': { class_type: 'SaveVideo', inputs: {} } },
+      }),
+      (error) => error.code === 'COMFYUI_TIMEOUT' && /timed out/i.test(error.message)
+    );
+  });
+
+  it('parses duration and audio/video streams from ffmpeg fallback output', () => {
+    const result = parseFfmpegProbe(`
+      Duration: 00:00:15.29, start: 0.000000, bitrate: 1281 kb/s
+      Stream #0:0: Video: h264 (High), yuv420p, 864x480, 24 fps
+      Stream #0:1: Audio: aac (LC), 32000 Hz, stereo
+    `);
+    assert.equal(result.format.duration, '15.29');
+    assert.deepEqual(result.streams, [
+      { codec_type: 'video', codec_name: 'h264', width: 864, height: 480, r_frame_rate: '24/1' },
+      { codec_type: 'audio', codec_name: 'aac' },
+    ]);
   });
 });

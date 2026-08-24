@@ -7,6 +7,7 @@ const { createArtifactManifest } = require('./artifactManifest');
 
 const execFileAsync = promisify(execFile);
 const REFERENCE_ROLES = new Set(['state', 'composition', 'identity', 'motion']);
+const DERIVED_OPERATIONS = new Set(['extract_frame', 'upscale_2x', 'crop', 'composition_edit', 'line_art']);
 
 function id() { return crypto.randomUUID(); }
 function nowIso(value) {
@@ -16,7 +17,43 @@ function nowIso(value) {
 
 async function defaultFrameExtractor({ sourcePath, outputPath, frameNumber, ffmpegPath = 'ffmpeg' }) {
   await execFileAsync(ffmpegPath, [
-    '-y', '-i', sourcePath, '-vf', `select=eq(n\,${frameNumber})`, '-frames:v', '1', outputPath,
+    '-y', '-i', sourcePath, '-vf', `select=eq(n\\,${frameNumber})`, '-frames:v', '1', outputPath,
+  ]);
+}
+
+function derivedImageFilter(operation, parameters = {}) {
+  if (operation === 'upscale_2x') return 'scale=iw*2:ih*2:flags=lanczos';
+  if (operation === 'line_art') {
+    const low = Number(parameters.edgeLow ?? 0.1);
+    const high = Number(parameters.edgeHigh ?? 0.4);
+    if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high <= low) {
+      throw new Error('line_art edge thresholds must be finite and ordered');
+    }
+    return `format=gray,edgedetect=mode=colormix:low=${low}:high=${high}`;
+  }
+  if (operation === 'crop' || operation === 'composition_edit') {
+    const width = Number(parameters.width);
+    const height = Number(parameters.height);
+    const x = Number(parameters.x ?? 0);
+    const y = Number(parameters.y ?? 0);
+    if (![width, height, x, y].every(Number.isFinite) || width <= 0 || height <= 0 || x < 0 || y < 0) {
+      throw new Error(`${operation} requires positive width/height and non-negative x/y`);
+    }
+    const crop = `crop=${Math.round(width)}:${Math.round(height)}:${Math.round(x)}:${Math.round(y)}`;
+    if (operation === 'crop' || !parameters.outputWidth || !parameters.outputHeight) return crop;
+    const outputWidth = Number(parameters.outputWidth);
+    const outputHeight = Number(parameters.outputHeight);
+    if (![outputWidth, outputHeight].every(Number.isFinite) || outputWidth <= 0 || outputHeight <= 0) {
+      throw new Error('composition_edit output dimensions must be positive');
+    }
+    return `${crop},scale=${Math.round(outputWidth)}:${Math.round(outputHeight)}:flags=lanczos`;
+  }
+  throw new Error(`Unsupported derived image operation: ${operation}`);
+}
+
+async function defaultDerivedImageProcessor({ operation, inputPath, outputPath, parameters = {}, ffmpegPath = 'ffmpeg' }) {
+  await execFileAsync(ffmpegPath, [
+    '-y', '-i', inputPath, '-vf', derivedImageFilter(operation, parameters), '-frames:v', '1', outputPath,
   ]);
 }
 
@@ -37,6 +74,8 @@ async function createContinuityAnchor(db, {
   promptLabel = null,
   isFirstFrame = false,
   frameExtractor = defaultFrameExtractor,
+  derivedImageProcessor = defaultDerivedImageProcessor,
+  operation = 'extract_frame',
   ffprobe = null,
   outputDir,
   ffmpegPath,
@@ -49,24 +88,42 @@ async function createContinuityAnchor(db, {
   if (isFirstFrame && referenceUse === 'composition_only') {
     throw new Error('composition_only cannot be used as an I2V first frame');
   }
+  const resolvedOperation = parameters.operation || operation;
+  if (!DERIVED_OPERATIONS.has(resolvedOperation)) throw new Error(`Unsupported derived image operation: ${resolvedOperation}`);
   const source = selectedSource(db, artifactId);
   const createdAt = nowIso(now);
   const targetDir = outputDir || path.dirname(source.artifact_path);
   fs.mkdirSync(targetDir, { recursive: true });
   const outputPath = path.join(targetDir, `anchor-${source.id}-${frameNumber}-${id()}.png`);
-  await frameExtractor({
-    sourcePath: source.artifact_path,
-    outputPath,
-    frameNumber,
-    ffmpegPath,
-  });
+  const extractedPath = resolvedOperation === 'extract_frame'
+    ? outputPath
+    : path.join(targetDir, `anchor-source-${source.id}-${frameNumber}-${id()}.png`);
+  try {
+    await frameExtractor({
+      sourcePath: source.artifact_path,
+      outputPath: extractedPath,
+      frameNumber,
+      ffmpegPath,
+    });
+    if (resolvedOperation !== 'extract_frame') {
+      await derivedImageProcessor({
+        operation: resolvedOperation,
+        inputPath: extractedPath,
+        outputPath,
+        parameters,
+        ffmpegPath,
+      });
+    }
+  } finally {
+    if (extractedPath !== outputPath) fs.rmSync(extractedPath, { force: true });
+  }
   if (!fs.existsSync(outputPath)) throw new Error('Frame extractor did not create an output artifact');
   const manifest = createArtifactManifest({
     artifactPath: outputPath,
     parentArtifactId: source.id,
     kind: 'image',
     ffprobe,
-    metadata: { operation: 'extract_frame', frameNumber, referenceRole, referenceUse, ...parameters },
+    metadata: { operation: resolvedOperation, frameNumber, referenceRole, referenceUse, ...parameters },
     now: createdAt,
   });
   const derivedId = id();
@@ -93,4 +150,11 @@ async function createContinuityAnchor(db, {
   return db.prepare('SELECT * FROM director_anchors WHERE id = ?').get(anchorId);
 }
 
-module.exports = { REFERENCE_ROLES, createContinuityAnchor, defaultFrameExtractor };
+module.exports = {
+  REFERENCE_ROLES,
+  DERIVED_OPERATIONS,
+  createContinuityAnchor,
+  defaultFrameExtractor,
+  defaultDerivedImageProcessor,
+  derivedImageFilter,
+};

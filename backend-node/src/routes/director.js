@@ -6,6 +6,7 @@ const candidateService = require('../director/candidateGroupService');
 const jobService = require('../director/directorJobService');
 const timelineService = require('../director/timelineService');
 const { selectWorkflow } = require('../director/workflowRegistry');
+const { validateSourceDependency } = require('../director/sourceDependency');
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -83,6 +84,11 @@ function routes(db, log, {
         const maxAttempts = body.maxAttempts === undefined ? 3 : body.maxAttempts;
         if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new Error('maxAttempts must be a positive integer');
 
+        const inputs = { ...(body.inputs || {}) };
+        if (body.sourceArtifactId) inputs.sourceArtifactId = body.sourceArtifactId;
+        if (body.sourceCandidateId) inputs.sourceCandidateId = body.sourceCandidateId;
+        validateSourceDependency(db, inputs);
+
         const workflow = selectWorkflow(registry, body.workflowId, { allowExperimental });
         const shot = db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(shotId);
         if (!shot) throw new Error(`Storyboard not found: ${shotId}`);
@@ -93,7 +99,7 @@ function routes(db, log, {
           workflowVersion: String(registry.version),
           candidateCount: body.candidateCount,
           prompt: body.prompt,
-          inputs: body.inputs || {},
+          inputs,
           maxAttempts,
         });
         for (const job of batch.jobs) {
