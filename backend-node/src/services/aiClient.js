@@ -155,8 +155,11 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
       }
 
       let accumulated = '';
+      let reasoningChars = 0;
+      let finishReason = null;
       let sseBuffer = '';
       let firstToken = true;
+      let firstReasoning = true;
       resetSilenceTimer();
 
       res.on('data', (chunk) => {
@@ -172,7 +175,19 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
           if (data === '[DONE]') continue;
           try {
             const evt = JSON.parse(data);
-            const delta = evt.choices?.[0]?.delta?.content;
+            const choice = evt.choices?.[0];
+            const delta = choice?.delta?.content;
+            const reasoningDelta = choice?.delta?.reasoning_content;
+            if (choice?.finish_reason) finishReason = choice.finish_reason;
+            if (reasoningDelta) {
+              reasoningChars += reasoningDelta.length;
+              if (firstReasoning) {
+                firstReasoning = false;
+                if (onProgress) onProgress(0, 'first_reasoning', '', reasoningChars);
+              } else if (onProgress) {
+                onProgress(accumulated.length, 'reasoning', accumulated, reasoningChars);
+              }
+            }
             if (delta) {
               if (firstToken) {
                 firstToken = false;
@@ -187,7 +202,7 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
 
       res.on('end', () => {
         clearTimeout(silenceTimer);
-        resolve({ status: statusCode, body: accumulated });
+        resolve({ status: statusCode, body: accumulated, reasoningChars, finishReason });
       });
       res.on('error', (e) => { clearTimeout(silenceTimer); reject(e); });
     });
@@ -197,6 +212,21 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
     req.write(bodyStr);
     req.end();
   });
+}
+
+async function postTextStreamWithThinkingFallback(url, headers, body, silenceTimeoutMs, onProgress, log, model) {
+  let res = await postJSONStream(url, headers, body, silenceTimeoutMs, onProgress);
+  if (!res.body && body?.thinking?.type === 'enabled' && res.reasoningChars > 0) {
+    log.warn('AI thinking stream returned reasoning without final content; retrying once without thinking', {
+      model,
+      reasoning_chars: res.reasoningChars,
+      finish_reason: res.finishReason || '(unknown)',
+    });
+    const fallbackBody = { ...body, thinking: { type: 'disabled' } };
+    delete fallbackBody.reasoning_effort;
+    res = await postJSONStream(url, headers, fallbackBody, silenceTimeoutMs, onProgress);
+  }
+  return res;
 }
 
 // 使用前端设置的「默认」与「优先级」：listConfigs 已按 is_default DESC, priority DESC 排序
@@ -337,16 +367,20 @@ async function generateText(db, log, serviceType, userPrompt, systemPrompt, opti
   body = applyDeepSeekChatOptions(config, body);
   const startMs = Date.now();
   log.info('AI generateText request', { url: url.slice(0, 60), model, max_tokens: finalMaxTokens ?? '(model default)', json_mode, stream: true });
-  const res = await postJSONStream(url, { Authorization: 'Bearer ' + (config.api_key || '') }, body, 60000, (receivedLen, event, accumulated) => {
+  const res = await postTextStreamWithThinkingFallback(url, { Authorization: 'Bearer ' + (config.api_key || '') }, body, 60000, (receivedLen, event, accumulated, reasoningChars) => {
     if (event === 'first_token') {
       log.info('AI stream first token', { model, ttft_ms: Date.now() - startMs });
+    } else if (event === 'first_reasoning') {
+      log.info('AI stream reasoning started', { model, ttft_ms: Date.now() - startMs });
+    } else if (event === 'reasoning' && reasoningChars > 0 && reasoningChars % 500 < 20) {
+      log.info('AI stream reasoning progress', { model, reasoning_chars: reasoningChars, elapsed_ms: Date.now() - startMs });
     } else if (receivedLen > 0 && receivedLen % 500 < 20) {
       // 每积累约 500 字符记录一次进度
       log.info('AI stream progress', { model, received_chars: receivedLen, elapsed_ms: Date.now() - startMs });
     }
     // 调用者提供的流式回调（如分镜增量解析），传入当前已积累的完整文本
     if (streamCallback && accumulated) streamCallback(accumulated);
-  });
+  }, log, model);
   // 流式模式下 res.body 已是拼接好的完整文本内容（非 JSON）
   const content = res.body;
   const elapsedMs = Date.now() - startMs;
@@ -441,20 +475,26 @@ async function streamGenerateText(db, log, serviceType, userPrompt, systemPrompt
     stream: true,
   });
   let lastLen = 0;
-  const res = await postJSONStream(
+  const res = await postTextStreamWithThinkingFallback(
     url,
     { Authorization: 'Bearer ' + (config.api_key || '') },
     body,
     silenceMs,
-    (receivedLen, event, accumulated) => {
+    (receivedLen, event, accumulated, reasoningChars) => {
       if (event === 'first_token') {
         log.info('AI stream first token', { model, ttft_ms: Date.now() - startMs });
+      } else if (event === 'first_reasoning') {
+        log.info('AI stream reasoning started', { model, ttft_ms: Date.now() - startMs });
+      } else if (event === 'reasoning' && reasoningChars > 0 && reasoningChars % 500 < 20) {
+        log.info('AI stream reasoning progress', { model, reasoning_chars: reasoningChars, elapsed_ms: Date.now() - startMs });
       }
       if (!accumulated || accumulated.length <= lastLen) return;
       const delta = accumulated.slice(lastLen);
       lastLen = accumulated.length;
       if (onDelta && delta) onDelta(delta);
-    }
+    },
+    log,
+    model
   );
   const content = res.body;
   if (!content) {
