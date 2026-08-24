@@ -28,6 +28,7 @@ const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
 const { createDirectorJobRunner } = require('../director/directorJobRunner');
 const { reconcileRunningJobs } = require('../director/directorJobService');
+const { getFfmpegPath } = require('../utils/ffmpegPath');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -56,6 +57,7 @@ function setupRouter(cfg, db, log) {
   const promptOverrides = promptOverridesRoutes.routes(db, log);
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
+  const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
   const directorComfyClient = createComfyUIClient({
     baseUrl: process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
     outputDir: directorArtifactRoot,
@@ -74,6 +76,8 @@ function setupRouter(cfg, db, log) {
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
     artifactRoot: directorArtifactRoot,
+    allowedLocalRoots: directorAllowedRoots,
+    ffmpegPath: getFfmpegPath(),
   });
 
   // ---------- dramas ----------
@@ -340,14 +344,26 @@ function setupRouter(cfg, db, log) {
 
   // ---------- AI Director candidate review ----------
   r.post('/director/shots/:shotId/generate', director.generateCandidates);
+  r.get('/director/queue', director.getQueue);
+  r.get('/director/storage', director.getStorage);
+  r.post('/director/storage/cleanup', director.cleanupStorage);
+  r.post('/director/bundles', director.createBundle);
+  r.post('/director/bundles/restore', director.restoreBundle);
   r.get('/director/shots/:shotId/candidates', director.getShotCandidates);
   r.post('/director/shots/:shotId/candidates', director.createCandidates);
   r.get('/director/artifacts/:artifactId/content', director.getArtifactContent);
   r.get('/director/jobs/:jobId', director.getJob);
+  r.post('/director/jobs/:jobId/cancel', director.cancelJob);
+  r.post('/director/jobs/:jobId/retry', director.retryJob);
   r.get('/director/candidates/:groupId', director.getCandidates);
   r.post('/director/candidates/:groupId/review', director.reviewCandidates);
   r.post('/director/candidates/:groupId/select', director.selectCandidate);
   r.get('/director/timelines/:timelineId', director.getTimeline);
+  r.post('/director/timelines', director.createTimeline);
+  r.post('/director/timelines/:timelineId/render', director.renderTimeline);
+  r.post('/director/anchors', director.createAnchor);
+  r.get('/director/artifacts/:artifactId/anchors', director.listAnchors);
+  r.post('/director/artifacts/:artifactId/analyze', director.analyzeArtifact);
 
   // ---------- scene model map ----------
   r.get('/scene-model-map', sceneModelMap.list);

@@ -6,11 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.js",
     "migrate": "node src/db/migrate.js",
     "migrate:07": "node scripts/run-migration-07.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "dependencies": {
     "@volcengine/openapi": "^1.36.1",

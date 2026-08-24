@@ -38,8 +38,14 @@ describe('Director postproduction pipeline', () => {
     assert.deepEqual(plan.audioInputs, ['music.mp3', 'dialogue.mp3']);
     assert.ok(plan.args.includes('music.mp3'));
     assert.ok(plan.args.includes('dialogue.mp3'));
-    assert.match(plan.command, /amix=inputs=3/);
+    assert.match(plan.command, /amix=inputs=2/);
     assert.equal(plan.ttsPath, 'dialogue.mp3');
+  });
+
+  it('does not reference a missing base audio stream for video-only timelines', () => {
+    const plan = buildPostproductionPlan({ inputPath: 'video-only.mp4', outputPath: 'out.mp4', musicPath: 'music.mp3' });
+    assert.doesNotMatch(plan.command, /\[0:a\]/);
+    assert.match(plan.command, /amix=inputs=1/);
   });
 
   it('rejects a 720p claim when the probe does not match the requested output', () => {

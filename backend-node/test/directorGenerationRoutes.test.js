@@ -151,6 +151,21 @@ describe('Director generation routes', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
+  it('reuses an active generation batch for an identical request', () => {
+    const request = {
+      params: { shotId: '1' },
+      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': { inputs: { seed: 42 } } } },
+    };
+    const first = responseCapture();
+    const second = responseCapture();
+    routes.generateCandidates(request, first);
+    routes.generateCandidates(request, second);
+    assert.equal(second.statusCode, 202);
+    assert.equal(second.body.data.group.id, first.body.data.group.id);
+    assert.equal(second.body.data.cacheHit, true);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 1);
+  });
+
   it('rejects downstream continuity generation until its source artifact is selected', () => {
     const body = {
       workflowId: 'h3-continuity-v1',
@@ -227,6 +242,43 @@ describe('Director generation routes', () => {
     assert.equal(res.body.data.jobs[0].error_code, 'DIRECTOR_QUEUE_ERROR');
     assert.equal(res.body.data.group.status, 'failed');
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 1);
+  });
+
+  it('cancels a pending job and finalizes its candidate group', async () => {
+    const createRes = responseCapture();
+    routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
+    }, createRes);
+    const jobId = createRes.body.data.jobs[0].id;
+    const cancelled = responseCapture();
+    await routes.cancelJob({ params: { jobId } }, cancelled);
+    assert.equal(cancelled.statusCode, 200);
+    assert.equal(cancelled.body.data.status, 'cancelled');
+    assert.equal(db.prepare('SELECT status FROM director_candidates WHERE job_id = ?').get(jobId).status, 'failed');
+  });
+
+  it('retries a failed job and enqueues it again', () => {
+    const failingRoutes = createRoutes(db, { error() {} }, {
+      registry: registry(),
+      runner: {
+        enqueue(jobId) { enqueued.push(jobId); },
+      },
+    });
+    const createRes = responseCapture();
+    failingRoutes.generateCandidates({
+      params: { shotId: '1' },
+      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
+    }, createRes);
+    const jobId = createRes.body.data.jobs[0].id;
+    db.prepare("UPDATE director_jobs SET status = 'failed', error_code = 'TEST_FAILED' WHERE id = ?").run(jobId);
+    db.prepare("UPDATE director_candidates SET status = 'failed', error_code = 'TEST_FAILED' WHERE job_id = ?").run(jobId);
+    const retried = responseCapture();
+    failingRoutes.retryJob({ params: { jobId } }, retried);
+    assert.equal(retried.statusCode, 202);
+    assert.equal(retried.body.data.status, 'pending');
+    assert.equal(db.prepare('SELECT status FROM director_candidates WHERE job_id = ?').get(jobId).status, 'pending');
+    assert.ok(enqueued.includes(jobId));
   });
 
   it('restores the newest candidate group for a shot with parsed artifact metadata', () => {

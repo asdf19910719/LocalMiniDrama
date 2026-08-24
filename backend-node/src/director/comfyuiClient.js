@@ -216,8 +216,9 @@ function createComfyUIClient({
     }
   }
 
-  async function runWorkflow({ registry, workflowId, prompt, inputs = {}, clientId, outputFileName }) {
+  async function runWorkflow({ registry, workflowId, prompt, inputs = {}, clientId, outputFileName, onSubmitted }) {
     const submitted = await submitWorkflow({ registry, workflowId, prompt, inputs, clientId });
+    if (typeof onSubmitted === 'function') onSubmitted(submitted.promptId);
     const polled = await pollHistory(submitted.promptId);
     const downloaded = await downloadOutput({ history: polled.history, promptId: submitted.promptId, outputFileName });
     const ffprobe = await probeArtifact(downloaded.artifactPath);
@@ -234,6 +235,15 @@ function createComfyUIClient({
   }
 
   async function cancel(promptId) {
+    try {
+      await request('/queue', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ delete: [promptId] }),
+      });
+    } catch (_) {
+      // A running prompt is no longer present in the queue; interrupt it below.
+    }
     await request('/interrupt', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

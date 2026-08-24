@@ -20,6 +20,61 @@
         "CreateVideo",
         "SaveVideo"
       ],
+      "provenance": {
+        "provider": "MiniMax",
+        "modelFamily": "MiniMax H3",
+        "source": "local model files and ComfyUI custom nodes",
+        "license": {
+          "status": "review_required",
+          "evidence": "docs/research/director-production-governance.md"
+        }
+      },
+      "runtimeLock": {
+        "comfyUIVersion": "0.33.1",
+        "models": [
+          {
+            "fileName": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "relativePath": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a",
+            "fileSizeBytes": 20970379616
+          },
+          {
+            "fileName": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "relativePath": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6",
+            "fileSizeBytes": 15687142551
+          }
+        ],
+        "customNodes": [
+          {
+            "name": "ComfyUI_MiniMaxH3_Director",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "b29b0f178c342c507791823228e2509c462011dc6c58ab3522a90364af2f9f96"
+              }
+            ]
+          },
+          {
+            "name": "ComfyUI-YCNodes-MiniMax-H3",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "508bd6f670da1e407e1cf0fbedeefb1502a64b68a689b24e000c181de73ddbd0"
+              }
+            ]
+          },
+          {
+            "name": "Comfyui_Minimax_h3_latent_Upscaler",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "7d1c52e999d89ba5cc77619c179d5917cedb8ba6f6445f5b27f765d2107a6f65"
+              }
+            ]
+          }
+        ]
+      },
       "inputSchema": {
         "prompt": "string",
         "seed": "integer",

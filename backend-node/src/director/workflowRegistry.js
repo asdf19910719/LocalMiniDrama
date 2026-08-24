@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { validateWorkflowGovernance } = require('./directorGovernance');
 
 const REGISTRY_VERSION = 1;
 const WORKFLOW_STATUSES = new Set(['verified', 'configured', 'invalid']);
@@ -45,6 +46,80 @@ function readApiWorkflow(filePath) {
   return workflow;
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function findDirectorNode(prompt) {
+  return Object.values(prompt || {}).find((node) => node?.class_type === 'MiniMaxH3Director');
+}
+
+function buildStructuredWorkflowPrompt(workflow, input = {}) {
+  if (!workflow || typeof workflow !== 'object' || !workflow.prompt || typeof workflow.prompt !== 'object') {
+    throw new WorkflowRegistryError('workflow must contain a ComfyUI prompt object', 'WORKFLOW_TEMPLATE_INVALID');
+  }
+  const text = String(input.prompt || '').trim();
+  if (!text) throw new WorkflowRegistryError('structured prompt is required', 'STRUCTURED_PROMPT_REQUIRED');
+  const directorNode = findDirectorNode(workflow.prompt);
+  if (!directorNode) throw new WorkflowRegistryError('workflow does not contain MiniMaxH3Director', 'STRUCTURED_WORKFLOW_UNSUPPORTED');
+
+  const output = cloneJson(workflow.prompt);
+  const node = Object.values(output).find((candidate) => candidate?.class_type === 'MiniMaxH3Director');
+  const nodeInputs = node.inputs || (node.inputs = {});
+  const frameRate = Number.isFinite(Number(input.frameRate)) ? Number(input.frameRate) : Number(nodeInputs.frame_rate || 24);
+  const durationSeconds = Number.isFinite(Number(input.durationSeconds)) ? Number(input.durationSeconds) : 5;
+  const totalFrames = Math.max(1, Math.round(frameRate * durationSeconds));
+  const width = Number.isInteger(Number(input.width)) ? Number(input.width) : Number(nodeInputs.width || 864);
+  const height = Number.isInteger(Number(input.height)) ? Number(input.height) : Number(nodeInputs.height || 480);
+  if (frameRate <= 0 || durationSeconds <= 0 || width <= 0 || height <= 0) {
+    throw new WorkflowRegistryError('structured dimensions, frame rate, and duration must be positive', 'STRUCTURED_INPUT_INVALID');
+  }
+  const seed = Number.isInteger(Number(input.seed)) ? Number(input.seed) : Number(nodeInputs.seed || 42);
+  const overlapFrames = Number.isInteger(Number(input.overlapFrames)) ? Number(input.overlapFrames) : Number(nodeInputs.continuityOverlapFrames || 22);
+  const continuityEnabled = input.continuityMode !== 'none';
+  const referenceImagePath = String(input.referenceImagePath || '').trim();
+  const refs = referenceImagePath
+    ? [{ index: 0, imageFile: referenceImagePath, role: String(input.referenceRole || 'state') }]
+    : [];
+
+  nodeInputs.global_prompt = text;
+  nodeInputs.seed = seed;
+  nodeInputs.frame_rate = frameRate;
+  nodeInputs.width = width;
+  nodeInputs.height = height;
+  nodeInputs.ref_max_size = Math.max(width, height);
+  nodeInputs.total_frames = totalFrames;
+  if (refs.length) nodeInputs.task_type = 'r2v';
+
+  let timeline = {};
+  try { timeline = JSON.parse(String(nodeInputs.timeline_data || '{}')); } catch { timeline = {}; }
+  timeline.totalFrames = totalFrames;
+  timeline.frameRate = frameRate;
+  timeline.width = width;
+  timeline.height = height;
+  timeline.refMaxSize = Math.max(width, height);
+  timeline.output = {
+    ...(timeline.output || {}),
+    continuityEnabled,
+    continuityOverlapFrames: overlapFrames,
+    width,
+    height,
+  };
+  timeline.global = { ...(timeline.global || {}), prompt: text, refs };
+  timeline.segments = [{
+    id: 's0', start: 0, length: totalFrames, frameCount: totalFrames,
+    durationSec: durationSeconds, prompt: text, taskType: refs.length ? 'r2v' : '', refs,
+    referenceVideo: {}, genImage: { imageFile: '' }, negativePrompt: String(input.negativePrompt || ''),
+    continuityFromPrev: continuityEnabled && input.continuityMode === 'motion_overlap',
+  }];
+  nodeInputs.timeline_data = JSON.stringify(timeline);
+  return output;
+}
+
+function readWorkflowTemplate(filePath) {
+  return readApiWorkflow(filePath);
+}
+
 function classTypes(workflow) {
   return new Set(Object.values(workflow.prompt).map((node) => node && node.class_type).filter(Boolean));
 }
@@ -71,6 +146,11 @@ function validateEntryShape(entry, index) {
   }
   if (entry.status === 'verified' && !String(entry.verifiedEvidence || '').trim()) {
     throw new WorkflowRegistryError(`verified workflow ${entry.id} must declare verifiedEvidence`);
+  }
+  try {
+    validateWorkflowGovernance(entry, entry.id);
+  } catch (error) {
+    throw new WorkflowRegistryError(error.message);
   }
 }
 
@@ -106,6 +186,20 @@ function loadRegistry(registryPath, options = {}) {
       throw new WorkflowRegistryError(`workflow ${entry.id} hash mismatch: expected ${expectedHash}, got ${actualHash}`);
     }
     const workflow = readApiWorkflow(workflowPath);
+    if (entry.status === 'verified') {
+      const evidenceCandidates = path.isAbsolute(entry.verifiedEvidence)
+        ? [entry.verifiedEvidence]
+        : [
+          path.resolve(baseDir, entry.verifiedEvidence),
+          path.resolve(baseDir, '..', entry.verifiedEvidence),
+          path.resolve(baseDir, '..', '..', entry.verifiedEvidence),
+          path.resolve(process.cwd(), entry.verifiedEvidence),
+        ];
+      const evidencePath = evidenceCandidates.find((candidate) => fs.existsSync(candidate));
+      if (!evidencePath || !fs.statSync(evidencePath).isFile()) {
+        throw new WorkflowRegistryError(`verified workflow ${entry.id} evidence does not exist: ${entry.verifiedEvidence}`);
+      }
+    }
     const availableNodes = classTypes(workflow);
     const missingNodes = entry.requiredNodes.filter((node) => !availableNodes.has(node));
     if (missingNodes.length > 0) {
@@ -120,6 +214,8 @@ function loadRegistry(registryPath, options = {}) {
       modelFiles: [...entry.modelFiles],
       customNodes: [...entry.customNodes],
       inputSchema: { ...entry.inputSchema },
+      provenance: cloneJson(entry.provenance),
+      runtimeLock: cloneJson(entry.runtimeLock),
     };
   });
 
@@ -148,6 +244,8 @@ module.exports = {
   REGISTRY_VERSION,
   WorkflowRegistryError,
   loadRegistry,
+  readWorkflowTemplate,
+  buildStructuredWorkflowPrompt,
   selectWorkflow,
   sha256File,
 };

@@ -102,7 +102,10 @@ npm run dev
 
 ### 3. 一键启动脚本
 
-在项目根目录提供了一键启动脚本，**同时启动后端和前端**：
+在项目根目录提供了一键启动脚本，**同时启动 ComfyUI、后端和前端**。
+
+默认要求 ComfyUI 位于 `E:\AI\ComfyUI_windows_portable`，也可以先设置
+`COMFYUI_ROOT` 环境变量覆盖路径。若 ComfyUI 已经占用 `8188` 端口，脚本不会重复启动。
 
 **Windows（双击运行）：**
 ```
@@ -114,7 +117,12 @@ run_dev.bat
 .\run_dev.ps1
 ```
 
-脚本会分别在两个窗口中启动后端（端口 5679）和前端（端口 3013），并自动打开浏览器。
+脚本会分别启动 ComfyUI（端口 8188）、后端（端口 5679）和前端（端口 3013），并自动打开浏览器。
+首次运行前请确认三个项目目录都已执行过 `npm install`，且 ComfyUI 的 H3 模型和 custom nodes 已准备好。
+
+Director 的 Timeline、字幕、TTS、配乐和输出文件受本地路径白名单保护。默认只允许
+`backend-node/data/director-artifacts` 与 `backend-node/data/storage`。如需使用其他本地素材目录，
+请在 `configs/config.yaml` 的 `director.allowed_local_roots` 中显式添加，不要从请求体覆盖 FFmpeg 路径。
 
 ---
 

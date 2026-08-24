@@ -1,0 +1,45 @@
+{
+  "url": "http://127.0.0.1:3014/drama/1/canvas",
+  "timelineClicked": true,
+  "desktop": {
+    "title": "画布模式 - LocalMiniDrama",
+    "panelVisible": true,
+    "panelRect": {
+      "left": 1120,
+      "top": 128,
+      "right": 1440,
+      "bottom": 1000,
+      "width": 320,
+      "height": 872
+    },
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "horizontalOverflow": false,
+    "hasTimelineText": true,
+    "hasRuntimeError": false,
+    "bodyPreview": "本地短剧助手\n画布模式\n›\n加载中…\n全部集数\n剧本\n分镜\n角色\n场景\n道具\n集\n对齐节点\nTimeline\n列表模式\n暗色\n已选 0 个分镜\n生图\n生视频\n配音\n创建工作流\n选择工作流\n整组重跑\n删除工作流\n本集生成\nAI 生成分镜\n批量生图\n批量生视频\n剧本 → 提取角色/场景/道具 → 分镜 → 生图 → 视频\n\n暂无画布数据\n\nTIMELINE V1\nAssemble selected shots\n\nSelect at least one shot candidate first"
+  },
+  "mobile": {
+    "title": "画布模式 - LocalMiniDrama",
+    "panelVisible": true,
+    "panelRect": {
+      "left": 70,
+      "top": 128,
+      "right": 390,
+      "bottom": 844,
+      "width": 320,
+      "height": 716
+    },
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "horizontalOverflow": false,
+    "hasTimelineText": true,
+    "hasRuntimeError": false,
+    "bodyPreview": "本地短剧助手\n画布模式\n›\n加载中…\n全部集数\n剧本\n分镜\n角色\n场景\n道具\n集\n对齐节点\nTimeline\n列表模式\n暗色\n已选 0 个分镜\n生图\n生视频\n配音\n创建工作流\n选择工作流\n整组重跑\n删除工作流\n本集生成\nAI 生成分镜\n批量生图\n批量生视频\n剧本 → 提取角色/场景/道具 → 分镜 → 生图 → 视频\n\n暂无画布数据\n\nTIMELINE V1\nAssemble selected shots\n\nSelect at least one shot candidate first"
+  },
+  "checkedAt": "2026-08-24T11:30:42.553Z"
+}

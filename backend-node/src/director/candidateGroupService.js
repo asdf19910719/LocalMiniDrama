@@ -47,13 +47,20 @@ function artifactRow(row, { includePath = false } = {}) {
 }
 
 function candidatesForGroup(db, groupId) {
-  return db.prepare(`SELECT candidate.*, artifact.id AS joined_artifact_id,
+  const hasJobsTable = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'director_jobs'").get());
+  const jobSelect = hasJobsTable
+    ? 'job.status AS job_status, job.attempt_number AS job_attempt_number, job.max_attempts AS job_max_attempts, job.error_code AS job_error_code, job.error_message AS job_error_message,'
+    : 'NULL AS job_status, NULL AS job_attempt_number, NULL AS job_max_attempts, NULL AS job_error_code, NULL AS job_error_message,';
+  const jobJoin = hasJobsTable ? 'LEFT JOIN director_jobs job ON job.id = candidate.job_id' : '';
+  return db.prepare(`SELECT candidate.*, ${jobSelect}
+      artifact.id AS joined_artifact_id,
       artifact.job_id AS artifact_job_id, artifact.attempt_number AS artifact_attempt_number,
       artifact.version AS artifact_version, artifact.status AS artifact_status,
       artifact.artifact_path, artifact.parent_artifact_id, artifact.sha256,
       artifact.file_size, artifact.ffprobe_json, artifact.manifest_json,
       artifact.created_at AS artifact_created_at, artifact.ready_at AS artifact_ready_at
     FROM director_candidates candidate
+    ${jobJoin}
     LEFT JOIN director_artifacts artifact ON artifact.id = candidate.artifact_id
     WHERE candidate.group_id = ? ORDER BY candidate.created_at, candidate.id`).all(groupId).map((row) => {
     const candidate = candidateRow({
@@ -62,6 +69,11 @@ function candidatesForGroup(db, groupId) {
       artifact_id: row.artifact_id,
       job_id: row.job_id,
       status: row.status,
+      job_status: row.job_status,
+      job_attempt_number: row.job_attempt_number,
+      job_max_attempts: row.job_max_attempts,
+      job_error_code: row.job_error_code || null,
+      job_error_message: row.job_error_message || null,
       error_code: row.error_code,
       error_message: row.error_message,
       created_at: row.created_at,

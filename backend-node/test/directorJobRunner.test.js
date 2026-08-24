@@ -204,6 +204,17 @@ describe('Director job runner', () => {
     const result = await runDirectorJob(db, seeded.jobId, {
       comfyClient,
       gpuMutex,
+      registry: { workflows: [{
+        id: 'h3-continuity-v1', workflowSha256: 'sha256:test',
+        provenance: {
+          provider: 'MiniMax', modelFamily: 'MiniMax H3', source: 'test fixture',
+          license: { status: 'review_required', evidence: 'test evidence' },
+        },
+        runtimeLock: {
+          comfyUIVersion: '0.33.1', models: [],
+          customNodes: [{ name: 'fixture-node', files: [{ path: '__init__.py', sha256: 'a'.repeat(64) }] }],
+        },
+      }] },
       leaseMs: 60_000,
       now: now(),
     });
@@ -217,6 +228,7 @@ describe('Director job runner', () => {
     assert.equal(getJob(db, seeded.jobId).artifact_path, artifactPath);
     assert.equal(getCandidate(db, seeded.candidateId).artifact_id, getJob(db, seeded.jobId).artifact_id);
     assert.equal(getArtifact(db, seeded.jobId).status, 'ready');
+    assert.equal(JSON.parse(getArtifact(db, seeded.jobId).manifest_json).metadata.governance.runtimeLock.comfyUIVersion, '0.33.1');
     assert.equal(calls.length, 1);
     assert.equal(calls[0].workflowId, 'h3-continuity-v1');
     assert.deepEqual(calls[0].prompt, { '5': { class_type: 'MiniMaxH3Director', inputs: { global_prompt: 'a rainy street' } } });
@@ -333,7 +345,9 @@ describe('Director job runner', () => {
 
     assert.equal(runner.enqueue(first.jobId), first.jobId);
     assert.equal(runner.enqueue(second.jobId), second.jobId);
+    assert.deepEqual(runner.snapshot().queuedJobIds, [first.jobId, second.jobId]);
     await runner.drain();
+    assert.deepEqual(runner.snapshot(), { activeJobId: null, queuedJobIds: [], queueLength: 0 });
 
     assert.deepEqual(events, [
       `start:${first.candidateId}`,
@@ -363,5 +377,80 @@ describe('Director job runner', () => {
     assert.equal(getCandidate(db, seeded.candidateId).status, 'failed');
     assert.equal(gpuMutex.inspect().token, existingLease.token);
     gpuMutex.release(existingLease);
+  });
+
+  it('cancels the active ComfyUI prompt by its submitted prompt id', async () => {
+    const seeded = seedPendingJob(db);
+    let rejectWorkflow;
+    let markSubmitted;
+    const submitted = new Promise((resolve) => { markSubmitted = resolve; });
+    const cancelledPromptIds = [];
+    const comfyClient = {
+      async runWorkflow(input) {
+        input.onSubmitted('prompt-active');
+        markSubmitted();
+        return new Promise((_resolve, reject) => { rejectWorkflow = reject; });
+      },
+      async cancel(promptId) {
+        cancelledPromptIds.push(promptId);
+        rejectWorkflow(Object.assign(new Error('interrupted'), { code: 'DIRECTOR_CANCELLED' }));
+      },
+    };
+    const runner = createDirectorJobRunner({ db, comfyClient, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
+    runner.enqueue(seeded.jobId);
+    await submitted;
+    await runner.cancel(seeded.jobId);
+    await runner.drain();
+    assert.deepEqual(cancelledPromptIds, ['prompt-active']);
+  });
+
+  it('keeps a running job cancelled when ComfyUI cancellation fails', async () => {
+    const seeded = seedPendingJob(db);
+    let markSubmitted;
+    const submitted = new Promise((resolve) => { markSubmitted = resolve; });
+    const comfyClient = {
+      async runWorkflow(input) {
+        input.onSubmitted('prompt-cancel-error');
+        markSubmitted();
+        return new Promise(() => {});
+      },
+      async cancel() {
+        throw Object.assign(new Error('ComfyUI interrupt failed'), { code: 'COMFYUI_CANCEL_FAILED' });
+      },
+    };
+    const runner = createDirectorJobRunner({ db, comfyClient, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
+    runner.enqueue(seeded.jobId);
+    await submitted;
+
+    await assert.rejects(() => runner.cancel(seeded.jobId), /ComfyUI interrupt failed/);
+
+    assert.equal(getJob(db, seeded.jobId).status, 'cancelled');
+    assert.equal(getArtifact(db, seeded.jobId), undefined);
+  });
+
+  it('interrupts a prompt that is returned after cancellation began', async () => {
+    const seeded = seedPendingJob(db);
+    let releaseSubmit;
+    let markEntered;
+    const entered = new Promise((resolve) => { markEntered = resolve; });
+    const cancelledPromptIds = [];
+    const comfyClient = {
+      async runWorkflow(input) {
+        markEntered();
+        await new Promise((resolve) => { releaseSubmit = resolve; });
+        input.onSubmitted('prompt-late');
+        return { artifactPath: path.join(outputDir, 'should-not-complete.mp4'), workflowId: 'h3-continuity-v1', workflowSha256: 'sha256:test' };
+      },
+      async cancel(promptId) { cancelledPromptIds.push(promptId); },
+    };
+    const runner = createDirectorJobRunner({ db, comfyClient, gpuMutex: createGpuMutex(), now: now(), logger: { error() {} } });
+    runner.enqueue(seeded.jobId);
+    await entered;
+    await runner.cancel(seeded.jobId);
+    releaseSubmit();
+    await runner.drain();
+    assert.deepEqual(cancelledPromptIds, ['prompt-late']);
+    assert.equal(getJob(db, seeded.jobId).status, 'cancelled');
+    assert.equal(getArtifact(db, seeded.jobId), undefined);
   });
 });

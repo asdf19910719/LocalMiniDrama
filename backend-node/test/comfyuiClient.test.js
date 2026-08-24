@@ -35,6 +35,11 @@ describe('ComfyUI Director client', () => {
         res.end(Buffer.from('fake-mp4'));
         return;
       }
+      if (req.method === 'POST' && (req.url === '/queue' || req.url === '/interrupt')) {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
       res.statusCode = 404;
       res.end(JSON.stringify({ error: 'not found' }));
     });
@@ -123,5 +128,15 @@ describe('ComfyUI Director client', () => {
       { codec_type: 'video', codec_name: 'h264', width: 864, height: 480, r_frame_rate: '24/1' },
       { codec_type: 'audio', codec_name: 'aac' },
     ]);
+  });
+
+  it('deletes a prompt from the ComfyUI queue and interrupts active execution', async () => {
+    const client = createComfyUIClient({ baseUrl });
+    const result = await client.cancel('prompt-to-cancel');
+    assert.deepEqual(result, { promptId: 'prompt-to-cancel', cancelled: true });
+    const queueRequest = requests.findLast((request) => request.url === '/queue');
+    const interruptRequest = requests.findLast((request) => request.url === '/interrupt');
+    assert.deepEqual(JSON.parse(queueRequest.body), { delete: ['prompt-to-cancel'] });
+    assert.deepEqual(JSON.parse(interruptRequest.body), { prompt_id: 'prompt-to-cancel' });
   });
 });

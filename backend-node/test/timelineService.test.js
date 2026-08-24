@@ -82,4 +82,52 @@ describe('Director timeline v1', () => {
   it('rejects invalid transitions', () => {
     assert.throws(() => validateTimeline(db, { version: 'timeline_v1', clips: [{ ...clip(artifacts[0], 0), transition: { type: 'teleport', duration: 1 } }], audioSources: [] }), /transition/i);
   });
+
+  it('rejects a clip source range beyond the probed media duration', () => {
+    assert.throws(() => validateTimeline(db, {
+      clips: [{ ...clip(artifacts[0], 0, 2), sourceOffset: 1.5, sourceDuration: 2 }],
+      audioSources: [],
+    }), /source range|media duration/i);
+  });
+
+  it('rejects stale declared source duration metadata', () => {
+    assert.throws(() => validateTimeline(db, {
+      clips: [{ ...clip(artifacts[0], 0, 1), sourceDuration: 99 }],
+      audioSources: [],
+    }), /source duration.*probe/i);
+  });
+
+  it('rejects timeline audio inputs that the video-only renderer would ignore', () => {
+    assert.throws(() => validateTimeline(db, {
+      clips: [clip(artifacts[0], 0)],
+      audioSources: ['/media/dialogue.wav'],
+      audioPolicy: 'mix',
+    }), /postproduction/i);
+  });
+
+  it('builds real FFmpeg xfade filters and accounts for transition overlap', () => {
+    const timeline = validateTimeline(db, {
+      version: 'timeline_v1',
+      clips: [
+        { ...clip(artifacts[0], 0), transition: { type: 'dissolve', duration: 0.5 } },
+        clip(artifacts[1], 2),
+      ],
+      audioSources: [],
+    });
+    const command = buildFfmpegCommand(timeline, { outputPath: '/tmp/dissolve.mp4' });
+    assert.equal(timeline.totalDuration, 3.5);
+    assert.match(command.args.join(' '), /xfade=transition=fade:duration=0\.5:offset=1\.5/);
+    assert.doesNotMatch(command.args.join(' '), /concat=n=2/);
+  });
+
+  it('rejects a transition on the last clip or one longer than the adjacent clip', () => {
+    assert.throws(() => validateTimeline(db, {
+      clips: [clip(artifacts[0], 0), { ...clip(artifacts[1], 2), transition: { type: 'fade', duration: 0.5 } }],
+      audioSources: [],
+    }), /last clip/i);
+    assert.throws(() => validateTimeline(db, {
+      clips: [{ ...clip(artifacts[0], 0), transition: { type: 'dissolve', duration: 2.1 } }, clip(artifacts[1], 2)],
+      audioSources: [],
+    }), /transition/i);
+  });
 });

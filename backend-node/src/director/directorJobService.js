@@ -111,6 +111,22 @@ function retryDirectorJob(db, jobId, now) {
   return getDirectorJob(db, jobId);
 }
 
+function cancelDirectorJob(db, jobId, now) {
+  const job = requireJob(db, jobId);
+  if (['succeeded', 'failed', 'cancelled'].includes(job.status)) {
+    if (job.status === 'cancelled') return job;
+    throw new Error(`Director job cannot be cancelled from ${job.status}`);
+  }
+  const timestamp = iso(now);
+  db.prepare(`
+    UPDATE director_jobs
+    SET status = 'cancelled', error_code = 'DIRECTOR_CANCELLED',
+        error_message = 'Cancelled by user', lease_expires_at = NULL, updated_at = ?
+    WHERE id = ? AND status IN ('pending', 'running', 'interrupted')
+  `).run(timestamp, jobId);
+  return getDirectorJob(db, jobId);
+}
+
 function succeedDirectorJob(db, jobId, {
   artifactPath,
   parentArtifactId = null,
@@ -172,6 +188,7 @@ module.exports = {
   startDirectorJob,
   failDirectorJob,
   retryDirectorJob,
+  cancelDirectorJob,
   succeedDirectorJob,
   reconcileRunningJobs,
 };

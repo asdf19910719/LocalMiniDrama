@@ -48,6 +48,10 @@
             <el-icon><Grid /></el-icon>
             对齐节点
           </el-button>
+          <el-button type="primary" plain @click="timelineVisible = !timelineVisible">
+            <el-icon><VideoCamera /></el-icon>
+            Timeline
+          </el-button>
           <el-button type="primary" plain @click="goListMode">
             <el-icon><List /></el-icon>
             列表模式
@@ -241,7 +245,14 @@
         <el-empty v-else-if="!loading" description="暂无画布数据" />
         <CanvasFloatingToolbar v-if="drama && nodes.length" />
       </div>
-      <DirectorShotPanel v-if="activeDirectorShotId" :shot-id="activeDirectorShotId" />
+      <DirectorTimelinePanel v-if="timelineVisible" :storyboards="directorStoryboards" />
+      <DirectorShotPanel
+        v-else-if="activeDirectorShotId"
+        :shot-id="activeDirectorShotId"
+        :storyboard="activeDirectorStoryboard"
+        :source-anchor="directorSourceAnchor"
+        @anchor-created="directorSourceAnchor = $event"
+      />
     </div>
 
     <CanvasCreateDialog
@@ -266,7 +277,7 @@ import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import { List, Moon, Plus, Sunny, Grid } from '@element-plus/icons-vue'
+import { List, Moon, Plus, Sunny, Grid, VideoCamera } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import '@vue-flow/core/dist/style.css'
@@ -319,6 +330,7 @@ import CanvasAddButtonNode from '@/components/dramaCanvas/CanvasAddButtonNode.vu
 import CanvasFloatingToolbar from '@/components/dramaCanvas/CanvasFloatingToolbar.vue'
 import CanvasFlowAligner from '@/components/dramaCanvas/CanvasFlowAligner.vue'
 import DirectorShotPanel from '@/components/dramaCanvas/DirectorShotPanel.vue'
+import DirectorTimelinePanel from '@/components/dramaCanvas/DirectorTimelinePanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -350,6 +362,8 @@ const contextMenuFlowPos = ref(null)
 const paneClickSuppressed = ref(false)
 const nodeStatus = createCanvasNodeStatusStore()
 const aligningNodes = ref(false)
+const timelineVisible = ref(false)
+const directorSourceAnchor = ref(null)
 const canvasFlowApi = ref(null)
 
 const PANEL_NODE_TYPES = new Set(['canvasStoryboard', 'canvasMedia', 'canvasAsset', 'canvasScript'])
@@ -384,6 +398,8 @@ const activeDirectorShotId = computed(() => {
   const focused = focusedNodeId.value ? storyboardIdFromNodeId(focusedNodeId.value) : null
   return focused || null
 })
+const activeDirectorStoryboard = computed(() => findStoryboardInDrama(drama.value, activeDirectorShotId.value))
+const directorStoryboards = computed(() => (drama.value?.episodes || []).flatMap((episode) => episode.storyboards || []))
 
 function syncWorkflowFromDrama() {
   workflowGroups.value = parseWorkflowGroups(drama.value?.metadata)

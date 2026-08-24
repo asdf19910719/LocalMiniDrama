@@ -67,8 +67,8 @@ function buildPostproductionPlan({
 
   if (audioInputs.length) {
     const vf = videoFilter ? `[0:v]${videoFilter}[vout]` : '[0:v]null[vout]';
-    const audioInputsForMix = ['[0:a]', ...audioInputs.map((_, index) => `[${index + 1}:a]`)].join('');
-    const audio = `${audioInputsForMix}amix=inputs=${audioInputs.length + 1}:duration=first:dropout_transition=2[aout]`;
+    const audioInputsForMix = audioInputs.map((_, index) => `[${index + 1}:a]`).join('');
+    const audio = `${audioInputsForMix}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2[aout]`;
     args.push('-filter_complex', `${vf};${audio}`, '-map', '[vout]', '-map', '[aout]');
   } else {
     if (videoFilter) args.push('-vf', videoFilter);

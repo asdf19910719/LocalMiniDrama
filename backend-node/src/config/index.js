@@ -26,6 +26,9 @@ function loadConfig() {
   parsed.director = {
     workflow_registry_path: parsed.director?.workflow_registry_path || './configs/director-workflows.json',
     allow_experimental: parsed.director?.allow_experimental === true,
+    allowed_local_roots: Array.isArray(parsed.director?.allowed_local_roots)
+      ? parsed.director.allowed_local_roots
+      : ['./data/director-artifacts', './data/storage'],
   };
   return parsed;
 }

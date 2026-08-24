@@ -1,0 +1,46 @@
+{
+  "version": "director_quality_benchmark_v1",
+  "workflowId": "h3-continuity-v1",
+  "repeatCount": 3,
+  "resolutions": [
+    { "label": "1280x720", "width": 1280, "height": 720 },
+    { "label": "1920x1080", "width": 1920, "height": 1080 }
+  ],
+  "visualVariants": [
+    { "id": "day-natural", "lighting": "soft natural daylight", "style": "live action cinematic" },
+    { "id": "night-practical", "lighting": "night practical lighting", "style": "live action cinematic" },
+    { "id": "stylized-high-contrast", "lighting": "high contrast studio lighting", "style": "stylized commercial" }
+  ],
+  "scenarios": [
+    {
+      "id": "cross-scene-continuity",
+      "prompt": "The same lead exits a warm apartment and enters a cool rainy street while identity, wardrobe, and carried prop remain unchanged."
+    },
+    {
+      "id": "close-up-face",
+      "prompt": "Close-up dialogue performance with clear eyes, natural lip motion, stable facial identity, and subtle emotion change."
+    },
+    {
+      "id": "multi-person-occlusion",
+      "prompt": "Three named characters cross paths, briefly occlude each other, exchange an object, and separate without identity swaps."
+    },
+    {
+      "id": "fast-camera-motion",
+      "prompt": "A fast lateral tracking move follows a running character through foreground occlusion without temporal tearing."
+    },
+    {
+      "id": "fine-prop-interaction",
+      "prompt": "A character opens a small engraved locket and reads the photograph inside with stable hands and object geometry."
+    }
+  ],
+  "semanticRubric": {
+    "scale": { "min": 1, "max": 5, "pass": 4 },
+    "dimensions": [
+      "identity",
+      "promptAdherence",
+      "temporalStability",
+      "subjectSeparation",
+      "sceneContinuity"
+    ]
+  }
+}

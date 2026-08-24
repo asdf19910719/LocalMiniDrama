@@ -49,3 +49,6 @@ image_proxy:
 director:
   workflow_registry_path: ./configs/director-workflows.json
   allow_experimental: false
+  allowed_local_roots:
+    - ./data/director-artifacts
+    - ./data/storage

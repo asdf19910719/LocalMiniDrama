@@ -3,7 +3,56 @@ import assert from 'node:assert/strict'
 
 import * as directorPersistence from '../src/utils/directorPersistence.js'
 
-const { buildDirectorGenerationRequest, createLatestRequestGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } = directorPersistence
+const { buildDirectorGenerationRequest, buildDirectorPostproductionRequest, buildStructuredDirectorGenerationRequest, createLatestRequestGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } = directorPersistence
+
+test('builds postproduction settings from export wizard fields', () => {
+  assert.deepEqual(buildDirectorPostproductionRequest({
+    enabled: true,
+    subtitlePath: 'dialogue.srt',
+    ttsPath: 'narration.mp3',
+    musicPath: 'music.wav',
+    brightness: 0.02,
+    contrast: 1.1,
+    saturation: 0.9,
+    width: 1280,
+    height: 720,
+  }), {
+    subtitlePath: 'dialogue.srt',
+    ttsPath: 'narration.mp3',
+    musicPath: 'music.wav',
+    color: { brightness: 0.02, contrast: 1.1, saturation: 0.9 },
+    upscale: { mode: 'ffmpeg-lanczos', width: 1280, height: 720 },
+    fps: 24,
+  })
+})
+
+test('builds a structured Director request from creator-facing fields', () => {
+  assert.deepEqual(buildStructuredDirectorGenerationRequest({
+    workflowId: 'h3-continuity-v1',
+    candidateCount: 2,
+    promptText: 'A woman opens an umbrella at a rainy bus stop.',
+    continuityMode: 'motion_overlap',
+    seed: 77,
+    width: 1280,
+    height: 720,
+    durationSeconds: 5,
+    frameRate: 24,
+  }), {
+    workflowId: 'h3-continuity-v1',
+    candidateCount: 2,
+    structured: {
+      prompt: 'A woman opens an umbrella at a rainy bus stop.',
+      continuityMode: 'motion_overlap',
+      seed: 77,
+      width: 1280,
+      height: 720,
+      durationSeconds: 5,
+      frameRate: 24,
+      overlapFrames: 22,
+      negativePrompt: '',
+    },
+  })
+})
 
 test('builds a validated Director generation request from panel fields', () => {
   assert.deepEqual(buildDirectorGenerationRequest({

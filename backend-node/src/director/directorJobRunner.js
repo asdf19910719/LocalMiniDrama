@@ -1,6 +1,7 @@
 const {
   getDirectorJob,
   startDirectorJob,
+  cancelDirectorJob,
   failDirectorJob,
   succeedDirectorJob,
 } = require('./directorJobService');
@@ -8,6 +9,7 @@ const {
   finalizeCandidateGroup,
   markCandidateFailed,
 } = require('./candidateGroupService');
+const { createGovernanceSnapshot } = require('./directorGovernance');
 
 function candidateForJob(db, jobId) {
   return db.prepare('SELECT * FROM director_candidates WHERE job_id = ?').get(jobId) || null;
@@ -19,6 +21,8 @@ async function runDirectorJob(db, jobId, {
   registry,
   leaseMs,
   now,
+  onPromptSubmitted,
+  isCancelled = () => false,
 } = {}) {
   if (!comfyClient || typeof comfyClient.runWorkflow !== 'function') throw new Error('Director runner requires a ComfyUI client');
   if (!gpuMutex) throw new Error('Director runner requires a GPU mutex');
@@ -44,7 +48,18 @@ async function runDirectorJob(db, jobId, {
       ...job.input,
       workflowId: job.workflow_id,
       outputFileName: `${jobId}.mp4`,
+      onSubmitted: (promptId) => {
+        onPromptSubmitted?.(jobId, promptId);
+        if (isCancelled()) {
+          Promise.resolve(comfyClient.cancel?.(promptId)).catch(() => {});
+          const error = new Error('Cancelled before ComfyUI submission completed');
+          error.code = 'DIRECTOR_CANCELLED';
+          throw error;
+        }
+      },
     });
+    const workflow = registry?.workflows?.find((entry) => entry.id === job.workflow_id);
+    const governance = workflow ? createGovernanceSnapshot(workflow) : null;
     const completed = succeedDirectorJob(db, jobId, {
       artifactPath: result.artifactPath,
       kind: 'video',
@@ -56,6 +71,7 @@ async function runDirectorJob(db, jobId, {
         pollTimestamps: result.pollTimestamps,
         workflowId: result.workflowId,
         workflowSha256: result.workflowSha256,
+        ...(governance && { governance }),
       },
       now,
     });
@@ -84,19 +100,56 @@ function createDirectorJobRunner(dependencies = {}) {
   const { db, logger = console } = dependencies;
   if (!db) throw new Error('Director runner requires a database');
   let tail = Promise.resolve();
+  const cancelled = new Set();
+  const queuedJobIds = [];
+  const activePromptIds = new Map();
+  let activeJobId = null;
 
   function enqueue(jobId) {
-    tail = tail.then(() => runDirectorJob(db, jobId, dependencies)).catch((error) => {
+    cancelled.delete(jobId);
+    queuedJobIds.push(jobId);
+    tail = tail.then(async () => {
+      const index = queuedJobIds.indexOf(jobId);
+      if (index >= 0) queuedJobIds.splice(index, 1);
+      if (cancelled.has(jobId)) return null;
+      activeJobId = jobId;
+      try {
+        return await runDirectorJob(db, jobId, {
+          ...dependencies,
+          onPromptSubmitted: (submittedJobId, promptId) => activePromptIds.set(submittedJobId, promptId),
+          isCancelled: () => cancelled.has(jobId),
+        });
+      } finally {
+        activePromptIds.delete(jobId);
+        activeJobId = null;
+      }
+    }).catch((error) => {
       logger.error?.('director job failed', { jobId, error: error.message });
     });
     return jobId;
+  }
+
+  async function cancel(jobId) {
+    cancelled.add(jobId);
+    const index = queuedJobIds.indexOf(jobId);
+    if (index >= 0) queuedJobIds.splice(index, 1);
+    cancelDirectorJob(db, jobId, dependencies.now);
+    const promptId = activePromptIds.get(jobId);
+    if (promptId && typeof dependencies.comfyClient?.cancel === 'function') {
+      await dependencies.comfyClient.cancel(promptId);
+    }
+    return jobId;
+  }
+
+  function snapshot() {
+    return { activeJobId, queuedJobIds: [...queuedJobIds], queueLength: queuedJobIds.length };
   }
 
   function drain() {
     return tail;
   }
 
-  return { enqueue, drain };
+  return { enqueue, cancel, drain, snapshot };
 }
 
 module.exports = { createDirectorJobRunner, runDirectorJob };

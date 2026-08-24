@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { buildPostproductionPlan } = require('./directorPostproductionService');
+const { assertAllowedLocalPath } = require('./directorGovernance');
 
 const ALLOWED_TRANSITIONS = new Set(['cut', 'fade', 'dissolve']);
 
@@ -28,11 +29,13 @@ function validateTimeline(db, {
   clips = [],
   audioSources = [],
   audioPolicy = 'mix',
+  allowedLocalRoots = null,
 } = {}) {
   if (version !== 'timeline_v1') throw new Error(`Unsupported timeline version: ${version}`);
   if (!Array.isArray(clips) || clips.length === 0) throw new Error('Timeline must contain clips');
   if (!Array.isArray(audioSources)) throw new Error('audioSources must be an array');
   if (new Set(audioSources).size !== audioSources.length) throw new Error('Duplicate audio source');
+  if (audioSources.length) throw new Error('Timeline audio sources are not rendered in V1; use Director postproduction inputs');
   const normalized = [];
   let expectedStart = 0;
   let baseline = null;
@@ -45,6 +48,7 @@ function validateTimeline(db, {
       throw new Error('Timeline clip source timing is invalid');
     }
     const artifact = selectedArtifact(db, clip.artifactId);
+    if (Array.isArray(allowedLocalRoots)) assertAllowedLocalPath(artifact.artifact_path, allowedLocalRoots, { mustExist: true, kind: 'file' });
     const stream = videoStream(probeFor(artifact));
     const fps = parseFps(stream.r_frame_rate || stream.avg_frame_rate);
     const media = { fps, width: Number(stream.width), height: Number(stream.height), pixelFormat: stream.pix_fmt };
@@ -63,6 +67,12 @@ function validateTimeline(db, {
     if (Math.abs(clip.startTime - expectedStart) > 0.001) {
       throw new Error(clip.startTime < expectedStart ? 'Timeline clips overlap' : 'Timeline has a gap');
     }
+    const mediaDuration = Number(probeFor(artifact).format?.duration || 0);
+    if (mediaDuration > 0 && Math.abs(clip.sourceDuration - mediaDuration) > 0.05) {
+      throw new Error('Timeline source duration does not match the media probe');
+    }
+    if (mediaDuration > 0 && clip.sourceOffset + clip.duration > mediaDuration + 0.001) throw new Error('Timeline clip source range exceeds media duration');
+    if (clip.sourceOffset + clip.duration > clip.sourceDuration + 0.001) throw new Error('Timeline clip source range exceeds declared source duration');
     if (clip.transition) {
       if (!ALLOWED_TRANSITIONS.has(clip.transition.type) || !Number.isFinite(clip.transition.duration) || clip.transition.duration < 0 || clip.transition.duration > clip.duration) {
         throw new Error('Invalid timeline transition');
@@ -80,6 +90,26 @@ function validateTimeline(db, {
       transition: clip.transition || null,
     });
   }
+  normalized.forEach((clip, index) => {
+    const transition = clip.transition;
+    if (!transition) return;
+    if (index === normalized.length - 1 && (transition.type !== 'cut' || transition.duration !== 0)) {
+      throw new Error('The last clip cannot declare a transition');
+    }
+    if (transition.type === 'cut' && transition.duration !== 0) {
+      throw new Error('Cut transition duration must be zero');
+    }
+    if (transition.type !== 'cut') {
+      const next = normalized[index + 1];
+      if (!next || transition.duration <= 0 || transition.duration > Math.min(clip.duration, next.duration)) {
+        throw new Error('Timeline transition duration exceeds an adjacent clip');
+      }
+    }
+  });
+  const transitionOverlap = normalized.slice(0, -1).reduce((sum, clip) => {
+    const transition = clip.transition;
+    return sum + (transition && transition.type !== 'cut' ? transition.duration : 0);
+  }, 0);
   return {
     version,
     output: {
@@ -91,7 +121,7 @@ function validateTimeline(db, {
     clips: normalized,
     audioSources: [...audioSources],
     audioPolicy,
-    totalDuration: expectedStart,
+    totalDuration: Number((expectedStart - transitionOverlap).toFixed(6)),
   };
 }
 
@@ -105,10 +135,31 @@ function buildFfmpegCommand(timeline, { ffmpegPath = 'ffmpeg', outputPath }) {
   const filters = [];
   timeline.clips.forEach((clip, index) => {
     args.push('-i', clip.artifactPath);
-    filters.push(`[${index}:v]trim=start=${clip.sourceOffset}:duration=${clip.sourceDuration},setpts=PTS-STARTPTS[v${index}]`);
+    filters.push(`[${index}:v]trim=start=${clip.sourceOffset}:duration=${clip.duration},setpts=PTS-STARTPTS[v${index}]`);
   });
-  const concatInputs = timeline.clips.map((_, index) => `[v${index}]`).join('');
-  filters.push(`${concatInputs}concat=n=${timeline.clips.length}:v=1:a=0[vout]`);
+  const hasTimedTransition = timeline.clips.slice(0, -1)
+    .some((clip) => clip.transition && clip.transition.type !== 'cut' && clip.transition.duration > 0);
+  if (!hasTimedTransition) {
+    const concatInputs = timeline.clips.map((_, index) => `[v${index}]`).join('');
+    filters.push(`${concatInputs}concat=n=${timeline.clips.length}:v=1:a=0[vout]`);
+  } else {
+    let currentLabel = 'v0';
+    let currentDuration = timeline.clips[0].duration;
+    for (let index = 1; index < timeline.clips.length; index += 1) {
+      const transition = timeline.clips[index - 1].transition || { type: 'cut', duration: 0 };
+      const outputLabel = index === timeline.clips.length - 1 ? 'vout' : `vchain${index}`;
+      if (transition.type === 'cut' || transition.duration === 0) {
+        filters.push(`[${currentLabel}][v${index}]concat=n=2:v=1:a=0[${outputLabel}]`);
+        currentDuration += timeline.clips[index].duration;
+      } else {
+        const ffmpegTransition = transition.type === 'fade' ? 'fadeblack' : 'fade';
+        const offset = Number((currentDuration - transition.duration).toFixed(6));
+        filters.push(`[${currentLabel}][v${index}]xfade=transition=${ffmpegTransition}:duration=${transition.duration}:offset=${offset}[${outputLabel}]`);
+        currentDuration += timeline.clips[index].duration - transition.duration;
+      }
+      currentLabel = outputLabel;
+    }
+  }
   args.push('-filter_complex', filters.join(';'));
   args.push('-map', '[vout]', '-r', String(timeline.output.fps), '-s', `${timeline.output.width}x${timeline.output.height}`);
   if (timeline.output.pixelFormat) args.push('-pix_fmt', timeline.output.pixelFormat);
