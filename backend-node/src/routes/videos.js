@@ -2,6 +2,7 @@ const response = require('../response');
 const videoService = require('../services/videoService');
 const taskService = require('../services/taskService');
 const { normalizeAspectRatioForApi } = require('../services/videoClient');
+const { resolveDefaultVideoConfig } = require('../services/videoConfigResolver');
 
 function routes(db, log) {
   return {
@@ -18,11 +19,12 @@ function routes(db, log) {
     create: (req, res) => {
       try {
         const body = req.body || {};
+        const resolvedConfig = resolveDefaultVideoConfig(db, { requestedModel: body.model });
         const task = taskService.createTask(db, log, 'video_generation', String(body.drama_id || ''));
         const now = new Date().toISOString();
         const dramaId = Number(body.drama_id) || 0;
         const storyboardId = body.storyboard_id != null ? Number(body.storyboard_id) : null;
-        const provider = body.provider || 'chatfire';
+        const provider = resolvedConfig.provider;
         let prompt = body.prompt || '';
         const style = (body.style || '').toString().trim();
         if (style) {
@@ -32,7 +34,7 @@ function routes(db, log) {
             prompt = prompt ? `${prompt}. Style: ${style}` : `Style: ${style}`;
           }
         }
-        const model = body.model ?? null;
+        const model = resolvedConfig.model || null;
         const duration = body.duration ?? null;
         // 画幅：请求体归一化（全角冒号等）后写入 DB；未传则从 drama.metadata 读取并同样归一化
         let aspectRatio = null;
