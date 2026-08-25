@@ -46,12 +46,12 @@ describe('buildVideoConfigSnapshot', () => {
     assert.equal(JSON.stringify(snapshot).includes('arbitrary_value'), false);
   });
 
-  test('does not leak secrets through nominally safe settings or endpoint query strings', () => {
+  test('does not leak secrets through nominally safe settings or endpoint URLs', () => {
     const snapshot = buildVideoConfigSnapshot({
       config: {
         id: 8,
-        endpoint: '/prompt?api_key=secret',
-        query_endpoint: '/history/{taskId}?access_token=secret',
+        endpoint: 'https://endpoint-key@provider.example.test/v1/generate?api_key=secret',
+        query_endpoint: 'https://query-key@provider.example.test/v1/jobs/{taskId}?access_token=secret',
         settings: { workflow_id: { api_key: 'secret' } },
       },
       provider: 'comfyui',
@@ -59,10 +59,12 @@ describe('buildVideoConfigSnapshot', () => {
       model: 'h3-continuity-v1',
     });
 
-    assert.equal(snapshot.endpoint, '/prompt');
-    assert.equal(snapshot.queryEndpoint, '/history/{taskId}');
+    assert.equal(snapshot.endpoint, 'https://provider.example.test/v1/generate');
+    assert.equal(snapshot.queryEndpoint, 'https://provider.example.test/v1/jobs/{taskId}');
     assert.deepEqual(snapshot.settings, {});
     assert.equal(JSON.stringify(snapshot).includes('secret'), false);
+    assert.equal(JSON.stringify(snapshot).includes('endpoint-key'), false);
+    assert.equal(JSON.stringify(snapshot).includes('query-key'), false);
   });
 });
 

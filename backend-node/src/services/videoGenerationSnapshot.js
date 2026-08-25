@@ -38,7 +38,14 @@ function snapshotSettings(value) {
 
 function nonSensitivePath(value) {
   if (value == null || String(value).trim() === '') return null;
-  return String(value).trim().split(/[?#]/, 1)[0];
+  const raw = String(value).trim();
+  try {
+    const url = new URL(raw);
+    const pathname = url.pathname.replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+    return `${url.protocol}//${url.host}${pathname}`;
+  } catch (_) {
+    return raw.split(/[?#]/, 1)[0];
+  }
 }
 
 function nonSensitiveBaseUrl(value) {
