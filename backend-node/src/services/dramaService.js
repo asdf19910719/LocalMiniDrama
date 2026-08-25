@@ -751,7 +751,7 @@ function getVideoUrlForStoryboard(db, storyboardId, baseUrl) {
   
   // 2. 获取 video_generations 表中最新完成的记录
   const vg = db.prepare(
-    "SELECT video_url, local_path, completed_at, updated_at, created_at FROM video_generations WHERE storyboard_id = ? AND status = 'completed' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
+    "SELECT video_url, local_path, completed_at, updated_at, created_at FROM video_generations WHERE storyboard_id = ? AND status IN ('completed', 'review', 'selected') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
   ).get(storyboardId);
 
   // 辅助函数：构造完整 URL，优先使用本地路径（避免远程URL过期导致无法合并）
@@ -870,4 +870,5 @@ module.exports = {
   finalizeEpisode,
   downloadEpisodeVideo,
   generateStoryboard,
+  getVideoUrlForStoryboard,
 };

@@ -316,7 +316,7 @@
           </el-select>
         </el-form-item>
         <!-- 接口规范：仅图片/分镜/视频类型显示，预设厂商自动填充；自定义厂商必选 -->
-        <el-form-item v-if="form.service_type !== 'text' && form.service_type !== 'tts' && form.service_type !== 'jimeng2_character_auth'">
+        <el-form-item v-if="form.service_type !== 'text' && form.service_type !== 'tts' && form.service_type !== 'jimeng2_character_auth' && !isComfyUIForm">
           <template #label>
             <span class="form-label-tip">接口规范
               <el-icon class="tip-icon" style="cursor:pointer;color:#409eff" @click="showProtocolHelp = true"><QuestionFilled /></el-icon>
@@ -531,7 +531,7 @@ input_reference = (图片文件，可选)</pre>
             :placeholder="form.service_type === 'jimeng2_character_auth' ? '如 https://your-gateway.com' : '选择预设厂商后自动填充，可修改'"
           />
         </el-form-item>
-        <el-form-item prop="api_key">
+        <el-form-item v-if="isApiKeyRequired(form)" prop="api_key">
           <template #label>
             <span class="form-label-tip">{{ form.service_type === 'jimeng2_character_auth' ? 'Token' : 'API Key' }}
               <el-tooltip placement="top" popper-class="cfg-tip-popper">
@@ -558,6 +558,24 @@ input_reference = (图片文件，可选)</pre>
             show-password
           />
         </el-form-item>
+        <template v-if="isComfyUIForm">
+          <el-form-item prop="default_model">
+            <template #label><span class="form-label-tip">工作流</span></template>
+            <el-select v-model="form.default_model" style="width: 100%" @change="onComfyWorkflowChange">
+              <el-option v-for="workflow in availableModels" :key="workflow" :label="workflow" :value="workflow" />
+            </el-select>
+            <p class="field-tip">选择已登记的 ComfyUI 工作流；连接检查会校验工作流、节点、模型和显存，且不会启动推理。</p>
+          </el-form-item>
+          <el-form-item>
+            <template #label><span class="form-label-tip">画面尺寸</span></template>
+            <div class="comfyui-dimensions">
+              <el-input-number v-model="form.width" :min="32" :step="32" controls-position="right" />
+              <span>×</span>
+              <el-input-number v-model="form.height" :min="32" :step="32" controls-position="right" />
+            </div>
+            <p class="field-tip">宽高必须为 32 的倍数，默认 1280 × 704。</p>
+          </el-form-item>
+        </template>
         <el-form-item v-if="form.service_type === 'jimeng2_character_auth'">
           <template #label><span class="form-label-tip">素材列表</span></template>
           <div class="jimeng2-assets-actions">
@@ -683,7 +701,7 @@ input_reference = (图片文件，可选)</pre>
         </template>
 
         <!-- 端点配置：视频必填（自定义厂商）；图片/分镜在使用代理或特殊厂商时填写 -->
-        <template v-if="form.service_type !== 'text' && form.service_type !== 'tts' && form.service_type !== 'jimeng2_character_auth'">
+        <template v-if="form.service_type !== 'text' && form.service_type !== 'tts' && form.service_type !== 'jimeng2_character_auth' && !isComfyUIForm">
           <el-form-item>
             <template #label>
               <span class="form-label-tip">提交端点
@@ -745,7 +763,7 @@ input_reference = (图片文件，可选)</pre>
           <p v-else class="ep-tip">以上为系统推断的实际调用地址（可手动填写上方端点字段来覆盖）</p>
         </div>
 
-        <template v-if="form.service_type !== 'jimeng2_character_auth'">
+        <template v-if="form.service_type !== 'jimeng2_character_auth' && !isComfyUIForm">
         <el-form-item>
           <template #label>
             <span class="form-label-tip">模型列表
@@ -1043,8 +1061,20 @@ input_reference = (图片文件，可选)</pre>
     <el-dialog v-model="testVisible" title="测试连接" width="420px">
       <p v-if="testResult === null">正在测试…</p>
       <template v-else-if="testResult">
+        <template v-if="testProvider === 'comfyui'">
+          <el-alert
+            type="success"
+            title="ComfyUI 连接检查通过"
+            description="以下检查均为只读检查，未启动推理任务。"
+            show-icon
+            :closable="false"
+          />
+          <ul class="comfyui-checks">
+            <li v-for="check in testChecks" :key="check.name">{{ check.name }}：{{ check.message }}</li>
+          </ul>
+        </template>
         <el-alert
-          v-if="testServiceType === 'image' || testServiceType === 'storyboard_image' || testServiceType === 'video'"
+          v-else-if="testServiceType === 'image' || testServiceType === 'storyboard_image' || testServiceType === 'video'"
           type="success"
           title="连接成功"
           description="API Key 有效，网络已连通。提示：测试仅验证 Key 合法性，不实际生成图片/视频，模型名填错、账号未开通该功能或配额不足时实际生成仍可能报错。"
@@ -1103,6 +1133,12 @@ import { generationSettingsAPI } from '@/api/prompts'
 import PromptEditor from '@/components/PromptEditor.vue'
 import SceneModelMap from '@/components/SceneModelMap.vue'
 import Sd2AssetManagement from '@/components/Sd2AssetManagement.vue'
+import {
+  comfyuiConfigDefaults,
+  isApiKeyRequired,
+  isComfyuiVideoConfig,
+  serializeVideoProviderSettings,
+} from '@/utils/aiConfigVideoProvider'
 
 const activeTab = ref('configs')
 const importFileRef = ref(null)
@@ -1191,6 +1227,8 @@ const form = ref({
   kling_access_key: '',
   kling_secret_key: '',
   kling_secret_key_base64: false,
+  width: 1280,
+  height: 704,
   // TTS 专属字段
   voice_id: '',
   group_id: '',
@@ -1198,6 +1236,7 @@ const form = ref({
 const presetModelPick = ref('')
 
 const formModelList = computed(() => parseModelText(form.value.modelText))
+const isComfyUIForm = computed(() => isComfyuiVideoConfig(form.value))
 
 // 保证「生成时默认使用」下拉有可选且选中值在列表内，否则会不显示或修改无效
 watch(
@@ -1260,9 +1299,19 @@ const rules = computed(() => ({
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   provider: [{ required: true, message: '请选择或输入厂商', trigger: 'change' }],
   base_url: [{ required: true, message: '请输入 Base URL', trigger: 'blur' }],
+  default_model: [
+    {
+      validator: (_rule, value, cb) => {
+        if (!isComfyUIForm.value || String(value || '').trim()) return cb()
+        cb(new Error('请选择 ComfyUI 工作流'))
+      },
+      trigger: 'change',
+    },
+  ],
   api_key: [
     {
       validator: (_rule, v, cb) => {
+        if (!isApiKeyRequired(form.value)) return cb()
         const st = form.value.service_type
         if (st === 'jimeng2_character_auth') {
           if (v != null && String(v).trim()) return cb()
@@ -1283,6 +1332,8 @@ const testVisible = ref(false)
 const testResult = ref(null)
 const testServiceType = ref('')
 const testError = ref('')
+const testProvider = ref('')
+const testChecks = ref([])
 const oneKeyTongyiVisible = ref(false)
 const oneKeyTongyiKey = ref('')
 const oneKeyTongyiSaving = ref(false)
@@ -1326,6 +1377,7 @@ const providerConfigs = {
     { id: 'agnes', name: 'Agnes AI', models: ['agnes-image-2.1-flash', 'agnes-image-2.0-flash'] }
   ],
   video: [
+    { id: 'comfyui', name: 'ComfyUI（本机工作流）', models: ['h3-continuity-v1'] },
     { id: 'klingai', name: '可灵官方 Omni (api-beijing.klingai.com)', models: ['kling-video-o1', 'kling-v3-omni'] },
     { id: 'ffir', name: '飞儿API / 可灵 Omni-Video (ffir.cn)', models: ['kling-video-o1', 'kling-v3-omni'] },
     { id: 'kling', name: '可灵 Kling', models: ['kling-omni-video', 'kling-video', 'kling-motion-control'] },
@@ -1380,6 +1432,7 @@ const providerProtocolMap = {
   grok: 'xai',
   minimax: 'openai',
   minimax_h3: 'minimax_h3',
+  comfyui: '',
   openai: 'openai',
   chatfire: 'openai',
   qwen: 'openai',
@@ -1395,6 +1448,7 @@ function getBaseUrlForProvider(provider) {
   const p = String(provider).toLowerCase()
   if (p === 'gemini' || p === 'google') return 'https://generativelanguage.googleapis.com'
   if (p === 'minimax_h3') return 'https://api.minimaxi.com'
+  if (p === 'comfyui') return 'http://127.0.0.1:8188'
   if (p === 'minimax') return 'https://api.minimaxi.com/v1'
   if (p === 'volces' || p === 'volcengine') return 'https://ark.cn-beijing.volces.com/api/v3'
   if (p === 'openai') return 'https://api.openai.com/v1'
@@ -1644,6 +1698,12 @@ function onProviderChange(providerId) {
   }
   // 自动填充接口规范
   form.value.api_protocol = providerProtocolMap[providerId] || (st === 'text' ? '' : 'openai')
+  if (st === 'video' && providerId === 'comfyui') {
+    Object.assign(form.value, comfyuiConfigDefaults(p.models))
+    form.value.api_protocol = ''
+    form.value.endpoint = ''
+    form.value.query_endpoint = ''
+  }
   if (st === 'video' && providerId === 'jimeng_ai_api') {
     form.value.endpoint = ''
     form.value.query_endpoint = ''
@@ -1675,6 +1735,10 @@ function onProviderChange(providerId) {
   if (!editingId.value) {
     form.value.name = (p.name || providerId) + ' ' + serviceTypeLabel(st)
   }
+}
+
+function onComfyWorkflowChange(workflow) {
+  form.value.modelText = workflow || ''
 }
 
 /** 通义一键配置用 */
@@ -1766,6 +1830,8 @@ function resetForm() {
     kling_access_key: '',
     kling_secret_key: '',
     kling_secret_key_base64: false,
+    width: 1280,
+    height: 704,
   }
   formRef.value?.resetFields?.()
 }
@@ -1786,6 +1852,8 @@ function openEdit(row) {
   let kling_access_key = ''
   let kling_secret_key = ''
   let kling_secret_key_base64 = false
+  let width = 1280
+  let height = 704
   const deepseekSettings = resolveDeepSeekFormSettings(row)
   if (row.settings) {
     try {
@@ -1798,6 +1866,10 @@ function openEdit(row) {
         kling_access_key = s.kling_access_key || ''
         kling_secret_key = s.kling_secret_key || ''
         kling_secret_key_base64 = !!s.kling_secret_key_base64
+      }
+      if (isComfyuiVideoConfig(row)) {
+        width = Number(s.width) || width
+        height = Number(s.height) || height
       }
     } catch (_) {}
   }
@@ -1821,12 +1893,23 @@ function openEdit(row) {
     kling_access_key,
     kling_secret_key,
     kling_secret_key_base64,
+    width,
+    height,
   }
   dialogVisible.value = true
 }
 
 async function submit() {
   await formRef.value?.validate?.().catch(() => {})
+  let comfyuiSettings
+  if (isComfyUIForm.value) {
+    try {
+      comfyuiSettings = serializeVideoProviderSettings(form.value)
+    } catch (error) {
+      ElMessage.warning(error.message)
+      return
+    }
+  }
   saving.value = true
   try {
     let modelList = parseModelText(form.value.modelText)
@@ -1870,6 +1953,13 @@ async function submit() {
         delete baseS.deepseek_reasoning_effort
       }
       settings = Object.keys(baseS).length ? JSON.stringify(baseS) : null
+    }
+    if (isComfyUIForm.value) {
+      const previous = editingId.value ? list.value.find((row) => row.id === editingId.value) : null
+      settings = previous?.settings
+        ? serializeVideoProviderSettings({ ...form.value, settings: previous.settings })
+        : comfyuiSettings
+      modelList = form.value.default_model ? [form.value.default_model] : []
     }
     const payload = {
       service_type: form.value.service_type,
@@ -1984,8 +2074,10 @@ async function openTest(row) {
   testResult.value = null
   testError.value = ''
   testServiceType.value = row.service_type || 'text'
+  testProvider.value = row.provider || ''
+  testChecks.value = []
   try {
-    await aiAPI.testConnection({
+    const result = await aiAPI.testConnection({
       base_url: row.base_url,
       api_key: row.api_key,
       model: Array.isArray(row.model) ? row.model[0] : row.model,
@@ -1994,6 +2086,7 @@ async function openTest(row) {
       service_type: row.service_type,
       settings: row.settings
     })
+    testChecks.value = Array.isArray(result?.checks) ? result.checks : []
     testResult.value = true
   } catch (e) {
     testResult.value = false
@@ -2229,6 +2322,17 @@ onMounted(() => {
   padding-top: 4px;
   color: var(--el-color-primary, #409eff) !important;
   font-style: italic;
+}
+.comfyui-dimensions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.comfyui-checks {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
 }
 </style>
 

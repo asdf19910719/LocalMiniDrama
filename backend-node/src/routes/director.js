@@ -5,11 +5,9 @@ const response = require('../response');
 const candidateService = require('../director/candidateGroupService');
 const jobService = require('../director/directorJobService');
 const timelineService = require('../director/timelineService');
-const { selectWorkflow, readWorkflowTemplate, buildStructuredWorkflowPrompt } = require('../director/workflowRegistry');
 const { validateSourceDependency } = require('../director/sourceDependency');
 const { createContinuityAnchor } = require('../director/continuityAnchorService');
 const { analyzeArtifact } = require('../director/directorQualityService');
-const { createGenerationCacheKey, validateVramBudget } = require('../director/directorGenerationPolicy');
 const { archiveUnreferencedArtifacts, createArtifactBundle, getArtifactUsage, restoreArtifactBundle } = require('../director/directorArtifactLifecycle');
 const { assertAllowedLocalPath } = require('../director/directorGovernance');
 
@@ -17,58 +15,115 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function createGenerationBatch(db, {
-  shotId,
-  workflowId,
-  workflowVersion,
-  candidateCount,
-  prompt,
-  inputs,
-  maxAttempts,
-  cacheKey,
-}) {
-  const timestamp = new Date().toISOString();
-  const groupId = crypto.randomUUID();
-  const jobs = [];
-  const create = db.transaction(() => {
-    db.prepare(`INSERT INTO director_candidate_groups
-      (id, shot_id, status, created_at, updated_at)
-      VALUES (?, ?, 'pending', ?, ?)`).run(groupId, String(shotId), timestamp, timestamp);
-    for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex += 1) {
-      const candidateId = crypto.randomUUID();
-      const job = jobService.createDirectorJob(db, {
-        input: { shotId: String(shotId), groupId, candidateId, candidateIndex, prompt, inputs, cacheKey },
-        workflowId,
-        workflowVersion,
-        maxAttempts,
-        now: timestamp,
-      });
-      db.prepare(`INSERT INTO director_candidates
-        (id, group_id, artifact_id, job_id, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'pending', ?, ?)`)
-        .run(candidateId, groupId, `pending-artifact-${job.id}`, job.id, timestamp, timestamp);
-      jobs.push(job);
-    }
-  });
-  create();
-  return { group: candidateService.getCandidateGroup(db, groupId), jobs };
+function legacyPromptText(prompt) {
+  if (typeof prompt === 'string') return prompt.trim();
+  if (!isPlainObject(prompt)) return '';
+  const directorNode = Object.values(prompt).find((node) => node?.class_type === 'MiniMaxH3Director');
+  const nodePrompt = String(directorNode?.inputs?.global_prompt || '').trim();
+  if (nodePrompt) return nodePrompt;
+  return JSON.stringify(prompt);
 }
 
-function findCachedGenerationBatch(db, cacheKey) {
-  const rows = db.prepare(`SELECT job.id, job.input_json, job.created_at, candidate.group_id
-    FROM director_jobs job
-    JOIN director_candidates candidate ON candidate.job_id = job.id
-    JOIN director_candidate_groups group_row ON group_row.id = candidate.group_id
-    WHERE group_row.status IN ('pending', 'running', 'review', 'selected')
-    ORDER BY job.created_at DESC`).all();
-  const match = rows.find((row) => {
-    try { return JSON.parse(row.input_json || '{}').cacheKey === cacheKey; } catch { return false; }
-  });
-  if (!match) return null;
+function storyboardContext(db, shotId) {
+  try {
+    return db.prepare(`SELECT storyboard.*, episode.drama_id
+      FROM storyboards storyboard
+      LEFT JOIN episodes episode ON episode.id = storyboard.episode_id
+      WHERE storyboard.id = ? AND storyboard.deleted_at IS NULL`).get(shotId);
+  } catch (_) {
+    return db.prepare('SELECT * FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(shotId);
+  }
+}
+
+function generationInput(body, { shot, groupId, structured, inputs }) {
+  const source = { ...inputs, ...(structured || {}) };
+  const prompt = String(structured?.prompt || legacyPromptText(body.prompt) || '').trim();
+  if (!prompt) throw new Error('prompt or structured input is required');
+  const referenceUrls = source.referenceImageUrls || source.referenceUrls
+    || (source.referenceImagePath ? [source.referenceImagePath] : undefined);
   return {
-    group: candidateService.getCandidateGroup(db, match.group_id),
-    jobs: rows.filter((row) => row.group_id === match.group_id).map((row) => jobService.getDirectorJob(db, row.id)),
-    cacheHit: true,
+    drama_id: Number(shot.drama_id) || 0,
+    storyboard_id: Number(shot.id),
+    candidate_group_id: groupId,
+    prompt,
+    negative_prompt: source.negativePrompt ?? source.negative_prompt ?? null,
+    duration: source.durationSeconds ?? source.duration,
+    aspect_ratio: source.aspectRatio ?? source.aspect_ratio,
+    resolution: source.resolution,
+    width: source.width,
+    height: source.height,
+    frame_rate: source.frameRate ?? source.frame_rate,
+    seed: source.seed,
+    camera_fixed: source.cameraFixed ?? source.camera_fixed,
+    watermark: source.watermark,
+    continuity_mode: source.continuityMode ?? source.continuity_mode,
+    anchor_id: source.anchorId ?? source.anchor_id,
+    image_url: source.imageUrl ?? source.image_url,
+    first_frame_url: source.firstFrameUrl ?? source.first_frame_url ?? source.referenceImagePath,
+    last_frame_url: source.lastFrameUrl ?? source.last_frame_url,
+    reference_image_urls: referenceUrls,
+    style: source.style,
+  };
+}
+
+function ensureBatchVideoTerminal(db, videoGenerationId) {
+  const row = db.prepare('SELECT id, status, task_id FROM video_generations WHERE id = ?')
+    .get(Number(videoGenerationId));
+  if (!row || !['waiting', 'queued', 'running', 'processing'].includes(row.status)) return;
+  const now = new Date().toISOString();
+  const error = JSON.stringify({
+    code: 'DIRECTOR_BATCH_COMPENSATED',
+    message: 'Director candidate batch creation was rolled back',
+    stage: 'cancel',
+    details: { reason: 'candidate_batch_failed' },
+  });
+  db.transaction(() => {
+    db.prepare(`UPDATE video_generations SET status = 'cancelled', error_msg = ?,
+      completed_at = ?, updated_at = ? WHERE id = ?
+      AND status IN ('waiting', 'queued', 'running', 'processing')`)
+      .run(error, now, now, row.id);
+    if (row.task_id) {
+      db.prepare(`UPDATE async_tasks SET status = 'failed', progress = 100, error = ?,
+        completed_at = ?, updated_at = ? WHERE id = ?`)
+        .run(error, now, now, row.task_id);
+    }
+  })();
+}
+
+async function createGenerationBatch(db, videoGenerationService, {
+  shot,
+  candidateCount,
+  body,
+  structured,
+  inputs,
+}) {
+  const initial = candidateService.createVideoCandidateGroup(db, {
+    shotId: String(shot.id),
+    candidateCount,
+  });
+  const videoGenerations = [];
+  try {
+    for (const candidate of initial.candidates) {
+      const generation = await videoGenerationService.createVideoGeneration(
+        generationInput(body, { shot, groupId: initial.id, structured, inputs }),
+      );
+      videoGenerations.push(generation);
+      candidateService.linkCandidateVideoGeneration(db, initial.id, candidate.id, generation.id);
+    }
+  } catch (error) {
+    await Promise.allSettled(videoGenerations.map((generation) => (
+      videoGenerationService.cancelVideoGeneration(generation.id)
+    )));
+    for (const generation of videoGenerations) ensureBatchVideoTerminal(db, generation.id);
+    db.transaction(() => {
+      db.prepare('DELETE FROM director_candidates WHERE group_id = ?').run(initial.id);
+      db.prepare('DELETE FROM director_candidate_groups WHERE id = ?').run(initial.id);
+    })();
+    throw error;
+  }
+  return {
+    group: candidateService.getCandidateGroup(db, initial.id),
+    video_generations: videoGenerations,
   };
 }
 
@@ -88,6 +143,7 @@ function isFileWithin(rootPath, filePath) {
 
 function routes(db, log, {
   runner = null,
+  videoGenerationService = null,
   registry = null,
   allowExperimental = false,
   artifactRoot = path.join(process.cwd(), 'data', 'director-artifacts'),
@@ -144,17 +200,20 @@ function routes(db, log, {
         response.badRequest(res, error.message);
       }
     },
-    generateCandidates: (req, res) => {
+    generateCandidates: async (req, res) => {
       try {
-        if (!runner || !registry) throw new Error('Director generation is not configured');
+        if (!videoGenerationService?.createVideoGeneration || !videoGenerationService?.cancelVideoGeneration) {
+          throw new Error('Director video generation is not configured');
+        }
         const shotId = req.params.shotId;
         const body = req.body || {};
         if (!shotId) throw new Error('shotId is required');
-        if (!body.workflowId) throw new Error('workflowId is required');
         if (!Number.isInteger(body.candidateCount) || body.candidateCount < 1 || body.candidateCount > 3) {
           throw new Error('candidateCount must be an integer from 1 through 3');
         }
-        if (body.prompt !== undefined && !isPlainObject(body.prompt)) throw new Error('prompt must be an object');
+        if (body.prompt !== undefined && typeof body.prompt !== 'string' && !isPlainObject(body.prompt)) {
+          throw new Error('prompt must be text or an object');
+        }
         if (body.structured !== undefined && !isPlainObject(body.structured)) throw new Error('structured must be an object');
         if (body.inputs !== undefined && !isPlainObject(body.inputs)) throw new Error('inputs must be an object');
         const maxAttempts = body.maxAttempts === undefined ? 3 : body.maxAttempts;
@@ -168,7 +227,6 @@ function routes(db, log, {
         if (body.sourceCandidateId) inputs.sourceCandidateId = body.sourceCandidateId;
         validateSourceDependency(db, inputs);
 
-        const workflow = selectWorkflow(registry, body.workflowId, { allowExperimental });
         let structured = body.structured;
         if (structured?.anchorId) {
           const anchor = db.prepare(`SELECT anchor.*, artifact.artifact_path, artifact.status AS artifact_status
@@ -184,49 +242,16 @@ function routes(db, log, {
             referenceRole: anchor.reference_role,
           };
         }
-        const prompt = body.prompt || (body.structured
-          ? buildStructuredWorkflowPrompt(readWorkflowTemplate(workflow.workflowPath), structured)
-          : null);
-        if (!isPlainObject(prompt)) throw new Error('prompt or structured input is required');
-        const shot = db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(shotId);
+        const shot = storyboardContext(db, shotId);
         if (!shot) throw new Error(`Storyboard not found: ${shotId}`);
-        const resource = body.structured
-          ? validateVramBudget({ width: body.structured.width, height: body.structured.height })
-          : null;
-        const cacheKey = createGenerationCacheKey({
-          shotId: String(shotId), workflowId: workflow.id, workflowSha256: workflow.workflowSha256,
-          candidateCount: body.candidateCount, prompt, inputs,
-        });
-        const cached = findCachedGenerationBatch(db, cacheKey);
-        if (cached) return response.accepted(res, { ...cached, resource });
-
-        const batch = createGenerationBatch(db, {
-          shotId,
-          workflowId: workflow.id,
-          workflowVersion: String(registry.version),
+        const batch = await createGenerationBatch(db, videoGenerationService, {
+          shot,
           candidateCount: body.candidateCount,
-          prompt,
+          body,
+          structured,
           inputs,
-          maxAttempts,
-          cacheKey,
         });
-        for (const job of batch.jobs) {
-          try {
-            runner.enqueue(job.id);
-          } catch (error) {
-            const updatedAt = new Date().toISOString();
-            db.prepare(`UPDATE director_jobs SET status = 'failed', error_code = 'DIRECTOR_QUEUE_ERROR',
-              error_message = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
-              .run(error.message, updatedAt, job.id);
-            candidateService.markCandidateFailed(db, job.id, {
-              code: 'DIRECTOR_QUEUE_ERROR', message: error.message,
-            }, updatedAt);
-          }
-        }
-        batch.jobs = batch.jobs.map((job) => jobService.getDirectorJob(db, job.id));
-        candidateService.finalizeCandidateGroup(db, batch.group.id);
-        batch.group = candidateService.getCandidateGroup(db, batch.group.id);
-        response.accepted(res, { ...batch, cacheHit: false, resource });
+        response.accepted(res, { ...batch, cacheHit: false, resource: null });
       } catch (error) {
         log.error('director candidate generation create', { error: error.message });
         response.badRequest(res, error.message);
@@ -296,9 +321,22 @@ function routes(db, log, {
         response.badRequest(res, error.message);
       }
     },
-    selectCandidate: (req, res) => {
+    selectCandidate: async (req, res) => {
       try {
-        const group = candidateService.selectCandidate(db, req.params.groupId, req.body?.candidateId || req.body?.candidate_id, {
+        const candidateId = req.body?.candidateId || req.body?.candidate_id;
+        const selection = candidateService.getCandidateSelectionState(db, req.params.groupId, candidateId);
+        const candidate = selection?.candidate;
+        if (candidate?.video_generation_id != null && !videoGenerationService?.selectVideoGeneration) {
+          throw new Error('Director video selection is not configured');
+        }
+        if (candidate?.video_generation_id != null) {
+          if (selection.group_status !== 'review') {
+            throw new Error(`Candidate group cannot select from ${selection.group_status}`);
+          }
+          if (!['review', 'selected'].includes(selection.candidate_status)) throw new Error('Candidate is not selectable');
+          await videoGenerationService.selectVideoGeneration(candidate.video_generation_id);
+        }
+        const group = candidateService.selectCandidate(db, req.params.groupId, candidateId, {
           selectedBy: req.body?.selectedBy || req.body?.selected_by || 'user',
           reason: req.body?.reason || '',
         });
@@ -437,6 +475,13 @@ function routes(db, log, {
     },
     cancelJob: async (req, res) => {
       try {
+        const unifiedCandidate = candidateService.getCandidateByVideoGenerationId(db, req.params.jobId);
+        if (unifiedCandidate) {
+          if (!videoGenerationService?.cancelVideoGeneration) throw new Error('Director video cancellation is not configured');
+          const video = await videoGenerationService.cancelVideoGeneration(unifiedCandidate.video_generation_id);
+          candidateService.finalizeCandidateGroup(db, unifiedCandidate.group_id);
+          return response.success(res, video);
+        }
         const job = jobService.cancelDirectorJob(db, req.params.jobId);
         if (runner?.cancel) await runner.cancel(req.params.jobId);
         const candidate = db.prepare('SELECT group_id FROM director_candidates WHERE job_id = ?').get(req.params.jobId);
@@ -452,8 +497,15 @@ function routes(db, log, {
         response.badRequest(res, error.message);
       }
     },
-    retryJob: (req, res) => {
+    retryJob: async (req, res) => {
       try {
+        const unifiedCandidate = candidateService.getCandidateByVideoGenerationId(db, req.params.jobId);
+        if (unifiedCandidate) {
+          if (!videoGenerationService?.retryVideoGeneration) throw new Error('Director video retry is not configured');
+          const video = await videoGenerationService.retryVideoGeneration(unifiedCandidate.video_generation_id);
+          candidateService.getCandidateGroup(db, unifiedCandidate.group_id);
+          return response.accepted(res, video);
+        }
         const job = jobService.retryDirectorJob(db, req.params.jobId);
         const candidate = db.prepare('SELECT group_id, id FROM director_candidates WHERE job_id = ?').get(req.params.jobId);
         if (candidate) {

@@ -40,18 +40,61 @@ describe('taskService.failOrphanedAsyncTasksOnStartup', () => {
       `INSERT INTO async_tasks (id, type, status, progress, message, resource_id, created_at, updated_at, completed_at)
        VALUES (?, ?, ?, 100, '', ?, ?, ?, ?)`
     ).run('task-done', 'background_extraction', 'completed', '42', now, now, now);
+    db.prepare(
+      `INSERT INTO async_tasks (id, type, status, progress, message, resource_id, created_at, updated_at)
+       VALUES (?, 'video_generation', 'pending', 0, '', ?, ?, ?)`
+    ).run('video-recoverable', '42', now, now);
 
     const count = taskService.failOrphanedAsyncTasksOnStartup(db, { warn() {}, info() {} });
-    assert.equal(count, 2);
+    assert.equal(count, 3);
 
     const pending = taskService.getTask(db, 'task-pending');
     const processing = taskService.getTask(db, 'task-processing');
     const done = taskService.getTask(db, 'task-done');
+    const videoRecoverable = taskService.getTask(db, 'video-recoverable');
 
     assert.equal(pending.status, 'failed');
     assert.equal(processing.status, 'failed');
     assert.equal(pending.error, taskService.ORPHAN_ASYNC_TASK_MSG);
     assert.equal(done.status, 'completed');
+    assert.equal(videoRecoverable.status, 'failed');
+  });
+
+  it('only preserves video tasks backed by a recoverable canonical video row and snapshot', () => {
+    const db = createTestDb();
+    db.exec(`
+      CREATE TABLE video_generations (
+        id INTEGER PRIMARY KEY,
+        task_id TEXT,
+        status TEXT,
+        config_snapshot TEXT,
+        deleted_at TEXT
+      );
+    `);
+    const now = new Date().toISOString();
+    const insertTask = db.prepare(`
+      INSERT INTO async_tasks (id, type, status, progress, message, resource_id, created_at, updated_at)
+      VALUES (?, 'video_generation', ?, 0, '', '42', ?, ?)
+    `);
+    insertTask.run('video-recoverable', 'pending', now, now);
+    insertTask.run('video-unmatched', 'pending', now, now);
+    insertTask.run('video-no-snapshot', 'processing', now, now);
+    insertTask.run('video-terminal-row', 'processing', now, now);
+    const insertVideo = db.prepare(`
+      INSERT INTO video_generations (id, task_id, status, config_snapshot)
+      VALUES (?, ?, ?, ?)
+    `);
+    insertVideo.run(1, 'video-recoverable', 'waiting', '{"configId":1,"provider":"fake","model":"v1"}');
+    insertVideo.run(2, 'video-no-snapshot', 'running', null);
+    insertVideo.run(3, 'video-terminal-row', 'review', '{"configId":1,"provider":"fake","model":"v1"}');
+
+    const count = taskService.failOrphanedAsyncTasksOnStartup(db, { warn() {}, info() {} });
+
+    assert.equal(count, 3);
+    assert.equal(taskService.getTask(db, 'video-recoverable').status, 'pending');
+    assert.equal(taskService.getTask(db, 'video-unmatched').status, 'failed');
+    assert.equal(taskService.getTask(db, 'video-no-snapshot').status, 'failed');
+    assert.equal(taskService.getTask(db, 'video-terminal-row').status, 'failed');
   });
 
   it('cancelTask marks active task as failed', () => {

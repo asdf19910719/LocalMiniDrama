@@ -28,6 +28,11 @@ const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
 const { createDirectorJobRunner } = require('../director/directorJobRunner');
 const { reconcileRunningJobs } = require('../director/directorJobService');
+const {
+  createComfyUIVideoProvider,
+  createVideoProviderRegistry,
+} = require('../services/videoProviders');
+const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
 
 function setupRouter(cfg, db, log) {
@@ -35,7 +40,6 @@ function setupRouter(cfg, db, log) {
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
   const settings = settingsRoutes(db, cfg, log);
-  const aiConfig = aiConfigRoutes(db, log, cfg);
   const prop = propRoutes(db, log, cfg);
   const stub = stubRoutes(db, cfg, log);
   const sceneModelMap = sceneModelMapRoutes(db, log);
@@ -50,7 +54,6 @@ function setupRouter(cfg, db, log) {
   const storyboards = storyboardRoutes(db, log);
   const tailFrameLink = tailFrameLinkRoutes(db, cfg, log);
   const images = imageRoutes(db, cfg, log);
-  const videos = videoRoutes(db, log);
   const videoMerges = videoMergeRoutes(db, log);
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
@@ -58,21 +61,54 @@ function setupRouter(cfg, db, log) {
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
-  const directorComfyClient = createComfyUIClient({
-    baseUrl: process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
+  const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
+    baseUrl,
     outputDir: directorArtifactRoot,
     allowExperimental: cfg.director.allow_experimental,
+  });
+  const directorComfyClient = createDirectorComfyClient(
+    process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
+  );
+  const videoGpuMutex = createGpuMutex();
+  const videoProviderRegistry = createVideoProviderRegistry({
+    comfyui: createComfyUIVideoProvider({
+      registry: directorRegistry,
+      comfyClient: directorComfyClient,
+      createComfyClient: createDirectorComfyClient,
+      gpuMutex: videoGpuMutex,
+      allowExperimental: cfg.director.allow_experimental,
+    }),
+  });
+  const aiConfig = aiConfigRoutes(db, log, cfg, { providerRegistry: videoProviderRegistry });
+  const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
+    db,
+    log,
+    providerRegistry: videoProviderRegistry,
+  });
+  require('../services/videoService').configureUnifiedVideoGenerationService(
+    db,
+    unifiedVideoGenerationService,
+  );
+  const videos = videoRoutes(db, log, {
+    providerRegistry: videoProviderRegistry,
+    lifecycleService: unifiedVideoGenerationService,
+  });
+  setImmediate(() => {
+    unifiedVideoGenerationService.recoverVideoGenerations().catch((error) => {
+      log.error('recoverVideoGenerations', { error: error.message });
+    });
   });
   reconcileRunningJobs(db);
   const directorRunner = createDirectorJobRunner({
     db,
     comfyClient: directorComfyClient,
-    gpuMutex: createGpuMutex(),
+    gpuMutex: videoGpuMutex,
     registry: directorRegistry,
     logger: log,
   });
   const director = directorRoutes(db, log, {
     runner: directorRunner,
+    videoGenerationService: unifiedVideoGenerationService,
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
     artifactRoot: directorArtifactRoot,
@@ -285,6 +321,8 @@ function setupRouter(cfg, db, log) {
   r.post('/videos', videos.create);
   r.post('/videos/image/:image_gen_id', videos.fromImage);
   r.post('/videos/episode/:episode_id/batch', videos.episodeBatch);
+  r.post('/videos/:id/cancel', videos.cancel);
+  r.post('/videos/:id/retry', videos.retry);
   r.post('/videos/:id/resume-poll', videos.resumePoll);
   r.get('/videos/:id', videos.get);
   r.delete('/videos/:id', videos.delete);

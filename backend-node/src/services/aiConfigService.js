@@ -10,6 +10,34 @@ function normalizeApiKeyForService(serviceType, apiKey) {
   return apiKey;
 }
 const { applyDeepSeekConnectivityOptions } = require('./deepseekConfig');
+const { validateH3Dimensions } = require('../director/directorGenerationPolicy');
+
+const COMFYUI_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
+
+function isComfyuiVideoConfig({ service_type, provider } = {}) {
+  return String(service_type || '').toLowerCase() === 'video'
+    && String(provider || '').trim().toLowerCase() === 'comfyui';
+}
+
+function parseSettings(settings) {
+  if (settings && typeof settings === 'object' && !Array.isArray(settings)) return settings;
+  if (typeof settings !== 'string' || !settings.trim()) return {};
+  try {
+    const parsed = JSON.parse(settings);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function normalizeComfyuiSettings(settings) {
+  const parsed = parseSettings(settings);
+  const dimensions = validateH3Dimensions({
+    width: parsed.width ?? 1280,
+    height: parsed.height ?? 704,
+  });
+  return JSON.stringify({ ...parsed, ...dimensions });
+}
 function modelToDb(model) {
   if (model == null) return null;
   if (Array.isArray(model)) return JSON.stringify(model);
@@ -112,6 +140,9 @@ function createConfig(db, log, req) {
     }
   }
   const defaultModel = req.default_model != null ? String(req.default_model).trim() || null : null;
+  const comfyui = isComfyuiVideoConfig(req);
+  const baseUrl = comfyui ? (req.base_url || COMFYUI_DEFAULT_BASE_URL) : (req.base_url || '');
+  const settings = comfyui ? normalizeComfyuiSettings(req.settings) : (req.settings || null);
   const info = db.prepare(
     `INSERT INTO ai_service_configs (service_type, provider, api_protocol, name, base_url, api_key, model, default_model, endpoint, query_endpoint, priority, is_default, is_active, settings, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
@@ -120,7 +151,7 @@ function createConfig(db, log, req) {
     req.provider || '',
     req.api_protocol || '',
     req.name || '',
-    req.base_url || '',
+    baseUrl,
     normalizeApiKeyForService(req.service_type, req.api_key || ''),
     model,
     defaultModel,
@@ -128,7 +159,7 @@ function createConfig(db, log, req) {
     queryEndpoint,
     req.priority ?? 0,
     req.is_default ? 1 : 0,
-    req.settings || null,
+    settings,
     now,
     now
   );
@@ -141,6 +172,8 @@ function createConfig(db, log, req) {
 function updateConfig(db, log, id, req) {
   const existing = getConfig(db, id);
   if (!existing) return null;
+  const nextProvider = req.provider != null ? req.provider : existing.provider;
+  const comfyui = isComfyuiVideoConfig({ service_type: existing.service_type, provider: nextProvider });
   const updates = [];
   const params = [];
   if (req.name != null) {
@@ -157,7 +190,7 @@ function updateConfig(db, log, id, req) {
   }
   if (req.base_url != null) {
     updates.push('base_url = ?');
-    params.push(req.base_url);
+    params.push(comfyui ? (req.base_url || COMFYUI_DEFAULT_BASE_URL) : req.base_url);
   }
   if (req.api_key != null) {
     updates.push('api_key = ?');
@@ -186,7 +219,7 @@ function updateConfig(db, log, id, req) {
   }
   if (req.settings != null) {
     updates.push('settings = ?');
-    params.push(req.settings);
+    params.push(comfyui ? normalizeComfyuiSettings(req.settings) : req.settings);
   }
   if (typeof req.is_default === 'boolean') {
     updates.push('is_default = ?');
@@ -579,4 +612,7 @@ module.exports = {
   getVendorLockStatus,
   applyVendorLock,
   bulkUpdateApiKey,
+  COMFYUI_DEFAULT_BASE_URL,
+  isComfyuiVideoConfig,
+  normalizeComfyuiSettings,
 };

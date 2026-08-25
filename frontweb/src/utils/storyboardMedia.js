@@ -1,5 +1,6 @@
-import { assetImageUrl } from './mediaUrl'
-import { parseDramaMetadata } from './canvasLayout'
+import { assetImageUrl } from './mediaUrl.js'
+import { parseDramaMetadata } from './canvasLayout.js'
+import { isPlayableVideoGenerationStatus } from './videoLifecycleStatus.js'
 
 export function dramaUsesFirstLastFrame(drama) {
   const meta = parseDramaMetadata(drama?.metadata)
@@ -27,7 +28,7 @@ export function getSbImagesList(imagesBySbId, storyboardId) {
 export function getSbVideosList(videosBySbId, storyboardId) {
   const list = videosBySbId?.[storyboardId]
   if (!Array.isArray(list)) return []
-  return list.filter((v) => v.status === 'completed' && ((v.local_path && String(v.local_path).trim()) || isHttpVideoUrl(v.video_url)))
+  return list.filter((v) => isPlayableVideoGenerationStatus(v.status) && ((v.local_path && String(v.local_path).trim()) || isHttpVideoUrl(v.video_url)))
 }
 
 /** 首帧图记录（与 FilmCreate.getSbFirstImage 一致） */

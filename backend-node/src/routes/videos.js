@@ -1,130 +1,111 @@
 const response = require('../response');
 const videoService = require('../services/videoService');
 const taskService = require('../services/taskService');
-const { normalizeAspectRatioForApi } = require('../services/videoClient');
+const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
 
-function routes(db, log) {
+function sendLifecycleError(res, error) {
+  const messageCode = /^[A-Z][A-Z0-9_]{2,}$/.test(String(error?.message || ''))
+    ? String(error.message)
+    : null;
+  const code = error?.code || messageCode || 'INTERNAL_ERROR';
+  const status = Number(error?.status)
+    || (code.startsWith('VIDEO_') ? 400 : 500);
+  const message = error?.message || '视频生成服务错误';
+  response.error(res, status, code, message, error?.details);
+}
+
+function routes(db, log, { providerRegistry, lifecycleService } = {}) {
+  const lifecycle = lifecycleService || createUnifiedVideoGenerationService({ db, log, providerRegistry });
+
   return {
     list: (req, res) => {
       try {
         const query = { ...req.query };
         const { items, total, page, pageSize } = videoService.list(db, query);
         response.successWithPagination(res, items, total, page, pageSize);
-      } catch (err) {
-        log.error('videos list', { error: err.message });
-        response.internalError(res, err.message);
+      } catch (error) {
+        log.error('videos list', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
-    create: (req, res) => {
+
+    create: async (req, res) => {
       try {
-        const body = req.body || {};
-        const task = taskService.createTask(db, log, 'video_generation', String(body.drama_id || ''));
-        const now = new Date().toISOString();
-        const dramaId = Number(body.drama_id) || 0;
-        const storyboardId = body.storyboard_id != null ? Number(body.storyboard_id) : null;
-        const provider = body.provider || 'chatfire';
-        let prompt = body.prompt || '';
-        const style = (body.style || '').toString().trim();
-        if (style) {
-          const baseLower = String(prompt || '').toLowerCase();
-          const styleLower = style.toLowerCase();
-          if (!baseLower.includes(styleLower)) {
-            prompt = prompt ? `${prompt}. Style: ${style}` : `Style: ${style}`;
-          }
-        }
-        const model = body.model ?? null;
-        const duration = body.duration ?? null;
-        // 画幅：请求体归一化（全角冒号等）后写入 DB；未传则从 drama.metadata 读取并同样归一化
-        let aspectRatio = null;
-        if (body.aspect_ratio != null && String(body.aspect_ratio).trim() !== '') {
-          aspectRatio = normalizeAspectRatioForApi(body.aspect_ratio);
-        }
-        if (!aspectRatio && dramaId) {
-          try {
-            const dramaRow = db.prepare('SELECT metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId);
-            if (dramaRow && dramaRow.metadata) {
-              const meta = typeof dramaRow.metadata === 'string' ? JSON.parse(dramaRow.metadata) : dramaRow.metadata;
-              if (meta && meta.aspect_ratio) aspectRatio = normalizeAspectRatioForApi(meta.aspect_ratio);
-            }
-          } catch (_) {}
-        }
-        const resolution = body.resolution ?? null;
-        const seed = body.seed != null ? Number(body.seed) : null;
-        const cameraFixed = body.camera_fixed != null ? (body.camera_fixed ? 1 : 0) : null;
-        const watermark = body.watermark != null ? (body.watermark ? 1 : 0) : 0;
-        const imageUrl = body.image_url ?? null;
-        // 首尾帧：支持 URL 或本地路径（sxy，存到 first_frame_url / last_frame_url）
-        const firstFrameUrl = body.first_frame_url ?? body.first_frame_local_path ?? null;
-        const lastFrameUrl = body.last_frame_url ?? body.last_frame_local_path ?? null;
-        // 多图模式：sxy，存 JSON 数组到 reference_image_urls
-        const refImagesJson =
-          body.reference_image_urls && Array.isArray(body.reference_image_urls)
-            ? JSON.stringify(body.reference_image_urls.slice(0, 10))
-            : null;
-        db.prepare(
-          `INSERT INTO video_generations (drama_id, storyboard_id, provider, prompt, model, duration, aspect_ratio, resolution, seed, camera_fixed, watermark, image_url, first_frame_url, last_frame_url, reference_image_urls, status, task_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?)`
-        ).run(dramaId, storyboardId, provider, prompt, model, duration, aspectRatio, resolution, seed, cameraFixed, watermark, imageUrl, firstFrameUrl, lastFrameUrl, refImagesJson, task.id, now, now);
-        const videoGenId = db.prepare('SELECT last_insert_rowid() as id').get().id;
-        setImmediate(() => {
-          videoService.processVideoGeneration(db, log, videoGenId);
-        });
-        const item = videoService.getById(db, videoGenId);
-        response.created(res, item || { id: videoGenId, task_id: task.id, status: 'processing' });
-      } catch (err) {
-        log.error('videos create', { error: err.message });
-        response.internalError(res, err.message);
+        const item = await lifecycle.createVideoGeneration(req.body || {});
+        response.created(res, item);
+      } catch (error) {
+        log.error('videos create', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
       }
     },
+
     get: (req, res) => {
       try {
-        const item = videoService.getById(db, req.params.id);
+        const item = lifecycle.getVideoGeneration(req.params.id);
         if (!item) return response.notFound(res, '记录不存在');
         response.success(res, item);
-      } catch (err) {
-        log.error('videos get', { error: err.message });
-        response.internalError(res, err.message);
+      } catch (error) {
+        log.error('videos get', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
+
     delete: (req, res) => {
       try {
         const ok = videoService.deleteById(db, log, req.params.id);
         if (!ok) return response.notFound(res, '记录不存在');
         response.success(res, { message: '删除成功' });
-      } catch (err) {
-        log.error('videos delete', { error: err.message });
-        response.internalError(res, err.message);
+      } catch (error) {
+        log.error('videos delete', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
-    /** 失败后复用 provider_task_id 继续轮询上游，避免浪费已提交任务 */
-    resumePoll: (req, res) => {
+
+    cancel: async (req, res) => {
       try {
-        const result = videoService.resumeFailedVideoPoll(db, log, req.params.id);
-        if (!result.ok) {
-          if (result.status === 404) return response.notFound(res, result.error);
-          return response.badRequest(res, result.error);
-        }
-        response.success(res, result.item);
-      } catch (err) {
-        log.error('videos resumePoll', { error: err.message });
-        response.internalError(res, err.message);
+        response.success(res, await lifecycle.cancelVideoGeneration(req.params.id));
+      } catch (error) {
+        log.error('videos cancel', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
       }
     },
+
+    retry: async (req, res) => {
+      try {
+        response.success(res, await lifecycle.retryVideoGeneration(req.params.id));
+      } catch (error) {
+        log.error('videos retry', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
+    // Legacy compatibility: continuing a failed upstream poll is now the strict
+    // snapshot retry path. It never resolves the current default configuration.
+    resumePoll: async (req, res) => {
+      try {
+        response.success(res, await lifecycle.retryVideoGeneration(req.params.id));
+      } catch (error) {
+        log.error('videos resumePoll', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
     fromImage: (req, res) => {
       try {
         const task = taskService.createTask(db, log, 'video_generation', req.params.image_gen_id);
         response.success(res, { task_id: task.id });
-      } catch (err) {
-        log.error('videos fromImage', { error: err.message });
-        response.internalError(res, err.message);
+      } catch (error) {
+        log.error('videos fromImage', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
+
     episodeBatch: (req, res) => {
       try {
         response.success(res, []);
-      } catch (err) {
-        log.error('videos episode batch', { error: err.message });
-        response.internalError(res, err.message);
+      } catch (error) {
+        log.error('videos episode batch', { error: error.message });
+        response.internalError(res, error.message);
       }
     },
   };

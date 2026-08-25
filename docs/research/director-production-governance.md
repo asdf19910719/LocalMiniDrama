@@ -48,3 +48,10 @@ repeats for the three highest-risk scenarios, and 5 1080p resolution spot
 checks. Run all 90 for a release candidate, a model/workflow/runtime change, or
 when the core gate detects a regression. Correct the native target to 704 and
 re-evaluate the existing checkpoint before resuming either campaign.
+# Unified video Provider governance
+
+All new video tasks, including Director candidates, are routed through the one active default video configuration. The task stores a redacted configuration snapshot so retry and recovery use the original routing identity. Legacy rows remain readable; rows without a provable snapshot are reported as `historical_unknown` during migration and are not relabeled.
+
+The shared Chinese generation panel is used in both normal drawer and canvas sidebar layouts. Layout changes do not change the available actions or request payload. Local ComfyUI connection checks are non-inference checks; production smoke is intentionally separate from automated tests.
+
+Deferred acceptance work remains explicit: a short one-candidate `864x480` local smoke, long-running audio stability, GPU queue soak, backup/restore rehearsal, and the remaining H3 benchmark matrix. Cloud inference and long benchmark runs are not part of automatic verification.

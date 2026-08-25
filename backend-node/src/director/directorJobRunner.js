@@ -34,6 +34,12 @@ async function runDirectorJob(db, jobId, {
     failDirectorJob(db, jobId, { code: 'DIRECTOR_CANDIDATE_NOT_FOUND', message: error.message }, now);
     throw error;
   }
+  if (candidate.video_generation_id != null) {
+    const error = new Error('Unified video candidates cannot run through the legacy Director runner');
+    error.code = 'DIRECTOR_UNIFIED_VIDEO_REQUIRED';
+    failDirectorJob(db, jobId, { code: error.code, message: error.message }, now);
+    throw error;
+  }
 
   db.prepare("UPDATE director_candidate_groups SET status = 'running', updated_at = ? WHERE id = ? AND status = 'pending'")
     .run(job.updated_at, candidate.group_id);

@@ -1,7 +1,11 @@
 // ? Go pkg/video + VideoGenerationService ????????? API??????(????)
 const fs = require('fs');
 const path = require('path');
-const aiConfigService = require('./aiConfigService');
+const {
+  resolveDefaultVideoConfig,
+  resolveVideoProtocol,
+  isMinimaxH3Model,
+} = require('./videoConfigResolver');
 let sharp; try { sharp = require('sharp'); } catch (_) { sharp = null; }
 const { uploadLocalImageToProxy, uploadToImageProxy } = require('./uploadService');
 const imageClient = require('./imageClient');
@@ -17,57 +21,6 @@ const {
   unsafeDecodeKlingJwtPayload,
   jwtPartLengths,
 } = require('./klingJwt');
-
-/**
- * ?? provider ??????????api_protocol ??????????
- */
-function inferVideoProtocol(provider) {
-  const p = String(provider || '').toLowerCase();
-  if (p === 'dashscope') return 'dashscope';
-  if (p === 'gemini' || p === 'google') return 'gemini';
-  if (p === 'volces' || p === 'volcengine' || p === 'volc') return 'volcengine';
-  if (p === 'vidu') return 'vidu';
-  if (p === 'ffir') return 'kling_omni';
-  if (p === 'kling' || p === 'klingai') return 'kling';
-  if (p === 'jimeng_ai_api') return 'jimeng_ai_api';
-  if (p === 'xai' || p === 'grok') return 'xai';
-  if (p === 'agnes') return 'agnes';
-  if (p === 'minimax_h3') return 'minimax_h3';
-  return 'openai';
-}
-
-/** 官方模型 ID：MiniMax-H3（Video Generation V2） */
-function isMinimaxH3Model(name) {
-  const m = String(name || '').trim().toLowerCase();
-  return m === 'minimax-h3' || m === 'minimax_h3' || /^minimax[-_]?h3\b/.test(m);
-}
-
-/**
- * 显式 api_protocol 优先；未配置时推断。
- * Grok / xAI 官方为 prompt + aspect_ratio + GET /v1/videos/{request_id}，与中转站用的 ratio + content 不同。
- * MiniMax-H3 走 V2（/v2/video_generation），与旧海螺 V1 不同。
- */
-function resolveVideoProtocol(config, modelHint) {
-  const provider = (config.provider || '').toLowerCase();
-  const explicit = String(config.api_protocol || '').trim();
-  let protocol = explicit.toLowerCase() || inferVideoProtocol(provider);
-  const baseLower = String(config.base_url || '').toLowerCase();
-  const modelCand =
-    modelHint ||
-    config.default_model ||
-    (Array.isArray(config.model) ? config.model[0] : config.model) ||
-    '';
-  const modelLower = String(modelCand || '').toLowerCase();
-  if (!explicit && protocol === 'openai') {
-    if (/api\.x\.ai(\/|$)/.test(baseLower)) protocol = 'xai';
-    else if (/grok-imagine|grok.*video/.test(modelLower)) protocol = 'xai';
-    else if (provider === 'agnes' || /agnes-video|apihub\.agnes-ai\.com/i.test(baseLower)) protocol = 'agnes';
-  }
-  if ((!explicit || protocol === 'openai') && (provider === 'minimax_h3' || isMinimaxH3Model(modelCand))) {
-    protocol = 'minimax_h3';
-  }
-  return protocol;
-}
 
 /** 可灵 Omni / 多图生视频（飞儿 ffir.cn 等中转）：可用环境变量临时覆盖配置 */
 function applyKlingOmniEnvOverrides(config) {
@@ -921,17 +874,7 @@ function parseKlingOmniPollVideoUrl(data) {
 
 // ??????????????????listConfigs ?? is_default DESC, priority DESC ??
 function getDefaultVideoConfig(db, preferredModel) {
-  const configs = aiConfigService.listConfigs(db, 'video');
-  const active = configs.filter((c) => c.is_active);
-  if (active.length === 0) return null;
-  if (preferredModel) {
-    for (const c of active) {
-      const models = Array.isArray(c.model) ? c.model : (c.model != null ? [c.model] : []);
-      if (models.includes(preferredModel)) return c;
-    }
-  }
-  const defaultOne = active.find((c) => c.is_default);
-  return defaultOne != null ? defaultOne : active[0];
+  return resolveDefaultVideoConfig(db, { requestedModel: preferredModel }).config;
 }
 
 // ?????? API ????? /contents/generations/tasks?base ???????????????
@@ -3665,7 +3608,7 @@ async function callMinimaxH3VideoApi(config, log, opts) {
  * ?????? API?ChatFire/?? ? ?????
  * @returns {Promise<{ task_id?: string, video_url?: string, error?: string }>}
  */
-async function callVideoApi(db, log, opts) {
+async function callVideoApi(db, log, opts, configOverride = null) {
   const {
     prompt,
     model: preferredModel,
@@ -3684,7 +3627,7 @@ async function callVideoApi(db, log, opts) {
     storage_local_path,
     video_gen_id
   } = opts;
-  const config = getDefaultVideoConfig(db, preferredModel);
+  const config = configOverride || getDefaultVideoConfig(db, preferredModel);
   if (!config) {
     throw new Error('???????????AI ?????? video ?????????');
   }

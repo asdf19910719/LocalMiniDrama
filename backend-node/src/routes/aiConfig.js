@@ -31,10 +31,11 @@ function create(db, log, cfg) {
       return response.badRequest(res, '当前为厂商锁定模式，不允许添加配置');
     }
     const body = req.body || {};
-    if (!body.service_type || !body.name || !body.provider || !body.base_url) {
+    const isComfyui = aiConfigService.isComfyuiVideoConfig(body);
+    if (!body.service_type || !body.name || !body.provider || (!body.base_url && !isComfyui)) {
       return response.badRequest(res, '缺少必填字段: service_type, name, provider, base_url');
     }
-    if (body.api_key === undefined || body.api_key === null) {
+    if (!isComfyui && (body.api_key === undefined || body.api_key === null)) {
       return response.badRequest(res, '缺少必填字段: api_key');
     }
     try {
@@ -103,13 +104,41 @@ function bulkUpdateKey(db, log, cfg) {
   };
 }
 
-function testConnection(log) {
+function comfyuiChecks(output = {}) {
+  const checks = [];
+  if (output.workflow?.id) checks.push({ name: '工作流', ok: true, message: `工作流 ${output.workflow.id} 校验通过` });
+  if (output.queue) checks.push({ name: '队列', ok: true, message: '已读取 ComfyUI 队列状态' });
+  if (output.nodes?.required) checks.push({ name: '节点', ok: true, message: '必需节点已就绪' });
+  if (output.models?.required) checks.push({ name: '模型', ok: true, message: '必需模型已就绪' });
+  if (output.vram?.availableVramMb != null) checks.push({ name: '显存', ok: true, message: `可用显存 ${output.vram.availableVramMb} MB` });
+  return checks;
+}
+
+function testConnection(log, { providerRegistry } = {}) {
   return async (req, res) => {
     const body = req.body || {};
-    if (!body.base_url || !body.api_key) {
+    const provider = String(body.provider || '').trim().toLowerCase();
+    if (!body.base_url || (provider !== 'comfyui' && !body.api_key)) {
       return response.badRequest(res, '缺少 base_url 或 api_key');
     }
     try {
+      if (provider === 'comfyui') {
+        if (!providerRegistry) throw new Error('ComfyUI 视频提供商未初始化');
+        const settings = typeof body.settings === 'string' ? JSON.parse(body.settings || '{}') : (body.settings || {});
+        const model = Array.isArray(body.model) ? body.model[0] : body.model;
+        const result = await providerRegistry.get('comfyui').testConnection({
+          base_url: body.base_url,
+          model,
+          config: { settings },
+          input: { width: settings.width, height: settings.height },
+        });
+        return response.success(res, {
+          ok: true,
+          provider: 'comfyui',
+          checks: comfyuiChecks(result.output),
+          message: 'ComfyUI 连接检查通过，未启动推理任务',
+        });
+      }
       await aiConfigService.testConnection({
         base_url: body.base_url,
         api_key: body.api_key,
@@ -182,7 +211,7 @@ function listJimeng2MaterialAssets(log) {
   };
 }
 
-module.exports = function aiConfigRoutes(db, log, cfg) {
+module.exports = function aiConfigRoutes(db, log, cfg, options) {
   return {
     list: list(db),
     get: get(db),
@@ -190,7 +219,7 @@ module.exports = function aiConfigRoutes(db, log, cfg) {
     create: create(db, log, cfg),
     update: update(db, log, cfg),
     delete: remove(db, log, cfg),
-    testConnection: testConnection(log),
+    testConnection: testConnection(log, options),
     listJimeng2MaterialAssets: listJimeng2MaterialAssets(log),
     modelArkAsset: modelArkAsset(log),
     bulkUpdateKey: bulkUpdateKey(db, log, cfg),

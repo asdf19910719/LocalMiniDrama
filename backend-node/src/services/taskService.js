@@ -98,11 +98,28 @@ function cancelTask(db, log, taskId, reason) {
 function failOrphanedAsyncTasksOnStartup(db, log) {
   const rows = db.prepare(
     `SELECT id, type, status, resource_id FROM async_tasks
-     WHERE status IN ('pending', 'processing') AND deleted_at IS NULL`
+     WHERE status IN ('pending', 'processing')
+       AND deleted_at IS NULL`
   ).all();
-  if (!rows.length) return 0;
-  log.warn('Failing orphaned async tasks after startup', { count: rows.length });
-  for (const row of rows) {
+  const hasVideoGenerations = Boolean(db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'video_generations'"
+  ).get());
+  const orphaned = rows.filter((row) => {
+    if (row.type !== 'video_generation') return true;
+    if (!hasVideoGenerations) return true;
+    const recoverable = db.prepare(
+      `SELECT 1 FROM video_generations
+       WHERE task_id = ?
+         AND status IN ('waiting', 'queued', 'running')
+         AND config_snapshot IS NOT NULL AND TRIM(config_snapshot) != ''
+         AND deleted_at IS NULL
+       LIMIT 1`
+    ).get(row.id);
+    return !recoverable;
+  });
+  if (!orphaned.length) return 0;
+  log.warn('Failing orphaned async tasks after startup', { count: orphaned.length });
+  for (const row of orphaned) {
     updateTaskError(db, row.id, ORPHAN_ASYNC_TASK_MSG);
     log.info('Orphaned async task marked failed', {
       task_id: row.id,
@@ -111,7 +128,7 @@ function failOrphanedAsyncTasksOnStartup(db, log) {
       previous_status: row.status,
     });
   }
-  return rows.length;
+  return orphaned.length;
 }
 
 module.exports = {

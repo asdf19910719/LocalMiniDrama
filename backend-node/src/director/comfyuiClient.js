@@ -146,6 +146,67 @@ function createComfyUIClient({
     return { promptId: body.prompt_id, queue: body, workflow: selected };
   }
 
+  async function getSystemStats() {
+    return (await request('/system_stats')).body;
+  }
+
+  async function getQueue() {
+    return (await request('/queue')).body;
+  }
+
+  async function getObjectInfo() {
+    return (await request('/object_info')).body;
+  }
+
+  async function getModels(folders = []) {
+    const uniqueFolders = [...new Set(folders.map((folder) => String(folder || '').trim()).filter(Boolean))];
+    const entries = await Promise.all(uniqueFolders.map(async (folder) => {
+      const { body } = await request(`/models/${encodeURIComponent(folder)}`);
+      return [folder, Array.isArray(body) ? body : []];
+    }));
+    return Object.fromEntries(entries);
+  }
+
+  function queueContains(queue, key, promptId) {
+    return (Array.isArray(queue?.[key]) ? queue[key] : []).some((entry) => {
+      if (Array.isArray(entry)) return entry[1] === promptId;
+      return entry?.prompt_id === promptId || entry?.promptId === promptId;
+    });
+  }
+
+  function executionWasInterrupted(status) {
+    return (Array.isArray(status?.messages) ? status.messages : [])
+      .some((message) => Array.isArray(message) && message[0] === 'execution_interrupted');
+  }
+
+  async function getPromptStatus(promptId) {
+    const normalizedId = String(promptId || '').trim();
+    if (!normalizedId) throw new ComfyUIClientError('ComfyUI prompt_id is required', 'COMFYUI_PROMPT_ID_REQUIRED');
+    const { body } = await request(`/history/${encodeURIComponent(normalizedId)}`);
+    const history = body && (body[normalizedId] || (body.status || body.outputs ? body : null));
+    const status = history?.status || {};
+    if (executionWasInterrupted(status)) {
+      return { status: 'interrupted', progress: 100, history };
+    }
+    if (status.status_str === 'error'
+      || status.status_str === 'failed'
+      || (status.completed === false && status.status_str === 'failure')) {
+      return { status: 'failed', progress: 100, history };
+    }
+    if (status.completed === true || status.status_str === 'success' || history?.outputs) {
+      return { status: 'completed', progress: 100, history };
+    }
+
+    const queue = await getQueue();
+    if (queueContains(queue, 'queue_running', normalizedId)) {
+      return { status: 'running', progress: 0, history: null };
+    }
+    if (queueContains(queue, 'queue_pending', normalizedId)) {
+      return { status: 'queued', progress: 0, history: null };
+    }
+    return { status: 'interrupted', progress: 0, history: null };
+  }
+
   async function pollHistory(promptId, { timeout = timeoutMs, intervalMs = pollIntervalMs } = {}) {
     const startedAt = Date.now();
     const pollTimestamps = [];
@@ -252,7 +313,19 @@ function createComfyUIClient({
     return { promptId, cancelled: true };
   }
 
-  return { submitWorkflow, pollHistory, downloadOutput, probeArtifact, runWorkflow, cancel };
+  return {
+    submitWorkflow,
+    getSystemStats,
+    getQueue,
+    getObjectInfo,
+    getModels,
+    getPromptStatus,
+    pollHistory,
+    downloadOutput,
+    probeArtifact,
+    runWorkflow,
+    cancel,
+  };
 }
 
 module.exports = { ComfyUIClientError, createComfyUIClient, findOutput, parseFfmpegProbe };

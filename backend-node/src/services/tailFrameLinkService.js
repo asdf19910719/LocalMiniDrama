@@ -3,6 +3,14 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { getFfmpegPath, hasLocalFfmpeg } = require('../utils/ffmpegPath');
 
+function getLatestPlayableVideo(db, storyboardId) {
+  return db.prepare(`
+    SELECT id, local_path, video_url FROM video_generations
+    WHERE storyboard_id = ? AND status IN ('completed', 'review', 'selected') AND deleted_at IS NULL
+    ORDER BY created_at DESC LIMIT 1
+  `).get(storyboardId);
+}
+
 /**
  * 尾帧衔接服务：提取当前分镜视频的最后一帧，设为下一个分镜的首帧
  */
@@ -19,11 +27,7 @@ function routes(db, cfg, log) {
         }
 
         // 1. 获取当前分镜的最新已完成视频
-        const video = db.prepare(`
-          SELECT id, local_path, video_url FROM video_generations
-          WHERE storyboard_id = ? AND status = 'completed' AND deleted_at IS NULL
-          ORDER BY created_at DESC LIMIT 1
-        `).get(storyboardId);
+        const video = getLatestPlayableVideo(db, storyboardId);
 
         if (!video || !video.local_path) {
           return res.status(400).json({ error: '当前分镜没有可用的本地视频文件' });
@@ -183,4 +187,5 @@ function routes(db, cfg, log) {
   };
 }
 
+routes.getLatestPlayableVideo = getLatestPlayableVideo;
 module.exports = routes;

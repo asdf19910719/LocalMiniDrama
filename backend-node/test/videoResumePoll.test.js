@@ -1,4 +1,4 @@
-const { describe, it, afterEach } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const videoService = require('../src/services/videoService');
@@ -46,71 +46,96 @@ function createTestDb() {
 
 const silentLog = { info() {}, warn() {}, error() {} };
 
-describe('videoService.resumeFailedVideoPoll', () => {
-  afterEach(async () => {
-    // 让 setImmediate 里的恢复逻辑跑完，避免污染后续用例
-    await new Promise((r) => setImmediate(r));
-    await new Promise((r) => setTimeout(r, 20));
+function insertVideo(db, { status, providerTaskId = null, error = null }) {
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    INSERT INTO video_generations
+      (drama_id, storyboard_id, provider, prompt, status, provider_task_id, error_msg, created_at, updated_at)
+    VALUES (1, 10, 'legacy', 'prompt', ?, ?, ?, ?, ?)
+  `).run(status, providerTaskId, error, now, now);
+  return Number(result.lastInsertRowid);
+}
+
+describe('videoService unified lifecycle compatibility', () => {
+  it('maps legacy statuses on read without rewriting stored history', () => {
+    const db = createTestDb();
+    const processingId = insertVideo(db, { status: 'processing' });
+    const completedId = insertVideo(db, { status: 'completed' });
+
+    assert.equal(videoService.getById(db, processingId).status, 'running');
+    assert.equal(videoService.getById(db, completedId).status, 'review');
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(processingId).status, 'processing');
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(completedId).status, 'completed');
   });
 
-  it('exposes can_resume_poll only for failed rows with provider_task_id', () => {
+  it('exposes resumability without exposing the upstream task id', () => {
     const db = createTestDb();
-    const now = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO video_generations
-        (drama_id, storyboard_id, provider, prompt, status, task_id, provider_task_id, error_msg, created_at, updated_at)
-       VALUES (1, 10, 'relay', 'p', 'failed', 't1', 'task_upstream_1', '超时', ?, ?)`
-    ).run(now, now);
-    db.prepare(
-      `INSERT INTO video_generations
-        (drama_id, storyboard_id, provider, prompt, status, task_id, provider_task_id, error_msg, created_at, updated_at)
-       VALUES (1, 10, 'relay', 'p', 'failed', 't2', NULL, '提交失败', ?, ?)`
-    ).run(now, now);
+    const resumableId = insertVideo(db, { status: 'failed', providerTaskId: 'upstream-task', error: '查询超时' });
+    const freshRetryId = insertVideo(db, { status: 'failed', error: '提交失败' });
 
-    const withId = videoService.getById(db, 1);
-    const withoutId = videoService.getById(db, 2);
-    assert.equal(withId.can_resume_poll, true);
-    assert.equal(withoutId.can_resume_poll, false);
-    assert.equal(withId.provider_task_id, undefined);
+    const resumable = videoService.getById(db, resumableId);
+    const freshRetry = videoService.getById(db, freshRetryId);
+    assert.equal(resumable.can_resume_poll, true);
+    assert.equal(freshRetry.can_resume_poll, false);
+    assert.equal(resumable.provider_task_id, undefined);
+    assert.equal(resumable.error_msg, '查询超时');
+    assert.equal(resumable.error.code, 'VIDEO_GENERATION_FAILED');
   });
 
-  it('rejects when missing provider_task_id', () => {
+  it('keeps startup recovery inert until the provider registry lifecycle is configured', () => {
     const db = createTestDb();
-    const now = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO video_generations
-        (drama_id, storyboard_id, provider, prompt, status, error_msg, created_at, updated_at)
-       VALUES (1, 10, 'relay', 'p', 'failed', '无 task', ?, ?)`
-    ).run(now, now);
-    const result = videoService.resumeFailedVideoPoll(db, silentLog, 1);
-    assert.equal(result.ok, false);
-    assert.equal(result.status, 400);
+    const legacyId = insertVideo(db, { status: 'processing' });
+
+    assert.equal(videoService.resumeProcessingVideoGenerations(db, silentLog), 0);
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(legacyId).status, 'processing');
   });
 
-  it('resets failed row to processing and restores async task', () => {
+  it('delegates resume-poll and startup recovery to the configured unified service', async () => {
     const db = createTestDb();
-    const now = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO async_tasks
-        (id, type, status, progress, message, error, resource_id, created_at, updated_at, completed_at)
-       VALUES ('task-uuid-1', 'video_generation', 'failed', 0, '', '超时或失败', '1', ?, ?, ?)`
-    ).run(now, now, now);
-    db.prepare(
-      `INSERT INTO video_generations
-        (drama_id, storyboard_id, provider, prompt, model, status, task_id, provider_task_id, error_msg, created_at, updated_at)
-       VALUES (1, 10, 'relay', 'p', 'm', 'failed', 'task-uuid-1', 'task_KOcn_demo', '超时或失败', ?, ?)`
-    ).run(now, now);
+    const calls = [];
+    const lifecycle = {
+      async retryVideoGeneration(id) {
+        calls.push(['retry', Number(id)]);
+        return { id: Number(id), status: 'queued', task_id: 'new-task' };
+      },
+      async processVideoGeneration(id, options) {
+        calls.push(['process', Number(id), options]);
+      },
+      async recoverVideoGenerations() {
+        calls.push(['recover']);
+        return 3;
+      },
+    };
+    videoService.configureUnifiedVideoGenerationService(db, lifecycle);
 
-    const result = videoService.resumeFailedVideoPoll(db, silentLog, 1);
-    assert.equal(result.ok, true);
-    assert.equal(result.item.status, 'processing');
-    assert.equal(result.item.error_msg, '');
-    assert.equal(result.item.can_resume_poll, false);
-    assert.equal(result.item.task_id, 'task-uuid-1');
+    const result = await videoService.resumeFailedVideoPoll(db, silentLog, 7);
+    assert.deepEqual(result, { ok: true, item: { id: 7, status: 'queued', task_id: 'new-task' } });
+    await videoService.resumePollForVideoGeneration(db, silentLog, 8);
+    assert.equal(await videoService.resumeProcessingVideoGenerations(db, silentLog), 3);
+    assert.deepEqual(calls, [
+      ['retry', 7],
+      ['process', 8, { operation: 'recover' }],
+      ['recover'],
+    ]);
+  });
 
-    const task = db.prepare('SELECT status, progress, message, error FROM async_tasks WHERE id = ?').get('task-uuid-1');
-    assert.equal(task.status, 'processing');
-    assert.equal(task.progress, 10);
-    assert.match(String(task.message || ''), /继续查询/);
+  it('preserves the legacy resume response envelope for lifecycle errors', async () => {
+    const db = createTestDb();
+    videoService.configureUnifiedVideoGenerationService(db, {
+      async retryVideoGeneration() {
+        throw Object.assign(new Error('原始配置快照缺失'), {
+          code: 'VIDEO_CONFIG_SNAPSHOT_INVALID',
+          status: 409,
+        });
+      },
+    });
+
+    const result = await videoService.resumeFailedVideoPoll(db, silentLog, 1);
+    assert.deepEqual(result, {
+      ok: false,
+      status: 409,
+      error: '原始配置快照缺失',
+      code: 'VIDEO_CONFIG_SNAPSHOT_INVALID',
+    });
   });
 });

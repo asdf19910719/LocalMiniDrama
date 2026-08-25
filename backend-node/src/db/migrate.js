@@ -342,14 +342,24 @@ function ensureAllColumns(database) {
     { name: 'drama_id',             type: 'INTEGER' },
     { name: 'storyboard_id',        type: 'INTEGER' },
     { name: 'provider',             type: 'TEXT' },
+    { name: 'protocol',             type: 'TEXT' },
     { name: 'prompt',               type: 'TEXT' },
     { name: 'model',                type: 'TEXT' },
+    { name: 'config_id',            type: 'INTEGER' },
+    { name: 'config_snapshot',      type: 'TEXT' },
     { name: 'duration',             type: 'REAL' },
     { name: 'aspect_ratio',         type: 'TEXT' },
     { name: 'resolution',           type: 'TEXT' },
+    { name: 'width',                type: 'INTEGER' },
+    { name: 'height',               type: 'INTEGER' },
+    { name: 'frame_rate',           type: 'REAL' },
     { name: 'seed',                 type: 'INTEGER' },
     { name: 'camera_fixed',         type: 'INTEGER' },
     { name: 'watermark',            type: 'INTEGER' },
+    { name: 'negative_prompt',      type: 'TEXT' },
+    { name: 'continuity_mode',      type: 'TEXT' },
+    { name: 'anchor_id',            type: 'TEXT' },
+    { name: 'candidate_group_id',   type: 'TEXT' },
     { name: 'image_url',            type: 'TEXT' },
     { name: 'first_frame_url',      type: 'TEXT' },
     { name: 'last_frame_url',       type: 'TEXT' },
@@ -365,6 +375,11 @@ function ensureAllColumns(database) {
     { name: 'created_at',           type: 'TEXT' },
     { name: 'updated_at',           type: 'TEXT' },
     { name: 'deleted_at',           type: 'TEXT' },
+  ]);
+
+  // --- Director candidates -> canonical video task link ---
+  ensureColumns(database, 'director_candidates', [
+    { name: 'video_generation_id', type: 'INTEGER' },
   ]);
 
   // --- video_merges ---

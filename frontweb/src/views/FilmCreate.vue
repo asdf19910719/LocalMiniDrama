@@ -1504,11 +1504,9 @@
                     type="primary"
                     size="small"
                     class="sb-generate-video-btn"
-                    :loading="isSbVideoGenerating(sb.id)"
-                    :disabled="!sbCanSubmitVideo(sb) || isSbVideoGenerating(sb.id)"
-                    @click="onGenerateSbVideo(sb)"
+                    @click="openVideoGenerationPanel(sb)"
                   >
-                    生成分镜视频
+                    打开视频生成
                   </el-button>
                 </template>
               </div>
@@ -1529,7 +1527,7 @@
                 </div>
               </div>
               <div v-if="getSbVideo(sb.id)" class="sb-video-actions">
-                <el-button size="small" :loading="isSbVideoGenerating(sb.id)" :disabled="!sbCanSubmitVideo(sb) || isSbVideoGenerating(sb.id)" @click="onGenerateSbVideo(sb)">重新生成</el-button>
+                <el-button size="small" @click="openVideoGenerationPanel(sb)">视频生成与候选</el-button>
                 <el-tooltip v-if="getNextStoryboard(sb.id)" content="提取本视频尾帧，设为下一个分镜的首帧" placement="top">
                   <el-button size="small" :loading="linkingTailFrameIds.has(sb.id)" @click="onLinkTailFrameToNext(sb)">尾帧衔接</el-button>
                 </el-tooltip>
@@ -2347,6 +2345,26 @@
       </template>
     </el-dialog>
 
+    <el-drawer
+      v-model="showVideoGenerationDrawer"
+      direction="rtl"
+      size="min(720px, 96vw)"
+      :with-header="false"
+      destroy-on-close
+      append-to-body
+    >
+      <VideoGenerationPanel
+        v-if="videoGenerationTarget"
+        :storyboard-id="videoGenerationTarget.id"
+        :storyboard="videoGenerationPanelStoryboard"
+        :generation-context="videoGenerationContext"
+        display-mode="drawer"
+        @selected="onVideoGenerationSelected"
+        @anchor-created="onVideoGenerationAnchorCreated"
+        @close="showVideoGenerationDrawer = false"
+      />
+    </el-drawer>
+
     <!-- 分镜视频参数编辑弹窗 -->
     <el-dialog
       v-model="showVideoParamsDialog"
@@ -2655,9 +2673,11 @@ import { propLibraryAPI } from '@/api/propLibrary'
 import { generationSettingsAPI } from '@/api/prompts'
 import { parseScriptIntoEpisodes, episodesListToPlainScript } from '@/utils/scriptEpisodes'
 import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
+import { isPlayableVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
+import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -3225,6 +3245,35 @@ const inferringParams = ref(false)
 const showVideoParamsDialog = ref(false)
 const videoParamsTarget = ref(null)
 const videoParamsSaving = ref(false)
+const showVideoGenerationDrawer = ref(false)
+const videoGenerationTarget = ref(null)
+const videoGenerationSourceAnchor = ref(null)
+const videoGenerationPanelStoryboard = computed(() => ({
+  ...(videoGenerationTarget.value || {}),
+  _videoSourceAnchor: videoGenerationSourceAnchor.value,
+}))
+// Keep the panel aligned with editor-local values until the user explicitly saves the shot.
+const videoGenerationContext = computed(() => {
+  const sb = videoGenerationTarget.value
+  if (!sb?.id) return null
+  const id = sb.id
+  const universal = isSbUniversalMode(id)
+  const firstFrameUrl = toAbsoluteImageUrl(getSbFirstFrameUrl(sb))
+  const lastFrameUrl = toAbsoluteImageUrl(getSbLastFrameUrl(sb))
+  const references = universal
+    ? collectSbOmniReferenceAbsoluteUrls(sb)
+    : [firstFrameUrl, lastFrameUrl].filter(Boolean)
+  return {
+    mode: universal ? 'universal_omni' : 'classic',
+    prompt: buildSbVideoPromptForApi(sb),
+    negativePrompt: sb.negative_prompt || '',
+    imageUrl: firstFrameUrl,
+    firstFrameUrl,
+    lastFrameUrl,
+    referenceImageUrls: references,
+    duration: sbDuration.value[id] ?? sb.duration,
+  }
+})
 const splitByAudioLoading = ref(false)
 const batchImageErrors = ref([])
 // 批量生成分镜视频
@@ -3728,7 +3777,7 @@ function getQuadGridImage(storyboardId) {
 function getSbAllVideos(storyboardId) {
   const list = sbVideos.value[storyboardId]
   if (!Array.isArray(list)) return []
-  return list.filter((i) => i.status === 'completed' && recordHasPlayableVideoUrl(i))
+  return list.filter((i) => isPlayableVideoGenerationStatus(i.status) && recordHasPlayableVideoUrl(i))
 }
 /** 取该分镜当前选中的视频（尊重 sbSelectedVideoId，否则默认第一条） */
 function getSbVideo(storyboardId) {
@@ -3789,10 +3838,10 @@ function getSbVideoError(storyboardId) {
   if (sbVideoErrors.value[storyboardId]) return sbVideoErrors.value[storyboardId]
   const list = sbVideos.value[storyboardId]
   if (!Array.isArray(list) || list.length === 0) return ''
-  const hasCompleted = list.some((i) => i.status === 'completed' && recordHasPlayableVideoUrl(i))
+  const hasCompleted = list.some((i) => isPlayableVideoGenerationStatus(i.status) && recordHasPlayableVideoUrl(i))
   if (hasCompleted) return ''
   const bogusCompleted = list.find(
-    (i) => i.status === 'completed' && i.video_url && !recordHasPlayableVideoUrl(i)
+    (i) => isPlayableVideoGenerationStatus(i.status) && i.video_url && !recordHasPlayableVideoUrl(i)
   )
   if (bogusCompleted) {
     const u = String(bogusCompleted.video_url || '').trim()
@@ -6515,6 +6564,24 @@ async function onRegenerateLayoutDescription(sb) {
   }
 }
 
+function openVideoGenerationPanel(sb) {
+  if (!sb?.id) return
+  videoGenerationTarget.value = sb
+  showVideoGenerationDrawer.value = true
+}
+
+function onVideoGenerationAnchorCreated(anchor) {
+  videoGenerationSourceAnchor.value = anchor || null
+}
+
+async function onVideoGenerationSelected() {
+  const storyboardId = videoGenerationTarget.value?.id
+  if (!storyboardId) return
+  await loadSingleStoryboardMedia(storyboardId)
+  await loadDrama()
+  videoGenerationTarget.value = storyboards.value.find((item) => item.id === storyboardId) || videoGenerationTarget.value
+}
+
 async function onGenerateSbVideo(sb) {
   if (!dramaId.value || !sb?.id || !sbCanSubmitVideo(sb)) return
   const universal = isSbUniversalMode(sb.id)
@@ -6971,7 +7038,7 @@ async function startBatchVideoGeneration() {
     // 只处理：有参考图（经典=分镜主图；全能=场景/角色/道具，不含经典主图）且 还没有已完成视频 的分镜
     const todo = boards.filter((sb) => {
       const vidList = sbVideos.value[sb.id] || []
-      if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+      if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
         return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
@@ -7066,13 +7133,13 @@ async function startBatchVideoGeneration() {
             } else if (contiguity && pollRes?.status === 'completed') {
               // 连贯帧：保存本条视频用于下一条
               const vList = sbVideos.value[sb.id] || []
-              prevVideoItem = vList.find((v) => v.status === 'completed') || null
+              prevVideoItem = vList.find((v) => isPlayableVideoGenerationStatus(v.status)) || null
             }
           } else {
             await loadSingleStoryboardMedia(sb.id)
             if (contiguity) {
               const vList = sbVideos.value[sb.id] || []
-              prevVideoItem = vList.find((v) => v.status === 'completed') || null
+              prevVideoItem = vList.find((v) => isPlayableVideoGenerationStatus(v.status)) || null
             }
           }
         } catch (e) {
@@ -7714,7 +7781,7 @@ async function runOneClickPipeline(textOnly = false) {
       await loadStoryboardMedia()
       const boards2 = (store.storyboards || []).filter((sb) => {
         const vidList = sbVideos.value[sb.id] || []
-        if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+        if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
         if (isSbUniversalMode(sb.id)) {
           if (!sbCanSubmitVideo(sb)) return false
           return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
@@ -8054,7 +8121,7 @@ async function runRepairPipeline() {
     await loadStoryboardMedia()
     const boards2 = (store.storyboards || []).filter((sb) => {
       const vidList = sbVideos.value[sb.id] || []
-      if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+      if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
         return collectSbOmniReferenceAbsoluteUrls(sb).length > 0

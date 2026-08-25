@@ -6,9 +6,36 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 
 const createRoutes = require('../src/routes/director');
+const { createUnifiedVideoGenerationService } = require('../src/services/unifiedVideoGenerationService');
 
 const SCHEMA = `
-  CREATE TABLE storyboards (id INTEGER PRIMARY KEY, deleted_at TEXT);
+  CREATE TABLE storyboards (
+    id INTEGER PRIMARY KEY, duration REAL, video_url TEXT, local_path TEXT,
+    updated_at TEXT, deleted_at TEXT
+  );
+  CREATE TABLE ai_service_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, service_type TEXT NOT NULL, provider TEXT,
+    api_protocol TEXT, base_url TEXT, api_key TEXT, model TEXT, default_model TEXT,
+    endpoint TEXT, query_endpoint TEXT, settings TEXT, is_default INTEGER,
+    is_active INTEGER, deleted_at TEXT
+  );
+  CREATE TABLE async_tasks (
+    id TEXT PRIMARY KEY, type TEXT, status TEXT, progress INTEGER DEFAULT 0,
+    message TEXT, error TEXT, result TEXT, resource_id TEXT, created_at TEXT,
+    updated_at TEXT, completed_at TEXT, deleted_at TEXT
+  );
+  CREATE TABLE video_generations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER, storyboard_id INTEGER,
+    provider TEXT, protocol TEXT, prompt TEXT, negative_prompt TEXT, model TEXT,
+    config_id INTEGER, config_snapshot TEXT, duration REAL, aspect_ratio TEXT,
+    resolution TEXT, width INTEGER, height INTEGER, frame_rate REAL, seed INTEGER,
+    camera_fixed INTEGER, watermark INTEGER, continuity_mode TEXT, anchor_id TEXT,
+    candidate_group_id TEXT, image_gen_id INTEGER, image_url TEXT,
+    first_frame_url TEXT, last_frame_url TEXT, reference_image_urls TEXT,
+    video_url TEXT, local_path TEXT, status TEXT, task_id TEXT,
+    provider_task_id TEXT, completed_at TEXT, error_msg TEXT, created_at TEXT,
+    updated_at TEXT, deleted_at TEXT
+  );
   CREATE TABLE director_jobs (
     id TEXT PRIMARY KEY, status TEXT NOT NULL, attempt_number INTEGER NOT NULL,
     max_attempts INTEGER NOT NULL, lease_expires_at TEXT, error_code TEXT,
@@ -30,7 +57,7 @@ const SCHEMA = `
   );
   CREATE TABLE director_candidates (
     id TEXT PRIMARY KEY, group_id TEXT NOT NULL, artifact_id TEXT NOT NULL,
-    job_id TEXT, status TEXT NOT NULL, error_code TEXT, error_message TEXT,
+    job_id TEXT, video_generation_id INTEGER, status TEXT NOT NULL, error_code TEXT, error_message TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(group_id, artifact_id)
   );
   CREATE TABLE director_timelines (
@@ -60,22 +87,71 @@ function registry() {
   };
 }
 
+function seedDefaultVideoConfig(db, {
+  provider = 'cloud-provider',
+  protocol = 'openai',
+  model = 'cloud-default-model',
+  settings = { width: 1280, height: 704, frame_rate: 24 },
+} = {}) {
+  db.prepare("UPDATE ai_service_configs SET is_default = 0 WHERE service_type = 'video'").run();
+  return Number(db.prepare(`INSERT INTO ai_service_configs
+    (service_type, provider, api_protocol, base_url, api_key, model, default_model,
+     settings, is_default, is_active)
+    VALUES ('video', ?, ?, 'https://video.example.test', 'secret', ?, ?, ?, 1, 1)`)
+    .run(provider, protocol, JSON.stringify([model]), model, JSON.stringify(settings)).lastInsertRowid);
+}
+
+function createLifecycle(db) {
+  return createUnifiedVideoGenerationService({
+    db,
+    log: { info() {}, warn() {}, error() {} },
+    providerRegistry: { has() { return false; }, get() { throw new Error('not scheduled in route tests'); } },
+    schedule() {},
+  });
+}
+
+function insertLegacyCandidate(db, {
+  jobId = 'legacy-job',
+  groupId = 'legacy-group',
+  candidateId = 'legacy-candidate',
+  jobStatus = 'pending',
+  candidateStatus = 'pending',
+  attemptNumber = 0,
+} = {}) {
+  const now = '2026-08-25T00:00:00.000Z';
+  db.prepare(`INSERT INTO director_candidate_groups
+    (id, shot_id, status, created_at, updated_at) VALUES (?, '1', ?, ?, ?)`)
+    .run(groupId, candidateStatus === 'failed' ? 'failed' : 'pending', now, now);
+  db.prepare(`INSERT INTO director_jobs
+    (id, status, attempt_number, max_attempts, input_json, workflow_id, workflow_version, created_at, updated_at)
+    VALUES (?, ?, ?, 3, '{}', 'legacy-workflow', '1', ?, ?)`)
+    .run(jobId, jobStatus, attemptNumber, now, now);
+  db.prepare(`INSERT INTO director_candidates
+    (id, group_id, artifact_id, job_id, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(candidateId, groupId, `pending-artifact-${jobId}`, jobId, candidateStatus, now, now);
+  return { jobId, groupId, candidateId };
+}
+
 describe('Director generation routes', () => {
   let db;
   let enqueued;
   let routes;
+  let lifecycle;
 
   beforeEach(() => {
     db = new Database(':memory:');
     db.exec(SCHEMA);
     db.prepare('INSERT INTO storyboards (id) VALUES (1)').run();
+    seedDefaultVideoConfig(db);
+    lifecycle = createLifecycle(db);
     enqueued = [];
     routes = createRoutes(db, { error() {} }, {
       registry: registry(),
       allowExperimental: false,
+      videoGenerationService: lifecycle,
       runner: {
         enqueue(jobId) {
-          assert.ok(db.prepare('SELECT id FROM director_jobs WHERE id = ?').get(jobId));
           enqueued.push(jobId);
           return jobId;
         },
@@ -85,96 +161,161 @@ describe('Director generation routes', () => {
 
   afterEach(() => db.close());
 
-  it('returns 202 and persists one pending job and candidate per requested output', () => {
-    const res = responseCapture();
-    routes.generateCandidates({
-      params: { shotId: '1' },
-      body: {
-        workflowId: 'h3-continuity-v1',
-        candidateCount: 2,
-        prompt: { '5': { class_type: 'MiniMaxH3Director', inputs: {} } },
-        inputs: { seed: 42 },
-      },
-    }, res);
+  it('uses cloud and ComfyUI defaults for unified candidates and ignores incoming routing overrides', async () => {
+    for (const expected of [
+      { provider: 'cloud-provider', protocol: 'openai', model: 'cloud-default-model' },
+      { provider: 'comfyui', protocol: 'comfyui', model: 'h3-default-workflow' },
+    ]) {
+      seedDefaultVideoConfig(db, expected);
+      const res = responseCapture();
+      await routes.generateCandidates({
+        params: { shotId: '1' },
+        body: {
+          workflowId: 'incoming-workflow-must-be-ignored',
+          provider: 'incoming-provider-must-be-ignored',
+          model: 'incoming-model-must-be-ignored',
+          candidateCount: 2,
+          structured: {
+            prompt: 'A tracked shot through a rainy alley',
+            width: 864,
+            height: 480,
+            frameRate: 24,
+            durationSeconds: 5,
+            seed: 42,
+          },
+        },
+      }, res);
 
-    assert.equal(res.statusCode, 202);
-    assert.equal(res.body.success, true);
-    assert.equal(res.body.data.group.shot_id, '1');
-    assert.equal(res.body.data.group.status, 'pending');
-    assert.equal(res.body.data.jobs.length, 2);
-    assert.equal(enqueued.length, 2);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 2);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidates').get().count, 2);
-    for (const [candidateIndex, job] of res.body.data.jobs.entries()) {
-      assert.equal(job.status, 'pending');
-      assert.equal(job.workflow_id, 'h3-continuity-v1');
-      assert.equal(job.input.shotId, '1');
-      assert.equal(job.input.candidateIndex, candidateIndex);
-      assert.deepEqual(job.input.inputs, { seed: 42 });
+      assert.equal(res.statusCode, 202);
+      assert.equal(res.body.success, true);
+      assert.equal(res.body.data.group.shot_id, '1');
+      assert.equal(res.body.data.group.status, 'pending');
+      assert.equal(res.body.data.video_generations.length, 2);
+      assert.equal(enqueued.length, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
+      const candidates = res.body.data.group.candidates;
+      assert.equal(candidates.length, 2);
+      assert.ok(candidates.every((candidate) => Number.isInteger(candidate.video_generation_id)));
+      for (const candidate of candidates) {
+        const generation = db.prepare(`SELECT provider, protocol, model, prompt, candidate_group_id
+          FROM video_generations WHERE id = ?`).get(candidate.video_generation_id);
+        assert.deepEqual(generation, {
+          provider: expected.provider,
+          protocol: expected.protocol,
+          model: expected.model,
+          prompt: 'A tracked shot through a rainy alley',
+          candidate_group_id: res.body.data.group.id,
+        });
+      }
     }
   });
 
-  it('rejects a missing shot or invalid workflow without writing a generation batch', () => {
+  it('rejects a missing shot without writing a generation batch', async () => {
     const missingShot = responseCapture();
-    routes.generateCandidates({
+    await routes.generateCandidates({
       params: { shotId: '999' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
+      body: { candidateCount: 1, structured: { prompt: 'missing shot' } },
     }, missingShot);
     assert.equal(missingShot.statusCode, 400);
-
-    const invalidWorkflow = responseCapture();
-    routes.generateCandidates({
-      params: { shotId: '1' },
-      body: { workflowId: 'invalid-workflow', candidateCount: 1, prompt: { '5': {} } },
-    }, invalidWorkflow);
-    assert.equal(invalidWorkflow.statusCode, 400);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_generations').get().count, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
     assert.equal(enqueued.length, 0);
   });
 
-  it('rejects invalid candidate, prompt, inputs, and retry values before writing', () => {
+  it('cancels created videos and removes the whole group when a later candidate fails', async () => {
+    let creationAttempt = 0;
+    const compensatingLifecycle = {
+      async createVideoGeneration(input) {
+        creationAttempt += 1;
+        if (creationAttempt === 2) throw new Error('second candidate creation failed');
+        return lifecycle.createVideoGeneration(input);
+      },
+      async cancelVideoGeneration(id) {
+        return lifecycle.cancelVideoGeneration(id);
+      },
+    };
+    const compensatingRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: compensatingLifecycle,
+      runner: { enqueue() { throw new Error('legacy enqueue must not run'); } },
+    });
+    const res = responseCapture();
+
+    await compensatingRoutes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 2, structured: { prompt: 'atomic candidate batch' } },
+    }, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidates').get().count, 0);
+    assert.deepEqual(db.prepare('SELECT status FROM video_generations').all(), [{ status: 'cancelled' }]);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM video_generations WHERE status IN ('waiting', 'queued', 'running')").get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
+  });
+
+  it('durably terminates created videos when batch cancellation rejects', async () => {
+    let creationAttempt = 0;
+    const rejectingCancellationLifecycle = {
+      async createVideoGeneration(input) {
+        creationAttempt += 1;
+        if (creationAttempt === 2) throw new Error('second candidate creation failed');
+        return lifecycle.createVideoGeneration(input);
+      },
+      async cancelVideoGeneration() {
+        throw new Error('provider cancellation rejected');
+      },
+    };
+    const rejectingCancellationRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: rejectingCancellationLifecycle,
+    });
+    const res = responseCapture();
+
+    await rejectingCancellationRoutes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 2, structured: { prompt: 'durable batch compensation' } },
+    }, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidates').get().count, 0);
+    const video = db.prepare('SELECT status, error_msg, task_id FROM video_generations').get();
+    assert.equal(video.status, 'cancelled');
+    assert.equal(JSON.parse(video.error_msg).code, 'DIRECTOR_BATCH_COMPENSATED');
+    assert.deepEqual(db.prepare('SELECT status, progress FROM async_tasks WHERE id = ?').get(video.task_id), {
+      status: 'failed',
+      progress: 100,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM video_generations WHERE status IN ('waiting', 'queued', 'running', 'processing')").get().count, 0);
+  });
+
+  it('rejects invalid candidate, prompt, inputs, and retry values before writing', async () => {
     const invalidBodies = [
-      { workflowId: 'h3-continuity-v1', candidateCount: 0, prompt: { '5': {} } },
-      { workflowId: 'h3-continuity-v1', candidateCount: 4, prompt: { '5': {} } },
-      { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: 'not-an-object' },
-      { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} }, inputs: [] },
-      { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} }, maxAttempts: 0 },
+      { candidateCount: 0, structured: { prompt: 'shot' } },
+      { candidateCount: 4, structured: { prompt: 'shot' } },
+      { candidateCount: 1, prompt: [] },
+      { candidateCount: 1, structured: [] },
+      { candidateCount: 1, structured: { prompt: 'shot' }, inputs: [] },
+      { candidateCount: 1, structured: { prompt: 'shot' }, maxAttempts: 0 },
     ];
 
     for (const body of invalidBodies) {
       const res = responseCapture();
-      routes.generateCandidates({ params: { shotId: '1' }, body }, res);
+      await routes.generateCandidates({ params: { shotId: '1' }, body }, res);
       assert.equal(res.statusCode, 400);
     }
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
-  it('reuses an active generation batch for an identical request', () => {
-    const request = {
-      params: { shotId: '1' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': { inputs: { seed: 42 } } } },
-    };
-    const first = responseCapture();
-    const second = responseCapture();
-    routes.generateCandidates(request, first);
-    routes.generateCandidates(request, second);
-    assert.equal(second.statusCode, 202);
-    assert.equal(second.body.data.group.id, first.body.data.group.id);
-    assert.equal(second.body.data.cacheHit, true);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 1);
-  });
-
-  it('rejects downstream continuity generation until its source artifact is selected', () => {
+  it('rejects downstream continuity generation until its source artifact is selected', async () => {
     const body = {
-      workflowId: 'h3-continuity-v1',
       candidateCount: 1,
-      prompt: { '5': {} },
+      structured: { prompt: 'continue from the selected source' },
       inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-unselected' },
     };
     const rejected = responseCapture();
-    routes.generateCandidates({ params: { shotId: '1' }, body }, rejected);
+    await routes.generateCandidates({ params: { shotId: '1' }, body }, rejected);
     assert.equal(rejected.statusCode, 400);
     assert.match(rejected.body.error.message, /selected/i);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
@@ -184,7 +325,7 @@ describe('Director generation routes', () => {
       VALUES ('source-group', '1', 'review', 'artifact-selected', ?, ?)`)
       .run(new Date().toISOString(), new Date().toISOString());
     const stillRejected = responseCapture();
-    routes.generateCandidates({
+    await routes.generateCandidates({
       params: { shotId: '1' },
       body: { ...body, inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-selected' } },
     }, stillRejected);
@@ -198,21 +339,17 @@ describe('Director generation routes', () => {
       .run(new Date().toISOString(), new Date().toISOString());
     db.prepare("UPDATE director_candidate_groups SET status = 'selected' WHERE id = 'source-group'").run();
     const accepted = responseCapture();
-    routes.generateCandidates({
+    await routes.generateCandidates({
       params: { shotId: '1' },
       body: { ...body, inputs: { continuityMode: 'state_anchor', sourceArtifactId: 'artifact-selected' } },
     }, accepted);
     assert.equal(accepted.statusCode, 202);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_generations').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
   it('returns durable job details and a not-found response', () => {
-    const createRes = responseCapture();
-    routes.generateCandidates({
-      params: { shotId: '1' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
-    }, createRes);
-    const jobId = createRes.body.data.jobs[0].id;
+    const { jobId } = insertLegacyCandidate(db);
 
     const found = responseCapture();
     routes.getJob({ params: { jobId } }, found);
@@ -225,32 +362,27 @@ describe('Director generation routes', () => {
     assert.equal(missing.statusCode, 404);
   });
 
-  it('keeps an accepted batch durable when enqueue fails after commit', () => {
+  it('never sends new candidates to the legacy Director runner', async () => {
     const failingRoutes = createRoutes(db, { error() {} }, {
       registry: registry(),
+      videoGenerationService: lifecycle,
       runner: { enqueue() { throw new Error('queue unavailable'); } },
     });
     const res = responseCapture();
 
-    failingRoutes.generateCandidates({
+    await failingRoutes.generateCandidates({
       params: { shotId: '1' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
+      body: { candidateCount: 1, structured: { prompt: 'unified only' } },
     }, res);
 
     assert.equal(res.statusCode, 202);
-    assert.equal(res.body.data.jobs[0].status, 'failed');
-    assert.equal(res.body.data.jobs[0].error_code, 'DIRECTOR_QUEUE_ERROR');
-    assert.equal(res.body.data.group.status, 'failed');
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 1);
+    assert.equal(res.body.data.group.status, 'pending');
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_generations').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
   it('cancels a pending job and finalizes its candidate group', async () => {
-    const createRes = responseCapture();
-    routes.generateCandidates({
-      params: { shotId: '1' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
-    }, createRes);
-    const jobId = createRes.body.data.jobs[0].id;
+    const { jobId } = insertLegacyCandidate(db);
     const cancelled = responseCapture();
     await routes.cancelJob({ params: { jobId } }, cancelled);
     assert.equal(cancelled.statusCode, 200);
@@ -265,20 +397,178 @@ describe('Director generation routes', () => {
         enqueue(jobId) { enqueued.push(jobId); },
       },
     });
-    const createRes = responseCapture();
-    failingRoutes.generateCandidates({
-      params: { shotId: '1' },
-      body: { workflowId: 'h3-continuity-v1', candidateCount: 1, prompt: { '5': {} } },
-    }, createRes);
-    const jobId = createRes.body.data.jobs[0].id;
-    db.prepare("UPDATE director_jobs SET status = 'failed', error_code = 'TEST_FAILED' WHERE id = ?").run(jobId);
-    db.prepare("UPDATE director_candidates SET status = 'failed', error_code = 'TEST_FAILED' WHERE job_id = ?").run(jobId);
+    const { jobId } = insertLegacyCandidate(db, {
+      jobStatus: 'failed',
+      candidateStatus: 'failed',
+      attemptNumber: 1,
+    });
     const retried = responseCapture();
     failingRoutes.retryJob({ params: { jobId } }, retried);
     assert.equal(retried.statusCode, 202);
     assert.equal(retried.body.data.status, 'pending');
     assert.equal(db.prepare('SELECT status FROM director_candidates WHERE job_id = ?').get(jobId).status, 'pending');
     assert.ok(enqueued.includes(jobId));
+  });
+
+  it('delegates cancel, retry, and selection for linked candidates to the unified lifecycle', async () => {
+    const created = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'cancel and retry' } },
+    }, created);
+    const generationId = created.body.data.group.candidates[0].video_generation_id;
+    const calls = [];
+    const delegatedRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async cancelVideoGeneration(id) {
+          calls.push(['cancel', Number(id)]);
+          db.prepare("UPDATE video_generations SET status = 'cancelled' WHERE id = ?").run(Number(id));
+          return { id: Number(id), status: 'cancelled' };
+        },
+        async retryVideoGeneration(id) {
+          calls.push(['retry', Number(id)]);
+          db.prepare("UPDATE video_generations SET status = 'waiting' WHERE id = ?").run(Number(id));
+          return { id: Number(id), status: 'waiting' };
+        },
+        async selectVideoGeneration(id) {
+          calls.push(['select', Number(id)]);
+          const now = '2026-08-25T00:00:05.000Z';
+          db.prepare("UPDATE video_generations SET status = 'selected', updated_at = ? WHERE id = ?").run(now, Number(id));
+          return { id: Number(id), status: 'selected' };
+        },
+      },
+      runner: { enqueue() { throw new Error('legacy enqueue must not run'); } },
+    });
+
+    const cancelled = responseCapture();
+    await delegatedRoutes.cancelJob({ params: { jobId: String(generationId) } }, cancelled);
+    assert.equal(cancelled.statusCode, 200);
+    assert.equal(cancelled.body.data.status, 'cancelled');
+
+    const retried = responseCapture();
+    await delegatedRoutes.retryJob({ params: { jobId: String(generationId) } }, retried);
+    assert.equal(retried.statusCode, 202);
+    assert.equal(retried.body.data.status, 'waiting');
+    assert.deepEqual(calls, [['cancel', generationId], ['retry', generationId]]);
+    assert.equal(db.prepare('SELECT status FROM director_candidates WHERE video_generation_id = ?').get(generationId).status, 'pending');
+
+    db.prepare(`UPDATE video_generations SET status = 'review', video_url = ?, updated_at = ? WHERE id = ?`)
+      .run('https://cdn.example.test/selected.mp4', '2026-08-25T00:00:04.000Z', generationId);
+    const refreshed = responseCapture();
+    routes.getCandidates({ params: { groupId: created.body.data.group.id } }, refreshed);
+    const candidateId = refreshed.body.data.candidates[0].id;
+    const selected = responseCapture();
+    await delegatedRoutes.selectCandidate({
+      params: { groupId: created.body.data.group.id },
+      body: { candidateId },
+    }, selected);
+    assert.equal(selected.statusCode, 200);
+    assert.equal(selected.body.data.status, 'selected');
+    assert.deepEqual(calls, [['cancel', generationId], ['retry', generationId], ['select', generationId]]);
+  });
+
+  it('leaves Director selection unchanged when the unified lifecycle rejects it', async () => {
+    const created = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'selection rejection' } },
+    }, created);
+    const groupId = created.body.data.group.id;
+    const candidate = created.body.data.group.candidates[0];
+    db.prepare(`UPDATE video_generations SET status = 'review', video_url = ? WHERE id = ?`)
+      .run('https://cdn.example.test/not-selected.mp4', candidate.video_generation_id);
+    const review = responseCapture();
+    routes.getCandidates({ params: { groupId } }, review);
+    assert.equal(review.body.data.status, 'review');
+
+    const rejectingRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async selectVideoGeneration() { throw new Error('selection rejected'); },
+      },
+    });
+    const rejected = responseCapture();
+    await rejectingRoutes.selectCandidate({
+      params: { groupId },
+      body: { candidateId: candidate.id },
+    }, rejected);
+
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(db.prepare('SELECT status FROM director_candidate_groups WHERE id = ?').get(groupId).status, 'review');
+    assert.equal(db.prepare('SELECT status FROM director_candidates WHERE id = ?').get(candidate.id).status, 'review');
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(candidate.video_generation_id).status, 'review');
+    assert.deepEqual(db.prepare('SELECT video_url, local_path FROM storyboards WHERE id = 1').get(), {
+      video_url: null,
+      local_path: null,
+    });
+  });
+
+  it('does not synchronize stale Director rows before unified selection succeeds', async () => {
+    const created = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'read-only selection check' } },
+    }, created);
+    const groupId = created.body.data.group.id;
+    const candidate = created.body.data.group.candidates[0];
+    db.prepare(`UPDATE video_generations SET status = 'review', video_url = ? WHERE id = ?`)
+      .run('https://cdn.example.test/stale-review.mp4', candidate.video_generation_id);
+    db.prepare(`UPDATE director_candidate_groups SET updated_at = ? WHERE id = ?`)
+      .run('2026-08-25T00:01:00.000Z', groupId);
+    db.prepare(`UPDATE director_candidates SET error_code = ?, error_message = ?, updated_at = ? WHERE id = ?`)
+      .run('STALE_SENTINEL', 'must remain untouched', '2026-08-25T00:01:01.000Z', candidate.id);
+    const beforeGroup = JSON.stringify(db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId));
+    const beforeCandidate = JSON.stringify(db.prepare('SELECT * FROM director_candidates WHERE id = ?').get(candidate.id));
+
+    const rejectingRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async selectVideoGeneration() { throw new Error('selection rejected before sync'); },
+      },
+    });
+    const rejected = responseCapture();
+    await rejectingRoutes.selectCandidate({
+      params: { groupId },
+      body: { candidateId: candidate.id },
+    }, rejected);
+
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.body.error.message, 'selection rejected before sync');
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId)), beforeGroup);
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM director_candidates WHERE id = ?').get(candidate.id)), beforeCandidate);
+  });
+
+  it('leaves a failed Director candidate unchanged when unified retry rejects', async () => {
+    const created = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'retry rejection' } },
+    }, created);
+    const groupId = created.body.data.group.id;
+    const candidate = created.body.data.group.candidates[0];
+    db.prepare(`UPDATE video_generations SET status = 'failed', error_msg = ? WHERE id = ?`)
+      .run(JSON.stringify({ code: 'UPSTREAM_FAILED', message: 'upstream failed' }), candidate.video_generation_id);
+    const failed = responseCapture();
+    routes.getCandidates({ params: { groupId } }, failed);
+    assert.equal(failed.body.data.status, 'failed');
+    assert.equal(failed.body.data.candidates[0].status, 'failed');
+
+    const rejectingRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async retryVideoGeneration() { throw new Error('retry rejected'); },
+      },
+    });
+    const rejected = responseCapture();
+    await rejectingRoutes.retryJob({
+      params: { jobId: String(candidate.video_generation_id) },
+    }, rejected);
+
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(db.prepare('SELECT status FROM director_candidate_groups WHERE id = ?').get(groupId).status, 'failed');
+    assert.deepEqual(db.prepare('SELECT status, error_code, error_message FROM director_candidates WHERE id = ?').get(candidate.id), {
+      status: 'failed',
+      error_code: 'UPSTREAM_FAILED',
+      error_message: 'upstream failed',
+    });
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(candidate.video_generation_id).status, 'failed');
   });
 
   it('restores the newest candidate group for a shot with parsed artifact metadata', () => {

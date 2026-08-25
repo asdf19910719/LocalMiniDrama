@@ -257,8 +257,8 @@ async function generate() {
         body.image_url = '/static/' + refImageLocalPath.value
       }
       const res = await videosAPI.create(body)
-      if (res?.task_id) {
-        await pollVideoTask(res.task_id, newItem)
+      if (res?.id) {
+        await pollVideoGeneration(res, newItem)
       } else {
         newItem.status = 'failed'
         newItem.error = '提交失败'
@@ -297,27 +297,21 @@ async function pollImageTask(taskId, item, maxMs = 180000) {
   item.error = '超时'
 }
 
-async function pollVideoTask(taskId, item) {
+async function pollVideoGeneration(generation, item) {
   const maxMs = videoPollMaxMs.value
   const start = Date.now()
-  const { taskAPI } = await import('@/api/task')
   while (Date.now() - start < maxMs) {
     await new Promise((r) => setTimeout(r, 4000))
     try {
-      const res = await taskAPI.get(taskId)
-      if (res?.status === 'completed' && res?.result) {
-        const r = res.result
-        const vgId = r.video_generation_id
-        if (vgId) {
-          const vRes = await videosAPI.get(vgId)
-          item.url = vRes?.local_path ? '/static/' + vRes.local_path : vRes?.video_url
-        }
+      const res = await videosAPI.get(generation.id)
+      if (['completed', 'review', 'selected'].includes(res?.status)) {
+        item.url = res?.local_path ? '/static/' + res.local_path : res?.video_url
         item.status = 'completed'
         return
       }
-      if (res?.status === 'failed') {
+      if (['failed', 'cancelled', 'interrupted'].includes(res?.status)) {
         item.status = 'failed'
-        item.error = res.error || '生成失败'
+        item.error = res.error_msg || '生成失败'
         return
       }
     } catch (_) {}
