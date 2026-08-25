@@ -264,3 +264,14 @@ storage/
 ---
 
 [← 返回项目主页](../README.md)
+# Unified Video Provider rollout
+
+Video generation now uses the single active default `service_type=video` configuration. Configure cloud or local ComfyUI in API settings; requests cannot select a Provider per call. ComfyUI H3 uses numeric dimensions and defaults to `1280x704` with 32-pixel alignment.
+
+For an existing SQLite database, run the idempotent migration from `backend-node`:
+
+```powershell
+node scripts/backupAndMigrateUnifiedVideo.js
+```
+
+The command creates a timestamped backup and reports rows whose original routing is provable versus `historical_unknown`. It never invents Provider provenance or deletes historical rows.
