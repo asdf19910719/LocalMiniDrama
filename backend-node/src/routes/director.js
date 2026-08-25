@@ -83,16 +83,17 @@ async function createGenerationBatch(db, videoGenerationService, {
       const generation = await videoGenerationService.createVideoGeneration(
         generationInput(body, { shot, groupId: initial.id, structured, inputs }),
       );
-      candidateService.linkCandidateVideoGeneration(db, initial.id, candidate.id, generation.id);
       videoGenerations.push(generation);
+      candidateService.linkCandidateVideoGeneration(db, initial.id, candidate.id, generation.id);
     }
   } catch (error) {
-    if (videoGenerations.length === 0) {
-      db.transaction(() => {
-        db.prepare('DELETE FROM director_candidates WHERE group_id = ?').run(initial.id);
-        db.prepare('DELETE FROM director_candidate_groups WHERE id = ?').run(initial.id);
-      })();
-    }
+    await Promise.allSettled(videoGenerations.map((generation) => (
+      videoGenerationService.cancelVideoGeneration(generation.id)
+    )));
+    db.transaction(() => {
+      db.prepare('DELETE FROM director_candidates WHERE group_id = ?').run(initial.id);
+      db.prepare('DELETE FROM director_candidate_groups WHERE id = ?').run(initial.id);
+    })();
     throw error;
   }
   return {
@@ -176,7 +177,9 @@ function routes(db, log, {
     },
     generateCandidates: async (req, res) => {
       try {
-        if (!videoGenerationService?.createVideoGeneration) throw new Error('Director video generation is not configured');
+        if (!videoGenerationService?.createVideoGeneration || !videoGenerationService?.cancelVideoGeneration) {
+          throw new Error('Director video generation is not configured');
+        }
         const shotId = req.params.shotId;
         const body = req.body || {};
         if (!shotId) throw new Error('shotId is required');
@@ -301,14 +304,15 @@ function routes(db, log, {
         if (candidate?.video_generation_id != null && !videoGenerationService?.selectVideoGeneration) {
           throw new Error('Director video selection is not configured');
         }
-        let group = candidateService.selectCandidate(db, req.params.groupId, candidateId, {
+        if (candidate?.video_generation_id != null) {
+          if (before.status !== 'review') throw new Error(`Candidate group cannot select from ${before.status}`);
+          if (!['review', 'selected'].includes(candidate.status)) throw new Error('Candidate is not selectable');
+          await videoGenerationService.selectVideoGeneration(candidate.video_generation_id);
+        }
+        const group = candidateService.selectCandidate(db, req.params.groupId, candidateId, {
           selectedBy: req.body?.selectedBy || req.body?.selected_by || 'user',
           reason: req.body?.reason || '',
         });
-        if (candidate?.video_generation_id != null) {
-          await videoGenerationService.selectVideoGeneration(candidate.video_generation_id);
-          group = candidateService.getCandidateGroup(db, group.id);
-        }
         response.success(res, group);
       } catch (error) {
         log.error('director candidate select', { error: error.message });
@@ -471,9 +475,8 @@ function routes(db, log, {
         const unifiedCandidate = candidateService.getCandidateByVideoGenerationId(db, req.params.jobId);
         if (unifiedCandidate) {
           if (!videoGenerationService?.retryVideoGeneration) throw new Error('Director video retry is not configured');
-          candidateService.retryFailedCandidate(db, unifiedCandidate.group_id, unifiedCandidate.id);
           const video = await videoGenerationService.retryVideoGeneration(unifiedCandidate.video_generation_id);
-          candidateService.finalizeCandidateGroup(db, unifiedCandidate.group_id);
+          candidateService.getCandidateGroup(db, unifiedCandidate.group_id);
           return response.accepted(res, video);
         }
         const job = jobService.retryDirectorJob(db, req.params.jobId);
