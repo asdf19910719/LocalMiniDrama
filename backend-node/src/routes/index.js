@@ -32,6 +32,7 @@ const {
   createComfyUIVideoProvider,
   createVideoProviderRegistry,
 } = require('../services/videoProviders');
+const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
 
 function setupRouter(cfg, db, log) {
@@ -75,7 +76,24 @@ function setupRouter(cfg, db, log) {
       allowExperimental: cfg.director.allow_experimental,
     }),
   });
-  const videos = videoRoutes(db, log, { providerRegistry: videoProviderRegistry });
+  const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
+    db,
+    log,
+    providerRegistry: videoProviderRegistry,
+  });
+  require('../services/videoService').configureUnifiedVideoGenerationService(
+    db,
+    unifiedVideoGenerationService,
+  );
+  const videos = videoRoutes(db, log, {
+    providerRegistry: videoProviderRegistry,
+    lifecycleService: unifiedVideoGenerationService,
+  });
+  setImmediate(() => {
+    unifiedVideoGenerationService.recoverVideoGenerations().catch((error) => {
+      log.error('recoverVideoGenerations', { error: error.message });
+    });
+  });
   reconcileRunningJobs(db);
   const directorRunner = createDirectorJobRunner({
     db,
@@ -298,6 +316,8 @@ function setupRouter(cfg, db, log) {
   r.post('/videos', videos.create);
   r.post('/videos/image/:image_gen_id', videos.fromImage);
   r.post('/videos/episode/:episode_id/batch', videos.episodeBatch);
+  r.post('/videos/:id/cancel', videos.cancel);
+  r.post('/videos/:id/retry', videos.retry);
   r.post('/videos/:id/resume-poll', videos.resumePoll);
   r.get('/videos/:id', videos.get);
   r.delete('/videos/:id', videos.delete);

@@ -40,6 +40,10 @@ describe('taskService.failOrphanedAsyncTasksOnStartup', () => {
       `INSERT INTO async_tasks (id, type, status, progress, message, resource_id, created_at, updated_at, completed_at)
        VALUES (?, ?, ?, 100, '', ?, ?, ?, ?)`
     ).run('task-done', 'background_extraction', 'completed', '42', now, now, now);
+    db.prepare(
+      `INSERT INTO async_tasks (id, type, status, progress, message, resource_id, created_at, updated_at)
+       VALUES (?, 'video_generation', 'pending', 0, '', ?, ?, ?)`
+    ).run('video-recoverable', '42', now, now);
 
     const count = taskService.failOrphanedAsyncTasksOnStartup(db, { warn() {}, info() {} });
     assert.equal(count, 2);
@@ -47,11 +51,13 @@ describe('taskService.failOrphanedAsyncTasksOnStartup', () => {
     const pending = taskService.getTask(db, 'task-pending');
     const processing = taskService.getTask(db, 'task-processing');
     const done = taskService.getTask(db, 'task-done');
+    const videoRecoverable = taskService.getTask(db, 'video-recoverable');
 
     assert.equal(pending.status, 'failed');
     assert.equal(processing.status, 'failed');
     assert.equal(pending.error, taskService.ORPHAN_ASYNC_TASK_MSG);
     assert.equal(done.status, 'completed');
+    assert.equal(videoRecoverable.status, 'pending');
   });
 
   it('cancelTask marks active task as failed', () => {

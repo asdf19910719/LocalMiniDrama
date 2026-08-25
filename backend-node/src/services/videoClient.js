@@ -3608,7 +3608,7 @@ async function callMinimaxH3VideoApi(config, log, opts) {
  * ?????? API?ChatFire/?? ? ?????
  * @returns {Promise<{ task_id?: string, video_url?: string, error?: string }>}
  */
-async function callVideoApi(db, log, opts) {
+async function callVideoApi(db, log, opts, configOverride = null) {
   const {
     prompt,
     model: preferredModel,
@@ -3627,7 +3627,7 @@ async function callVideoApi(db, log, opts) {
     storage_local_path,
     video_gen_id
   } = opts;
-  const config = getDefaultVideoConfig(db, preferredModel);
+  const config = configOverride || getDefaultVideoConfig(db, preferredModel);
   if (!config) {
     throw new Error('???????????AI ?????? video ?????????');
   }

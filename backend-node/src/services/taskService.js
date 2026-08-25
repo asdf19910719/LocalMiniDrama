@@ -98,7 +98,9 @@ function cancelTask(db, log, taskId, reason) {
 function failOrphanedAsyncTasksOnStartup(db, log) {
   const rows = db.prepare(
     `SELECT id, type, status, resource_id FROM async_tasks
-     WHERE status IN ('pending', 'processing') AND deleted_at IS NULL`
+     WHERE status IN ('pending', 'processing')
+       AND type != 'video_generation'
+       AND deleted_at IS NULL`
   ).all();
   if (!rows.length) return 0;
   log.warn('Failing orphaned async tasks after startup', { count: rows.length });
