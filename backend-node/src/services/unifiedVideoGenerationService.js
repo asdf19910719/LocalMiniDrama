@@ -2,6 +2,7 @@ const path = require('node:path');
 const taskService = require('./taskService');
 const videoClient = require('./videoClient');
 const videoService = require('./videoService');
+const candidateService = require('../director/candidateGroupService');
 const { resolveDefaultVideoConfig } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 
@@ -400,6 +401,23 @@ function createUnifiedVideoGenerationService({
        SET status = ?, video_url = ?, local_path = ?, error_msg = NULL,
            completed_at = ?, updated_at = ? WHERE id = ?`
     ).run(finalStatus, videoUrl, localPath, now, now, row.id);
+    if (latest.candidate_group_id) {
+      try {
+        const artifact = candidateService.linkUnifiedCandidateArtifact(db, row.id, { ffprobe: output.ffprobe });
+        if (!artifact) {
+          throw new VideoLifecycleError(
+            'VIDEO_ARTIFACT_IMPORT_FAILED',
+            '候选视频未能建立可检查的本地产物',
+            500,
+            { videoGenerationId: row.id },
+          );
+        }
+      } catch (error) {
+        // A review candidate without a real local artifact cannot be QC'd or anchored.
+        persistFailure({ ...latest, status: finalStatus }, error, 'artifact');
+        throw error;
+      }
+    }
     if (latest.task_id) {
       taskService.updateTaskResult(db, latest.task_id, {
         video_generation_id: row.id,
@@ -527,7 +545,7 @@ function createUnifiedVideoGenerationService({
       } catch (_) {}
     }
     let duration = input.duration ?? null;
-    if (Number.isFinite(storyboardId)) {
+    if (duration == null && Number.isFinite(storyboardId)) {
       try {
         const storyboard = db.prepare('SELECT duration FROM storyboards WHERE id = ?').get(storyboardId);
         if (Number(storyboard?.duration) > 0) duration = Number(storyboard.duration);

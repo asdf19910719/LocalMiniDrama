@@ -128,8 +128,36 @@ export function resolveStoryboardVideoPrompt(storyboard) {
   return candidates.map(trimmed).find(Boolean) || ''
 }
 
+export function normalizeVideoGenerationContext(context = {}) {
+  const referenceImageUrls = Array.isArray(context.referenceImageUrls ?? context.reference_image_urls)
+    ? (context.referenceImageUrls ?? context.reference_image_urls).map(trimmed).filter(Boolean)
+    : []
+  return {
+    mode: trimmed(context.mode) || 'default',
+    prompt: trimmed(context.prompt),
+    negativePrompt: trimmed(context.negativePrompt ?? context.negative_prompt),
+    imageUrl: trimmed(context.imageUrl ?? context.image_url),
+    firstFrameUrl: trimmed(context.firstFrameUrl ?? context.first_frame_url),
+    lastFrameUrl: trimmed(context.lastFrameUrl ?? context.last_frame_url),
+    referenceImageUrls,
+    style: trimmed(context.style),
+    aspectRatio: trimmed(context.aspectRatio ?? context.aspect_ratio),
+    resolution: trimmed(context.resolution),
+    duration: context.duration == null ? null : finiteNumber(context.duration, null),
+  }
+}
+
 export function listVideoActions(_displayMode) {
   return [...VIDEO_ACTIONS]
+}
+
+export function anchorRoleLabel(role) {
+  return {
+    state: '状态',
+    composition: '构图',
+    identity: '角色一致性',
+    motion: '动作',
+  }[trimmed(role).toLowerCase()] || '连续性'
 }
 
 export function hasEnglishGenerationActions(source) {
@@ -162,6 +190,9 @@ export function buildVideoCandidateRequest(form = {}) {
     imageUrl: trimmed(form.imageUrl),
     firstFrameUrl: trimmed(form.firstFrameUrl),
     lastFrameUrl: trimmed(form.lastFrameUrl),
+    style: trimmed(form.style),
+    aspectRatio: trimmed(form.aspectRatio),
+    resolution: trimmed(form.resolution),
   }
   for (const [key, value] of Object.entries(optional)) {
     if (value) structured[key] = value
@@ -229,7 +260,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     firstFrameUrl: '',
     lastFrameUrl: '',
     referenceImageUrls: [],
+    style: '',
+    aspectRatio: '',
+    resolution: '',
   })
+  const generationMode = ref('default')
   const defaultConfig = ref(null)
   const configLoading = ref(false)
   const loading = ref(false)
@@ -249,6 +284,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const creatingAnchor = ref(false)
   let refreshVersion = 0
   let mutationVersion = 0
+  let createVersion = 0
   let pollTimer = null
 
   const currentGroup = computed(() => (
@@ -312,10 +348,12 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     if (!pollTimer) pollTimer = setInterval(() => refreshHistory({ quiet: true }), 2500)
   }
 
-  function applyStoryboard(storyboard) {
-    form.prompt = resolveStoryboardVideoPrompt(storyboard)
-    form.negativePrompt = trimmed(storyboard?.negative_prompt)
-    form.duration = finiteNumber(storyboard?.duration, 5) || 5
+  function applyStoryboard(storyboard, rawContext = props.generationContext) {
+    const context = normalizeVideoGenerationContext(rawContext)
+    generationMode.value = context.mode
+    form.prompt = context.prompt || resolveStoryboardVideoPrompt(storyboard)
+    form.negativePrompt = context.negativePrompt || trimmed(storyboard?.negative_prompt)
+    form.duration = context.duration ?? (finiteNumber(storyboard?.duration, 5) || 5)
     const anchor = normalizedSourceAnchor(storyboard)
     form.anchorId = anchor?.id || ''
     form.sourceArtifactId = anchor?.sourceArtifactId || ''
@@ -323,12 +361,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       ? (anchor.reference_role === 'composition' ? 'composition_only' : 'state_anchor')
       : trimmed(storyboard?.continuity_mode) || 'motion_overlap'
     const localPath = trimmed(storyboard?.local_path)
-    form.imageUrl = trimmed(storyboard?.image_url) || (localPath ? `/static/${localPath.replace(/^\/+/, '')}` : '')
-    form.firstFrameUrl = trimmed(storyboard?.first_frame_image_url) || form.imageUrl
-    form.lastFrameUrl = trimmed(storyboard?.last_frame_image_url)
-    form.referenceImageUrls = Array.isArray(storyboard?.reference_image_urls)
-      ? storyboard.reference_image_urls.map(trimmed).filter(Boolean)
-      : []
+    form.imageUrl = context.imageUrl || trimmed(storyboard?.image_url) || (localPath ? `/static/${localPath.replace(/^\/+/, '')}` : '')
+    form.firstFrameUrl = context.firstFrameUrl || trimmed(storyboard?.first_frame_image_url) || form.imageUrl
+    form.lastFrameUrl = context.lastFrameUrl || trimmed(storyboard?.last_frame_image_url)
+    form.referenceImageUrls = context.referenceImageUrls.length
+      ? context.referenceImageUrls
+      : Array.isArray(storyboard?.reference_image_urls)
+        ? storyboard.reference_image_urls.map(trimmed).filter(Boolean)
+        : []
+    form.style = context.style
+    form.aspectRatio = context.aspectRatio
+    form.resolution = context.resolution
   }
 
   function applyConfigDefaults(config) {
@@ -367,9 +410,16 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       anchors.value = []
       return
     }
+    const requestVersion = refreshVersion
+    const requestStoryboardId = props.storyboardId
+    const requestArtifactId = selectedArtifactId.value
     try {
-      anchors.value = await videosAPI.listAnchors(selectedArtifactId.value)
+      const result = await videosAPI.listAnchors(requestArtifactId)
+      if (requestVersion !== refreshVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || String(selectedArtifactId.value) !== String(requestArtifactId)) return
+      anchors.value = result
     } catch (caught) {
+      if (requestVersion !== refreshVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
       anchors.value = []
       setError(caught)
     }
@@ -377,6 +427,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   async function refreshHistory({ quiet = false } = {}) {
     const requestVersion = ++refreshVersion
+    const requestStoryboardId = props.storyboardId
     if (!quiet) loading.value = true
     if (!quiet) setError(null)
     try {
@@ -386,7 +437,9 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (!activeGroupId.value || !groups.value.some((item) => item.id === activeGroupId.value)) {
         activeGroupId.value = state?.latest?.id || groups.value[0]?.id || ''
       }
-      if (currentGroup.value?.status === 'selected') await loadAnchors()
+      if (currentGroup.value?.status === 'selected'
+        && requestVersion === refreshVersion
+        && String(props.storyboardId) === String(requestStoryboardId)) await loadAnchors()
       else anchors.value = []
       syncPolling()
     } catch (caught) {
@@ -406,6 +459,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     if (creating.value) return
     const requestStoryboardId = props.storyboardId
     const requestVersion = mutationVersion
+    const requestCreateVersion = ++createVersion
     creating.value = true
     setError(null)
     try {
@@ -413,7 +467,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
         requestStoryboardId,
         buildVideoCandidateRequest(form),
       )
-      if (requestVersion !== mutationVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      if (requestCreateVersion !== createVersion || requestVersion !== mutationVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
       const group = generated?.group
       if (group) {
         groups.value = [group, ...groups.value.filter((item) => item.id !== group.id)]
@@ -422,9 +476,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       syncPolling()
       await refreshHistory({ quiet: true })
     } catch (caught) {
-      setError(caught)
+      if (requestCreateVersion === createVersion && requestVersion === mutationVersion
+        && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
     } finally {
-      creating.value = false
+      if (requestCreateVersion === createVersion && requestVersion === mutationVersion
+        && String(props.storyboardId) === String(requestStoryboardId)) creating.value = false
     }
   }
 
@@ -533,6 +589,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   watch(() => props.storyboardId, async () => {
     refreshVersion += 1
     mutationVersion += 1
+    createVersion += 1
     stopPolling()
     creating.value = false
     analyzingCandidateId.value = ''
@@ -543,11 +600,15 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     qualityReviews.value = {}
     selectionReason.value = ''
     setError(null)
-    applyStoryboard(props.storyboard)
+    applyStoryboard(props.storyboard, props.generationContext)
     await refresh()
   }, { immediate: true })
 
   watch(() => props.storyboard, (storyboard) => {
+    if (props.generationContext) {
+      applyStoryboard(storyboard, props.generationContext)
+      return
+    }
     const nextPrompt = resolveStoryboardVideoPrompt(storyboard)
     if (!trimmed(form.prompt) || form.prompt === resolveStoryboardVideoPrompt(null)) form.prompt = nextPrompt
     const anchor = normalizedSourceAnchor(storyboard)
@@ -557,6 +618,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       form.continuityMode = anchor.reference_role === 'composition' ? 'composition_only' : 'state_anchor'
     }
   })
+
+  watch(() => props.generationContext, (context) => {
+    if (context) applyStoryboard(props.storyboard, context)
+  }, { deep: true })
 
   watch(activeGroupId, () => {
     if (currentGroup.value?.status === 'selected') loadAnchors()
@@ -568,6 +633,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   return {
     form,
+    generationMode,
     defaultConfig,
     configLoading,
     configStatus,
@@ -606,5 +672,6 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     candidatePreviewUrl,
     candidateMediaId,
     videoStatusLabel,
+    anchorRoleLabel,
   }
 }

@@ -252,7 +252,7 @@ describe('unified video generation lifecycle', () => {
     db.close();
   });
 
-  it('preserves legacy aspect and storyboard-duration normalization at creation', async () => {
+  it('prefers an explicit duration and uses storyboard duration only as a fallback', async () => {
     const db = createTestDb();
     seedDefaultConfig(db);
     db.prepare("INSERT INTO dramas (id, metadata) VALUES (3, '{\"aspect_ratio\":\"9：16\"}')").run();
@@ -267,8 +267,15 @@ describe('unified video generation lifecycle', () => {
       duration: 3,
     });
 
+    const fallback = await service.createVideoGeneration({
+      drama_id: 3,
+      storyboard_id: 5,
+      prompt: '兼容输入回退',
+    });
+
     assert.equal(created.aspect_ratio, '9:16');
-    assert.equal(created.duration, 8);
+    assert.equal(created.duration, 3);
+    assert.equal(fallback.duration, 8);
     assert.equal(created.width, 1280);
     assert.equal(created.height, 704);
   });

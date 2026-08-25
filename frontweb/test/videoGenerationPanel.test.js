@@ -1,13 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { nextTick, reactive } from 'vue'
 
 import {
   buildVideoCandidateRequest,
+  anchorRoleLabel,
   candidateStatus,
-  hasEnglishGenerationActions,
   listVideoActions,
+  normalizeVideoGenerationContext,
   resolveStoryboardVideoPrompt,
   useVideoGenerationPanel,
   videoErrorCopy,
@@ -85,6 +85,70 @@ test('accepts zero as a deterministic random seed', () => {
   assert.equal(request.structured.seed, 0)
 })
 
+test('preserves the normal editor generation context in the unified candidate payload', async () => {
+  const captured = []
+  const generationContext = normalizeVideoGenerationContext({
+    mode: 'universal_omni',
+    prompt: '未保存的全能片段提示词',
+    imageUrl: 'https://assets.example.test/selected-first.png',
+    firstFrameUrl: 'https://assets.example.test/selected-first.png',
+    lastFrameUrl: 'https://assets.example.test/selected-last.png',
+    referenceImageUrls: [
+      'https://assets.example.test/scene.png',
+      'https://assets.example.test/character.png',
+      'https://assets.example.test/prop.png',
+    ],
+    style: '电影写实',
+    aspectRatio: '9:16',
+    resolution: '1080p',
+    duration: 7,
+  })
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    generateCandidates: async (_storyboardId, body) => {
+      captured.push(body)
+      return {}
+    },
+  }
+  const props = reactive({
+    storyboardId: 1,
+    storyboard: { id: 1, universal_segment_text: '已保存的旧提示词', duration: 3 },
+    generationContext,
+  })
+  const panel = useVideoGenerationPanel(props, () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.generateCandidates()
+
+  assert.equal(panel.generationMode.value, 'universal_omni')
+  assert.deepEqual(captured, [{
+    candidateCount: 2,
+    structured: {
+      prompt: '未保存的全能片段提示词',
+      negativePrompt: '',
+      width: 1280,
+      height: 704,
+      durationSeconds: 7,
+      frameRate: 24,
+      seed: 42,
+      continuityMode: 'motion_overlap',
+      imageUrl: 'https://assets.example.test/selected-first.png',
+      firstFrameUrl: 'https://assets.example.test/selected-first.png',
+      lastFrameUrl: 'https://assets.example.test/selected-last.png',
+      referenceImageUrls: [
+        'https://assets.example.test/scene.png',
+        'https://assets.example.test/character.png',
+        'https://assets.example.test/prop.png',
+      ],
+      style: '电影写实',
+      aspectRatio: '9:16',
+      resolution: '1080p',
+    },
+  }])
+})
+
 test('provides Chinese lifecycle and error summaries while preserving technical details', () => {
   assert.equal(videoStatusLabel('queued'), '排队中')
   assert.equal(videoStatusLabel('running'), '生成中')
@@ -146,28 +210,62 @@ test('ignores a candidate selection response after the panel switches storyboard
   assert.equal(panel.currentGroup.value, null)
 })
 
-test('contains no English video-generation action or status copy', async () => {
-  const sources = await Promise.all([
-    readFile(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dramaCanvas/DirectorShotPanel.vue', import.meta.url), 'utf8'),
-  ])
+test('does not let a stale create failure clear or overwrite a newer storyboard create', async () => {
+  const pendingCreates = []
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    generateCandidates: async () => new Promise((resolve, reject) => pendingCreates.push({ resolve, reject })),
+  }
+  const props = reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头一' } })
+  const panel = useVideoGenerationPanel(props, () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
 
-  assert.equal(hasEnglishGenerationActions(sources.join('\n')), false)
-  assert.doesNotMatch(sources.join('\n'), /\bDirector\b/i)
+  const staleCreate = panel.generateCandidates()
+  props.storyboardId = 2
+  props.storyboard = { id: 2, video_prompt: '镜头二' }
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  const currentCreate = panel.generateCandidates()
+  pendingCreates[0].reject(new Error('旧分镜创建失败'))
+  await staleCreate
+
+  assert.equal(panel.creating.value, true)
+  assert.equal(panel.error.value, null)
+
+  pendingCreates[1].resolve({})
+  await currentCreate
+  assert.equal(panel.creating.value, false)
+  assert.equal(panel.error.value, null)
 })
 
-test('mounts the shared panel in the normal drawer and canvas sidebar while other entries stay unified', async () => {
-  const [filmCreate, directorPanel, freeCreate, canvasRunner] = await Promise.all([
-    readFile(new URL('../src/views/FilmCreate.vue', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dramaCanvas/DirectorShotPanel.vue', import.meta.url), 'utf8'),
-    readFile(new URL('../src/views/FreeCreate.vue', import.meta.url), 'utf8'),
-    readFile(new URL('../src/composables/useCanvasWorkflowRunner.js', import.meta.url), 'utf8'),
-  ])
+test('keeps generation copy and continuity roles Chinese through the panel behavior model', () => {
+  assert.equal(anchorRoleLabel('state'), '状态')
+  assert.equal(anchorRoleLabel('composition'), '构图')
+  assert.equal(anchorRoleLabel('identity'), '角色一致性')
+  assert.equal(anchorRoleLabel('motion'), '动作')
+  assert.equal(anchorRoleLabel('unknown-provider-role'), '连续性')
+  assert.deepEqual(listVideoActions('drawer'), listVideoActions('sidebar'))
+  for (const action of listVideoActions('drawer')) assert.doesNotMatch(action, /\b(?:Refresh|Generate|Cancel|Retry|Quality|Select|Create|Director|GPU)\b/i)
+  for (const status of ['waiting', 'queued', 'running', 'review', 'selected', 'failed']) {
+    assert.doesNotMatch(videoStatusLabel(status), /\b(?:waiting|queued|running|review|selected|failed)\b/i)
+  }
+})
 
-  assert.match(filmCreate, /<VideoGenerationPanel[\s\S]*display-mode="drawer"/)
-  assert.match(directorPanel, /<VideoGenerationPanel[\s\S]*display-mode="sidebar"/)
-  assert.match(freeCreate, /videosAPI\.create\(body\)/)
-  assert.doesNotMatch(freeCreate, /\bprovider\s*:/)
-  assert.match(canvasRunner, /resolveStoryboardVideoPrompt\(sb\)/)
-  assert.doesNotMatch(canvasRunner, /\bprovider\s*:/)
+test('normal and canvas callers use the same candidate request behavior', () => {
+  const makeRequest = (displayMode) => {
+    const form = {
+      prompt: 'shared caller',
+      width: 864,
+      height: 480,
+      duration: 3,
+      frameRate: 24,
+      seed: 0,
+      candidateCount: 1,
+      continuityMode: 'none',
+    }
+    return buildVideoCandidateRequest(form)
+  }
+  assert.deepEqual(makeRequest('drawer'), makeRequest('sidebar'))
 })

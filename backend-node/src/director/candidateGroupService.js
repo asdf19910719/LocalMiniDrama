@@ -1,4 +1,7 @@
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const { createArtifactManifest } = require('./artifactManifest');
 
 function id() { return crypto.randomUUID(); }
 function timestamp(value) {
@@ -117,16 +120,145 @@ function videoGenerationRow(row) {
   };
 }
 
-function syncUnifiedCandidateGroup(db, groupId) {
+function configuredStorageRoot(override) {
+  if (override) return path.resolve(String(override));
+  try {
+    const config = require('../config').loadConfig();
+    const configured = config.storage?.local_path || './data/storage';
+    return path.resolve(path.isAbsolute(configured) ? configured : path.join(process.cwd(), configured));
+  } catch (_) {
+    return path.resolve(process.cwd(), 'data', 'storage');
+  }
+}
+
+function storedVideoArtifactPath(localPath, storageRoot) {
+  const value = String(localPath || '').trim();
+  if (!value) return null;
+  const root = configuredStorageRoot(storageRoot);
+  const resolved = path.resolve(path.isAbsolute(value) ? value : path.join(root, value));
+  const relative = path.relative(root, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  try {
+    return fs.statSync(resolved).isFile() ? resolved : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function synthesizedVideoProbe(row, suppliedProbe) {
+  if (suppliedProbe && typeof suppliedProbe === 'object' && !Array.isArray(suppliedProbe)) return suppliedProbe;
+  const width = Number(row.video_width);
+  const height = Number(row.video_height);
+  const frameRate = Number(row.video_frame_rate);
+  const duration = Number(row.video_duration);
+  return {
+    streams: [{
+      codec_type: 'video',
+      width: Number.isFinite(width) && width > 0 ? width : null,
+      height: Number.isFinite(height) && height > 0 ? height : null,
+      avg_frame_rate: Number.isFinite(frameRate) && frameRate > 0 ? `${frameRate}/1` : null,
+      r_frame_rate: Number.isFinite(frameRate) && frameRate > 0 ? `${frameRate}/1` : null,
+    }],
+    format: {
+      duration: Number.isFinite(duration) && duration > 0 ? duration : null,
+    },
+  };
+}
+
+function videoColumnExpression(db, column, alias) {
+  return columnExists(db, 'video_generations', column)
+    ? `video.${column} AS ${alias}`
+    : `NULL AS ${alias}`;
+}
+
+function unifiedCandidateArtifactRow(db, videoGenerationId) {
+  if (!columnExists(db, 'director_candidates', 'video_generation_id') || !tableExists(db, 'video_generations')) return null;
+  return db.prepare(`SELECT candidate.id AS candidate_id, candidate.group_id,
+      candidate.artifact_id, candidate.video_generation_id,
+      video.status AS video_status, video.provider AS video_provider,
+      ${videoColumnExpression(db, 'protocol', 'video_protocol')}, video.model AS video_model,
+      video.video_url, video.local_path AS video_local_path,
+      ${videoColumnExpression(db, 'width', 'video_width')},
+      ${videoColumnExpression(db, 'height', 'video_height')},
+      ${videoColumnExpression(db, 'frame_rate', 'video_frame_rate')},
+      ${videoColumnExpression(db, 'duration', 'video_duration')},
+      video.created_at AS video_created_at, video.updated_at AS video_updated_at,
+      ${videoColumnExpression(db, 'completed_at', 'video_completed_at')}
+    FROM director_candidates candidate
+    JOIN video_generations video ON video.id = candidate.video_generation_id
+    WHERE candidate.video_generation_id = ?`).get(Number(videoGenerationId)) || null;
+}
+
+function linkUnifiedCandidateArtifact(db, videoGenerationId, { storageRoot, ffprobe } = {}) {
+  const row = unifiedCandidateArtifactRow(db, videoGenerationId);
+  if (!row || !['review', 'completed', 'selected'].includes(normalizeVideoStatus(row.video_status))) return null;
+  const current = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(row.artifact_id);
+  if (current?.status === 'ready') return artifactRow(current, { includePath: true });
+
+  const artifactPath = storedVideoArtifactPath(row.video_local_path, storageRoot);
+  if (!artifactPath) return null;
+  const artifactId = `unified-video-${row.video_generation_id}`;
+  const jobId = artifactId;
+  const existing = db.prepare('SELECT * FROM director_artifacts WHERE id = ? OR (job_id = ? AND version = 1) LIMIT 1')
+    .get(artifactId, jobId);
+  if (existing) {
+    db.prepare('UPDATE director_candidates SET artifact_id = ? WHERE id = ?').run(existing.id, row.candidate_id);
+    return artifactRow(existing, { includePath: true });
+  }
+
+  const readyAt = timestamp(row.video_completed_at || row.video_updated_at || row.video_created_at);
+  const mediaProbe = synthesizedVideoProbe(row, ffprobe);
+  const manifest = createArtifactManifest({
+    artifactPath,
+    kind: 'video',
+    ffprobe: mediaProbe,
+    metadata: {
+      source: 'unified_video_generation',
+      videoGenerationId: Number(row.video_generation_id),
+      candidateGroupId: row.group_id,
+      provider: row.video_provider || null,
+      protocol: row.video_protocol || null,
+      model: row.video_model || null,
+      videoUrl: row.video_url || null,
+      localPath: row.video_local_path,
+    },
+    now: readyAt,
+  });
+  db.transaction(() => {
+    db.prepare(`INSERT INTO director_artifacts
+      (id, job_id, attempt_number, version, status, artifact_path, parent_artifact_id,
+       sha256, file_size, ffprobe_json, manifest_json, created_at, ready_at)
+      VALUES (?, ?, 1, 1, 'ready', ?, NULL, ?, ?, ?, ?, ?, ?)`).run(
+      artifactId,
+      jobId,
+      artifactPath,
+      manifest.sha256,
+      manifest.fileSize,
+      JSON.stringify(mediaProbe),
+      manifest.manifestJson,
+      readyAt,
+      readyAt,
+    );
+    db.prepare('UPDATE director_candidates SET artifact_id = ?, updated_at = ? WHERE id = ?')
+      .run(artifactId, readyAt, row.candidate_id);
+  })();
+  return getCandidateArtifact(db, artifactId);
+}
+
+function syncUnifiedCandidateGroup(db, groupId, options = {}) {
   if (!columnExists(db, 'director_candidates', 'video_generation_id') || !tableExists(db, 'video_generations')) return;
   const group = db.prepare('SELECT status FROM director_candidate_groups WHERE id = ?').get(groupId);
   if (!group) return;
-  const rows = db.prepare(`SELECT candidate.id, candidate.status, video.status AS video_status,
-      video.error_msg AS video_error_msg
+  const rows = db.prepare(`SELECT candidate.id, candidate.status, candidate.video_generation_id,
+      video.status AS video_status, video.error_msg AS video_error_msg
     FROM director_candidates candidate
     JOIN video_generations video ON video.id = candidate.video_generation_id
     WHERE candidate.group_id = ?`).all(groupId);
   if (!rows.length) return;
+
+  for (const row of rows) {
+    linkUnifiedCandidateArtifact(db, row.video_generation_id, options);
+  }
 
   const updatedAt = timestamp();
   const updateCandidate = db.prepare(`UPDATE director_candidates
@@ -224,8 +356,8 @@ function candidatesForGroup(db, groupId) {
   });
 }
 
-function getCandidateGroup(db, groupId) {
-  syncUnifiedCandidateGroup(db, groupId);
+function getCandidateGroup(db, groupId, options = {}) {
+  syncUnifiedCandidateGroup(db, groupId, options);
   const group = db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId);
   if (!group) return null;
   return {
@@ -234,19 +366,19 @@ function getCandidateGroup(db, groupId) {
   };
 }
 
-function getCandidateGroupsByShot(db, shotId) {
+function getCandidateGroupsByShot(db, shotId, options = {}) {
   if (!shotId) return [];
   return db.prepare(`SELECT id FROM director_candidate_groups
     WHERE shot_id = ? ORDER BY created_at DESC, id DESC`).all(String(shotId))
-    .map((row) => getCandidateGroup(db, row.id));
+    .map((row) => getCandidateGroup(db, row.id, options));
 }
 
 function getCandidateArtifact(db, artifactId) {
   return artifactRow(db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(artifactId), { includePath: true });
 }
 
-function requireGroup(db, groupId) {
-  const group = getCandidateGroup(db, groupId);
+function requireGroup(db, groupId, options = {}) {
+  const group = getCandidateGroup(db, groupId, options);
   if (!group) throw new Error(`Candidate group not found: ${groupId}`);
   return group;
 }
@@ -366,8 +498,8 @@ function moveCandidateGroupToReview(db, groupId, now) {
   return getCandidateGroup(db, groupId);
 }
 
-function selectCandidate(db, groupId, candidateId, { selectedBy = 'user', reason = '', now } = {}) {
-  const group = requireGroup(db, groupId);
+function selectCandidate(db, groupId, candidateId, { selectedBy = 'user', reason = '', now, storageRoot } = {}) {
+  const group = requireGroup(db, groupId, { storageRoot });
   if (group.status !== 'review') throw new Error(`Candidate group cannot select from ${group.status}`);
   const candidate = db.prepare('SELECT * FROM director_candidates WHERE id = ? AND group_id = ?').get(candidateId, groupId);
   if (!candidate) throw new Error('Candidate is not selectable');
@@ -378,9 +510,7 @@ function selectCandidate(db, groupId, candidateId, { selectedBy = 'user', reason
   const video = isUnified
     ? db.prepare('SELECT * FROM video_generations WHERE id = ? AND deleted_at IS NULL').get(candidate.video_generation_id)
     : null;
-  const artifact = isUnified
-    ? null
-    : db.prepare('SELECT status FROM director_artifacts WHERE id = ?').get(candidate.artifact_id);
+  const artifact = db.prepare('SELECT status FROM director_artifacts WHERE id = ?').get(candidate.artifact_id);
   if (isUnified && !video) throw new Error('Candidate video is not selectable');
   if (isUnified && !['review', 'completed', 'selected'].includes(video.status)) {
     throw new Error('Candidate video is not selectable');
@@ -392,7 +522,7 @@ function selectCandidate(db, groupId, candidateId, { selectedBy = 'user', reason
     db.prepare("UPDATE director_candidates SET status = 'selected', updated_at = ? WHERE id = ?").run(selectedAt, candidateId);
     db.prepare(`UPDATE director_candidate_groups
       SET status = 'selected', selected_candidate_id = ?, selected_artifact_id = ?, selected_by = ?, selected_at = ?, selection_reason = ?, updated_at = ?
-      WHERE id = ?`).run(candidateId, isUnified ? null : candidate.artifact_id, selectedBy, selectedAt, reason, selectedAt, groupId);
+      WHERE id = ?`).run(candidateId, artifact?.status === 'ready' ? candidate.artifact_id : null, selectedBy, selectedAt, reason, selectedAt, groupId);
     if (isUnified) {
       db.prepare(`UPDATE video_generations SET status = 'selected', updated_at = ?
         WHERE id = ? AND status IN ('review', 'completed', 'selected')`).run(selectedAt, video.id);
@@ -402,7 +532,7 @@ function selectCandidate(db, groupId, candidateId, { selectedBy = 'user', reason
     }
   });
   transaction();
-  return getCandidateGroup(db, groupId);
+  return getCandidateGroup(db, groupId, { storageRoot });
 }
 
 function retryFailedCandidate(db, groupId, candidateId, now) {
@@ -473,4 +603,5 @@ module.exports = {
   getCandidateArtifact,
   getCandidateByVideoGenerationId,
   getCandidateSelectionState,
+  linkUnifiedCandidateArtifact,
 };

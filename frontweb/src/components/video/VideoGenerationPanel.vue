@@ -28,6 +28,7 @@
       <template v-if="defaultConfig">
         <span>{{ providerName }}</span>
         <small>模型或工作流：{{ modelName }}</small>
+        <small v-if="generationMode !== 'default'">生成模式：{{ generationModeLabel }}</small>
       </template>
       <small v-else>生成时始终由后端读取唯一默认配置，此处不可切换服务。</small>
     </section>
@@ -80,7 +81,7 @@
         </el-select>
       </el-form-item>
       <el-tag v-if="sourceAnchor || form.anchorId" type="success" effect="plain" closable @close="clearAnchor">
-        已使用连续性锚点 · {{ sourceAnchor?.reference_role || '状态' }}
+        已使用连续性锚点 · {{ anchorRoleLabel(sourceAnchor?.reference_role) }}
       </el-tag>
 
       <el-button
@@ -281,6 +282,7 @@ import {
 const props = defineProps({
   storyboardId: { type: [String, Number], required: true },
   storyboard: { type: Object, default: null },
+  generationContext: { type: Object, default: null },
   displayMode: {
     type: String,
     default: 'drawer',
@@ -291,6 +293,7 @@ const emit = defineEmits(['selected', 'anchor-created', 'close'])
 
 const {
   form,
+  generationMode,
   defaultConfig,
   configLoading,
   configStatus,
@@ -328,11 +331,17 @@ const {
   candidatePreviewUrl,
   candidateMediaId,
   videoStatusLabel,
+  anchorRoleLabel,
 } = useVideoGenerationPanel(props, emit, videosAPI)
 
 const storyboardLabel = computed(() => (
   props.storyboard?.storyboard_number ?? props.storyboardId
 ))
+const generationModeLabel = computed(() => ({
+  universal_omni: '全能多参考图',
+  universal_fallback: '全能兼容模式',
+  classic: '传统首尾帧模式',
+}[generationMode.value] || '默认模式'))
 
 function setDimensions(width, height) {
   form.width = width
@@ -391,9 +400,6 @@ function qualityLabel(status) {
   return labels[String(status || '').toLowerCase()] || '质量检查完成'
 }
 
-function anchorRoleLabel(role) {
-  return { state: '状态', composition: '构图', identity: '角色一致性', motion: '动作' }[role] || '连续性'
-}
 </script>
 
 <style scoped>

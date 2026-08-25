@@ -2357,6 +2357,7 @@
         v-if="videoGenerationTarget"
         :storyboard-id="videoGenerationTarget.id"
         :storyboard="videoGenerationPanelStoryboard"
+        :generation-context="videoGenerationContext"
         display-mode="drawer"
         @selected="onVideoGenerationSelected"
         @anchor-created="onVideoGenerationAnchorCreated"
@@ -3251,6 +3252,28 @@ const videoGenerationPanelStoryboard = computed(() => ({
   ...(videoGenerationTarget.value || {}),
   _videoSourceAnchor: videoGenerationSourceAnchor.value,
 }))
+// Keep the panel aligned with editor-local values until the user explicitly saves the shot.
+const videoGenerationContext = computed(() => {
+  const sb = videoGenerationTarget.value
+  if (!sb?.id) return null
+  const id = sb.id
+  const universal = isSbUniversalMode(id)
+  const firstFrameUrl = toAbsoluteImageUrl(getSbFirstFrameUrl(sb))
+  const lastFrameUrl = toAbsoluteImageUrl(getSbLastFrameUrl(sb))
+  const references = universal
+    ? collectSbOmniReferenceAbsoluteUrls(sb)
+    : [firstFrameUrl, lastFrameUrl].filter(Boolean)
+  return {
+    mode: universal ? 'universal_omni' : 'classic',
+    prompt: buildSbVideoPromptForApi(sb),
+    negativePrompt: sb.negative_prompt || '',
+    imageUrl: firstFrameUrl,
+    firstFrameUrl,
+    lastFrameUrl,
+    referenceImageUrls: references,
+    duration: sbDuration.value[id] ?? sb.duration,
+  }
+})
 const splitByAudioLoading = ref(false)
 const batchImageErrors = ref([])
 // 批量生成分镜视频
