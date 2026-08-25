@@ -240,6 +240,79 @@ test('does not let a stale create failure clear or overwrite a newer storyboard 
   assert.equal(panel.error.value, null)
 })
 
+test('keeps an in-flight create locked per storyboard while the user switches away and back', async () => {
+  const pending = []
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    generateCandidates: async () => new Promise((resolve) => pending.push(resolve)),
+  }
+  const props = reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头一' } })
+  const panel = useVideoGenerationPanel(props, () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  const first = panel.generateCandidates()
+  props.storyboardId = 2
+  props.storyboard = { id: 2, video_prompt: '镜头二' }
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  props.storyboardId = 1
+  props.storyboard = { id: 1, video_prompt: '镜头一' }
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  const duplicate = panel.generateCandidates()
+
+  assert.equal(pending.length, 1)
+  pending[0]({})
+  await Promise.all([first, duplicate])
+})
+
+test('ignores stale cancel, retry, quality, and anchor writes after switching storyboards', async () => {
+  const pending = {}
+  const group = {
+    id: 'selected-group',
+    status: 'selected',
+    selected_artifact_id: 'artifact-1',
+    candidates: [{ id: 'candidate-1', status: 'selected', artifact: { id: 'artifact-1', status: 'ready' } }],
+  }
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async (id) => id === 1 ? { groups: [group], latest: group } : { groups: [], latest: null },
+    listAnchors: async () => [],
+    cancelCandidate: async () => new Promise((resolve, reject) => { pending.cancel = { resolve, reject } }),
+    retryCandidate: async () => new Promise((resolve, reject) => { pending.retry = { resolve, reject } }),
+    analyzeCandidate: async () => new Promise((resolve, reject) => { pending.analyze = { resolve, reject } }),
+    createAnchor: async () => new Promise((resolve, reject) => { pending.anchor = { resolve, reject } }),
+  }
+  const props = reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头一' } })
+  const emitted = []
+  const panel = useVideoGenerationPanel(props, (name, payload) => emitted.push([name, payload]), api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  const candidate = group.candidates[0]
+  const cancel = panel.cancelCandidate(candidate)
+  const retry = panel.retryCandidate(candidate)
+  const analyze = panel.analyzeCandidate(candidate)
+  const anchor = panel.createAnchor()
+  props.storyboardId = 2
+  props.storyboard = { id: 2, video_prompt: '镜头二' }
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  pending.cancel.reject(new Error('旧分镜取消失败'))
+  pending.retry.reject(new Error('旧分镜重试失败'))
+  pending.analyze.resolve({ status: 'failed', issues: ['stale'] })
+  pending.anchor.resolve({ id: 'old-anchor', reference_role: 'state' })
+  await Promise.all([cancel, retry, analyze, anchor])
+
+  assert.equal(panel.error.value, null)
+  assert.deepEqual(panel.qualityReviews.value, {})
+  assert.deepEqual(panel.anchors.value, [])
+  assert.deepEqual(emitted, [])
+})
+
 test('keeps generation copy and continuity roles Chinese through the panel behavior model', () => {
   assert.equal(anchorRoleLabel('state'), '状态')
   assert.equal(anchorRoleLabel('composition'), '构图')
@@ -253,8 +326,45 @@ test('keeps generation copy and continuity roles Chinese through the panel behav
   }
 })
 
-test('normal and canvas callers use the same candidate request behavior', () => {
-  const makeRequest = (displayMode) => {
+test('maps the rendered source-anchor role through the panel model', async () => {
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+  }
+  const panel = useVideoGenerationPanel(reactive({
+    storyboardId: 1,
+    storyboard: { id: 1, _videoSourceAnchor: { id: 'anchor-1', reference_role: 'identity' } },
+  }), () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(anchorRoleLabel(panel.sourceAnchor.value.reference_role), '角色一致性')
+})
+
+test('drawer and sidebar callers preserve distinct layout state while sharing candidate behavior', async () => {
+  const calls = []
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    generateCandidates: async (id, body) => { calls.push([id, body]); return {} },
+  }
+  const makePanel = (displayMode) => useVideoGenerationPanel(reactive({
+    storyboardId: 1,
+    displayMode,
+    storyboard: { id: 1, video_prompt: 'shared caller' },
+  }), () => {}, api)
+  const drawer = makePanel('drawer')
+  const sidebar = makePanel('sidebar')
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  await Promise.all([drawer.generateCandidates(), sidebar.generateCandidates()])
+
+  assert.equal(drawer.displayMode.value, 'drawer')
+  assert.equal(sidebar.displayMode.value, 'sidebar')
+  assert.deepEqual(calls[0][1], calls[1][1])
+})
+
+test('builds the same numeric candidate request for either panel layout', () => {
+  const makeRequest = () => {
     const form = {
       prompt: 'shared caller',
       width: 864,

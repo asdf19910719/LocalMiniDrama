@@ -285,11 +285,23 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   let refreshVersion = 0
   let mutationVersion = 0
   let createVersion = 0
+  let cancelVersion = 0
+  let retryVersion = 0
+  let analyzeVersion = 0
+  let anchorVersion = 0
+  const inFlightCreates = new Map()
   let pollTimer = null
+
+  function requestIsCurrent(storyboardId, version, token = null, currentToken = null) {
+    return version === mutationVersion
+      && String(props.storyboardId) === String(storyboardId)
+      && (token == null || token === currentToken)
+  }
 
   const currentGroup = computed(() => (
     groups.value.find((item) => item.id === activeGroupId.value) || groups.value[0] || null
   ))
+  const displayMode = computed(() => props.displayMode || 'drawer')
   const candidates = computed(() => currentGroup.value?.candidates || [])
   const activeCandidates = computed(() => candidates.value.filter((item) => ACTIVE_STATUSES.has(candidateStatus(item))))
   const queueLabel = computed(() => {
@@ -456,10 +468,13 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   }
 
   async function generateCandidates() {
-    if (creating.value) return
     const requestStoryboardId = props.storyboardId
+    const storyboardKey = String(requestStoryboardId)
+    if (creating.value || inFlightCreates.has(storyboardKey)) return
     const requestVersion = mutationVersion
     const requestCreateVersion = ++createVersion
+    const request = { version: requestVersion, createVersion: requestCreateVersion }
+    inFlightCreates.set(storyboardKey, request)
     creating.value = true
     setError(null)
     try {
@@ -467,7 +482,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
         requestStoryboardId,
         buildVideoCandidateRequest(form),
       )
-      if (requestCreateVersion !== createVersion || requestVersion !== mutationVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      if (requestCreateVersion !== createVersion || !requestIsCurrent(requestStoryboardId, requestVersion)) return
       const group = generated?.group
       if (group) {
         groups.value = [group, ...groups.value.filter((item) => item.id !== group.id)]
@@ -476,47 +491,58 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       syncPolling()
       await refreshHistory({ quiet: true })
     } catch (caught) {
-      if (requestCreateVersion === createVersion && requestVersion === mutationVersion
-        && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
+      if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) setError(caught)
     } finally {
-      if (requestCreateVersion === createVersion && requestVersion === mutationVersion
-        && String(props.storyboardId) === String(requestStoryboardId)) creating.value = false
+      if (inFlightCreates.get(storyboardKey) === request) inFlightCreates.delete(storyboardKey)
+      if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) creating.value = false
     }
   }
 
   async function cancelCandidate(candidate) {
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = mutationVersion
+    const requestToken = ++cancelVersion
+    if (!requestIsCurrent(requestStoryboardId, requestVersion, requestToken, cancelVersion)) return
     setError(null)
     try {
       await videosAPI.cancelCandidate(candidate)
-      await refreshHistory({ quiet: true })
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, cancelVersion)) await refreshHistory({ quiet: true })
     } catch (caught) {
-      setError(caught)
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, cancelVersion)) setError(caught)
     }
   }
 
   async function retryCandidate(candidate) {
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = mutationVersion
+    const requestToken = ++retryVersion
     setError(null)
     try {
       await videosAPI.retryCandidate(candidate)
-      await refreshHistory({ quiet: true })
-      syncPolling()
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, retryVersion)) {
+        await refreshHistory({ quiet: true })
+        syncPolling()
+      }
     } catch (caught) {
-      setError(caught)
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, retryVersion)) setError(caught)
     }
   }
 
   async function analyzeCandidate(candidate) {
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = mutationVersion
+    const requestToken = ++analyzeVersion
     analyzingCandidateId.value = candidate.id
     setError(null)
     try {
-      qualityReviews.value = {
-        ...qualityReviews.value,
-        [candidate.id]: await videosAPI.analyzeCandidate(candidate),
+      const review = await videosAPI.analyzeCandidate(candidate)
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, analyzeVersion)) {
+        qualityReviews.value = { ...qualityReviews.value, [candidate.id]: review }
       }
     } catch (caught) {
-      setError(caught)
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, analyzeVersion)) setError(caught)
     } finally {
-      analyzingCandidateId.value = ''
+      if (requestIsCurrent(requestStoryboardId, requestVersion, requestToken, analyzeVersion)) analyzingCandidateId.value = ''
     }
   }
 
@@ -536,9 +562,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       groups.value = groups.value.map((item) => item.id === selected.id ? selected : item)
       activeGroupId.value = selected.id
       await loadAnchors()
+      if (!requestIsCurrent(requestStoryboardId, requestVersion)) return
       emit?.('selected', { group: selected, candidate })
     } catch (caught) {
-      setError(caught)
+      if (requestIsCurrent(requestStoryboardId, requestVersion)) setError(caught)
     }
   }
 
@@ -555,22 +582,32 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   async function createAnchor() {
     if (!selectedArtifactId.value) return
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = mutationVersion
+    const requestToken = ++anchorVersion
+    const requestArtifactId = selectedArtifactId.value
     creatingAnchor.value = true
     setError(null)
     try {
       const anchor = await videosAPI.createAnchor({
-        artifactId: selectedArtifactId.value,
+        artifactId: requestArtifactId,
         frameNumber: Math.max(0, Math.round(anchorTime.value * selectedFps.value)),
         referenceRole: anchorRole.value,
         referenceUse: anchorRole.value === 'composition' ? 'composition_only' : 'state_anchor',
         operation: anchorOperation.value,
       })
-      await loadAnchors()
-      useAnchor(anchor)
+      if (requestVersion === mutationVersion && requestToken === anchorVersion
+        && String(props.storyboardId) === String(requestStoryboardId)
+        && String(selectedArtifactId.value) === String(requestArtifactId)) {
+        await loadAnchors()
+        useAnchor(anchor)
+      }
     } catch (caught) {
-      setError(caught)
+      if (requestVersion === mutationVersion && requestToken === anchorVersion
+        && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
     } finally {
-      creatingAnchor.value = false
+      if (requestVersion === mutationVersion && requestToken === anchorVersion
+        && String(props.storyboardId) === String(requestStoryboardId)) creatingAnchor.value = false
     }
   }
 
@@ -590,6 +627,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     refreshVersion += 1
     mutationVersion += 1
     createVersion += 1
+    cancelVersion += 1
+    retryVersion += 1
+    analyzeVersion += 1
+    anchorVersion += 1
     stopPolling()
     creating.value = false
     analyzingCandidateId.value = ''
@@ -633,6 +674,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   return {
     form,
+    displayMode,
     generationMode,
     defaultConfig,
     configLoading,
