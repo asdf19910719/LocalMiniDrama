@@ -175,6 +175,27 @@ describe('Director job runner', () => {
     fs.rmSync(outputDir, { recursive: true, force: true });
   });
 
+  it('refuses to execute a unified video candidate through the legacy runner', async () => {
+    db.exec('ALTER TABLE director_candidates ADD COLUMN video_generation_id INTEGER');
+    const seeded = seedPendingJob(db);
+    db.prepare('UPDATE director_candidates SET video_generation_id = 42 WHERE id = ?')
+      .run(seeded.candidateId);
+    let called = false;
+
+    await assert.rejects(
+      () => runDirectorJob(db, seeded.jobId, {
+        comfyClient: { async runWorkflow() { called = true; } },
+        gpuMutex: createGpuMutex(),
+        now: now(),
+      }),
+      (error) => error.code === 'DIRECTOR_UNIFIED_VIDEO_REQUIRED',
+    );
+
+    assert.equal(called, false);
+    assert.equal(getJob(db, seeded.jobId).status, 'failed');
+    assert.equal(getJob(db, seeded.jobId).error_code, 'DIRECTOR_UNIFIED_VIDEO_REQUIRED');
+  });
+
   it('runs a pending job to success and moves its candidate group into review', async () => {
     const seeded = seedPendingJob(db);
     const artifactPath = path.join(outputDir, 'success.mp4');

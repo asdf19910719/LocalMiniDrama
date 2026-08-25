@@ -377,6 +377,11 @@ function ensureAllColumns(database) {
     { name: 'deleted_at',           type: 'TEXT' },
   ]);
 
+  // --- Director candidates -> canonical video task link ---
+  ensureColumns(database, 'director_candidates', [
+    { name: 'video_generation_id', type: 'INTEGER' },
+  ]);
+
   // --- video_merges ---
   ensureColumns(database, 'video_merges', [
     { name: 'episode_id',   type: 'INTEGER' },

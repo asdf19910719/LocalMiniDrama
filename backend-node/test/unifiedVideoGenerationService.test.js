@@ -91,6 +91,9 @@ function createTestDb() {
     CREATE TABLE storyboards (
       id INTEGER PRIMARY KEY,
       duration REAL,
+      video_url TEXT,
+      local_path TEXT,
+      updated_at TEXT,
       deleted_at TEXT
     );
   `);
@@ -214,6 +217,41 @@ function buildService(db, harness, overrides = {}) {
 }
 
 describe('unified video generation lifecycle', () => {
+  it('never demotes a selected provider result back to review', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db);
+    const harness = createHarness({
+      submit: [{ status: 'selected', progress: 100, output: { localPath: 'videos/selected.mp4' } }],
+    });
+    const service = buildService(db, harness);
+
+    const created = await service.createVideoGeneration({ prompt: 'selected result' });
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'selected');
+    db.close();
+  });
+
+  it('selects a review video and makes it the storyboard current video', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db);
+    db.prepare('INSERT INTO storyboards (id) VALUES (12)').run();
+    const harness = createHarness();
+    const service = buildService(db, harness);
+    const created = await service.createVideoGeneration({ storyboard_id: 12, prompt: 'select result' });
+    db.prepare(`UPDATE video_generations SET status = 'review', video_url = ?, local_path = ? WHERE id = ?`)
+      .run('https://cdn.example.test/selected.mp4', 'projects/demo/videos/selected.mp4', created.id);
+
+    const selected = await service.selectVideoGeneration(created.id);
+
+    assert.equal(selected.status, 'selected');
+    assert.deepEqual(db.prepare('SELECT video_url, local_path FROM storyboards WHERE id = 12').get(), {
+      video_url: 'https://cdn.example.test/selected.mp4',
+      local_path: 'projects/demo/videos/selected.mp4',
+    });
+    db.close();
+  });
+
   it('preserves legacy aspect and storyboard-duration normalization at creation', async () => {
     const db = createTestDb();
     seedDefaultConfig(db);

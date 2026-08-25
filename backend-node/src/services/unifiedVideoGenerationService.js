@@ -366,7 +366,7 @@ function createUnifiedVideoGenerationService({
     return new Error(String(outputError || fallback));
   }
 
-  async function persistReview(row, result) {
+  async function persistReview(row, result, { status = 'review' } = {}) {
     const output = result?.output && typeof result.output === 'object' ? result.output : {};
     const videoUrl = output.videoUrl || output.video_url || output.url || null;
     const artifactPath = output.artifactPath || output.artifact_path || null;
@@ -393,22 +393,23 @@ function createUnifiedVideoGenerationService({
       log.info('Ignored late video provider result after local cancellation', { videoGenerationId: row.id });
       return;
     }
+    const finalStatus = status === 'selected' || latest.status === 'selected' ? 'selected' : 'review';
     const now = new Date().toISOString();
     db.prepare(
       `UPDATE video_generations
-       SET status = 'review', video_url = ?, local_path = ?, error_msg = NULL,
+       SET status = ?, video_url = ?, local_path = ?, error_msg = NULL,
            completed_at = ?, updated_at = ? WHERE id = ?`
-    ).run(videoUrl, localPath, now, now, row.id);
+    ).run(finalStatus, videoUrl, localPath, now, now, row.id);
     if (latest.task_id) {
       taskService.updateTaskResult(db, latest.task_id, {
         video_generation_id: row.id,
         video_url: videoUrl,
         local_path: localPath,
         status: 'completed',
-        lifecycle_status: 'review',
+        lifecycle_status: finalStatus,
       });
     }
-    log.info('Unified video generation ready for review', { videoGenerationId: row.id });
+    log.info('Unified video generation completed', { videoGenerationId: row.id, status: finalStatus });
   }
 
   function enqueueOperation(id, operation, delay = 0) {
@@ -455,7 +456,7 @@ function createUnifiedVideoGenerationService({
       if (providerTaskId && providerTaskId !== latest.provider_task_id) {
         db.prepare('UPDATE video_generations SET provider_task_id = ? WHERE id = ?').run(providerTaskId, latest.id);
       }
-      await persistReview({ ...latest, provider_task_id: providerTaskId }, result);
+      await persistReview({ ...latest, provider_task_id: providerTaskId }, result, { status });
       return;
     }
 
@@ -639,6 +640,25 @@ function createUnifiedVideoGenerationService({
     return getVideoGeneration(row.id);
   }
 
+  async function selectVideoGeneration(id) {
+    const row = requireRow(id);
+    if (row.status === 'selected') return getVideoGeneration(row.id);
+    if (!['review', 'completed'].includes(row.status)) {
+      throw new VideoLifecycleError('VIDEO_NOT_SELECTABLE', '仅待审核的视频可以选用', 409, { status: row.status });
+    }
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      db.prepare("UPDATE video_generations SET status = 'selected', updated_at = ? WHERE id = ?")
+        .run(now, row.id);
+      if (row.storyboard_id != null) {
+        db.prepare(`UPDATE storyboards SET video_url = ?, local_path = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`)
+          .run(row.video_url || null, row.local_path || null, now, row.storyboard_id);
+      }
+    })();
+    return getVideoGeneration(row.id);
+  }
+
   async function recoverVideoGenerations() {
     const rows = db.prepare(
       `SELECT * FROM video_generations
@@ -668,6 +688,7 @@ function createUnifiedVideoGenerationService({
     createVideoGeneration,
     cancelVideoGeneration,
     retryVideoGeneration,
+    selectVideoGeneration,
     recoverVideoGenerations,
     processVideoGeneration,
     getVideoGeneration,

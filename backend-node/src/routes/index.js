@@ -104,6 +104,7 @@ function setupRouter(cfg, db, log) {
   });
   const director = directorRoutes(db, log, {
     runner: directorRunner,
+    videoGenerationService: unifiedVideoGenerationService,
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
     artifactRoot: directorArtifactRoot,
