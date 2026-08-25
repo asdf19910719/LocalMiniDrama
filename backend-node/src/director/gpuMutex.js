@@ -24,6 +24,14 @@ function createGpuMutex({ clock = () => Date.now() } = {}) {
     return true;
   }
 
+  function renew(handle, { leaseMs = 15 * 60 * 1000 } = {}) {
+    const current = inspect();
+    if (!current || !handle || typeof handle !== 'object') return null;
+    if (handle.owner !== current.owner || handle.token !== current.token) return null;
+    lease.expiresAt = clock() + leaseMs;
+    return { ...lease };
+  }
+
   async function withLease(owner, options, work) {
     if (typeof options === 'function') {
       work = options;
@@ -37,7 +45,7 @@ function createGpuMutex({ clock = () => Date.now() } = {}) {
     }
   }
 
-  return { acquire, release, inspect, reclaimExpired: () => { const previous = lease; inspect(); return previous && !lease; }, withLease };
+  return { acquire, renew, release, inspect, reclaimExpired: () => { const previous = lease; inspect(); return previous && !lease; }, withLease };
 }
 
 module.exports = { createGpuMutex };

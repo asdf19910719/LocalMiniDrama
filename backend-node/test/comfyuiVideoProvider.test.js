@@ -181,6 +181,111 @@ describe('ComfyUI video provider adapter', () => {
     assert.equal(gpuMutex.inspect(), null);
   });
 
+  test('keeps the GPU lease when upstream cancellation fails', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const fake = createFakeClient();
+    fake.cancel = async () => { throw new Error('interrupt endpoint unavailable'); };
+    const gpuMutex = createGpuMutex();
+    const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
+    await provider.submit(context());
+
+    await assert.rejects(
+      () => provider.cancel({ providerTaskId: 'prompt-1' }),
+      /interrupt endpoint unavailable/
+    );
+
+    assert.equal(gpuMutex.inspect().owner, 'video-1');
+    await assert.rejects(() => provider.submit({ ...context(), taskId: 'video-2' }), /GPU_BUSY/);
+  });
+
+  test('releases the GPU lease when completed artifact finalization fails', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    for (const failure of ['download', 'probe']) {
+      const fake = createFakeClient();
+      fake.getPromptStatus = async () => ({
+        status: 'completed', progress: 100, history: { outputs: { '7': { videos: [{ filename: 'shot.mp4' }] } } },
+      });
+      if (failure === 'download') fake.downloadOutput = async () => { throw new Error('output download failed'); };
+      else fake.probeArtifact = async () => { throw new Error('output probe failed'); };
+      const gpuMutex = createGpuMutex();
+      const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
+      await provider.submit(context());
+
+      await assert.rejects(
+        () => provider.query({ providerTaskId: 'prompt-1' }),
+        new RegExp(`output ${failure} failed`)
+      );
+
+      assert.equal(gpuMutex.inspect(), null);
+      await assert.doesNotReject(() => provider.submit({ ...context(), taskId: `video-after-${failure}` }));
+    }
+  });
+
+  test('renews an active GPU lease on each running query', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    let now = 1_000;
+    const fake = createFakeClient();
+    const gpuMutex = createGpuMutex({ clock: () => now });
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
+    });
+    await provider.submit(context());
+    const token = gpuMutex.inspect().token;
+
+    now = 1_090;
+    await provider.query({ providerTaskId: 'prompt-1' });
+    now = 1_150;
+
+    assert.equal(gpuMutex.inspect().token, token);
+    assert.equal(gpuMutex.inspect().expiresAt, 1_190);
+  });
+
+  test('reacquires an expired lease even when a stale local handle remains', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    let now = 1_000;
+    const fake = createFakeClient();
+    const gpuMutex = createGpuMutex({ clock: () => now });
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
+    });
+    await provider.submit(context());
+    const expiredToken = gpuMutex.inspect().token;
+    now = 1_101;
+    assert.equal(gpuMutex.inspect(), null);
+
+    const recovered = await provider.recover({
+      providerTaskId: 'prompt-1', taskId: 'video-1', leaseMs: 100,
+    });
+
+    assert.equal(recovered.status, 'running');
+    assert.equal(gpuMutex.inspect().owner, 'video-1');
+    assert.notEqual(gpuMutex.inspect().token, expiredToken);
+  });
+
+  test('does not replace another owner when reacquiring a stale lease', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    let now = 1_000;
+    const fake = createFakeClient();
+    const gpuMutex = createGpuMutex({ clock: () => now });
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
+    });
+    await provider.submit(context());
+    now = 1_101;
+    const other = gpuMutex.acquire('other-job', { leaseMs: 100 });
+
+    await assert.rejects(
+      () => provider.recover({ providerTaskId: 'prompt-1', taskId: 'video-1', leaseMs: 100 }),
+      /GPU_BUSY/
+    );
+    assert.equal(gpuMutex.inspect().token, other.token);
+  });
+
   test('tests read-only ComfyUI capabilities without enqueuing inference', async (t) => {
     const fixture = createWorkflowFixture();
     t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));

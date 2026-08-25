@@ -112,6 +112,23 @@ function createComfyUIVideoProvider({
     return gpuMutex.release(handle);
   }
 
+  function maintainActiveLease(providerTaskId, context) {
+    const activeLeaseMs = Number(context.leaseMs || leaseMs);
+    const existing = leases.get(providerTaskId);
+    if (existing) {
+      const renewed = gpuMutex.renew(existing, { leaseMs: activeLeaseMs });
+      if (renewed) {
+        leases.set(providerTaskId, renewed);
+        return renewed;
+      }
+      leases.delete(providerTaskId);
+    }
+    const owner = String(context.taskId || context.videoGenerationId || `comfyui-recovered-${providerTaskId}`);
+    const acquired = gpuMutex.acquire(owner, { leaseMs: activeLeaseMs });
+    leases.set(providerTaskId, acquired);
+    return acquired;
+  }
+
   function normalized(providerTaskId, status, progress, output = null) {
     return {
       providerTaskId,
@@ -168,30 +185,24 @@ function createComfyUIVideoProvider({
   async function query(context = {}) {
     const providerTaskId = providerTaskIdFor(context);
     const state = await comfyClient.getPromptStatus(providerTaskId);
+    const terminal = TERMINAL_STATUSES.has(state.status);
+    if (terminal) releaseLease(providerTaskId);
+    else maintainActiveLease(providerTaskId, context);
     const output = state.status === 'completed'
       ? await resolveCompletedOutput(context, providerTaskId, state)
       : state.output || null;
-    if (TERMINAL_STATUSES.has(state.status)) releaseLease(providerTaskId);
     return normalized(providerTaskId, state.status, state.progress, output);
   }
 
   async function cancel(context = {}) {
     const providerTaskId = providerTaskIdFor(context);
-    try {
-      await comfyClient.cancel(providerTaskId);
-    } finally {
-      releaseLease(providerTaskId);
-    }
+    await comfyClient.cancel(providerTaskId);
+    releaseLease(providerTaskId);
     return normalized(providerTaskId, 'cancelled', 100);
   }
 
   async function recover(context = {}) {
-    const result = await query(context);
-    if (!TERMINAL_STATUSES.has(result.status) && !leases.has(result.providerTaskId)) {
-      const owner = String(context.taskId || context.videoGenerationId || `comfyui-recovered-${result.providerTaskId}`);
-      leases.set(result.providerTaskId, gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) }));
-    }
-    return result;
+    return query(context);
   }
 
   async function testConnection(context = {}) {

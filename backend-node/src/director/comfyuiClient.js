@@ -174,12 +174,20 @@ function createComfyUIClient({
     });
   }
 
+  function executionWasInterrupted(status) {
+    return (Array.isArray(status?.messages) ? status.messages : [])
+      .some((message) => Array.isArray(message) && message[0] === 'execution_interrupted');
+  }
+
   async function getPromptStatus(promptId) {
     const normalizedId = String(promptId || '').trim();
     if (!normalizedId) throw new ComfyUIClientError('ComfyUI prompt_id is required', 'COMFYUI_PROMPT_ID_REQUIRED');
     const { body } = await request(`/history/${encodeURIComponent(normalizedId)}`);
     const history = body && (body[normalizedId] || (body.status || body.outputs ? body : null));
     const status = history?.status || {};
+    if (executionWasInterrupted(status)) {
+      return { status: 'interrupted', progress: 100, history };
+    }
     if (status.status_str === 'error'
       || status.status_str === 'failed'
       || (status.completed === false && status.status_str === 'failure')) {

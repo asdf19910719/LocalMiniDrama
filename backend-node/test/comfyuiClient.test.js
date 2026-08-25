@@ -35,6 +35,26 @@ describe('ComfyUI Director client', () => {
         res.end('{}');
         return;
       }
+      if (req.method === 'GET' && req.url === '/history/prompt-interrupted') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({
+          'prompt-interrupted': {
+            prompt: [3, 'prompt-interrupted', {}, { client_id: 'video-1' }, []],
+            outputs: {},
+            status: {
+              status_str: 'error',
+              completed: false,
+              messages: [
+                ['execution_start', { prompt_id: 'prompt-interrupted' }],
+                ['execution_interrupted', {
+                  prompt_id: 'prompt-interrupted', node_id: '5', node_type: 'MiniMaxH3Director', executed: [],
+                }],
+              ],
+            },
+          },
+        }));
+        return;
+      }
       if (req.method === 'GET' && req.url === '/system_stats') {
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify({ devices: [{ name: 'test-gpu', vram_total: 1024 }] }));
@@ -179,5 +199,16 @@ describe('ComfyUI Director client', () => {
       status: 'running', progress: 0, history: null,
     });
     assert.equal(requests.filter((request) => request.url === '/prompt').length, promptRequestsBefore);
+  });
+
+  it('recognizes a realistic ComfyUI execution_interrupted history as interrupted', async () => {
+    const client = createComfyUIClient({ baseUrl });
+
+    const result = await client.getPromptStatus('prompt-interrupted');
+
+    assert.equal(result.status, 'interrupted');
+    assert.equal(result.progress, 100);
+    assert.equal(result.history.status.status_str, 'error');
+    assert.equal(result.history.status.messages[1][0], 'execution_interrupted');
   });
 });
