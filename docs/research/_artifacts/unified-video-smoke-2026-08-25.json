@@ -42,6 +42,7 @@
   },
   "notes": [
     "真实 ComfyUI GPU 推理，仅执行一个短任务和一个候选。",
+    "请求 durationSeconds=1；H3 工作流按节点最小值输出 5 秒，实际媒体时长以探针结果为准。",
     "ComfyUI system_stats 报告 vram_total 约 17 GB，但 torch_vram_total 约 736 MB；连接检查因此触发显存安全阈值，推理本身已成功完成。",
     "媒体探针使用后端 ffmpeg fallback，未发现系统 ffprobe 可执行文件。"
   ]
