@@ -1,0 +1,1 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {envelope}from'../src/protocol.js';test('protocol validates types',()=>{assert.equal(envelope('JOB_CREATED',{},1,'x').id,'x');assert.throws(()=>envelope('NOPE'));});

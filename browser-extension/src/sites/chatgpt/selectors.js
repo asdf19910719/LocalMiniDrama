@@ -1,0 +1,1 @@
+export const selectors={composer:'textarea#prompt-textarea,[contenteditable="true"]',file:'input[type="file"]',send:'button[data-testid="send-button"]',message:'[data-message-id],[data-testid^="conversation-turn-"]',assistant:'[data-message-author-role="assistant"]'};

@@ -1,0 +1,2 @@
+export const EVENT_TYPES = new Set(['JOB_CREATED','JOB_PREPARED','ATTEMPT_CREATED','ATTEMPT_EVENT','RESULT_IMPORTED','ADAPTER_ERROR']);
+export function envelope(type,payload={},sequence=1,id=crypto.randomUUID()){ if(!EVENT_TYPES.has(type)) throw new Error(`Unknown event: ${type}`); if(!Number.isInteger(sequence)||sequence<1) throw new Error('Invalid sequence'); return {id,type,sequence,payload,createdAt:new Date().toISOString()}; }

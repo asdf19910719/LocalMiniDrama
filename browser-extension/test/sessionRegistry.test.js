@@ -1,0 +1,1 @@
+import test from'node:test';import assert from'node:assert/strict';import{SessionRegistry}from'../src/sessionRegistry.js';test('session keyed by drama/site',async()=>{const d={};const s={get:async k=>d[k],set:async(k,v)=>d[k]=v};const r=new SessionRegistry(s);await r.load();await r.attach(1,'chatgpt',{conversationId:'c'});assert.equal(r.get(1,'chatgpt').conversationId,'c');});

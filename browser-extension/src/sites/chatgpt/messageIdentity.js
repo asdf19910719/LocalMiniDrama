@@ -1,0 +1,2 @@
+export function messageIdentity(node){if(!node)return null;const messageId=node.dataset?.messageId||node.getAttribute?.('data-message-id');const turnId=node.getAttribute?.('data-testid');return messageId?{messageId,confidence:'provider'}:turnId?{messageId:turnId,confidence:'dom'}:null;}
+export function conversationIdentity(url=location.href){const match=new URL(url).pathname.match(/\/c\/([^/]+)/);return match?{conversationId:match[1]}:null;}
