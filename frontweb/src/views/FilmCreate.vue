@@ -1504,11 +1504,9 @@
                     type="primary"
                     size="small"
                     class="sb-generate-video-btn"
-                    :loading="isSbVideoGenerating(sb.id)"
-                    :disabled="!sbCanSubmitVideo(sb) || isSbVideoGenerating(sb.id)"
-                    @click="onGenerateSbVideo(sb)"
+                    @click="openVideoGenerationPanel(sb)"
                   >
-                    生成分镜视频
+                    打开视频生成
                   </el-button>
                 </template>
               </div>
@@ -1529,7 +1527,7 @@
                 </div>
               </div>
               <div v-if="getSbVideo(sb.id)" class="sb-video-actions">
-                <el-button size="small" :loading="isSbVideoGenerating(sb.id)" :disabled="!sbCanSubmitVideo(sb) || isSbVideoGenerating(sb.id)" @click="onGenerateSbVideo(sb)">重新生成</el-button>
+                <el-button size="small" @click="openVideoGenerationPanel(sb)">视频生成与候选</el-button>
                 <el-tooltip v-if="getNextStoryboard(sb.id)" content="提取本视频尾帧，设为下一个分镜的首帧" placement="top">
                   <el-button size="small" :loading="linkingTailFrameIds.has(sb.id)" @click="onLinkTailFrameToNext(sb)">尾帧衔接</el-button>
                 </el-tooltip>
@@ -2347,6 +2345,25 @@
       </template>
     </el-dialog>
 
+    <el-drawer
+      v-model="showVideoGenerationDrawer"
+      direction="rtl"
+      size="min(720px, 96vw)"
+      :with-header="false"
+      destroy-on-close
+      append-to-body
+    >
+      <VideoGenerationPanel
+        v-if="videoGenerationTarget"
+        :storyboard-id="videoGenerationTarget.id"
+        :storyboard="videoGenerationPanelStoryboard"
+        display-mode="drawer"
+        @selected="onVideoGenerationSelected"
+        @anchor-created="onVideoGenerationAnchorCreated"
+        @close="showVideoGenerationDrawer = false"
+      />
+    </el-drawer>
+
     <!-- 分镜视频参数编辑弹窗 -->
     <el-dialog
       v-model="showVideoParamsDialog"
@@ -2659,6 +2676,7 @@ import { isPlayableVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
+import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -3226,6 +3244,13 @@ const inferringParams = ref(false)
 const showVideoParamsDialog = ref(false)
 const videoParamsTarget = ref(null)
 const videoParamsSaving = ref(false)
+const showVideoGenerationDrawer = ref(false)
+const videoGenerationTarget = ref(null)
+const videoGenerationSourceAnchor = ref(null)
+const videoGenerationPanelStoryboard = computed(() => ({
+  ...(videoGenerationTarget.value || {}),
+  _videoSourceAnchor: videoGenerationSourceAnchor.value,
+}))
 const splitByAudioLoading = ref(false)
 const batchImageErrors = ref([])
 // 批量生成分镜视频
@@ -6514,6 +6539,24 @@ async function onRegenerateLayoutDescription(sb) {
   } finally {
     regeneratingLayoutSbIds.delete(sb.id)
   }
+}
+
+function openVideoGenerationPanel(sb) {
+  if (!sb?.id) return
+  videoGenerationTarget.value = sb
+  showVideoGenerationDrawer.value = true
+}
+
+function onVideoGenerationAnchorCreated(anchor) {
+  videoGenerationSourceAnchor.value = anchor || null
+}
+
+async function onVideoGenerationSelected() {
+  const storyboardId = videoGenerationTarget.value?.id
+  if (!storyboardId) return
+  await loadSingleStoryboardMedia(storyboardId)
+  await loadDrama()
+  videoGenerationTarget.value = storyboards.value.find((item) => item.id === storyboardId) || videoGenerationTarget.value
 }
 
 async function onGenerateSbVideo(sb) {

@@ -10,6 +10,7 @@ import {
   toAbsoluteMediaUrl,
 } from '@/utils/canvasWorkflow'
 import { dramaUsesFirstLastFrame, sbVideoFirstLastUrls } from '@/utils/storyboardMedia'
+import { resolveStoryboardVideoPrompt } from '@/composables/useVideoGenerationPanel'
 
 async function pollTaskSimple(taskId, options = {}) {
   if (!taskId) return { status: 'failed', error: '缺少 task_id' }
@@ -56,7 +57,7 @@ export async function runVideoStep(drama, sb, genOpts) {
   }
   const absoluteFirst = toAbsoluteMediaUrl(imgPath)
   const absoluteLast = last ? toAbsoluteMediaUrl(last) : undefined
-  const prompt = sb.video_prompt || sb.polished_prompt || sb.image_prompt || sb.description || ''
+  const prompt = resolveStoryboardVideoPrompt(sb)
   const res = await videosAPI.create({
     drama_id: drama.id,
     storyboard_id: sb.id,

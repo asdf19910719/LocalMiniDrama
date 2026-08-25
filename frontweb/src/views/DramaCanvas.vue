@@ -251,7 +251,9 @@
         :shot-id="activeDirectorShotId"
         :storyboard="activeDirectorStoryboard"
         :source-anchor="directorSourceAnchor"
+        @selected="onDirectorVideoSelected"
         @anchor-created="directorSourceAnchor = $event"
+        @close="closeDirectorShotPanel"
       />
     </div>
 
@@ -398,8 +400,17 @@ const activeDirectorShotId = computed(() => {
   const focused = focusedNodeId.value ? storyboardIdFromNodeId(focusedNodeId.value) : null
   return focused || null
 })
-const activeDirectorStoryboard = computed(() => findStoryboardInDrama(drama.value, activeDirectorShotId.value))
+const activeDirectorStoryboard = computed(() => findStoryboardInDrama(drama.value, activeDirectorShotId.value)?.storyboard || null)
 const directorStoryboards = computed(() => (drama.value?.episodes || []).flatMap((episode) => episode.storyboards || []))
+
+async function onDirectorVideoSelected() {
+  await refreshCanvas(true)
+}
+
+function closeDirectorShotPanel() {
+  selectedStoryboardIds.value = []
+  focusedNodeId.value = null
+}
 
 function syncWorkflowFromDrama() {
   workflowGroups.value = parseWorkflowGroups(drama.value?.metadata)
