@@ -1,0 +1,48 @@
+{
+  "kind": "unified-video-real-inference-smoke",
+  "checkedAt": "2026-08-25T11:33:42.000Z",
+  "provider": "comfyui",
+  "baseUrl": "http://127.0.0.1:8188",
+  "workflowId": "h3-continuity-v1",
+  "storyboardId": 5,
+  "candidateCount": 1,
+  "videoGenerationId": 3,
+  "taskId": "610ce860-4d1b-4711-a808-828c38534e73",
+  "providerTaskId": "9522b6b3-a332-4a39-9997-b8a12b066d0d",
+  "request": {
+    "width": 864,
+    "height": 480,
+    "durationSeconds": 1,
+    "frameRate": 24,
+    "seed": 42,
+    "continuityMode": "none"
+  },
+  "result": {
+    "status": "review",
+    "artifactId": "unified-video-3",
+    "artifactPath": "backend-node/data/storage/projects/0003_20260824_测试项目一/videos/vg_3_d0fd932e.mp4",
+    "fileSize": 523939,
+    "sha256": "de035d18caa0a6ca290f29c1d12b688aa1d1bb4292e20e5f1744b608c097e479",
+    "media": {
+      "codec": "h264",
+      "width": 864,
+      "height": 480,
+      "frameRate": "24/1",
+      "durationSeconds": 5,
+      "audioCodec": "aac"
+    }
+  },
+  "defaultVideoConfigRestored": {
+    "id": 3,
+    "provider": "openai",
+    "name": "Local Shim Video",
+    "baseUrl": "http://127.0.0.1:18080/v1",
+    "model": "local-video-shim",
+    "isDefault": true
+  },
+  "notes": [
+    "真实 ComfyUI GPU 推理，仅执行一个短任务和一个候选。",
+    "ComfyUI system_stats 报告 vram_total 约 17 GB，但 torch_vram_total 约 736 MB；连接检查因此触发显存安全阈值，推理本身已成功完成。",
+    "媒体探针使用后端 ffmpeg fallback，未发现系统 ffprobe 可执行文件。"
+  ]
+}
