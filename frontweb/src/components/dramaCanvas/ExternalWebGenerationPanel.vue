@@ -1,9 +1,51 @@
-<template><section class="external-generation-panel"><header><strong>External Web Image</strong><span>{{ state }}</span></header><el-input v-model="prompt" type="textarea" :rows="4" placeholder="Prompt"/><el-button type="primary" :loading="state==='preparing'" @click="prepare">Prepare Job</el-button><p v-if="error" class="error">{{ error.message }}</p><p v-if="job">Job {{ job.id.slice(0, 8) }} · {{ job.site }}</p></section></template>
+<template>
+  <section class="external-generation-panel">
+    <header><strong>External Web Image</strong><el-tag size="small" effect="plain">{{ state }}</el-tag></header>
+    <el-input v-model="prompt" type="textarea" :rows="4" placeholder="Prompt" />
+    <div class="actions">
+      <el-button type="primary" :loading="state === 'preparing'" @click="prepare">Prepare Job</el-button>
+      <el-button :disabled="!job || ['preparing', 'sending'].includes(state)" :loading="state === 'sending'" @click="send">Send in ChatGPT</el-button>
+      <el-button text :disabled="!job" @click="refresh">Refresh</el-button>
+    </div>
+    <p v-if="error" class="error">{{ error.message }}</p>
+    <p v-if="job" class="job-meta">Job {{ job.id.slice(0, 8) }} / {{ job.site }} / {{ job.prompt_hash?.slice(0, 10) }}</p>
+    <div v-if="results.length" class="results">
+      <div v-for="result in results" :key="result.id" class="result-row">
+        <img :src="result.preview_url || `/api/v1/external-generation/results/${encodeURIComponent(result.id)}/content`" alt="Generated candidate" />
+        <span>Candidate {{ result.candidate_index ?? result.result_index }} · {{ result.status }}</span>
+        <el-button size="small" type="primary" :disabled="result.selected === 1" @click="select(result.id)">{{ result.selected === 1 ? 'Selected' : 'Use for Shot' }}</el-button>
+      </div>
+    </div>
+  </section>
+</template>
+
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useExternalGeneration } from '@/composables/useExternalGeneration'
-const props = defineProps({ dramaId: [Number, String], storyboardId: [Number, String], site: { type: String, default: 'chatgpt' }, provider: { type: String, default: 'chatgpt-web' } })
-const prompt = ref(''); const { state, job, error, prepare: create } = useExternalGeneration()
-async function prepare() { await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, []) }
+
+const props = defineProps({ dramaId: [Number, String], storyboardId: [Number, String], initialPrompt: { type: String, default: '' }, references: { type: Array, default: () => [] }, site: { type: String, default: 'chatgpt' }, provider: { type: String, default: 'chatgpt-web' } })
+const prompt = ref(props.initialPrompt)
+const { state, job, results, error, prepare: create, createAttempt, refresh, selectResult } = useExternalGeneration()
+watch(() => props.initialPrompt, (value) => { if (!prompt.value) prompt.value = value || '' })
+const extensionId = import.meta.env.VITE_EXTERNAL_EXTENSION_ID || ''
+function notifyExtension(message) {
+  if (extensionId && globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime.sendMessage(extensionId, message)
+  if (typeof window !== 'undefined') window.postMessage({ source: 'aistory-external-generation', message }, '*')
+}
+async function prepare() { const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, props.references); notifyExtension({ action: 'prepare', jobId: prepared.id, prompt: prompt.value, references: props.references, conversationId: prepared.conversation_id }) }
+async function send() { const attempt = await createAttempt({ conversationId: job.value?.conversation_id, sent_prompt_hash: job.value?.prompt_hash, status: 'ready_to_send' }); notifyExtension({ action: 'send', dramaId: props.dramaId, site: props.site, attemptId: attempt.id, conversationId: job.value?.conversation_id, payload: attempt }) }
+async function select(resultId) { await selectResult(resultId, props.storyboardId) }
 </script>
-<style scoped>.external-generation-panel{padding:12px;border-top:1px solid var(--el-border-color);display:grid;gap:10px}.external-generation-panel header{display:flex;justify-content:space-between}.error{color:var(--el-color-danger)}</style>
+
+<style scoped>
+.external-generation-panel { padding: 12px; border-top: 1px solid var(--el-border-color); display: grid; gap: 10px; }
+.external-generation-panel header, .actions, .result-row { display: flex; align-items: center; gap: 8px; }
+.external-generation-panel header { justify-content: space-between; }
+.actions { flex-wrap: wrap; }
+.job-meta { font-size: 12px; color: var(--el-text-color-secondary); margin: 0; }
+.error { color: var(--el-color-danger); }
+.results { display: grid; gap: 8px; }
+.result-row { min-height: 56px; border: 1px solid var(--el-border-color); padding: 6px; }
+.result-row img { width: 52px; height: 52px; object-fit: cover; }
+.result-row span { flex: 1; font-size: 12px; }
+</style>

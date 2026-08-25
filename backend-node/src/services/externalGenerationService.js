@@ -35,7 +35,71 @@ function value(input, camel, snake, fallback = null) {
 }
 
 function getExternalJob(db, jobId) {
-  return db.prepare('SELECT * FROM external_generation_jobs WHERE id = ?').get(jobId) || null;
+  const job = db.prepare('SELECT * FROM external_generation_jobs WHERE id = ?').get(jobId) || null;
+  if (!job) return null;
+  job.attempts = db.prepare('SELECT * FROM external_generation_attempts WHERE job_id = ? ORDER BY sequence').all(jobId);
+  for (const attempt of job.attempts) {
+    attempt.results = db.prepare('SELECT * FROM external_generation_results WHERE attempt_id = ? ORDER BY result_index').all(attempt.id);
+  }
+  return job;
+}
+
+const idempotencyLocks = new WeakMap();
+
+function runIdempotent(db, idempotencyKey, operation, callback) {
+  const key = String(idempotencyKey || '').trim();
+  if (!key) throw new Error('Idempotency-Key is required');
+  const readExisting = () => db.prepare('SELECT operation, response_json FROM external_generation_idempotency WHERE idempotency_key = ?').get(key);
+  const existing = readExisting();
+  if (existing) {
+    if (existing.operation !== operation) throw new Error('Idempotency-Key was already used for another operation');
+    return JSON.parse(existing.response_json);
+  }
+  let locks = idempotencyLocks.get(db);
+  if (!locks) { locks = new Map(); idempotencyLocks.set(db, locks); }
+  const lockKey = `${key}\u0000${operation}`;
+  const prior = locks.get(lockKey);
+  if (prior) return prior.then(() => {
+    const replay = readExisting();
+    if (!replay) throw new Error('Idempotent operation did not persist a response');
+    if (replay.operation !== operation) throw new Error('Idempotency-Key was already used for another operation');
+    return JSON.parse(replay.response_json);
+  });
+  const save = (value) => {
+    const responseJson = JSON.stringify(value);
+    if (responseJson === undefined) throw new Error('Idempotent operation must return a value');
+    try {
+      db.prepare('INSERT INTO external_generation_idempotency (idempotency_key, operation, response_json, created_at) VALUES (?, ?, ?, ?)')
+        .run(key, operation, responseJson, new Date().toISOString());
+      return value;
+    } catch (error) {
+      if (!String(error.code || '').includes('CONSTRAINT')) throw error;
+      const replay = readExisting();
+      if (!replay || replay.operation !== operation) throw error;
+      return JSON.parse(replay.response_json);
+    }
+  };
+  let result;
+  let persistedSynchronously = false;
+  try {
+    db.transaction(() => {
+      result = callback();
+      if (!result || typeof result.then !== 'function') {
+        save(result);
+        persistedSynchronously = true;
+      }
+    })();
+  } catch (error) {
+    locks.delete(lockKey);
+    throw error;
+  }
+  if (persistedSynchronously) {
+    locks.delete(lockKey);
+    return result;
+  }
+  const pending = Promise.resolve(result).then(save).finally(() => locks.delete(lockKey));
+  locks.set(lockKey, pending);
+  return pending;
 }
 
 function createExternalJob(db, input = {}) {
@@ -134,6 +198,8 @@ function recordAttemptEvent(db, attemptId, event = {}) {
         (id, attempt_id, idempotency_key, sequence, event_type, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(eventId, attemptId, idempotencyKey, sequence, eventType, payloadJson, timestamp);
+    const nextStatus = { SUBMITTED: 'submitted', GENERATING: 'generating', RESULT_READY: 'completed', COMPLETED: 'completed', ADAPTER_ERROR: 'needs_review' }[eventType];
+    if (nextStatus) db.prepare('UPDATE external_generation_attempts SET status=?, updated_at=? WHERE id=?').run(nextStatus, timestamp, attemptId);
     result = db.prepare('SELECT * FROM external_generation_events WHERE id = ?').get(eventId);
   });
   record();
@@ -187,4 +253,5 @@ module.exports = {
   recordAttemptEvent,
   getProjectSession,
   attachProjectSession,
+  runIdempotent,
 };

@@ -22,7 +22,7 @@ export class Outbox {
   async setCursor(cursor) { if (!Number.isInteger(cursor) || cursor < this.cursor) return this.cursor; this.cursor = cursor; await this.write(this.cursorKey, cursor); return cursor; }
   async flush(send) {
     if (this.flushing) return this.flushing;
-    this.flushing = (async () => { const confirmed = []; for (const event of this.pending()) { const response = await send(event, writeRequest(event)); if (!response || response.ok === false) break; await this.ack(event.id); confirmed.push(event.id); } return confirmed; })().finally(() => { this.flushing = null; });
+    this.flushing = (async () => { const confirmed = []; for (const event of this.pending()) { const response = await send(event, writeRequest(event)); if (!response || response.ok === false) break; await this.ack(event.id); await this.setCursor(event.sequence); confirmed.push(event.id); } return confirmed; })().finally(() => { this.flushing = null; });
     return this.flushing;
   }
 }

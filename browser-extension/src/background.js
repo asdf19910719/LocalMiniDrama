@@ -4,7 +4,7 @@ import { SessionRegistry } from './sessionRegistry.js';
 import { BridgeClient } from './bridgeClient.js';
 import { WorkbenchClient } from './workbenchClient.js';
 
-const DEFAULT_API = 'http://127.0.0.1:5678/api';
+const DEFAULT_API = 'http://127.0.0.1:5679/api/v1';
 const WRITE_PATHS = new Set(['jobs', 'prepare', 'attempts', 'events', 'results/import', 'session/attach']);
 
 function makeEventId() { return globalThis.crypto?.randomUUID?.() || `write-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
@@ -15,7 +15,7 @@ export class BackgroundController {
     this.storage = storage || chromeStorageLocal(chromeApi); this.outbox = new Outbox(this.storage); this.sessions = new SessionRegistry(this.storage); this.queues = new Map(); this.ready = null;
     this.bridge = new BridgeClient(); this.workbench = new WorkbenchClient({ baseUrl: this.apiBase });
   }
-  async init() { if (!this.ready) this.ready = Promise.all([this.outbox.load(), this.sessions.load()]); return this.ready; }
+  async init() { if (!this.ready) this.ready = Promise.all([this.outbox.load(), this.sessions.load(), this.storage.get('bridgeConfig').then((value) => { const config = value?.bridgeConfig || value; if (config?.baseUrl) this.bridge = new BridgeClient(config); })]); return this.ready; }
   async api(path, { method = 'GET', body, idempotencyKey } = {}) {
     const headers = { Accept: 'application/json' }; if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET') headers['Idempotency-Key'] = idempotencyKey || makeEventId();
@@ -25,7 +25,7 @@ export class BackgroundController {
   }
   queueFor(sessionKey, task) { const prior = this.queues.get(sessionKey) || Promise.resolve(); const next = prior.catch(() => {}).then(task); this.queues.set(sessionKey, next.finally(() => { if (this.queues.get(sessionKey) === next) this.queues.delete(sessionKey); })); return next; }
   async emit(type, payload, sequence = 1, id) { const event = envelope(type, payload, sequence, id); await this.outbox.add(event); await this.flush(); return event; }
-  async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : event.type === 'RESULT_IMPORTED' ? 'external-generation/results/import' : event.type === 'JOB_CREATED' ? 'external-generation/jobs' : event.type === 'JOB_PREPARED' ? `external-generation/jobs/${event.payload.jobId}/prepare` : event.type === 'ATTEMPT_CREATED' ? `external-generation/jobs/${event.payload.jobId}/attempts` : null; if (!endpoint) return { ok: true }; const body = event.type === 'ADAPTER_ERROR' ? { ...event.payload, eventType: 'ADAPTER_ERROR' } : event.payload; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
+  async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : null; if (!endpoint) return { ok: true }; const body = { ...event.payload, id: event.id, idempotencyKey: event.id, eventType: event.type === 'ADAPTER_ERROR' ? 'ADAPTER_ERROR' : event.payload.eventType }; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
     if (action === 'flush') return { ok: true, confirmed: await this.flush() };
@@ -38,15 +38,27 @@ export class BackgroundController {
     if (action === 'rebind') return { ok: true, session: await this.sessions.rebind(message.dramaId, message.site, message.session) };
     if (action === 'state') return { ok: true, session: this.sessions.get(message.dramaId, message.site), outbox: this.outbox.pending() };
     if (action === 'prepare') {
-      const tabId = message.tabId ?? sender.tab?.id;
+      const tabId = message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'fill', prompt: message.prompt });
       if (tabId && message.references?.length && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'upload', files: message.references });
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };
     }
-    if (action === 'send') {
-      const tabId = message.tabId ?? sender.tab?.id;
+    if (action === 'send') return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
+      if (message.dramaId !== undefined && message.site && message.conversationId) this.sessions.assertConversation(message.dramaId, message.site, message.conversationId);
+      const tabId = message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
+      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId: message.conversationId } });
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'submit' });
       return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId: message.conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
+    });
+    if (action === 'capturedResult') {
+      const result = await this.workbench.importImage(message.payload);
+      await this.emit('RESULT_IMPORTED', { attemptId: message.payload.attemptId, resultSetId: message.payload.resultSetId, resultIndex: message.payload.resultIndex, result });
+      return { ok: true, result };
+    }
+    if (action === 'adapterError') {
+      const payload = message.payload || {};
+      if (payload.attemptId) await this.emit('ADAPTER_ERROR', payload);
+      return { ok: true };
     }
     if (action === 'confirm') return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId: message.conversationId, eventType: 'CONFIRMED', payload: message.payload || {} }, message.sequence, message.id) };
     if (action === 'event') {

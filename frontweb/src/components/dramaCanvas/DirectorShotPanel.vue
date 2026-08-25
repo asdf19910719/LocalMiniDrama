@@ -131,6 +131,15 @@
       </el-collapse>
       <el-alert v-if="error" type="error" :closable="false" :title="error" />
     </div>
+    <el-collapse class="external-generation-entry">
+      <el-collapse-item name="external-web" title="External web image generation">
+        <ExternalWebGenerationPanel
+          :drama-id="props.dramaId"
+          :storyboard-id="props.shotId"
+          :initial-prompt="promptText"
+        />
+      </el-collapse-item>
+    </el-collapse>
   </aside>
 </template>
 
@@ -138,9 +147,11 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { Check, Close, DataAnalysis, Link, Plus, Refresh } from '@element-plus/icons-vue'
 import { directorAPI } from '@/api/director'
+import ExternalWebGenerationPanel from './ExternalWebGenerationPanel.vue'
 import { buildDirectorGenerationRequest, buildStructuredDirectorGenerationRequest, createDirectorStateGuard, formatArtifactMedia, isSameDirectorShot, normalizeDirectorShotState } from '@/utils/directorPersistence'
 
 const props = defineProps({
+  dramaId: { type: [String, Number], required: true },
   shotId: { type: [String, Number], required: true },
   storyboard: { type: Object, default: null },
   sourceAnchor: { type: Object, default: null },

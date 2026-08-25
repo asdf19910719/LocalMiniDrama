@@ -33,7 +33,7 @@ function safeRelativeName(name) {
   return normalized;
 }
 
-function referenceBytes(db, reference) {
+function referenceBytes(db, reference, job) {
   const supplied = referenceValue(reference, 'content', 'content', referenceValue(reference, 'data', 'data'));
   if (Buffer.isBuffer(supplied)) return Buffer.from(supplied);
   if (typeof supplied === 'string') return Buffer.from(supplied, 'utf8');
@@ -43,12 +43,17 @@ function referenceBytes(db, reference) {
   if (!sourcePath) {
     const assetId = referenceValue(reference, 'assetId', 'asset_id');
     if (assetId !== undefined && assetId !== null) {
-      const asset = db.prepare('SELECT local_path, url FROM assets WHERE id = ?').get(assetId);
+      const asset = db.prepare('SELECT local_path, url FROM assets WHERE id = ? AND drama_id = ?').get(assetId, job.drama_id);
       sourcePath = asset?.local_path;
     }
   }
   if (!sourcePath) throw new Error('Reference content or local path is required');
   const resolved = path.resolve(String(sourcePath));
+  const allowedRoots = String(process.env.EXTERNAL_GENERATION_ALLOWED_REFERENCE_ROOTS || '')
+    .split(path.delimiter).map((item) => item.trim()).filter(Boolean).map((item) => path.resolve(item));
+  if (!allowedRoots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`))) {
+    throw new Error(`Reference file is outside the configured reference roots: ${sourcePath}`);
+  }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) throw new Error(`Reference file not found: ${sourcePath}`);
   return fs.readFileSync(resolved);
 }
@@ -104,7 +109,7 @@ function prepareReferencePackage(db, jobId, references = []) {
 
 function buildManifestOnly(db, job, references) {
   const entries = references.map((reference, index) => {
-    const bytes = referenceBytes(db, reference);
+    const bytes = referenceBytes(db, reference, job);
     const assetId = referenceValue(reference, 'assetId', 'asset_id', null);
     const role = String(referenceValue(reference, 'referenceRole', 'reference_role', referenceValue(reference, 'role', 'role', 'reference')) || 'reference');
     const order = Number(referenceValue(reference, 'order', 'order', referenceValue(reference, 'index', 'index', index)));

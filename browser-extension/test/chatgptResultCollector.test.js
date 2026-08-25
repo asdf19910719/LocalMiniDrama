@@ -20,5 +20,5 @@ test('adapter uploads byte references through DataTransfer and exposes authentic
   globalThis.File = FakeFile; globalThis.DataTransfer = FakeDataTransfer; globalThis.Event = class Event { constructor(type) { this.type = type; } };
   const adapter = new ChatGPTAdapter({ documentRef: doc, fetchImpl: async (_url, options) => { assert.equal(options.credentials, 'include'); return { ok: true, headers: { get: () => 'image/png' }, async arrayBuffer() { return Uint8Array.from([1, 2]).buffer; } }; } });
   await adapter.uploadReferences([{ name: 'ref.png', bytes: Uint8Array.from([1]), mime: 'image/png' }]); assert.equal(fileInput.files.length, 1); adapter.submit(); assert.equal(button.clicked, true);
-  const original = await adapter.fetchOriginal({ sourceUrl: 'https://cdn.test/a.png' }); assert.equal(original.mime, 'image/png'); assert.deepEqual([...original.bytes], [1, 2]);
+  const original = await adapter.fetchOriginal({ sourceUrl: 'https://files.oaiusercontent.com/a.png' }); assert.equal(original.mime, 'image/png'); assert.deepEqual([...original.bytes], [1, 2]);
 });
