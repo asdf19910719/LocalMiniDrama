@@ -28,7 +28,9 @@ test('backs up, migrates idempotently, and reports only provable historical rout
     assert.deepEqual(first.historical_unknown.map((row) => row.id), [1]);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_generations').get().count, 2);
 
-    const second = migrateUnifiedVideo({ db, dbPath: null, backupDir, now: '2026-08-25T00:00:01.000Z' });
+    const second = migrateUnifiedVideo({ db, dbPath, backupDir, now: '2026-08-25T00:00:00.000Z' });
+    assert.notEqual(second.backupPath, first.backupPath);
+    assert.equal(fs.existsSync(second.backupPath), true);
     assert.equal(second.total, 2);
     assert.deepEqual(second.linked.map((row) => row.id), [2]);
     assert.deepEqual(second.historical_unknown.map((row) => row.id), [1]);

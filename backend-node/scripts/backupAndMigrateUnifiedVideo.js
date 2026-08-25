@@ -12,8 +12,11 @@ function backupDatabase(dbPath, backupDir, now) {
   if (!dbPath || !fs.existsSync(dbPath)) return null;
   const targetDir = path.resolve(backupDir || path.dirname(dbPath));
   fs.mkdirSync(targetDir, { recursive: true });
-  const target = path.join(targetDir, `${path.basename(dbPath)}.unified-video-${timestamp(now)}.bak`);
-  fs.copyFileSync(dbPath, target, fs.constants.COPYFILE_EXCL);
+  const stem = path.join(targetDir, `${path.basename(dbPath)}.unified-video-${timestamp(now)}`);
+  let target = `${stem}.bak`;
+  let suffix = 1;
+  while (fs.existsSync(target)) target = `${stem}-${suffix++}.bak`;
+  fs.copyFileSync(dbPath, target);
   return target;
 }
 
