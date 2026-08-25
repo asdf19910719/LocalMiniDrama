@@ -30,6 +30,31 @@ describe('ComfyUI Director client', () => {
         res.end(JSON.stringify({ 'prompt-1': { status: { completed: true, status_str: 'success' }, outputs: { '7': { gifs: [{ filename: 'shot.mp4', subfolder: 'director', type: 'output' }] } } } }));
         return;
       }
+      if (req.method === 'GET' && req.url === '/history/prompt-running') {
+        res.setHeader('content-type', 'application/json');
+        res.end('{}');
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/system_stats') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ devices: [{ name: 'test-gpu', vram_total: 1024 }] }));
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/queue') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ queue_running: [[1, 'prompt-running', {}]], queue_pending: [] }));
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/object_info') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ MiniMaxH3Director: {}, SaveVideo: {} }));
+        return;
+      }
+      if (req.method === 'GET' && req.url === '/models/diffusion_models') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(['minimax-h3.safetensors']));
+        return;
+      }
       if (req.method === 'GET' && req.url.startsWith('/view?')) {
         res.setHeader('content-type', 'video/mp4');
         res.end(Buffer.from('fake-mp4'));
@@ -138,5 +163,21 @@ describe('ComfyUI Director client', () => {
     const interruptRequest = requests.findLast((request) => request.url === '/interrupt');
     assert.deepEqual(JSON.parse(queueRequest.body), { delete: ['prompt-to-cancel'] });
     assert.deepEqual(JSON.parse(interruptRequest.body), { prompt_id: 'prompt-to-cancel' });
+  });
+
+  it('provides non-inference diagnostics and one-shot prompt status reads', async () => {
+    const client = createComfyUIClient({ baseUrl });
+    const promptRequestsBefore = requests.filter((request) => request.url === '/prompt').length;
+
+    assert.equal((await client.getSystemStats()).devices[0].name, 'test-gpu');
+    assert.equal((await client.getQueue()).queue_running[0][1], 'prompt-running');
+    assert.ok((await client.getObjectInfo()).MiniMaxH3Director);
+    assert.deepEqual(await client.getModels(['diffusion_models']), {
+      diffusion_models: ['minimax-h3.safetensors'],
+    });
+    assert.deepEqual(await client.getPromptStatus('prompt-running'), {
+      status: 'running', progress: 0, history: null,
+    });
+    assert.equal(requests.filter((request) => request.url === '/prompt').length, promptRequestsBefore);
   });
 });

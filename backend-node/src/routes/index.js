@@ -28,6 +28,10 @@ const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
 const { createDirectorJobRunner } = require('../director/directorJobRunner');
 const { reconcileRunningJobs } = require('../director/directorJobService');
+const {
+  createComfyUIVideoProvider,
+  createVideoProviderRegistry,
+} = require('../services/videoProviders');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
 
 function setupRouter(cfg, db, log) {
@@ -50,7 +54,6 @@ function setupRouter(cfg, db, log) {
   const storyboards = storyboardRoutes(db, log);
   const tailFrameLink = tailFrameLinkRoutes(db, cfg, log);
   const images = imageRoutes(db, cfg, log);
-  const videos = videoRoutes(db, log);
   const videoMerges = videoMergeRoutes(db, log);
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
@@ -63,11 +66,21 @@ function setupRouter(cfg, db, log) {
     outputDir: directorArtifactRoot,
     allowExperimental: cfg.director.allow_experimental,
   });
+  const videoGpuMutex = createGpuMutex();
+  const videoProviderRegistry = createVideoProviderRegistry({
+    comfyui: createComfyUIVideoProvider({
+      registry: directorRegistry,
+      comfyClient: directorComfyClient,
+      gpuMutex: videoGpuMutex,
+      allowExperimental: cfg.director.allow_experimental,
+    }),
+  });
+  const videos = videoRoutes(db, log, { providerRegistry: videoProviderRegistry });
   reconcileRunningJobs(db);
   const directorRunner = createDirectorJobRunner({
     db,
     comfyClient: directorComfyClient,
-    gpuMutex: createGpuMutex(),
+    gpuMutex: videoGpuMutex,
     registry: directorRegistry,
     logger: log,
   });
