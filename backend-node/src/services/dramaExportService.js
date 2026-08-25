@@ -73,6 +73,12 @@ function parseSbChars(raw) {
   } catch (_) { return []; }
 }
 
+function getLatestPlayableVideo(db, storyboardId) {
+  return db.prepare(
+    "SELECT video_url, local_path FROM video_generations WHERE storyboard_id = ? AND status IN ('completed', 'review', 'selected') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
+  ).get(storyboardId);
+}
+
 /**
  * 导出一个剧集为 ZIP Buffer
  * @returns {Buffer}
@@ -112,9 +118,7 @@ function exportDrama(db, cfg, log, dramaId) {
     ).all(sbId);
     allImagesBySb[sbId] = igs.filter(ig => ig && ig.local_path);
 
-    const vg = db.prepare(
-      "SELECT video_url, local_path FROM video_generations WHERE storyboard_id = ? AND status = 'completed' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1"
-    ).get(sbId);
+    const vg = getLatestPlayableVideo(db, sbId);
     if (vg) videosBySb[sbId] = vg;
   }
 
@@ -447,4 +451,4 @@ function exportDrama(db, cfg, log, dramaId) {
   return { buffer: zip.toBuffer(), title: drama.title };
 }
 
-module.exports = { exportDrama };
+module.exports = { exportDrama, getLatestPlayableVideo };

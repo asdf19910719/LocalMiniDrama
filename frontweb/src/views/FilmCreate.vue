@@ -2655,6 +2655,7 @@ import { propLibraryAPI } from '@/api/propLibrary'
 import { generationSettingsAPI } from '@/api/prompts'
 import { parseScriptIntoEpisodes, episodesListToPlainScript } from '@/utils/scriptEpisodes'
 import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
+import { isPlayableVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
@@ -3728,7 +3729,7 @@ function getQuadGridImage(storyboardId) {
 function getSbAllVideos(storyboardId) {
   const list = sbVideos.value[storyboardId]
   if (!Array.isArray(list)) return []
-  return list.filter((i) => i.status === 'completed' && recordHasPlayableVideoUrl(i))
+  return list.filter((i) => isPlayableVideoGenerationStatus(i.status) && recordHasPlayableVideoUrl(i))
 }
 /** 取该分镜当前选中的视频（尊重 sbSelectedVideoId，否则默认第一条） */
 function getSbVideo(storyboardId) {
@@ -3789,10 +3790,10 @@ function getSbVideoError(storyboardId) {
   if (sbVideoErrors.value[storyboardId]) return sbVideoErrors.value[storyboardId]
   const list = sbVideos.value[storyboardId]
   if (!Array.isArray(list) || list.length === 0) return ''
-  const hasCompleted = list.some((i) => i.status === 'completed' && recordHasPlayableVideoUrl(i))
+  const hasCompleted = list.some((i) => isPlayableVideoGenerationStatus(i.status) && recordHasPlayableVideoUrl(i))
   if (hasCompleted) return ''
   const bogusCompleted = list.find(
-    (i) => i.status === 'completed' && i.video_url && !recordHasPlayableVideoUrl(i)
+    (i) => isPlayableVideoGenerationStatus(i.status) && i.video_url && !recordHasPlayableVideoUrl(i)
   )
   if (bogusCompleted) {
     const u = String(bogusCompleted.video_url || '').trim()
@@ -6971,7 +6972,7 @@ async function startBatchVideoGeneration() {
     // 只处理：有参考图（经典=分镜主图；全能=场景/角色/道具，不含经典主图）且 还没有已完成视频 的分镜
     const todo = boards.filter((sb) => {
       const vidList = sbVideos.value[sb.id] || []
-      if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+      if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
         return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
@@ -7066,13 +7067,13 @@ async function startBatchVideoGeneration() {
             } else if (contiguity && pollRes?.status === 'completed') {
               // 连贯帧：保存本条视频用于下一条
               const vList = sbVideos.value[sb.id] || []
-              prevVideoItem = vList.find((v) => v.status === 'completed') || null
+              prevVideoItem = vList.find((v) => isPlayableVideoGenerationStatus(v.status)) || null
             }
           } else {
             await loadSingleStoryboardMedia(sb.id)
             if (contiguity) {
               const vList = sbVideos.value[sb.id] || []
-              prevVideoItem = vList.find((v) => v.status === 'completed') || null
+              prevVideoItem = vList.find((v) => isPlayableVideoGenerationStatus(v.status)) || null
             }
           }
         } catch (e) {
@@ -7714,7 +7715,7 @@ async function runOneClickPipeline(textOnly = false) {
       await loadStoryboardMedia()
       const boards2 = (store.storyboards || []).filter((sb) => {
         const vidList = sbVideos.value[sb.id] || []
-        if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+        if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
         if (isSbUniversalMode(sb.id)) {
           if (!sbCanSubmitVideo(sb)) return false
           return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
@@ -8054,7 +8055,7 @@ async function runRepairPipeline() {
     await loadStoryboardMedia()
     const boards2 = (store.storyboards || []).filter((sb) => {
       const vidList = sbVideos.value[sb.id] || []
-      if (vidList.some((v) => v.status === 'completed' && recordHasPlayableVideoUrl(v))) return false
+      if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
         return collectSbOmniReferenceAbsoluteUrls(sb).length > 0

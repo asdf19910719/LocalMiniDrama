@@ -74,11 +74,18 @@ function structuredError(error, stage, fallbackCode = 'VIDEO_PROVIDER_ERROR', ex
   const sourceDetails = error?.details && typeof error.details === 'object' && !Array.isArray(error.details)
     ? error.details
     : {};
+  const redactPrivateDetails = (value) => {
+    if (Array.isArray(value)) return value.map(redactPrivateDetails);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !['providertaskid', 'provider_task_id'].includes(String(key).toLowerCase()))
+      .map(([key, detail]) => [key, redactPrivateDetails(detail)]));
+  };
   return {
     code: errorCode(error, fallbackCode),
     message,
     stage,
-    details: { ...sourceDetails, ...extraDetails },
+    details: redactPrivateDetails({ ...sourceDetails, ...extraDetails }),
   };
 }
 
@@ -110,6 +117,7 @@ function createUnifiedVideoGenerationService({
   legacyPollMaxAttempts = 300,
   legacyPollIntervalMs = 10000,
   prepareVideoOutput = videoService.prepareSuccessfulVideoOutput,
+  importVideoArtifact = videoService.importSuccessfulVideoArtifact,
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
   if (!log) throw new Error('Unified video generation service requires a logger');
@@ -143,7 +151,9 @@ function createUnifiedVideoGenerationService({
   }
 
   function configFor(row, snapshot) {
-    const config = db.prepare('SELECT * FROM ai_service_configs WHERE id = ?').get(Number(snapshot.configId));
+    const config = db.prepare(
+      'SELECT * FROM ai_service_configs WHERE id = ? AND deleted_at IS NULL AND is_active = 1'
+    ).get(Number(snapshot.configId));
     const base = config || {};
     return {
       originalConfigFound: Boolean(config),
@@ -241,7 +251,6 @@ function createUnifiedVideoGenerationService({
   function persistFailure(row, error, stage, status = 'failed', fallbackCode = 'VIDEO_PROVIDER_ERROR') {
     const normalized = structuredError(error, stage, fallbackCode, {
       provider: row.provider || null,
-      providerTaskId: row.provider_task_id || null,
     });
     const serialized = JSON.stringify(normalized);
     const now = new Date().toISOString();
@@ -336,7 +345,6 @@ function createUnifiedVideoGenerationService({
 
   function providerFor(context) {
     const providerName = String(context.snapshot.provider || '').trim().toLowerCase();
-    if (providerRegistry.has(providerName)) return providerRegistry.get(providerName);
     if (!context.originalConfigFound) {
       throw new VideoLifecycleError(
         'VIDEO_CONFIG_CREDENTIALS_MISSING',
@@ -345,6 +353,7 @@ function createUnifiedVideoGenerationService({
         { configId: context.snapshot.configId, provider: providerName },
       );
     }
+    if (providerRegistry.has(providerName)) return providerRegistry.get(providerName);
     return legacyProvider(context);
   }
 
@@ -360,7 +369,22 @@ function createUnifiedVideoGenerationService({
   async function persistReview(row, result) {
     const output = result?.output && typeof result.output === 'object' ? result.output : {};
     const videoUrl = output.videoUrl || output.video_url || output.url || null;
-    let localPath = output.localPath || output.local_path || output.artifactPath || null;
+    const artifactPath = output.artifactPath || output.artifact_path || null;
+    const localCandidate = output.localPath || output.local_path || artifactPath || null;
+    let localPath = localCandidate;
+    if (localCandidate && path.isAbsolute(String(localCandidate))) {
+      localPath = typeof importVideoArtifact === 'function'
+        ? await importVideoArtifact(db, log, row, String(localCandidate))
+        : null;
+      if (!localPath) {
+        throw new VideoLifecycleError(
+          'VIDEO_ARTIFACT_IMPORT_FAILED',
+          'Video artifact could not be imported into configured storage',
+          500,
+          { videoGenerationId: row.id },
+        );
+      }
+    }
     if (videoUrl && !localPath && typeof prepareVideoOutput === 'function') {
       localPath = await prepareVideoOutput(db, log, row, videoUrl);
     }
@@ -569,7 +593,7 @@ function createUnifiedVideoGenerationService({
       new Error('用户已取消视频生成'),
       'cancel',
       'VIDEO_CANCELLED',
-      { provider: row.provider || null, providerTaskId: row.provider_task_id || null },
+      { provider: row.provider || null },
     );
     const serialized = JSON.stringify(cancellation);
     const now = new Date().toISOString();

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { taskAPI } from '@/api/task'
 import { imagesAPI } from '@/api/images'
 import { videosAPI } from '@/api/videos'
+import { isActiveVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
 
 /** 资源类型常量 */
 export const GEN_RESOURCE = {
@@ -481,7 +482,7 @@ export const useGenerationTaskStore = defineStore('generationTask', () => {
 
     const attachVideo = (vid) => {
       if (!vid?.storyboard_id || !sbIdSet.has(Number(vid.storyboard_id))) return
-      if (!['pending', 'processing'].includes(vid.status)) return
+      if (!isActiveVideoGenerationStatus(vid.status)) return
       if (!vid.task_id) return
       const resourceId = Number(vid.storyboard_id)
       const sb = storyboards.find((s) => Number(s.id) === resourceId)

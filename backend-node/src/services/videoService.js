@@ -268,6 +268,28 @@ async function prepareSuccessfulVideoOutput(db, log, row, videoUrl) {
   }
 }
 
+async function importSuccessfulVideoArtifact(db, log, row, artifactPath, options = {}) {
+  try {
+    const sourcePath = String(artifactPath || '').trim();
+    if (!sourcePath || !path.isAbsolute(sourcePath)) return null;
+    const sourceStat = fs.statSync(sourcePath);
+    if (!sourceStat.isFile()) return null;
+    const config = options.storagePath ? null : require('../config').loadConfig();
+    const storagePath = options.storagePath || resolveStoragePath(config);
+    const projectSubdir = storageLayout.getProjectStorageSubdir(db, row.drama_id);
+    const { dir, relPrefix } = resolveVideosDir(storagePath, projectSubdir);
+    fs.mkdirSync(dir, { recursive: true });
+    const sourceExtension = path.extname(sourcePath).toLowerCase();
+    const extension = /^\.(mp4|webm|mov|mkv)$/.test(sourceExtension) ? sourceExtension : '.mp4';
+    const name = `vg_${row.id}_${randomUUID().slice(0, 8)}${extension}`;
+    fs.copyFileSync(sourcePath, path.join(dir, name));
+    return `${relPrefix}/${name}`.replace(/\\/g, '/');
+  } catch (error) {
+    log.warn('Import video artifact failed', { videoGenerationId: row?.id, error: error.message });
+    return null;
+  }
+}
+
 function deleteById(db, log, id) {
   const now = new Date().toISOString();
   const result = db.prepare(
@@ -323,6 +345,7 @@ module.exports = {
   configureUnifiedVideoGenerationService,
   deleteById,
   getById,
+  importSuccessfulVideoArtifact,
   list,
   prepareSuccessfulVideoOutput,
   processVideoGeneration,

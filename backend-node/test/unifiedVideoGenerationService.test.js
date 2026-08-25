@@ -1,6 +1,9 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const videoService = require('../src/services/videoService');
 const { createUnifiedVideoGenerationService } = require('../src/services/unifiedVideoGenerationService');
@@ -79,6 +82,9 @@ function createTestDb() {
     );
     CREATE TABLE dramas (
       id INTEGER PRIMARY KEY,
+      title TEXT,
+      created_at TEXT,
+      updated_at TEXT,
       metadata TEXT,
       deleted_at TEXT
     );
@@ -195,7 +201,7 @@ function createHarness({ submit = [], query = [], recover = [] } = {}) {
   };
 }
 
-function buildService(db, harness) {
+function buildService(db, harness, overrides = {}) {
   return createUnifiedVideoGenerationService({
     db,
     log: { info() {}, warn() {}, error() {} },
@@ -203,6 +209,7 @@ function buildService(db, harness) {
     schedule: harness.schedule,
     pollIntervalMs: 0,
     prepareVideoOutput: async () => null,
+    ...overrides,
   });
 }
 
@@ -431,6 +438,130 @@ describe('unified video generation lifecycle', () => {
     assert.equal(failed.status, 'failed');
     assert.equal(failed.error.code, 'VIDEO_CONFIG_CREDENTIALS_MISSING');
     assert.equal(failed.error.stage, 'submit');
+  });
+
+  it('rejects inactive and soft-deleted original configs as missing credential sources', async () => {
+    for (const invalidation of [
+      "UPDATE ai_service_configs SET is_active = 0 WHERE id = ?",
+      "UPDATE ai_service_configs SET deleted_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
+    ]) {
+      const db = createTestDb();
+      const configId = seedDefaultConfig(db, {
+        provider: 'cloud-provider',
+        api_protocol: 'openai',
+        base_url: 'http://127.0.0.1:1',
+      });
+      const harness = createHarness();
+      const service = buildService(db, harness);
+      const created = await service.createVideoGeneration({ prompt: 'invalid credential config' });
+      db.prepare(invalidation).run(configId);
+
+      await harness.runNext();
+
+      const failed = service.getVideoGeneration(created.id);
+      assert.equal(failed.status, 'failed');
+      assert.equal(failed.error.code, 'VIDEO_CONFIG_CREDENTIALS_MISSING');
+      assert.equal(failed.error.stage, 'submit');
+      db.close();
+    }
+  });
+
+  it('does not invoke a registered provider after its original config is inactive', async () => {
+    const db = createTestDb();
+    const configId = seedDefaultConfig(db);
+    const harness = createHarness({
+      submit: [{ status: 'completed', progress: 100, output: { localPath: 'videos/should-not-run.mp4' } }],
+    });
+    const service = buildService(db, harness);
+    const created = await service.createVideoGeneration({ prompt: 'inactive registered config' });
+    db.prepare('UPDATE ai_service_configs SET is_active = 0 WHERE id = ?').run(configId);
+
+    await harness.runNext();
+
+    assert.equal(harness.calls.submit.length, 0);
+    assert.equal(service.getVideoGeneration(created.id).error.code, 'VIDEO_CONFIG_CREDENTIALS_MISSING');
+  });
+
+  it('never persists or returns the private provider task id in structured errors', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db);
+    const providerFailure = Object.assign(new Error('upstream query failed'), {
+      code: 'UPSTREAM_QUERY_FAILED',
+      details: { providerTaskId: 'leaked-from-error', provider_task_id: 'also-private', retryable: true },
+    });
+    const harness = createHarness({
+      submit: [{ providerTaskId: 'private-upstream-id', status: 'queued', progress: 1 }],
+      query: [providerFailure],
+    });
+    const service = buildService(db, harness);
+    const created = await service.createVideoGeneration({ prompt: 'private error test' });
+    await harness.runNext();
+    await harness.runNext();
+
+    const raw = db.prepare('SELECT provider_task_id, error_msg FROM video_generations WHERE id = ?').get(created.id);
+    assert.equal(raw.provider_task_id, 'private-upstream-id');
+    assert.equal(raw.error_msg.includes('private-upstream-id'), false);
+    assert.equal(raw.error_msg.includes('leaked-from-error'), false);
+    assert.equal(raw.error_msg.includes('also-private'), false);
+    const persisted = JSON.parse(raw.error_msg);
+    assert.deepEqual(persisted.details, { retryable: true, provider: 'fake' });
+
+    const publicItem = service.getVideoGeneration(created.id);
+    assert.equal(JSON.stringify(publicItem).includes('private-upstream-id'), false);
+    assert.deepEqual(publicItem.error.details, persisted.details);
+  });
+
+  it('imports a real provider artifact into storage and persists only its storage-relative path', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'video-artifact-contract-'));
+    try {
+      const sourceDir = path.join(tempRoot, 'director-output');
+      const storagePath = path.join(tempRoot, 'storage');
+      fs.mkdirSync(sourceDir, { recursive: true });
+      const artifactPath = path.join(sourceDir, 'comfy-final.mp4');
+      fs.writeFileSync(artifactPath, Buffer.from('real-video-artifact'));
+
+      const db = createTestDb();
+      db.prepare(`
+        INSERT INTO dramas (id, title, created_at, updated_at, metadata)
+        VALUES (9, 'Artifact Project', '2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z', '{}')
+      `).run();
+      const relativePath = await videoService.importSuccessfulVideoArtifact(
+        db,
+        { warn() {} },
+        { id: 42, drama_id: 9 },
+        artifactPath,
+        { storagePath },
+      );
+
+      assert.equal(path.isAbsolute(relativePath), false);
+      assert.match(relativePath, /^projects\/0009_20260102_Artifact_Project\/videos\/vg_42_[a-f0-9]{8}\.mp4$/);
+      assert.equal(fs.readFileSync(path.join(storagePath, relativePath), 'utf8'), 'real-video-artifact');
+      db.close();
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('routes an absolute provider artifact through storage import before persisting review', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db);
+    const artifactPath = path.resolve('director-output', 'absolute-final.mp4');
+    const imported = [];
+    const harness = createHarness({
+      submit: [{ status: 'completed', progress: 100, output: { artifactPath } }],
+    });
+    const service = buildService(db, harness, {
+      importVideoArtifact: async (_db, _log, row, value) => {
+        imported.push({ row, value });
+        return 'projects/demo/videos/imported-final.mp4';
+      },
+    });
+    const created = await service.createVideoGeneration({ prompt: 'artifact wiring' });
+    await harness.runNext();
+
+    assert.equal(imported.length, 1);
+    assert.equal(imported[0].value, artifactPath);
+    assert.equal(service.getVideoGeneration(created.id).local_path, 'projects/demo/videos/imported-final.mp4');
   });
 
   it('persists strict structured provider errors while retaining legacy read fields and history', async () => {
