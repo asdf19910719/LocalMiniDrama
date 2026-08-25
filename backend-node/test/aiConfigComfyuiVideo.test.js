@@ -105,6 +105,7 @@ test('uses the shared ComfyUI provider for a read-only connection check and retu
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].model, 'h3-continuity-v1');
+  assert.equal(calls[0].base_url, 'http://127.0.0.1:8188');
   assert.deepEqual(calls[0].config.settings, { width: 1280, height: 704 });
   assert.deepEqual(res.result.body.data, {
     ok: true,

@@ -309,6 +309,32 @@ describe('ComfyUI video provider adapter', () => {
     );
   });
 
+  test('uses a configured ComfyUI URL for read-only checks without duplicating provider logic', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const defaultClient = createFakeClient();
+    const configuredClient = createFakeClient();
+    const requestedUrls = [];
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry,
+      comfyClient: defaultClient,
+      createComfyClient(baseUrl) {
+        requestedUrls.push(baseUrl);
+        return configuredClient;
+      },
+      gpuMutex: createGpuMutex(),
+    });
+
+    await provider.testConnection({
+      ...context(),
+      base_url: 'http://comfyui.internal:8188/',
+    });
+
+    assert.deepEqual(requestedUrls, ['http://comfyui.internal:8188']);
+    assert.equal(configuredClient.calls.some((call) => call.method === 'getSystemStats'), true);
+    assert.equal(defaultClient.calls.length, 0);
+  });
+
   test('rejects stale workflows and missing ComfyUI runtime capabilities without inference', async (t) => {
     const fixture = createWorkflowFixture();
     t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));

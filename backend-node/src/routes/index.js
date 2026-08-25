@@ -61,16 +61,20 @@ function setupRouter(cfg, db, log) {
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
-  const directorComfyClient = createComfyUIClient({
-    baseUrl: process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
+  const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
+    baseUrl,
     outputDir: directorArtifactRoot,
     allowExperimental: cfg.director.allow_experimental,
   });
+  const directorComfyClient = createDirectorComfyClient(
+    process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
+  );
   const videoGpuMutex = createGpuMutex();
   const videoProviderRegistry = createVideoProviderRegistry({
     comfyui: createComfyUIVideoProvider({
       registry: directorRegistry,
       comfyClient: directorComfyClient,
+      createComfyClient: createDirectorComfyClient,
       gpuMutex: videoGpuMutex,
       allowExperimental: cfg.director.allow_experimental,
     }),

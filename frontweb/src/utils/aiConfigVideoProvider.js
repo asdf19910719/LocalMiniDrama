@@ -27,9 +27,19 @@ function normalizeDimension(value, label) {
   return dimension
 }
 
-export function serializeVideoProviderSettings({ provider, width, height } = {}) {
+export function serializeVideoProviderSettings({ provider, width, height, settings } = {}) {
   if (String(provider || '').trim().toLowerCase() !== 'comfyui') return undefined
+  let existing = {}
+  if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+    existing = settings
+  } else if (typeof settings === 'string' && settings.trim()) {
+    try {
+      const parsed = JSON.parse(settings)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed
+    } catch (_) {}
+  }
   return JSON.stringify({
+    ...existing,
     width: normalizeDimension(width, '宽度'),
     height: normalizeDimension(height, '高度'),
   })

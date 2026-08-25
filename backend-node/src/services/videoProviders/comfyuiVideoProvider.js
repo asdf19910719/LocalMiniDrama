@@ -89,6 +89,7 @@ function modelFolders(selected) {
 function createComfyUIVideoProvider({
   registry,
   comfyClient,
+  createComfyClient,
   gpuMutex,
   allowExperimental = false,
   leaseMs = 30 * 60 * 1000,
@@ -103,6 +104,13 @@ function createComfyUIVideoProvider({
     const workflowId = workflowIdFor(context);
     if (!workflowId) throw new Error('COMFYUI_WORKFLOW_ID_REQUIRED');
     return selectWorkflow(registry, workflowId, { allowExperimental });
+  }
+
+  function clientForConnection(context) {
+    const baseUrl = String(context?.base_url || context?.config?.base_url || '').trim().replace(/\/$/, '');
+    return baseUrl && typeof createComfyClient === 'function'
+      ? createComfyClient(baseUrl)
+      : comfyClient;
   }
 
   function releaseLease(providerTaskId) {
@@ -208,16 +216,17 @@ function createComfyUIVideoProvider({
   async function testConnection(context = {}) {
     const selected = select(context);
     const dimensions = validateH3Dimensions(contextInput(context));
+    const connectionClient = clientForConnection(context);
     const actualSha256 = sha256File(selected.workflowPath);
     if (actualSha256 !== selected.workflowSha256) {
       throw new Error(`ComfyUI 工作流 SHA-256 校验失败: ${selected.id}`);
     }
 
-    const systemStats = await comfyClient.getSystemStats();
-    const queue = await comfyClient.getQueue();
-    const objectInfo = await comfyClient.getObjectInfo();
+    const systemStats = await connectionClient.getSystemStats();
+    const queue = await connectionClient.getQueue();
+    const objectInfo = await connectionClient.getObjectInfo();
     const folders = modelFolders(selected);
-    const models = await comfyClient.getModels(folders);
+    const models = await connectionClient.getModels(folders);
 
     const requiredNodes = [...new Set([...(selected.requiredNodes || []), ...(selected.customNodes || [])])];
     const absentNodes = requiredNodes.filter((node) => !Object.prototype.hasOwnProperty.call(objectInfo || {}, node));

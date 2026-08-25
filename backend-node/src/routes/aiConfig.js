@@ -127,6 +127,7 @@ function testConnection(log, { providerRegistry } = {}) {
         const settings = typeof body.settings === 'string' ? JSON.parse(body.settings || '{}') : (body.settings || {});
         const model = Array.isArray(body.model) ? body.model[0] : body.model;
         const result = await providerRegistry.get('comfyui').testConnection({
+          base_url: body.base_url,
           model,
           config: { settings },
           input: { width: settings.width, height: settings.height },

@@ -1955,7 +1955,10 @@ async function submit() {
       settings = Object.keys(baseS).length ? JSON.stringify(baseS) : null
     }
     if (isComfyUIForm.value) {
-      settings = comfyuiSettings
+      const previous = editingId.value ? list.value.find((row) => row.id === editingId.value) : null
+      settings = previous?.settings
+        ? serializeVideoProviderSettings({ ...form.value, settings: previous.settings })
+        : comfyuiSettings
       modelList = form.value.default_model ? [form.value.default_model] : []
     }
     const payload = {

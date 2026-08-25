@@ -30,3 +30,22 @@ test('serializes ComfyUI width and height as numbers and rejects dimensions outs
     /32 的倍数/,
   )
 })
+
+test('preserves unrelated ComfyUI settings when editing numeric dimensions', () => {
+  assert.equal(
+    serializeVideoProviderSettings({
+      provider: 'comfyui',
+      width: '1280',
+      height: '704',
+      settings: JSON.stringify({ vram_budget_mb: 24000, frame_rate: 24, seed: 42, continuity_mode: 'motion_overlap' }),
+    }),
+    JSON.stringify({
+      vram_budget_mb: 24000,
+      frame_rate: 24,
+      seed: 42,
+      continuity_mode: 'motion_overlap',
+      width: 1280,
+      height: 704,
+    }),
+  )
+})
