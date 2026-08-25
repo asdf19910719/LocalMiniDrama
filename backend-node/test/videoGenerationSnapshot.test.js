@@ -1,0 +1,107 @@
+const { describe, test } = require('node:test');
+const assert = require('node:assert/strict');
+const Database = require('better-sqlite3');
+const { buildVideoConfigSnapshot } = require('../src/services/videoGenerationSnapshot');
+const { runMigrationsAndEnsure } = require('../src/db/migrate');
+
+describe('buildVideoConfigSnapshot', () => {
+  test('keeps only resolved routing and allowlisted non-secret settings', () => {
+    const snapshot = buildVideoConfigSnapshot({
+      config: {
+        id: 7,
+        api_key: 'secret',
+        base_url: 'http://user:password@127.0.0.1:8188/api?token=secret',
+        endpoint: '/prompt',
+        query_endpoint: '/history/{taskId}',
+        settings: {
+          width: 1280,
+          height: 704,
+          frame_rate: 24,
+          workflow_id: 'h3-continuity-v1',
+          workflow_version: '2026-08-25',
+          api_key: 'nested-secret',
+          access_token: 'nested-token',
+          arbitrary_value: 'must-not-be-snapshotted',
+        },
+      },
+      provider: 'comfyui',
+      protocol: 'comfyui',
+      model: 'h3-continuity-v1',
+    });
+
+    assert.equal(snapshot.configId, 7);
+    assert.equal(snapshot.provider, 'comfyui');
+    assert.equal(snapshot.protocol, 'comfyui');
+    assert.equal(snapshot.model, 'h3-continuity-v1');
+    assert.equal(snapshot.api_key, undefined);
+    assert.equal(snapshot.baseUrl, 'http://127.0.0.1:8188/api');
+    assert.deepEqual(snapshot.settings, {
+      width: 1280,
+      height: 704,
+      frame_rate: 24,
+      workflow_id: 'h3-continuity-v1',
+      workflow_version: '2026-08-25',
+    });
+    assert.equal(JSON.stringify(snapshot).includes('secret'), false);
+    assert.equal(JSON.stringify(snapshot).includes('arbitrary_value'), false);
+  });
+
+  test('does not leak secrets through nominally safe settings or endpoint query strings', () => {
+    const snapshot = buildVideoConfigSnapshot({
+      config: {
+        id: 8,
+        endpoint: '/prompt?api_key=secret',
+        query_endpoint: '/history/{taskId}?access_token=secret',
+        settings: { workflow_id: { api_key: 'secret' } },
+      },
+      provider: 'comfyui',
+      protocol: 'comfyui',
+      model: 'h3-continuity-v1',
+    });
+
+    assert.equal(snapshot.endpoint, '/prompt');
+    assert.equal(snapshot.queryEndpoint, '/history/{taskId}');
+    assert.deepEqual(snapshot.settings, {});
+    assert.equal(JSON.stringify(snapshot).includes('secret'), false);
+  });
+});
+
+describe('video generation snapshot migration', () => {
+  test('adds nullable snapshot columns idempotently without changing old rows', () => {
+    const db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE video_generations (
+        id INTEGER PRIMARY KEY,
+        provider TEXT,
+        model TEXT
+      );
+      INSERT INTO video_generations (id, provider, model) VALUES (42, 'legacy-provider', 'legacy-model');
+    `);
+
+    runMigrationsAndEnsure(db);
+    runMigrationsAndEnsure(db);
+
+    const row = db.prepare(`
+      SELECT id, provider, model, config_id, config_snapshot, protocol,
+        width, height, frame_rate, negative_prompt, continuity_mode,
+        anchor_id, candidate_group_id
+      FROM video_generations WHERE id = 42
+    `).get();
+
+    assert.deepEqual(row, {
+      id: 42,
+      provider: 'legacy-provider',
+      model: 'legacy-model',
+      config_id: null,
+      config_snapshot: null,
+      protocol: null,
+      width: null,
+      height: null,
+      frame_rate: null,
+      negative_prompt: null,
+      continuity_mode: null,
+      anchor_id: null,
+      candidate_group_id: null,
+    });
+  });
+});
