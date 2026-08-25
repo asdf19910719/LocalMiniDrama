@@ -56,7 +56,7 @@ function resolveDefaultVideoConfig(db, { requestedModel } = {}) {
     `SELECT * FROM ai_service_configs
      WHERE service_type = 'video'
        AND deleted_at IS NULL
-       AND is_active = 1
+       AND (is_active = 1 OR is_active IS NULL)
        AND is_default = 1`
   ).all();
 

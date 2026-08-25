@@ -306,20 +306,20 @@ async function resumePollForVideoGeneration(db, log, videoGenId) {
   const providerTaskId = row.provider_task_id && String(row.provider_task_id).trim();
   if (!providerTaskId) return;
 
-  const config = videoClient.getDefaultVideoConfig(db, row.model);
-  if (!config) {
-    const now = new Date().toISOString();
-    setVideoGenFailed(db, videoGenId, '未配置视频模型', now);
-    if (row.task_id) taskService.updateTaskError(db, row.task_id, '未配置视频模型');
-    return;
-  }
-
-  activeVideoPolls.add(videoGenId);
-  log.info('Resuming video generation poll', {
-    videoGenId,
-    provider_task_id: providerTaskId,
-  });
   try {
+    const config = videoClient.getDefaultVideoConfig(db, row.model);
+    if (!config) {
+      const now = new Date().toISOString();
+      setVideoGenFailed(db, videoGenId, '未配置视频模型', now);
+      if (row.task_id) taskService.updateTaskError(db, row.task_id, '未配置视频模型');
+      return;
+    }
+
+    activeVideoPolls.add(videoGenId);
+    log.info('Resuming video generation poll', {
+      videoGenId,
+      provider_task_id: providerTaskId,
+    });
     let aspectForVideo = row.aspect_ratio;
     if (aspectForVideo) {
       const n = videoClient.normalizeAspectRatioForApi(aspectForVideo);

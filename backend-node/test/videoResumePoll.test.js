@@ -40,6 +40,18 @@ function createTestDb() {
       completed_at TEXT,
       deleted_at TEXT
     );
+    CREATE TABLE ai_service_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_type TEXT,
+      provider TEXT,
+      api_protocol TEXT,
+      base_url TEXT,
+      model TEXT,
+      default_model TEXT,
+      is_default INTEGER,
+      is_active INTEGER,
+      deleted_at TEXT
+    );
   `);
   return db;
 }
@@ -112,5 +124,29 @@ describe('videoService.resumeFailedVideoPoll', () => {
     assert.equal(task.status, 'processing');
     assert.equal(task.progress, 10);
     assert.match(String(task.message || ''), /继续查询/);
+  });
+
+  it('fails a resumed row durably when default configuration resolution fails', async () => {
+    const db = createTestDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO async_tasks
+        (id, type, status, progress, message, resource_id, created_at, updated_at)
+       VALUES ('resume-config-error', 'video_generation', 'processing', 10, '', '1', ?, ?)`
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO video_generations
+        (drama_id, storyboard_id, provider, prompt, model, status, task_id, provider_task_id, created_at, updated_at)
+       VALUES (1, 10, 'relay', 'p', 'legacy-model', 'processing', 'resume-config-error', 'upstream-task', ?, ?)`
+    ).run(now, now);
+
+    await assert.doesNotReject(() => videoService.resumePollForVideoGeneration(db, silentLog, 1));
+
+    const row = db.prepare('SELECT status, error_msg FROM video_generations WHERE id = 1').get();
+    const task = db.prepare('SELECT status, error FROM async_tasks WHERE id = ?').get('resume-config-error');
+    assert.equal(row.status, 'failed');
+    assert.equal(row.error_msg, 'VIDEO_CONFIG_MISSING');
+    assert.equal(task.status, 'failed');
+    assert.equal(task.error, 'VIDEO_CONFIG_MISSING');
   });
 });

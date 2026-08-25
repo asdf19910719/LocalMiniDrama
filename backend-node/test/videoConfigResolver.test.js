@@ -15,7 +15,7 @@ function createTestDb() {
       model TEXT,
       default_model TEXT,
       is_default INTEGER NOT NULL DEFAULT 0,
-      is_active INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
       deleted_at TEXT
     );
   `);
@@ -99,5 +99,14 @@ describe('resolveDefaultVideoConfig', () => {
     const resolved = resolveDefaultVideoConfig(db);
 
     assert.equal(resolved.model, 'allowed-model');
+  });
+
+  test('treats a null active flag as active', () => {
+    const db = createTestDb();
+    seed(db, { is_default: 1, is_active: null });
+
+    const resolved = resolveDefaultVideoConfig(db);
+
+    assert.equal(resolved.provider, 'openai');
   });
 });
