@@ -1,0 +1,8 @@
+{
+  "name": "local-mini-drama-external-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "test": "node --test test/*.test.js", "start": "node src/bridgeServer.js" },
+  "dependencies": { "sharp": "^0.33.5" }
+}
