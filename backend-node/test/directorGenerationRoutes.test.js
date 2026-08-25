@@ -254,6 +254,41 @@ describe('Director generation routes', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_jobs').get().count, 0);
   });
 
+  it('durably terminates created videos when batch cancellation rejects', async () => {
+    let creationAttempt = 0;
+    const rejectingCancellationLifecycle = {
+      async createVideoGeneration(input) {
+        creationAttempt += 1;
+        if (creationAttempt === 2) throw new Error('second candidate creation failed');
+        return lifecycle.createVideoGeneration(input);
+      },
+      async cancelVideoGeneration() {
+        throw new Error('provider cancellation rejected');
+      },
+    };
+    const rejectingCancellationRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: rejectingCancellationLifecycle,
+    });
+    const res = responseCapture();
+
+    await rejectingCancellationRoutes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 2, structured: { prompt: 'durable batch compensation' } },
+    }, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidate_groups').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM director_candidates').get().count, 0);
+    const video = db.prepare('SELECT status, error_msg, task_id FROM video_generations').get();
+    assert.equal(video.status, 'cancelled');
+    assert.equal(JSON.parse(video.error_msg).code, 'DIRECTOR_BATCH_COMPENSATED');
+    assert.deepEqual(db.prepare('SELECT status, progress FROM async_tasks WHERE id = ?').get(video.task_id), {
+      status: 'failed',
+      progress: 100,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM video_generations WHERE status IN ('waiting', 'queued', 'running', 'processing')").get().count, 0);
+  });
+
   it('rejects invalid candidate, prompt, inputs, and retry values before writing', async () => {
     const invalidBodies = [
       { candidateCount: 0, structured: { prompt: 'shot' } },
@@ -465,6 +500,40 @@ describe('Director generation routes', () => {
       video_url: null,
       local_path: null,
     });
+  });
+
+  it('does not synchronize stale Director rows before unified selection succeeds', async () => {
+    const created = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'read-only selection check' } },
+    }, created);
+    const groupId = created.body.data.group.id;
+    const candidate = created.body.data.group.candidates[0];
+    db.prepare(`UPDATE video_generations SET status = 'review', video_url = ? WHERE id = ?`)
+      .run('https://cdn.example.test/stale-review.mp4', candidate.video_generation_id);
+    db.prepare(`UPDATE director_candidate_groups SET updated_at = ? WHERE id = ?`)
+      .run('2026-08-25T00:01:00.000Z', groupId);
+    db.prepare(`UPDATE director_candidates SET error_code = ?, error_message = ?, updated_at = ? WHERE id = ?`)
+      .run('STALE_SENTINEL', 'must remain untouched', '2026-08-25T00:01:01.000Z', candidate.id);
+    const beforeGroup = JSON.stringify(db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId));
+    const beforeCandidate = JSON.stringify(db.prepare('SELECT * FROM director_candidates WHERE id = ?').get(candidate.id));
+
+    const rejectingRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async selectVideoGeneration() { throw new Error('selection rejected before sync'); },
+      },
+    });
+    const rejected = responseCapture();
+    await rejectingRoutes.selectCandidate({
+      params: { groupId },
+      body: { candidateId: candidate.id },
+    }, rejected);
+
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.body.error.message, 'selection rejected before sync');
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId)), beforeGroup);
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM director_candidates WHERE id = ?').get(candidate.id)), beforeCandidate);
   });
 
   it('leaves a failed Director candidate unchanged when unified retry rejects', async () => {

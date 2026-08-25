@@ -71,6 +71,22 @@ function candidateStatusForVideo(status) {
   return null;
 }
 
+function projectedCandidateStatus(candidate) {
+  if (['selected', 'rejected'].includes(candidate.status)) return candidate.status;
+  if (candidate.video_generation_id != null) {
+    return candidateStatusForVideo(candidate.video_status) || candidate.status;
+  }
+  return candidate.status;
+}
+
+function projectedGroupStatus(candidates) {
+  const statuses = candidates.map(projectedCandidateStatus);
+  if (statuses.every((status) => status === 'pending')) return 'pending';
+  if (statuses.some((status) => ['pending', 'running'].includes(status))) return 'running';
+  if (statuses.some((status) => ['review', 'selected'].includes(status))) return 'review';
+  return 'failed';
+}
+
 function videoError(value) {
   const parsed = parseJson(value);
   if (parsed?.code || parsed?.message) {
@@ -128,11 +144,7 @@ function syncUnifiedCandidateGroup(db, groupId) {
 
     if (group.status === 'selected') return;
     const candidates = db.prepare('SELECT status FROM director_candidates WHERE group_id = ?').all(groupId);
-    let status;
-    if (candidates.every((candidate) => candidate.status === 'pending')) status = 'pending';
-    else if (candidates.some((candidate) => ['pending', 'running'].includes(candidate.status))) status = 'running';
-    else if (candidates.some((candidate) => ['review', 'selected'].includes(candidate.status))) status = 'review';
-    else status = 'failed';
+    const status = projectedGroupStatus(candidates);
     if (status !== group.status) {
       db.prepare('UPDATE director_candidate_groups SET status = ?, updated_at = ? WHERE id = ?')
         .run(status, updatedAt, groupId);
@@ -312,6 +324,26 @@ function getCandidateByVideoGenerationId(db, videoGenerationId) {
     .get(Number(videoGenerationId)) || null;
 }
 
+function getCandidateSelectionState(db, groupId, candidateId) {
+  const group = db.prepare('SELECT * FROM director_candidate_groups WHERE id = ?').get(groupId);
+  if (!group) return null;
+  const hasVideo = columnExists(db, 'director_candidates', 'video_generation_id')
+    && tableExists(db, 'video_generations');
+  const videoSelect = hasVideo ? 'video.status AS video_status' : 'NULL AS video_status';
+  const videoJoin = hasVideo
+    ? 'LEFT JOIN video_generations video ON video.id = candidate.video_generation_id'
+    : '';
+  const candidates = db.prepare(`SELECT candidate.*, ${videoSelect}
+    FROM director_candidates candidate ${videoJoin} WHERE candidate.group_id = ?`).all(groupId);
+  const candidate = candidates.find((entry) => entry.id === candidateId) || null;
+  return {
+    group,
+    candidate,
+    group_status: group.status === 'selected' ? 'selected' : projectedGroupStatus(candidates),
+    candidate_status: candidate ? projectedCandidateStatus(candidate) : null,
+  };
+}
+
 function startCandidateGroup(db, groupId, now) {
   const group = requireGroup(db, groupId);
   if (group.status !== 'pending') throw new Error(`Candidate group cannot start from ${group.status}`);
@@ -440,4 +472,5 @@ module.exports = {
   getCandidateGroupsByShot,
   getCandidateArtifact,
   getCandidateByVideoGenerationId,
+  getCandidateSelectionState,
 };
