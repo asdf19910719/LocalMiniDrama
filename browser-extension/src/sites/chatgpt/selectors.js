@@ -1,1 +1,8 @@
-export const selectors={composer:'textarea#prompt-textarea,[contenteditable="true"]',file:'input[type="file"]',send:'button[data-testid="send-button"]',message:'[data-message-id],[data-testid^="conversation-turn-"]',assistant:'[data-message-author-role="assistant"]'};
+export const selectors = {
+  composer: 'textarea#prompt-textarea, textarea[placeholder*="Message"], [contenteditable="true"]',
+  file: 'input[type="file"]',
+  send: 'button[data-testid="send-button"], button[aria-label*="Send"]',
+  message: '[data-message-id],[data-testid^="conversation-turn-"]',
+  assistant: '[data-message-author-role="assistant"], [data-message-author-role="assistant"] [data-message-id]',
+  user: '[data-message-author-role="user"]',
+};
