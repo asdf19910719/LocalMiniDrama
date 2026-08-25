@@ -40,7 +40,6 @@ function setupRouter(cfg, db, log) {
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
   const settings = settingsRoutes(db, cfg, log);
-  const aiConfig = aiConfigRoutes(db, log, cfg);
   const prop = propRoutes(db, log, cfg);
   const stub = stubRoutes(db, cfg, log);
   const sceneModelMap = sceneModelMapRoutes(db, log);
@@ -76,6 +75,7 @@ function setupRouter(cfg, db, log) {
       allowExperimental: cfg.director.allow_experimental,
     }),
   });
+  const aiConfig = aiConfigRoutes(db, log, cfg, { providerRegistry: videoProviderRegistry });
   const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
     db,
     log,
