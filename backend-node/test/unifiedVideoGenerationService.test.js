@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const videoService = require('../src/services/videoService');
 const { createUnifiedVideoGenerationService } = require('../src/services/unifiedVideoGenerationService');
+const { createH3PromptCompiler } = require('../src/services/h3PromptCompiler');
 
 function createTestDb() {
   const db = new Database(':memory:');
@@ -217,6 +218,44 @@ function buildService(db, harness, overrides = {}) {
 }
 
 describe('unified video generation lifecycle', () => {
+  it('uses the skill-agent compiler for H3 prompt previews', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['h3-continuity-v1']),
+      default_model: 'h3-continuity-v1',
+    });
+    const validPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
+    const calls = [];
+    const compiler = createH3PromptCompiler({
+      skillAgent: {
+        async run(_db, _log, request) {
+          calls.push(request);
+          return {
+            prompt: validPrompt,
+            provenance: {
+              skillName: 'h3-prompt-writing',
+              skillSha256: 'a'.repeat(64),
+              skillResources: ['SKILL.md', 'references/base-en.txt'],
+              toolCallId: 'call-preview',
+            },
+          };
+        },
+      },
+    });
+    const harness = createHarness();
+    const service = buildService(db, harness, { h3PromptCompiler: compiler });
+
+    const result = await service.previewH3Prompt({ prompt: 'a woman walks', duration: 5 });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].mode, 'T2VA');
+    assert.equal(result.compilerVersion, 'h3-skill-agent-v1');
+    assert.equal(result.skillProvenance.toolCallId, 'call-preview');
+    assert.equal(result.compiledPrompt, validPrompt);
+    db.close();
+  });
+
   it('requeues a candidate when ComfyUI reports a temporary GPU lock', async () => {
     const db = createTestDb();
     seedDefaultConfig(db);
