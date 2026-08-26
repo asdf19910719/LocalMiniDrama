@@ -106,3 +106,26 @@ test('createChatCompletion preserves a model tool call and sends forced tool opt
     await server.close();
   }
 });
+
+test('createChatCompletion maps tool transport rejection to a stable H3 error', async () => {
+  const server = await listen((_req, res) => {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'tools are not supported' } }));
+  });
+  const tools = [{ type: 'function', function: { name: 'load_skill', parameters: { type: 'object' } } }];
+  try {
+    await assert.rejects(
+      () => aiClient.createChatCompletion(
+        createConfigDb(server.baseUrl),
+        { info() {}, warn() {}, error() {} },
+        'text',
+        [{ role: 'user', content: 'compile' }],
+        { scene_key: 'h3_prompt_compile', tools, tool_choice: { type: 'function', function: { name: 'load_skill' } } },
+      ),
+      (error) => error.code === 'H3_SKILL_TOOL_CALL_UNSUPPORTED'
+        && error.details.transport === 'chat_completions_tool_call',
+    );
+  } finally {
+    await server.close();
+  }
+});

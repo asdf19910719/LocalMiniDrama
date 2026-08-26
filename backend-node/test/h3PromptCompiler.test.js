@@ -70,17 +70,19 @@ describe('H3 prompt compiler', () => {
   });
 
   it('preserves stable skill-agent error codes as H3PromptError', async () => {
-    const sourceError = Object.assign(new Error('tool calls unavailable'), {
-      code: 'H3_SKILL_TOOL_CALL_UNSUPPORTED',
-      details: { sceneKey: 'h3_prompt_compile' },
-    });
-    const compiler = createH3PromptCompiler({ skillAgent: { run: async () => { throw sourceError; } } });
-    await assert.rejects(
-      () => compiler.compile({}, {}, { prompt: 'rain' }),
-      (error) => error instanceof H3PromptError
-        && error.code === 'H3_SKILL_TOOL_CALL_UNSUPPORTED'
-        && error.details.sceneKey === 'h3_prompt_compile',
-    );
+    for (const code of ['H3_SKILL_TOOL_CALL_UNSUPPORTED', 'SKILL_RESOURCE_MISSING']) {
+      const sourceError = Object.assign(new Error('skill request failed'), {
+        code,
+        details: { sceneKey: 'h3_prompt_compile' },
+      });
+      const compiler = createH3PromptCompiler({ skillAgent: { run: async () => { throw sourceError; } } });
+      await assert.rejects(
+        () => compiler.compile({}, {}, { prompt: 'rain' }),
+        (error) => error instanceof H3PromptError
+          && error.code === code
+          && error.details.sceneKey === 'h3_prompt_compile',
+      );
+    }
   });
 
   it('passes the selected Ref2VA mode and source bundle unchanged to the skill agent', async () => {

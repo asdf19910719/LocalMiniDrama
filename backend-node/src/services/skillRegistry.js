@@ -22,12 +22,24 @@ class SkillRegistryError extends Error {
 }
 
 function safeResourcePath(skillDirectory, resourceName) {
-  const root = path.resolve(SKILL_ROOT);
+  const root = fs.realpathSync(SKILL_ROOT);
   const resolved = path.resolve(root, skillDirectory, resourceName);
   if (!resolved.startsWith(`${root}${path.sep}`)) {
     throw new SkillRegistryError('SKILL_RESOURCE_INVALID', 'Skill resource escapes the configured root');
   }
-  return resolved;
+  let realPath;
+  try {
+    realPath = fs.realpathSync(resolved);
+  } catch (error) {
+    throw new SkillRegistryError('SKILL_RESOURCE_MISSING', `Skill resource is unavailable: ${resourceName}`, {
+      resourceName,
+      cause: error.code || error.message,
+    });
+  }
+  if (!realPath.startsWith(`${root}${path.sep}`)) {
+    throw new SkillRegistryError('SKILL_RESOURCE_INVALID', 'Skill resource escapes the configured root');
+  }
+  return realPath;
 }
 
 function readResource(skillDirectory, resourceName) {

@@ -113,7 +113,8 @@ function createH3PromptCompiler({ skillAgent = defaultSkillAgent } = {}) {
         };
       } catch (error) {
         if (error instanceof H3PromptError) throw error;
-        if (typeof error?.code === 'string' && error.code.startsWith('H3_SKILL_')) {
+        if (typeof error?.code === 'string'
+          && (error.code.startsWith('H3_SKILL_') || error.code.startsWith('SKILL_'))) {
           throw new H3PromptError(error.code, error.message, error.details || {});
         }
         throw new H3PromptError('H3_PROMPT_COMPILE_FAILED', `H3 prompt compilation failed: ${error.message}`, { cause: error.code || error.message });

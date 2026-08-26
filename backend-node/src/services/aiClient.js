@@ -328,15 +328,26 @@ async function createChatCompletion(db, log, serviceType, messages, options = {}
   body = applyDeepSeekChatOptions(config, body);
 
   const startMs = Date.now();
-  const response = await postJSONNonStream(
-    buildChatUrl(config),
-    { Authorization: `Bearer ${config.api_key || ''}` },
-    body,
-    120000,
-  );
+  let response;
+  try {
+    response = await postJSONNonStream(
+      buildChatUrl(config),
+      { Authorization: `Bearer ${config.api_key || ''}` },
+      body,
+      120000,
+    );
+  } catch (error) {
+    if (tools != null || toolChoice != null) {
+      const toolError = new Error('The configured text model rejected the required tool-calling request');
+      toolError.code = 'H3_SKILL_TOOL_CALL_UNSUPPORTED';
+      toolError.details = { transport: 'chat_completions_tool_call' };
+      throw toolError;
+    }
+    throw error;
+  }
   return {
     message: response.json?.choices?.[0]?.message || null,
-    model,
+    model: body.model,
     configId: config.id,
     elapsedMs: Date.now() - startMs,
   };
