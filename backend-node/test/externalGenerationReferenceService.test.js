@@ -52,4 +52,17 @@ describe('external generation reference packages', () => {
     assert.throws(() => prepareReferencePackage(db, job.id, [{ fileName: 'one.txt', content: 'changed' }]), /immutable/i);
     assert.throws(() => getReferenceFile(db, job.id, '../manifest.json'), /unsafe/i);
   });
+
+  it('resolves persisted storage-relative reference paths under the database storage root', () => {
+    const dbFile = path.join(root, 'drama.db');
+    db.close();
+    db = new Database(dbFile);
+    db.exec(fs.readFileSync('migrations/24_external_web_generation.sql', 'utf8'));
+    const storageFile = path.join(root, 'storage', 'projects', '3', 'reference.png');
+    fs.mkdirSync(path.dirname(storageFile), { recursive: true });
+    fs.writeFileSync(storageFile, Buffer.from('stored-reference'));
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'prompt' });
+    const result = prepareReferencePackage(db, job.id, [{ fileName: 'reference.png', localPath: 'projects/3/reference.png' }]);
+    assert.equal(fs.readFileSync(getReferenceFile(db, job.id, result.manifest.references[0].path), 'utf8'), 'stored-reference');
+  });
 });
