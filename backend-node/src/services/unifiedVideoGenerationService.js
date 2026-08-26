@@ -242,6 +242,9 @@ function createUnifiedVideoGenerationService({
       input: inputFor(row),
       promptFormat: row.prompt_format || null,
       promptCompilerVersion: row.prompt_compiler_version || null,
+      skillName: row.h3_skill_name || null,
+      skillSha256: row.h3_skill_sha256 || null,
+      skillProvenance: parseJsonObject(row.h3_skill_provenance),
     };
   }
 
@@ -635,6 +638,13 @@ function createUnifiedVideoGenerationService({
       if (tableHasColumn('video_generations', 'prompt_format')) { columns.push('prompt_format'); values.push(compiled?.promptFormat || null); }
       if (tableHasColumn('video_generations', 'prompt_compiler_version')) { columns.push('prompt_compiler_version'); values.push(compiled?.compilerVersion || null); }
       if (tableHasColumn('video_generations', 'prompt_compile_status')) { columns.push('prompt_compile_status'); values.push(compiled ? 'compiled' : null); }
+      if (tableHasColumn('video_generations', 'h3_skill_name')) { columns.push('h3_skill_name'); values.push(compiled?.skillProvenance?.skillName || null); }
+      if (tableHasColumn('video_generations', 'h3_skill_sha256')) { columns.push('h3_skill_sha256'); values.push(compiled?.skillProvenance?.skillSha256 || null); }
+      if (tableHasColumn('video_generations', 'h3_skill_provenance')) {
+        const provenance = compiled?.skillProvenance;
+        columns.push('h3_skill_provenance');
+        values.push(provenance ? JSON.stringify(provenance) : null);
+      }
       columns.push('status', 'task_id', 'created_at', 'updated_at');
       values.push('waiting', task.id, now, now);
       const result = db.prepare(`INSERT INTO video_generations (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`).run(...values);
