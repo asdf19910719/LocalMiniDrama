@@ -1,0 +1,1 @@
+import test from'node:test';import assert from'node:assert/strict';import{conversationIdentity}from'../src/sites/chatgpt/messageIdentity.js';test('conversation id',()=>assert.equal(conversationIdentity('https://chatgpt.com/c/abc').conversationId,'abc'));

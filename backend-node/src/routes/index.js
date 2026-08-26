@@ -23,6 +23,7 @@ const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const directorRoutes = require('./director');
+const externalGenerationRoutes = require('./externalGeneration');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
@@ -116,6 +117,8 @@ function setupRouter(cfg, db, log) {
     allowedLocalRoots: directorAllowedRoots,
     ffmpegPath: getFfmpegPath(),
   });
+  const externalGeneration = externalGenerationRoutes(db, cfg, log);
+  r.use(externalGeneration);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);

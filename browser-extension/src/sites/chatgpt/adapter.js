@@ -1,0 +1,120 @@
+import { selectors } from './selectors.js';
+import { conversationIdentity, messageIdentity, identityMatches } from './messageIdentity.js';
+import { extractResultSet } from './resultCollector.js';
+
+function asFile(input) {
+  if (typeof File !== 'undefined' && input instanceof File) return input;
+  const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes || []);
+  return new File([bytes], input.name || 'reference', { type: input.mime || 'application/octet-stream' });
+}
+
+export class ChatGPTAdapter {
+  constructor({ documentRef = globalThis.document, fetchImpl = globalThis.fetch, locationRef = globalThis.location } = {}) {
+    this.document = documentRef; this.fetchImpl = fetchImpl; this.location = locationRef; this.referencesReady = false; this.capturePaused = false; this.seenResultFingerprints = new Set(); this.pendingObserver = null;
+  }
+  matches(url = this.location?.href || '') { return /^https:\/\/(www\.)?chatgpt\.com\//.test(url); }
+  getConversationIdentity() { return conversationIdentity(this.location?.href); }
+  fillPrompt(prompt) {
+    const element = this.document?.querySelector(selectors.composer); if (!element) throw new Error('ADAPTER_BROKEN');
+    element.focus?.();
+    if ('value' in element) element.value = prompt;
+    else {
+      const execDocument = element.ownerDocument || this.document;
+      execDocument?.execCommand?.('selectAll', false);
+      const inserted = execDocument?.execCommand?.('insertText', false, String(prompt));
+      if (!inserted) element.textContent = prompt;
+    }
+    const Input = globalThis.InputEvent || globalThis.Event; element.dispatchEvent?.(new Input('input', { bubbles: true, inputType: 'insertText', data: prompt })); return { promptLength: String(prompt).length };
+  }
+  async uploadReferences(files = []) {
+    const input = this.document?.querySelector(selectors.file); if (!input) throw new Error('ADAPTER_BROKEN');
+    if (typeof DataTransfer === 'undefined') throw new Error('ADAPTER_BROKEN');
+    const dataTransfer = new DataTransfer(); for (const file of files) dataTransfer.items.add(asFile(file)); input.files = dataTransfer.files; input.dispatchEvent?.(new Event('change', { bubbles: true }));
+    this.referencesReady = input.files.length === files.length; if (!this.referencesReady) throw new Error('UPLOAD_NOT_CONFIRMED');
+    return { count: input.files.length };
+  }
+  submit() {
+    if (!this.referencesReady && this.document?.querySelector(selectors.file)?.files?.length) this.referencesReady = true;
+    const button = this.document?.querySelector(selectors.send); if (!button || button.disabled) throw new Error('NOT_READY');
+    button.click(); this.referencesReady = false;
+    return { submittedAt: new Date().toISOString() };
+  }
+  findAssistant(identity) {
+    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
+    return nodes.find((node) => identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
+  }
+  recoverAttempt(identity, onResult, onError = () => {}) {
+    this.capturePaused = false;
+    this.seenResultFingerprints.clear();
+    const requested = identity?.assistantMessageId || identity?.messageId;
+    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
+    const target = requested
+      ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }))
+      : nodes.filter((node) => messageIdentity(node)).at(-1);
+    const assistantMessageId = messageIdentity(target)?.messageId;
+    if (!target || !assistantMessageId) {
+      const error = Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' });
+      onError(error);
+      return () => {};
+    }
+    return this.observeAttempt({ ...identity, assistantMessageId }, onResult, onError);
+  }
+  conversationRoot() {
+    return this.document?.querySelector?.('main[data-conversation-id], main') || this.document?.body || this.document;
+  }
+  beginAttempt(identity, onResult, onError = () => {}) {
+    this.capturePaused = false;
+    const known = new Set([...this.conversationRoot()?.querySelectorAll?.(selectors.assistant) || []]
+      .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
+    if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
+    const root = this.conversationRoot();
+    if (!root) { onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); return () => {}; }
+    let activeStop = null;
+    let activeAssistantId = null;
+    const discover = () => {
+      const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
+        .map((node) => ({ node, id: messageIdentity(node)?.messageId }))
+        .filter((entry) => entry.id && (!known.has(entry.id) || (entry.id === activeAssistantId && entry.node !== activeStop?.root)));
+      if (!candidates.length) return;
+      const selected = candidates[candidates.length - 1];
+      activeStop?.();
+      known.add(selected.id);
+      activeAssistantId = selected.id;
+      activeStop = this.observeAttempt({ ...identity, assistantMessageId: selected.id }, onResult, onError);
+    };
+    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(discover);
+    if (!observer) { onError(Object.assign(new Error('ADAPTER_BROKEN'), { code: 'ADAPTER_BROKEN' })); return () => {}; }
+    observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+    discover();
+    const stop = () => { observer.disconnect(); activeStop?.(); this.pendingObserver = null; };
+    stop.stop = stop;
+    this.pendingObserver = stop;
+    return stop;
+  }
+  observeAttempt(identity, onResult, onError = () => {}) {
+    if (this.capturePaused) { const stopped = () => {}; stopped.stop = stopped; return stopped; }
+    const root = this.findAssistant(identity); if (!root) { this.capturePaused = true; onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); const stopped = () => {}; stopped.stop = stopped; return stopped; }
+    const emit = () => { try { const result = extractResultSet(root, identity); if (result.status === 'UNBOUND_RESULT' || result.status === 'NEEDS_REVIEW') { this.capturePaused = true; onError(Object.assign(new Error(result.status), { code: result.status })); } else {
+      const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
+      if (fresh.length) {
+        Promise.resolve(onResult({ ...result, results: fresh }))
+          .then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint)))
+          .catch(() => { this.capturePaused = true; });
+      }
+    } } catch (error) { this.capturePaused = true; onError(error); } };
+    emit(); const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(emit); observer?.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+    const stop = () => observer?.disconnect(); stop.stop = stop; stop.root = root; return stop;
+  }
+  resumeCapture() { this.capturePaused = false; this.seenResultFingerprints.clear(); }
+  extractResultSet(node, attempt) { return extractResultSet(node, attempt); }
+  async fetchOriginal(result, fetchImpl = this.fetchImpl) {
+    const sourceUrl = result?.sourceUrl || result?.url; if (!sourceUrl) throw new Error('ORIGINAL_URL_MISSING');
+    let parsed;
+    try { parsed = new URL(sourceUrl); } catch (_) { throw new Error('ORIGINAL_URL_INVALID'); }
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:' || !(host === 'chatgpt.com' || host.endsWith('.chatgpt.com') || host === 'openai.com' || host.endsWith('.openai.com') || host.endsWith('.oaiusercontent.com'))) throw new Error('ORIGINAL_URL_NOT_ALLOWED');
+    const response = await fetchImpl(sourceUrl, { credentials: 'include' }); if (!response.ok) throw new Error(`ORIGINAL_FETCH_FAILED:${response.status}`);
+    const bytes = new Uint8Array(await response.arrayBuffer()); const mime = response.headers?.get?.('content-type') || result.sourceMime || 'application/octet-stream';
+    return { bytes, mime: mime.split(';')[0], sourceUrl };
+  }
+}

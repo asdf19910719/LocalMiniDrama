@@ -248,6 +248,7 @@
       <DirectorTimelinePanel v-if="timelineVisible" :storyboards="directorStoryboards" />
       <DirectorShotPanel
         v-else-if="activeDirectorShotId"
+        :drama-id="dramaId"
         :shot-id="activeDirectorShotId"
         :storyboard="activeDirectorStoryboard"
         :source-anchor="directorSourceAnchor"
