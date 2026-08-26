@@ -223,3 +223,96 @@ describe('structured Director workflow input', () => {
     assert.deepEqual(timeline.segments[0].refs, timeline.global.refs);
   });
 });
+
+describe('official H3 Director R2V registry and adapter', () => {
+  it('loads the official Sage workflow with explicit capabilities and API format', () => {
+    const { loadRegistry, selectWorkflow } = loadSut();
+    const registry = loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json'));
+    const entry = selectWorkflow(registry, 'minimax_h3_director_r2v');
+
+    assert.equal(entry.family, 'h3_director');
+    assert.equal(entry.adapter, 'h3_director_r2v');
+    assert.equal(entry.variant, 'official_sage');
+    assert.equal(entry.workflowFormat, 'api');
+    assert.equal(entry.inputSchemaVersion, 1);
+    assert.deepEqual(entry.capabilities.modes, ['single_reference']);
+    assert.equal(entry.capabilities.maxReferenceImages, 9);
+    assert.equal(entry.capabilities.supportsContinuity, false);
+    assert.equal(entry.capabilities.supportsSage, true);
+    assert.equal(entry.capabilities.supportsAudio, true);
+    assert.ok(entry.requiredNodes.includes('PathchSageAttentionKJ'));
+    assert.ok(entry.requiredNodes.includes('MiniMaxH3Director'));
+  });
+
+  it('builds a single-segment r2v prompt from staged references and disables continuity', () => {
+    const { loadRegistry, selectWorkflow, getWorkflowAdapter } = loadSut();
+    const registry = loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json'));
+    const entry = selectWorkflow(registry, 'minimax_h3_director_r2v');
+    const adapter = getWorkflowAdapter(entry);
+    const template = loadSut().readWorkflowTemplate(entry.workflowPath);
+    const prompt = adapter.buildPrompt(template, {
+      prompt: 'A character walks through a misty forest.',
+      width: 864,
+      height: 480,
+      durationSeconds: 5,
+      frameRate: 24,
+      seed: 42,
+    }, [
+      { index: 0, comfyFilename: 'ref_abc.png', role: 'subject' },
+      { index: 1, comfyFilename: 'ref_def.png', role: 'environment' },
+    ]);
+    const node = Object.values(prompt).find((candidate) => candidate.class_type === 'MiniMaxH3Director');
+    const timeline = JSON.parse(node.inputs.timeline_data);
+
+    assert.equal(node.inputs.task_type, 'r2v');
+    assert.equal(timeline.output.continuityEnabled, false);
+    assert.equal(timeline.segments.length, 1);
+    assert.equal(timeline.segments[0].id, 's0');
+    assert.equal(timeline.segments[0].continuityFromPrev, false);
+    assert.deepEqual(timeline.segments[0].refs, [
+      { index: 0, imageFile: 'ref_abc.png', role: 'subject' },
+      { index: 1, imageFile: 'ref_def.png', role: 'environment' },
+    ]);
+  });
+
+  it('accepts raw reference aliases when staging has not run yet', () => {
+    const { loadRegistry, selectWorkflow, getWorkflowAdapter, readWorkflowTemplate } = loadSut();
+    const entry = selectWorkflow(loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json')), 'minimax_h3_director_r2v');
+    const adapter = getWorkflowAdapter(entry);
+    const prompt = adapter.buildPrompt(readWorkflowTemplate(entry.workflowPath), {
+      prompt: 'A subject turns toward camera.',
+      referenceImageUrls: ['subject.png'],
+      continuityMode: 'none',
+    });
+    const node = Object.values(prompt).find((candidate) => candidate.class_type === 'MiniMaxH3Director');
+    assert.equal(JSON.parse(node.inputs.timeline_data).segments[0].refs[0].imageFile, 'subject.png');
+  });
+
+  it('fails closed for unknown adapters and invalid reference counts', () => {
+    const { getWorkflowAdapter } = loadSut();
+    assert.throws(() => getWorkflowAdapter({ adapter: 'missing-adapter' }), /adapter/i);
+    const adapter = getWorkflowAdapter({ adapter: 'h3_director_r2v' });
+    assert.throws(() => adapter.validate({ prompt: 'x', stagedAssets: [] }), /reference/i);
+    assert.throws(() => adapter.validate({ prompt: 'x', stagedAssets: Array.from({ length: 10 }, (_, i) => ({ comfyFilename: `r${i}.png` })) }), /reference/i);
+  });
+
+  it('rejects a UI-format graph and a graph missing Sage or ref2va requirements', () => {
+    const { loadRegistry, sha256File } = loadSut();
+    const { root, workflowPath } = writeWorkflowFixture();
+    const uiPath = path.join(root, 'ui.json');
+    fs.writeFileSync(uiPath, JSON.stringify({ nodes: [], links: [], groups: [] }));
+    const base = registryFor(workflowPath, sha256File(workflowPath));
+    const makeEntry = (target, requiredNodes = ['MiniMaxH3Director']) => ({
+      ...base.workflows[0], id: 'minimax_h3_director_r2v', workflowPath: target,
+      workflowSha256: sha256File(target), family: 'h3_director', adapter: 'h3_director_r2v',
+      variant: 'official_sage', workflowFormat: 'api', inputSchemaVersion: 1,
+      capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false, supportsAudio: true, supportsSage: true },
+      requiredNodes,
+    });
+    const registryPath = path.join(root, 'registry.json');
+    fs.writeFileSync(registryPath, JSON.stringify({ version: 1, workflows: [makeEntry(uiPath)] }));
+    assert.throws(() => loadRegistry(registryPath), /API|format|prompt/i);
+    fs.writeFileSync(registryPath, JSON.stringify({ version: 1, workflows: [makeEntry(workflowPath)] }));
+    assert.throws(() => loadRegistry(registryPath), /required|missing|Sage|ref2va/i);
+  });
+});

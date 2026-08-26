@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { validateWorkflowGovernance } = require('./directorGovernance');
+const { getAdapter } = require('./adapters');
 
 const REGISTRY_VERSION = 1;
 const WORKFLOW_STATUSES = new Set(['verified', 'configured', 'invalid']);
@@ -165,6 +166,44 @@ function validateEntryShape(entry, index) {
   if (entry.status === 'verified' && !String(entry.verifiedEvidence || '').trim()) {
     throw new WorkflowRegistryError(`verified workflow ${entry.id} must declare verifiedEvidence`);
   }
+  if (entry.workflowFormat != null && entry.workflowFormat !== 'api') {
+    throw new WorkflowRegistryError(`workflow ${entry.id} must use ComfyUI API format`);
+  }
+  const hasAdapterMetadata = ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']
+    .some((field) => field in entry);
+  if (hasAdapterMetadata) {
+    for (const field of ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']) {
+      if (!(field in entry)) throw new WorkflowRegistryError(`workflow ${entry.id} missing ${field}`);
+    }
+    if (!String(entry.family).trim() || !String(entry.variant).trim() || !String(entry.adapter).trim()) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} family, adapter, and variant are required`);
+    }
+    if (!Number.isInteger(entry.inputSchemaVersion) || entry.inputSchemaVersion < 1) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} inputSchemaVersion must be a positive integer`);
+    }
+    if (!entry.capabilities || typeof entry.capabilities !== 'object' || Array.isArray(entry.capabilities)) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} capabilities must be an object`);
+    }
+    if (!Array.isArray(entry.capabilities.modes) || entry.capabilities.modes.length === 0) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} capabilities.modes must be a non-empty array`);
+    }
+    if (!Number.isInteger(entry.capabilities.maxReferenceImages) || entry.capabilities.maxReferenceImages < 1) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} must declare maxReferenceImages`);
+    }
+    if (typeof entry.capabilities.supportsContinuity !== 'boolean') {
+      throw new WorkflowRegistryError(`workflow ${entry.id} must declare supportsContinuity`);
+    }
+  }
+  if (entry.adapter != null) {
+    try {
+      getAdapter(entry.adapter);
+    } catch (error) {
+      throw new WorkflowRegistryError(error.message, 'ADAPTER_NOT_FOUND');
+    }
+  }
+  if (entry.capabilities != null && (!entry.capabilities || typeof entry.capabilities !== 'object')) {
+    throw new WorkflowRegistryError(`workflow ${entry.id} capabilities must be an object`);
+  }
   try {
     validateWorkflowGovernance(entry, entry.id);
   } catch (error) {
@@ -224,6 +263,17 @@ function loadRegistry(registryPath, options = {}) {
       throw new WorkflowRegistryError(`workflow ${entry.id} is missing required nodes: ${missingNodes.join(', ')}`);
     }
 
+    if (entry.adapter) {
+      const adapter = getAdapter(entry.adapter);
+      if (typeof adapter.describeCapabilities === 'function') {
+        try {
+          adapter.describeCapabilities(workflow);
+        } catch (error) {
+          throw new WorkflowRegistryError(`workflow ${entry.id} adapter validation failed: ${error.message}`, error.code || 'WORKFLOW_UNSUPPORTED');
+        }
+      }
+    }
+
     return {
       ...entry,
       workflowPath,
@@ -232,6 +282,13 @@ function loadRegistry(registryPath, options = {}) {
       modelFiles: [...entry.modelFiles],
       customNodes: [...entry.customNodes],
       inputSchema: { ...entry.inputSchema },
+      workflowFormat: entry.workflowFormat || 'api',
+      family: entry.family || null,
+      adapter: entry.adapter || null,
+      adapterVersion: entry.adapterVersion || null,
+      variant: entry.variant || null,
+      capabilities: entry.capabilities ? cloneJson(entry.capabilities) : null,
+      inputSchemaVersion: entry.inputSchemaVersion || 1,
       provenance: cloneJson(entry.provenance),
       runtimeLock: cloneJson(entry.runtimeLock),
     };
@@ -267,4 +324,11 @@ module.exports = {
   normalizeReferenceImages,
   selectWorkflow,
   sha256File,
+  getWorkflowAdapter: (workflow) => {
+    try {
+      return getAdapter(workflow?.adapter || workflow);
+    } catch (error) {
+      throw new WorkflowRegistryError(error.message, 'ADAPTER_NOT_FOUND');
+    }
+  },
 };

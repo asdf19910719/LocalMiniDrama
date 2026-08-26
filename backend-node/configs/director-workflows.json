@@ -2,6 +2,125 @@
   "version": 1,
   "workflows": [
     {
+      "id": "minimax_h3_director_r2v",
+      "status": "verified",
+      "workflowPath": "workflows/minimax_h3_director_r2v.json",
+      "workflowSha256": "sha256:f80969d8c86a1fbabb20fc0ce915a4fa494fe016a256ef47939ef8ce5d4599fe",
+      "family": "h3_director",
+      "adapter": "h3_director_r2v",
+      "adapterVersion": "v1",
+      "variant": "official_sage",
+      "workflowFormat": "api",
+      "requiredNodes": [
+        "UNETLoader",
+        "CLIPLoader",
+        "VAELoader",
+        "MiniMaxH3Director",
+        "CreateVideo",
+        "SaveVideo",
+        "PathchSageAttentionKJ"
+      ],
+      "modelFiles": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax_h3_video_vae_fp16.safetensors",
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "customNodes": [
+        "MiniMaxH3Director",
+        "CreateVideo",
+        "SaveVideo",
+        "PathchSageAttentionKJ"
+      ],
+      "capabilities": {
+        "modes": [
+          "single_reference"
+        ],
+        "maxReferenceImages": 9,
+        "supportsContinuity": false,
+        "supportsAudio": true,
+        "supportsSage": true
+      },
+      "inputSchemaVersion": 1,
+      "inputSchema": {
+        "common": [
+          "prompt",
+          "negativePrompt",
+          "width",
+          "height",
+          "durationSeconds",
+          "frameRate",
+          "seed"
+        ],
+        "references": [
+          "referenceImageUrls"
+        ],
+        "advanced": [
+          "refMaxSize",
+          "continuityOverlapFrames"
+        ]
+      },
+      "provenance": {
+        "provider": "MiniMax",
+        "modelFamily": "MiniMax H3 Director R2V",
+        "source": "official ComfyUI API workflow with KJ Sage",
+        "license": {
+          "status": "review_required",
+          "evidence": "docs/research/director-production-governance.md"
+        }
+      },
+      "runtimeLock": {
+        "comfyUIVersion": "0.33.1",
+        "models": [
+          {
+            "fileName": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "relativePath": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 20970379616
+          },
+          {
+            "fileName": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "relativePath": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6",
+            "fileSizeBytes": 15687142551
+          },
+          {
+            "fileName": "minimax_h3_video_vae_fp16.safetensors",
+            "relativePath": "vae/minimax_h3_video_vae_fp16.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 5207808496
+          },
+          {
+            "fileName": "minimax_h3_audio_vae_fp32.safetensors",
+            "relativePath": "vae/minimax_h3_audio_vae_fp32.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 605254808
+          }
+        ],
+        "customNodes": [
+          {
+            "name": "ComfyUI_MiniMaxH3_Director",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "b29b0f178c342c507791823228e2509c462011dc6c58ab3522a90364af2f9f96"
+              }
+            ]
+          },
+          {
+            "name": "ComfyUI-KJNodes",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ]
+          }
+        ]
+      },
+      "verifiedEvidence": "docs/research/h3-continuity-test-report.md"
+    },
+    {
       "id": "h3-continuity-v1",
       "status": "verified",
       "workflowPath": "E:/AI/h3_director_test/workflow_api.json",
