@@ -273,6 +273,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const activeGroupId = ref('')
   const selectionReason = ref('')
   const error = ref(null)
+  const h3Preview = ref(null)
+  const h3Previewing = ref(false)
   const qualityReviews = ref({})
   const analyzingCandidateId = ref('')
   const anchors = ref([])
@@ -498,6 +500,19 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     }
   }
 
+  async function previewH3Prompt() {
+    h3Previewing.value = true
+    setError(null)
+    try {
+      h3Preview.value = await videosAPI.previewH3Prompt(buildVideoCandidateRequest(form).structured)
+    } catch (caught) {
+      h3Preview.value = null
+      setError(caught)
+    } finally {
+      h3Previewing.value = false
+    }
+  }
+
   async function cancelCandidate(candidate) {
     const requestStoryboardId = props.storyboardId
     const requestVersion = mutationVersion
@@ -690,6 +705,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     queueLabel,
     selectionReason,
     error,
+    h3Preview,
+    h3Previewing,
     qualityReviews,
     analyzingCandidateId,
     anchors,
@@ -702,6 +719,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     sourceAnchor,
     refresh,
     generateCandidates,
+    previewH3Prompt,
     cancelCandidate,
     retryCandidate,
     analyzeCandidate,

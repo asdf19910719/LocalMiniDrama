@@ -5,6 +5,7 @@ const videoService = require('./videoService');
 const candidateService = require('../director/candidateGroupService');
 const { resolveDefaultVideoConfig } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
+const { createH3PromptCompiler } = require('./h3PromptCompiler');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -115,16 +116,30 @@ function createUnifiedVideoGenerationService({
   providerRegistry,
   schedule = (job, delay = 0) => (delay > 0 ? setTimeout(job, delay) : setImmediate(job)),
   pollIntervalMs = 1000,
+  gpuBusyRetryDelayMs = 2000,
   legacyPollMaxAttempts = 300,
   legacyPollIntervalMs = 10000,
   prepareVideoOutput = videoService.prepareSuccessfulVideoOutput,
   importVideoArtifact = videoService.importSuccessfulVideoArtifact,
+  h3PromptCompiler = createH3PromptCompiler(),
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
   if (!log) throw new Error('Unified video generation service requires a logger');
   if (!providerRegistry) throw new Error('Unified video generation service requires a provider registry');
 
   const activeOperations = new Set();
+
+  function isH3VideoConfig(resolved) {
+    const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
+    const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
+    const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
+    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+      || protocol === 'minimax_h3';
+  }
+
+  function tableHasColumn(table, column) {
+    try { return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column); } catch (_) { return false; }
+  }
 
   function rawRow(id) {
     return db.prepare(
@@ -184,6 +199,7 @@ function createUnifiedVideoGenerationService({
       negativePrompt: row.negative_prompt,
       negative_prompt: row.negative_prompt,
       duration: row.duration,
+      durationSeconds: row.duration,
       aspectRatio: row.aspect_ratio,
       aspect_ratio: row.aspect_ratio,
       resolution: row.resolution,
@@ -224,6 +240,8 @@ function createUnifiedVideoGenerationService({
       config: original.config,
       originalConfigFound: original.originalConfigFound,
       input: inputFor(row),
+      promptFormat: row.prompt_format || null,
+      promptCompilerVersion: row.prompt_compiler_version || null,
     };
   }
 
@@ -270,6 +288,12 @@ function createUnifiedVideoGenerationService({
       stage,
     });
     return normalized;
+  }
+
+  function isGpuBusyError(error) {
+    const code = String(error?.code || '').trim().toUpperCase();
+    const message = String(error?.message || error || '').trim().toUpperCase();
+    return code === 'GPU_BUSY' || message === 'GPU_BUSY';
   }
 
   function legacyProvider(context) {
@@ -520,7 +544,13 @@ function createUnifiedVideoGenerationService({
       await applyProviderResult(row, result, stage);
     } catch (error) {
       const latest = row && rawRow(row.id);
-      if (latest && latest.status !== 'cancelled') persistFailure(latest, error, stage);
+      if (latest && latest.status !== 'cancelled' && stage === 'submit' && isGpuBusyError(error)) {
+        setState(latest, 'queued', 1, 'ComfyUI GPU 正忙，等待上一个视频任务完成后重试', {
+          error_msg: null,
+          completed_at: null,
+        });
+        enqueueOperation(latest.id, 'submit', gpuBusyRetryDelayMs);
+      } else if (latest && latest.status !== 'cancelled') persistFailure(latest, error, stage);
       else if (!latest) throw error;
     } finally {
       activeOperations.delete(numericId);
@@ -551,27 +581,34 @@ function createUnifiedVideoGenerationService({
         if (Number(storyboard?.duration) > 0) duration = Number(storyboard.duration);
       } catch (_) {}
     }
+    const sourcePrompt = appendStyle(input.prompt, input.style);
+    let prompt = sourcePrompt;
+    let compiled = null;
+    if (isH3VideoConfig(resolved)) {
+      compiled = await h3PromptCompiler.compile(db, log, {
+        ...input,
+        prompt: sourcePrompt,
+        durationSeconds: duration || 5,
+      });
+      prompt = compiled.compiledPrompt;
+    }
     let createdId;
 
     db.transaction(() => {
       const task = taskService.createTask(db, log, 'video_generation', String(dramaId || ''));
-      const result = db.prepare(`
-        INSERT INTO video_generations (
-          drama_id, storyboard_id, provider, protocol, prompt, negative_prompt, model,
-          config_id, config_snapshot, duration, aspect_ratio, resolution, width, height,
-          frame_rate, seed, camera_fixed, watermark, continuity_mode, anchor_id,
-          candidate_group_id, image_url, first_frame_url, last_frame_url,
-          reference_image_urls, status, task_id, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          'waiting', ?, ?, ?
-        )
-      `).run(
+      const columns = [
+        'drama_id', 'storyboard_id', 'provider', 'protocol', 'prompt', 'negative_prompt', 'model',
+        'config_id', 'config_snapshot', 'duration', 'aspect_ratio', 'resolution', 'width', 'height',
+        'frame_rate', 'seed', 'camera_fixed', 'watermark', 'continuity_mode', 'anchor_id',
+        'candidate_group_id', 'image_url', 'first_frame_url', 'last_frame_url',
+        'reference_image_urls',
+      ];
+      const values = [
         dramaId,
         Number.isFinite(storyboardId) ? storyboardId : null,
         snapshot.provider,
         snapshot.protocol,
-        appendStyle(input.prompt, input.style),
+        prompt,
         input.negative_prompt ?? input.negativePrompt ?? null,
         snapshot.model,
         snapshot.configId,
@@ -592,15 +629,28 @@ function createUnifiedVideoGenerationService({
         input.first_frame_url ?? input.firstFrameUrl ?? input.first_frame_local_path ?? null,
         input.last_frame_url ?? input.lastFrameUrl ?? input.last_frame_local_path ?? null,
         refs.length ? JSON.stringify(refs) : null,
-        task.id,
-        now,
-        now,
-      );
+      ];
+      if (tableHasColumn('video_generations', 'source_prompt')) { columns.push('source_prompt'); values.push(compiled?.sourcePrompt || null); }
+      if (tableHasColumn('video_generations', 'compiled_prompt')) { columns.push('compiled_prompt'); values.push(compiled?.compiledPrompt || null); }
+      if (tableHasColumn('video_generations', 'prompt_format')) { columns.push('prompt_format'); values.push(compiled?.promptFormat || null); }
+      if (tableHasColumn('video_generations', 'prompt_compiler_version')) { columns.push('prompt_compiler_version'); values.push(compiled?.compilerVersion || null); }
+      if (tableHasColumn('video_generations', 'prompt_compile_status')) { columns.push('prompt_compile_status'); values.push(compiled ? 'compiled' : null); }
+      columns.push('status', 'task_id', 'created_at', 'updated_at');
+      values.push('waiting', task.id, now, now);
+      const result = db.prepare(`INSERT INTO video_generations (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`).run(...values);
       createdId = Number(result.lastInsertRowid);
     })();
 
     enqueueOperation(createdId, 'submit');
     return getVideoGeneration(createdId);
+  }
+
+  async function previewH3Prompt(input = {}) {
+    const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
+    if (!isH3VideoConfig(resolved)) {
+      throw new VideoLifecycleError('H3_PREVIEW_UNSUPPORTED', '当前视频配置不是 ComfyUI H3 工作流', 409);
+    }
+    return h3PromptCompiler.compile(db, log, { ...input, prompt: appendStyle(input.prompt, input.style) });
   }
 
   async function cancelVideoGeneration(id) {
@@ -704,6 +754,7 @@ function createUnifiedVideoGenerationService({
 
   return {
     createVideoGeneration,
+    previewH3Prompt,
     cancelVideoGeneration,
     retryVideoGeneration,
     selectVideoGeneration,

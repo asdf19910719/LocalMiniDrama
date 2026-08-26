@@ -217,6 +217,32 @@ function buildService(db, harness, overrides = {}) {
 }
 
 describe('unified video generation lifecycle', () => {
+  it('requeues a candidate when ComfyUI reports a temporary GPU lock', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db);
+    const harness = createHarness({
+      submit: [new Error('GPU_BUSY'), { status: 'running', providerTaskId: 'prompt-after-wait', progress: 0 }],
+    });
+    const service = buildService(db, harness, { gpuBusyRetryDelayMs: 1 });
+
+    const created = await service.createVideoGeneration({ prompt: 'wait for the GPU' });
+    await harness.runNext();
+
+    const waiting = service.getVideoGeneration(created.id);
+    assert.equal(waiting.status, 'queued');
+    assert.equal(waiting.error_msg, null);
+    assert.equal(harness.calls.submit.length, 1);
+    assert.equal(harness.jobs.length, 1);
+
+    await harness.runNext();
+
+    const submitted = service.getVideoGeneration(created.id);
+    assert.equal(submitted.status, 'running');
+    assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, 'prompt-after-wait');
+    assert.equal(harness.calls.submit.length, 2);
+    db.close();
+  });
+
   it('never demotes a selected provider result back to review', async () => {
     const db = createTestDb();
     seedDefaultConfig(db);

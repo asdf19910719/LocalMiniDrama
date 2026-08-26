@@ -2674,6 +2674,7 @@ import { generationSettingsAPI } from '@/api/prompts'
 import { parseScriptIntoEpisodes, episodesListToPlainScript } from '@/utils/scriptEpisodes'
 import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
 import { isPlayableVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
+import { universalVideoCompatibility } from '@/utils/videoModeCompatibility.js'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
@@ -6252,15 +6253,6 @@ async function getActiveVideoAiConfig() {
   return activeVideoAiConfigCache
 }
 
-function videoModelNameFromAiConfig(cfg) {
-  if (!cfg) return ''
-  const dm = (cfg.default_model || '').toString().trim()
-  if (dm) return dm
-  const m = cfg.model
-  if (Array.isArray(m) && m.length) return String(m[0]).trim()
-  return String(m || '').trim()
-}
-
 /**
  * Seedance 2.x 家族模型名判定（与后端 videoClient.isSeedance2FamilyModel 对齐）。
  * 含官方 doubao-seedance-2-0-* / jimeng-video-seedance-2.0，以及中转别名 mingiz-sd2、*-sd2 等。
@@ -6276,7 +6268,17 @@ function isSeedance2VideoModel(modelName) {
 }
 
 /** 全能分镜 + 当前视频配置是否可走多图参考（火山 Seedance 2.0、可灵 Omni、Agnes Video 等） */
+function videoModelNameFromAiConfig(cfg) {
+  if (!cfg) return ''
+  const dm = (cfg.default_model || '').toString().trim()
+  if (dm) return dm
+  const m = cfg.model
+  if (Array.isArray(m) && m.length) return String(m[0]).trim()
+  return String(m || '').trim()
+}
+
 function canUseUniversalOmniVideoApi(cfg) {
+  if (universalVideoCompatibility(cfg).compatible) return true
   if (!cfg) return false
   const proto = String(cfg.api_protocol || '').toLowerCase()
   const provider = String(cfg.provider || '').toLowerCase()
@@ -6586,8 +6588,10 @@ async function onGenerateSbVideo(sb) {
   if (!dramaId.value || !sb?.id || !sbCanSubmitVideo(sb)) return
   const universal = isSbUniversalMode(sb.id)
   let universalOmniApi = universal
+  let h3DirectorMode = false
   if (universal) {
     const videoCfg = await getActiveVideoAiConfig()
+    const compatibility = universalVideoCompatibility(videoCfg)
     if (!canUseUniversalOmniVideoApi(videoCfg)) {
       try {
         await confirmUniversalNonSeedance2Video()
@@ -6595,6 +6599,9 @@ async function onGenerateSbVideo(sb) {
         return
       }
       universalOmniApi = false
+    } else {
+      universalOmniApi = compatibility.supportsOmniReferences
+      h3DirectorMode = compatibility.mode === 'h3_director'
     }
   }
   const omniRefs = universalOmniApi ? collectSbOmniReferenceAbsoluteUrls(sb) : []
@@ -6608,7 +6615,7 @@ async function onGenerateSbVideo(sb) {
   } else {
     hasAnyImage = hasClassicFrame
   }
-  if (!hasAnyImage) {
+  if (!hasAnyImage && !h3DirectorMode) {
     if (!universal) {
       await ElMessageBox.alert(
         '当前为传统模式，生视频需要分镜参考图。请先生成或上传分镜图片后再试。',

@@ -46,6 +46,13 @@
         <el-input v-model="form.negativePrompt" clearable placeholder="可选：不希望出现的内容" />
       </el-form-item>
 
+      <template v-if="isH3Config">
+        <div class="h3-preview-actions">
+          <el-button size="small" :loading="h3Previewing" @click="previewH3Prompt">预览 H3 提示词</el-button>
+          <el-tag v-if="h3Preview?.promptFormat" size="small" type="success" effect="plain">{{ h3Preview.promptFormat }}</el-tag>
+        </div>
+        <el-input v-if="h3Preview?.compiledPrompt" :model-value="h3Preview.compiledPrompt" type="textarea" :rows="7" readonly class="h3-preview" />
+      </template>
       <div class="number-grid">
         <el-form-item label="宽度">
           <el-input-number v-model="form.width" :min="32" :step="32" :controls="true" controls-position="right" />
@@ -308,6 +315,8 @@ const {
   queueLabel,
   selectionReason,
   error,
+  h3Preview,
+  h3Previewing,
   qualityReviews,
   analyzingCandidateId,
   anchors,
@@ -320,6 +329,7 @@ const {
   sourceAnchor,
   refresh,
   generateCandidates,
+  previewH3Prompt,
   cancelCandidate,
   retryCandidate,
   analyzeCandidate,
@@ -342,6 +352,13 @@ const generationModeLabel = computed(() => ({
   universal_fallback: '全能兼容模式',
   classic: '传统首尾帧模式',
 }[generationMode.value] || '默认模式'))
+
+const isH3Config = computed(() => {
+  const cfg = defaultConfig.value || {}
+  const provider = String(cfg.provider || '').toLowerCase()
+  const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.includes('minimax-h3') || model.includes('minimaxh3'))
+})
 
 function setDimensions(width, height) {
   form.width = width

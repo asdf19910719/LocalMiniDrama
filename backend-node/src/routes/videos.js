@@ -39,6 +39,16 @@ function routes(db, log, { providerRegistry, lifecycleService } = {}) {
       }
     },
 
+    h3Preview: async (req, res) => {
+      try {
+        if (!lifecycle.previewH3Prompt) throw new Error('H3 prompt preview is not configured');
+        response.success(res, await lifecycle.previewH3Prompt(req.body || {}));
+      } catch (error) {
+        log.error('videos h3 preview', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
     get: (req, res) => {
       try {
         const item = lifecycle.getVideoGeneration(req.params.id);

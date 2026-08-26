@@ -10,6 +10,7 @@ const {
   validateH3Dimensions,
   validateVramBudget,
 } = require('../../director/directorGenerationPolicy');
+const { validateH3Prompt } = require('../h3PromptCompiler');
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 
@@ -157,6 +158,13 @@ function createComfyUIVideoProvider({
       reserveMb: settings.vram_reserve_mb || 512,
     });
     const template = readWorkflowTemplate(selected.workflowPath);
+    if ((selected.id === 'h3-continuity-v1' || String(context.model || '').toLowerCase().includes('h3'))
+      && (context.videoGenerationId || context.promptFormat || context.input?.promptFormat)) {
+      validateH3Prompt(normalizedInput.prompt, {
+        durationSeconds: normalizedInput.durationSeconds || normalizedInput.duration,
+        mode: context.promptFormat || context.input?.promptFormat,
+      });
+    }
     const prompt = buildStructuredWorkflowPrompt(template, normalizedInput);
     const owner = String(context.taskId || context.videoGenerationId || `comfyui-${crypto.randomUUID()}`);
     const handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });

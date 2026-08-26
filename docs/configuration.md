@@ -138,6 +138,14 @@ API Key：sk-xxxxxxxxxxxxxxxx
 - **v1.2.7**：单条生视频前会检测配置是否匹配（`kling_omni`，或 `volcengine_omni` + Seedance 2.x 模型名）；不匹配时弹窗说明，可选强制继续（降级为场景图 / 分镜主图参考）。**经典模式**无分镜参考图时会提示先生成分镜图，不提供纯文案强行生成。
 - 亦可使用 **可灵 Omni** 走同一套全能分镜工作流，详见 AI 配置页内嵌说明。
 
+**ComfyUI H3 全能模式（`h3-continuity-v1`）**
+
+- 厂商选择 **ComfyUI（本机工作流）**，模型/工作流选择 `h3-continuity-v1`，并将该视频配置设为唯一默认配置。
+- 刷新页面后，分镜的“全能模式”仍可直接生成，不会再被误判为“全能模式与模型不匹配”。H3 不是 Kling/Seedance 的 Omni 多图协议，场景、角色、道具多图不会被强行按 Omni 方式提交。
+- 生成前可在统一视频面板点击 **预览 H3 提示词**。后端会使用当前启用的文本模型，把中文分镜改写为 H3 所需格式：T2VA/I2VA/FL2VA/L2VA 使用 `integrated_multimodal_description`、`overall_soundscape`、`non_diegetic_music` 三段；Ref2VA 使用 `subject_definitions`、`summary`、`retention_analysis`、`detailed_description`、`overall_soundscape`、`non_diegetic_music` 六段。每段必须有内容，改写失败或格式不完整会直接阻止提交，不会回退为中文原文。
+- 后端保存原始提示词、编译提示词、H3 模式（T2VA/I2VA/FL2VA/L2VA/Ref2VA）及编译版本；重试复用已保存的编译结果。ComfyUI 提交前还会再次校验对应的 H3 格式。
+- 无参考图时使用 T2VA；仅首帧使用 I2VA；首尾帧使用 FL2VA；仅尾帧使用 L2VA。完整素材引用时使用 Ref2VA。
+
 ### 配置示例
 
 ```

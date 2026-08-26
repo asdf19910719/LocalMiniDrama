@@ -319,6 +319,7 @@ function setupRouter(cfg, db, log) {
   // ---------- videos ----------
   r.get('/videos', videos.list);
   r.post('/videos', videos.create);
+  r.post('/videos/h3-preview', videos.h3Preview);
   r.post('/videos/image/:image_gen_id', videos.fromImage);
   r.post('/videos/episode/:episode_id/batch', videos.episodeBatch);
   r.post('/videos/:id/cancel', videos.cancel);
