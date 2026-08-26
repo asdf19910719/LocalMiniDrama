@@ -32,7 +32,9 @@ function postJSONNonStream(url, headers, body, timeoutMs = 120000) {
       res.on('end', () => {
         const raw = Buffer.concat(chunks).toString('utf-8');
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 500)}`));
+          const error = new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 500)}`);
+          error.status = res.statusCode;
+          return reject(error);
         }
         try {
           const json = JSON.parse(raw);
@@ -54,6 +56,12 @@ function postJSONNonStream(url, headers, body, timeoutMs = 120000) {
     req.write(bodyStr);
     req.end();
   });
+}
+
+function isToolCapabilityRejection(error) {
+  const status = Number(error?.status);
+  if (status !== 400 && status !== 422) return false;
+  return /tool(?:s|[_ -]?choice)?|function[_ -]?call|tool[_ -]?call|unsupported.*(?:tool|function)|(?:tool|function).*unsupported/i.test(String(error?.message || ''));
 }
 
 /**
@@ -337,7 +345,7 @@ async function createChatCompletion(db, log, serviceType, messages, options = {}
       120000,
     );
   } catch (error) {
-    if (tools != null || toolChoice != null) {
+    if ((tools != null || toolChoice != null) && isToolCapabilityRejection(error)) {
       const toolError = new Error('The configured text model rejected the required tool-calling request');
       toolError.code = 'H3_SKILL_TOOL_CALL_UNSUPPORTED';
       toolError.details = { transport: 'chat_completions_tool_call' };

@@ -129,3 +129,25 @@ test('createChatCompletion maps tool transport rejection to a stable H3 error', 
     await server.close();
   }
 });
+
+test('createChatCompletion preserves unrelated tool transport failures', async () => {
+  const server = await listen((_req, res) => {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'invalid API key' } }));
+  });
+  const tools = [{ type: 'function', function: { name: 'load_skill', parameters: { type: 'object' } } }];
+  try {
+    await assert.rejects(
+      () => aiClient.createChatCompletion(
+        createConfigDb(server.baseUrl),
+        { info() {}, warn() {}, error() {} },
+        'text',
+        [{ role: 'user', content: 'compile' }],
+        { scene_key: 'h3_prompt_compile', tools },
+      ),
+      (error) => error.code !== 'H3_SKILL_TOOL_CALL_UNSUPPORTED' && /HTTP 401/.test(error.message),
+    );
+  } finally {
+    await server.close();
+  }
+});

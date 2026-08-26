@@ -1,7 +1,9 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { loadSkillPackage } = require('../src/services/skillRegistry');
+const { loadSkillPackage, safeResourcePath } = require('../src/services/skillRegistry');
 
 describe('skill registry', () => {
   it('loads the complete base-mode skill package', () => {
@@ -40,6 +42,15 @@ describe('skill registry', () => {
     assert.throws(
       () => loadSkillPackage('h3-prompt-writing', { mode: 'UNKNOWN' }),
       (error) => error.code === 'SKILL_RESOURCE_INVALID',
+    );
+  });
+
+  it('reports a missing skill root with a stable resource error', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'h3-skill-root-'));
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.throws(
+      () => safeResourcePath('h3-prompt-writing', 'SKILL.md', root),
+      (error) => error.code === 'SKILL_RESOURCE_MISSING',
     );
   });
 });

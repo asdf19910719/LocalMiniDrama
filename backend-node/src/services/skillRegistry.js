@@ -21,8 +21,16 @@ class SkillRegistryError extends Error {
   }
 }
 
-function safeResourcePath(skillDirectory, resourceName) {
-  const root = fs.realpathSync(SKILL_ROOT);
+function safeResourcePath(skillDirectory, resourceName, skillRoot = SKILL_ROOT) {
+  let root;
+  try {
+    root = fs.realpathSync(skillRoot);
+  } catch (error) {
+    throw new SkillRegistryError('SKILL_RESOURCE_MISSING', 'Skill root is unavailable', {
+      resourceName,
+      cause: error.code || error.message,
+    });
+  }
   const resolved = path.resolve(root, skillDirectory, resourceName);
   if (!resolved.startsWith(`${root}${path.sep}`)) {
     throw new SkillRegistryError('SKILL_RESOURCE_INVALID', 'Skill resource escapes the configured root');
@@ -89,5 +97,6 @@ function loadSkillPackage(skillName, { mode } = {}) {
 
 module.exports = {
   SkillRegistryError,
+  safeResourcePath,
   loadSkillPackage,
 };
