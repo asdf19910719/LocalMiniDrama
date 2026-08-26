@@ -66,8 +66,7 @@ export class BackgroundController {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
     const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' })
     const conversationId = identity?.value?.conversationId
-    if (!conversationId) return null
-    const session = await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: identity.value.confidence || 'url' })
+    const session = await this.sessions.attach(message.dramaId, message.site, { conversationId: conversationId || null, tabId, confidence: identity?.value?.confidence || 'tab' })
     await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
     return session
   }
@@ -90,11 +89,22 @@ export class BackgroundController {
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };
     }
     if (action === 'send') return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
-      if (message.dramaId !== undefined && message.site && message.conversationId) this.sessions.assertConversation(message.dramaId, message.site, message.conversationId);
       const tabId = message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
-      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId: message.conversationId } });
+      let conversationId = message.conversationId || this.sessions.get(message.dramaId, message.site)?.conversationId || null
+      if (tabId && this.chromeApi?.tabs?.sendMessage) {
+        const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
+        if (identity?.value?.conversationId) conversationId = identity.value.conversationId
+      }
+      if (message.dramaId !== undefined && message.site && conversationId) {
+        const session = this.sessions.get(message.dramaId, message.site)
+        if (!session?.conversationId || session.conversationId !== conversationId) {
+          await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: 'url' })
+          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
+        } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
+      }
+      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'submit' });
-      return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId: message.conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
+      return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
     });
     if (action === 'capturedResult') {
       const result = await this.workbench.importImage(message.payload);
