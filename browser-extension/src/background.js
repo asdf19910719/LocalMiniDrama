@@ -6,6 +6,31 @@ import { WorkbenchClient } from './workbenchClient.js';
 
 const DEFAULT_API = 'http://127.0.0.1:5679/api/v1';
 const WRITE_PATHS = new Set(['jobs', 'prepare', 'attempts', 'events', 'results/import', 'session/attach']);
+const CHATGPT_CONTENT_BUNDLE = 'src/sites/chatgpt/content.bundle.js';
+
+export function isChatGPTUrl(url = '') {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && (
+      parsed.hostname === 'chatgpt.com' ||
+      parsed.hostname.endsWith('.chatgpt.com') ||
+      parsed.hostname === 'chat.openai.com'
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+export async function injectChatGPTContentScript(chromeApi, tabId, url) {
+  if (!isChatGPTUrl(url) || !Number.isInteger(tabId) || !chromeApi?.scripting?.executeScript) return false;
+  try {
+    await chromeApi.scripting.executeScript({ target: { tabId }, files: [CHATGPT_CONTENT_BUNDLE] });
+    return true;
+  } catch (_) {
+    // Chrome can reject restricted, discarded, or already-closing tabs.
+    return false;
+  }
+}
 
 function makeEventId() { return globalThis.crypto?.randomUUID?.() || `write-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 
@@ -75,6 +100,10 @@ export function registerBackground(chromeApi = globalThis.chrome, options = {}) 
   const controller = new BackgroundController({ chromeApi, ...options });
   chromeApi.runtime.onMessage.addListener((message, sender, reply) => { controller.handle(message, sender).then(reply).catch((error) => reply({ ok: false, error: error.message })); return true; });
   chromeApi.runtime.onStartup?.addListener(() => controller.flush()); chromeApi.runtime.onInstalled?.addListener(() => controller.flush());
+  chromeApi.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo?.status && changeInfo.status !== 'complete') return;
+    void injectChatGPTContentScript(chromeApi, tabId, tab?.url || changeInfo?.url);
+  });
   return controller;
 }
 
