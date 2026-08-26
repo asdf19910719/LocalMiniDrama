@@ -14,6 +14,7 @@ function referenceFor(item, role, assetImageUrl) {
     name: `${role}-${item.id}`,
     mime: mimeFromUrl(url),
     url,
+    ...(item.local_path ? { filePath: item.local_path } : {}),
     role,
     sourceId: item.id,
   }

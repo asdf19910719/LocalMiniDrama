@@ -41,8 +41,8 @@ async function hydrateReferences(references) {
   }))
 }
 async function prepare() {
+  const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, props.references)
   const hydratedReferences = await hydrateReferences(props.references)
-  const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, hydratedReferences)
   notifyExtension({ action: 'prepare', dramaId: props.dramaId, site: props.site, jobId: prepared.id, prompt: prompt.value, references: hydratedReferences, conversationId: prepared.conversation_id })
 }
 async function send() { const attempt = await createAttempt({ conversationId: job.value?.conversation_id, sent_prompt_hash: job.value?.prompt_hash, status: 'ready_to_send' }); notifyExtension({ action: 'send', dramaId: props.dramaId, site: props.site, attemptId: attempt.id, conversationId: job.value?.conversation_id, payload: attempt }) }

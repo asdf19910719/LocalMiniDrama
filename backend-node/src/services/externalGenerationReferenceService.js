@@ -48,10 +48,16 @@ function referenceBytes(db, reference, job) {
     }
   }
   if (!sourcePath) throw new Error('Reference content or local path is required');
-  const resolved = path.resolve(String(sourcePath));
+  const rawSource = String(sourcePath)
+  const dbDir = typeof db.name === 'string' && db.name !== ':memory:' ? path.dirname(path.resolve(db.name)) : null
+  const storageRoot = dbDir ? path.resolve(dbDir, 'storage') : null
+  const resolved = path.isAbsolute(rawSource)
+    ? path.resolve(rawSource)
+    : path.resolve(storageRoot || process.cwd(), rawSource)
   const allowedRoots = String(process.env.EXTERNAL_GENERATION_ALLOWED_REFERENCE_ROOTS || '')
     .split(path.delimiter).map((item) => item.trim()).filter(Boolean).map((item) => path.resolve(item));
-  if (!allowedRoots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`))) {
+  const effectiveRoots = storageRoot ? [...allowedRoots, storageRoot] : allowedRoots
+  if (!effectiveRoots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`))) {
     throw new Error(`Reference file is outside the configured reference roots: ${sourcePath}`);
   }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) throw new Error(`Reference file not found: ${sourcePath}`);
