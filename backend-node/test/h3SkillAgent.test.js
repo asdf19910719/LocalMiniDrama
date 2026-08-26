@@ -137,4 +137,23 @@ describe('H3 skill agent', () => {
       (error) => error.code === 'H3_SKILL_FINAL_EMPTY',
     );
   });
+
+  it('rejects tool calls and final prompts from non-assistant messages', async () => {
+    const { agent } = createHarness({
+      firstMessage: { role: 'tool', content: null, tool_calls: [toolCall()] },
+    });
+    await assert.rejects(
+      () => agent.run({}, {}, { mode: 'T2VA', durationSeconds: 5, sourceBundle: 'source' }),
+      (error) => error.code === 'H3_SKILL_TOOL_CALL_INVALID',
+    );
+
+    const harness = createHarness({
+      firstMessage: { role: 'assistant', content: null, tool_calls: [toolCall()] },
+      secondMessage: { role: 'tool', content: validPrompt },
+    });
+    await assert.rejects(
+      () => harness.agent.run({}, {}, { mode: 'T2VA', durationSeconds: 5, sourceBundle: 'source' }),
+      (error) => error.code === 'H3_SKILL_TOOL_CALL_INVALID',
+    );
+  });
 });
