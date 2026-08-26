@@ -4,7 +4,7 @@ const http = require('node:http');
 
 const aiClient = require('../src/services/aiClient');
 
-function createConfigDb(baseUrl) {
+function createConfigDb(baseUrl, overrides = {}) {
   const config = {
     id: 42,
     service_type: 'text',
@@ -21,6 +21,7 @@ function createConfigDb(baseUrl) {
     is_active: 1,
     settings: JSON.stringify({ max_tokens: 4096 }),
     deleted_at: null,
+    ...overrides,
   };
   return {
     prepare(sql) {
@@ -102,6 +103,39 @@ test('createChatCompletion preserves a model tool call and sends forced tool opt
     assert.equal(result.model, 'tool-model');
     assert.equal(result.configId, 42);
     assert.equal(typeof result.elapsedMs, 'number');
+  } finally {
+    await server.close();
+  }
+});
+
+test('createChatCompletion disables DeepSeek thinking for forced tool calls', async () => {
+  let requestBody;
+  const server = await listen((req, res) => {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      requestBody = JSON.parse(raw);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [] } }] }));
+    });
+  });
+  const tools = [{ type: 'function', function: { name: 'load_skill', parameters: { type: 'object' } } }];
+  try {
+    await aiClient.createChatCompletion(
+      createConfigDb(server.baseUrl, {
+        provider: 'deepseek',
+        base_url: server.baseUrl,
+        settings: JSON.stringify({ deepseek_thinking: 'enabled', deepseek_reasoning_effort: 'high' }),
+      }),
+      { info() {}, warn() {}, error() {} },
+      'text',
+      [{ role: 'user', content: 'compile' }],
+      { scene_key: 'h3_prompt_compile', tools, tool_choice: { type: 'function', function: { name: 'load_skill' } } },
+    );
+    assert.deepEqual(requestBody.thinking, { type: 'disabled' });
+    assert.equal(requestBody.reasoning_effort, undefined);
+    assert.equal(requestBody.temperature, 0.2);
   } finally {
     await server.close();
   }

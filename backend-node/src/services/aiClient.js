@@ -1,6 +1,6 @@
 // 与 Go pkg/ai + application/services/ai_service 对齐：读取 ai_service_configs，调用 OpenAI 兼容的 chat completions
 const aiConfigService = require('./aiConfigService');
-const { applyDeepSeekChatOptions } = require('./deepseekConfig');
+const { applyDeepSeekChatOptions, isDeepSeekOfficialConfig } = require('./deepseekConfig');
 const https = require('https');
 const http = require('http');
 
@@ -334,6 +334,12 @@ async function createChatCompletion(db, log, serviceType, messages, options = {}
   if (tools != null) body.tools = tools;
   if (toolChoice != null) body.tool_choice = toolChoice;
   body = applyDeepSeekChatOptions(config, body);
+  // DeepSeek rejects forced tool_choice while thinking mode is enabled.
+  if ((tools != null || toolChoice != null) && isDeepSeekOfficialConfig(config)) {
+    body.thinking = { type: 'disabled' };
+    delete body.reasoning_effort;
+    if (body.temperature == null) body.temperature = temperature;
+  }
 
   const startMs = Date.now();
   let response;
