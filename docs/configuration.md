@@ -181,6 +181,12 @@ API Key：ollama   （或任意字符串，本地服务通常不验证）
 
 ---
 
+## H3 提示词编译模型要求
+
+`ai_model_map.key = 'h3_prompt_compile'` 选择的文本模型必须实现兼容 OpenAI 的 Chat Completions 工具调用协议。H3 编译器会强制发送 `tool_choice`，并要求模型返回恰好一条包含 `tool_calls` 的 assistant 消息，随后发送包含 allowlist 技能结果的 `tool` 角色消息。若服务商不支持 `tools`、强制 `tool_choice`、assistant `tool_calls` 或 `tool` 角色消息，系统会以 `H3_SKILL_TOOL_CALL_UNSUPPORTED` fail closed；不会降级为普通提示词注入。
+
+---
+
 ## 其他 OpenAI 兼容接口
 
 任何支持 OpenAI Chat Completions 协议的接口均可接入：

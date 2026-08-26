@@ -199,6 +199,13 @@ test('provides Chinese lifecycle and error summaries while preserving technical 
     videoErrorCopy({ code: 'VIDEO_CONFIG_AMBIGUOUS', message: 'VIDEO_CONFIG_AMBIGUOUS' }).summary,
     '检测到多个默认视频服务，请在 API 配置中仅保留一个。',
   )
+  assert.equal(
+    videoErrorCopy({
+      code: 'H3_SKILL_TOOL_CALL_UNSUPPORTED',
+      message: 'H3_SKILL_TOOL_CALL_UNSUPPORTED',
+    }).summary,
+    '当前文本模型不支持技能工具调用，请为 H3 提示词编译选择支持 tool calling 的模型。',
+  )
 })
 
 test('keeps Director selection results authoritative over the linked video review state', () => {
