@@ -8,6 +8,9 @@ if not exist "%DIRECTOR_NODE_ROOT%\npm.cmd" (
   echo Set DIRECTOR_NODE_ROOT to its extracted directory.
   exit /b 1
 )
+rem npm uses its pinned Node binary, but npm scripts resolve `node` through PATH.
+rem Scope Node 22 to this launcher and its child windows without changing system PATH.
+set "PATH=%DIRECTOR_NODE_ROOT%;%PATH%"
 
 echo [0/3] Checking backend port 5679...
 netstat -ano > "%TEMP%\lmd_netstat.txt" 2>&1
@@ -38,12 +41,26 @@ start "Backend" cmd /k "cd /d %ROOT%backend-node && "%DIRECTOR_NODE_ROOT%\npm.cm
 echo [3/3] Starting frontend (frontweb)...
 start "Frontend" cmd /k "cd /d %ROOT%frontweb && "%DIRECTOR_NODE_ROOT%\npm.cmd" run dev"
 
+echo Waiting for backend health check...
+set "BACKEND_READY="
+for /l %%i in (1,1,60) do (
+  powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5679/health' -TimeoutSec 2 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+  if not errorlevel 1 (
+    set "BACKEND_READY=1"
+    goto :backend_ready
+  )
+  timeout /t 1 /nobreak >nul
+)
+
+:backend_ready
+if not defined BACKEND_READY echo WARNING: Backend did not become healthy within 60 seconds.
+
 echo.
 echo Done.
 echo   ComfyUI: http://127.0.0.1:8188
 echo   Backend: http://127.0.0.1:5679
 echo   Frontend: http://127.0.0.1:3013
 
-timeout /t 8 /nobreak >nul
+powershell -NoProfile -Command "Start-Sleep -Seconds 8"
 start http://127.0.0.1:3013
 endlocal
