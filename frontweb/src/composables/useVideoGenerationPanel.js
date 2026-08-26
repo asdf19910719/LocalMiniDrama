@@ -26,6 +26,7 @@ const STATUS_LABELS = Object.freeze({
 })
 
 const ERROR_SUMMARIES = Object.freeze({
+  H3_SKILL_TOOL_CALL_UNSUPPORTED: '当前文本模型不支持技能工具调用，请为 H3 提示词编译选择支持 tool calling 的模型。',
   VIDEO_CONFIG_DEFAULT_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
   VIDEO_CONFIG_DEFAULT_MULTIPLE: '检测到多个默认视频服务，请在 API 配置中仅保留一个。',
   VIDEO_CONFIG_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
