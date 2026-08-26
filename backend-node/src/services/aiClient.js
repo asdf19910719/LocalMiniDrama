@@ -40,9 +40,9 @@ function postJSONNonStream(url, headers, body, timeoutMs = 120000) {
           const content = json.choices?.[0]?.message?.content
             || json.choices?.[0]?.message?.reasoning_content
             || null;
-          resolve({ status: res.statusCode, body: content, raw });
+          resolve({ status: res.statusCode, body: content, raw, json });
         } catch (_) {
-          resolve({ status: res.statusCode, body: null, raw });
+          resolve({ status: res.statusCode, body: null, raw, json: null });
         }
       });
       res.on('error', reject);
@@ -282,6 +282,64 @@ function getConfigFromModelMap(db, sceneKey) {
   } catch (_) {
     return null;
   }
+}
+
+async function createChatCompletion(db, log, serviceType, messages, options = {}) {
+  const {
+    model: preferredModel,
+    scene_key: sceneKey = null,
+    tools,
+    tool_choice: toolChoice,
+    temperature = 0.2,
+    max_tokens: maxTokens,
+  } = options;
+  let config = null;
+  let routedModelOverride = null;
+  if (sceneKey) {
+    const mapped = getConfigFromModelMap(db, sceneKey);
+    if (mapped) {
+      config = mapped.config;
+      routedModelOverride = mapped.modelOverride;
+      log.info('AI createChatCompletion: scene_key routing', {
+        scene_key: sceneKey,
+        config_id: config.id,
+        model_override: routedModelOverride,
+      });
+    }
+  }
+  if (!config) {
+    config = preferredModel
+      ? getConfigForModel(db, serviceType, preferredModel)
+      : getDefaultConfig(db, serviceType);
+  }
+  if (!config && preferredModel === undefined) config = getDefaultConfig(db, 'text');
+  if (!config) throw new Error(`No active AI configuration for ${serviceType}`);
+
+  const model = getModelFromConfig(config, routedModelOverride || preferredModel);
+  let body = {
+    model,
+    messages,
+    stream: false,
+    temperature,
+  };
+  if (maxTokens != null) body.max_tokens = maxTokens;
+  if (tools != null) body.tools = tools;
+  if (toolChoice != null) body.tool_choice = toolChoice;
+  body = applyDeepSeekChatOptions(config, body);
+
+  const startMs = Date.now();
+  const response = await postJSONNonStream(
+    buildChatUrl(config),
+    { Authorization: `Bearer ${config.api_key || ''}` },
+    body,
+    120000,
+  );
+  return {
+    message: response.json?.choices?.[0]?.message || null,
+    model,
+    configId: config.id,
+    elapsedMs: Date.now() - startMs,
+  };
 }
 
 async function generateText(db, log, serviceType, userPrompt, systemPrompt, options = {}) {
@@ -740,6 +798,7 @@ module.exports = {
   getDefaultConfig,
   getConfigForModel,
   getConfigFromModelMap,
+  createChatCompletion,
   generateText,
   streamGenerateText,
   generateTextWithVision,
