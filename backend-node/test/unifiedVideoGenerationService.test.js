@@ -51,6 +51,9 @@ function createTestDb() {
       prompt TEXT,
       negative_prompt TEXT,
       model TEXT,
+      h3_skill_name TEXT,
+      h3_skill_sha256 TEXT,
+      h3_skill_provenance TEXT,
       config_id INTEGER,
       config_snapshot TEXT,
       duration REAL,
@@ -253,6 +256,39 @@ describe('unified video generation lifecycle', () => {
     assert.equal(result.compilerVersion, 'h3-skill-agent-v1');
     assert.equal(result.skillProvenance.toolCallId, 'call-preview');
     assert.equal(result.compiledPrompt, validPrompt);
+    db.close();
+  });
+
+  it('persists and exposes H3 skill provenance on generated rows', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['h3-continuity-v1']),
+      default_model: 'h3-continuity-v1',
+    });
+    const validPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
+    const compiler = createH3PromptCompiler({
+      skillAgent: { async run() {
+        return {
+          prompt: validPrompt,
+          provenance: {
+            skillName: 'h3-prompt-writing',
+            skillSha256: 'a'.repeat(64),
+            skillResources: ['SKILL.md', 'references/base-en.txt'],
+            toolCallId: 'call-persist',
+          },
+        };
+      } },
+    });
+    const provider = { async submit() { return { status: 'queued', providerTaskId: 'h3-task' }; } };
+    const harness = createHarness();
+    harness.registry = { has(name) { return name === 'comfyui'; }, get(name) { assert.equal(name, 'comfyui'); return provider; } };
+    const service = buildService(db, harness, { h3PromptCompiler: compiler });
+    const created = await service.createVideoGeneration({ prompt: 'a woman walks', duration: 5 });
+    const row = db.prepare('SELECT h3_skill_name, h3_skill_sha256, h3_skill_provenance FROM video_generations WHERE id = ?').get(created.id);
+    assert.equal(row.h3_skill_name, 'h3-prompt-writing');
+    assert.equal(row.h3_skill_sha256, 'a'.repeat(64));
+    assert.deepEqual(service.getVideoGeneration(created.id).skillProvenance.skillResources, ['SKILL.md', 'references/base-en.txt']);
     db.close();
   });
 
