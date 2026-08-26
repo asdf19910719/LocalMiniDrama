@@ -40,6 +40,18 @@ export async function injectChatGPTContentScript(chromeApi, tabId, url) {
 
 function makeEventId() { return globalThis.crypto?.randomUUID?.() || `write-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 
+function normalizeBytes(bytes) {
+  if (bytes instanceof Uint8Array) return bytes;
+  if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
+  if (Array.isArray(bytes)) return Uint8Array.from(bytes);
+  if (bytes?.type === 'Buffer' && Array.isArray(bytes.data)) return Uint8Array.from(bytes.data);
+  if (bytes && typeof bytes === 'object') {
+    const keys = Object.keys(bytes).filter((key) => /^\d+$/.test(key)).sort((a, b) => Number(a) - Number(b));
+    if (keys.length) return Uint8Array.from(keys.map((key) => bytes[key]));
+  }
+  throw new Error('image bytes are required');
+}
+
 export class BackgroundController {
   constructor({ chromeApi = globalThis.chrome, fetchImpl = globalThis.fetch, apiBase = DEFAULT_API, storage } = {}) {
     this.chromeApi = chromeApi; this.fetchImpl = fetchImpl === globalThis.fetch && typeof fetchImpl === 'function' ? fetchImpl.bind(globalThis) : fetchImpl; this.apiBase = apiBase.replace(/\/$/, '');
@@ -65,7 +77,7 @@ export class BackgroundController {
     return next
   }
   async emit(type, payload, sequence = 1, id) { const event = envelope(type, payload, sequence, id); await this.outbox.add(event); await this.flush(); return event; }
-  async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : null; if (!endpoint) return { ok: true }; const body = { ...event.payload, id: event.id, idempotencyKey: event.id, eventType: event.type === 'ADAPTER_ERROR' ? 'ADAPTER_ERROR' : event.payload.eventType }; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
+  async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : null; if (!endpoint) return { ok: true }; const body = { ...event.payload, id: event.id, idempotencyKey: event.id, eventType: event.type === 'ADAPTER_ERROR' ? 'ADAPTER_ERROR' : event.payload.eventType }; if (event.type === 'ADAPTER_ERROR') body.payload = { ...event.payload }; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
   async resolveProviderTab(message, sender) {
     const existing = this.sessions.get(message.dramaId, message.site)
     if (existing?.tabId) return existing.tabId
@@ -82,6 +94,15 @@ export class BackgroundController {
     if (existing?.conversationId && existing?.tabId) {
       const identity = await ping(existing.tabId)
       if (identity?.value?.conversationId === existing.conversationId) return existing
+      if (identity?.value?.conversationId && String(existing.conversationId).startsWith('WEB:')) {
+        const upgraded = await this.sessions.rebind(message.dramaId, message.site, {
+          tabId: existing.tabId,
+          conversationId: identity.value.conversationId,
+          confidence: identity.value.confidence || 'url',
+        })
+        await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...upgraded }, idempotencyKey: message.id || makeEventId() })
+        return upgraded
+      }
       const tabs = await this.chromeApi?.tabs?.query?.({ url: ['https://chatgpt.com/*', 'https://www.chatgpt.com/*', 'https://chat.openai.com/*'] }) || []
       for (const tab of tabs) {
         if (!Number.isInteger(tab?.id) || tab.id === existing.tabId) continue
@@ -167,9 +188,19 @@ export class BackgroundController {
       }
       return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
     });
+    if (action === 'recoverAttempt') {
+      const session = await this.ensureProviderSession(message, sender);
+      const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
+      if (!tabId) throw new Error('provider tab is unavailable');
+      const conversationId = session?.conversationId || message.conversationId || null;
+      if (message.conversationId && conversationId && message.conversationId !== conversationId) throw new Error('conversation identity mismatch');
+      await this.sendToProviderTab(tabId, { action: 'recoverAttempt', attempt: { ...(message.attempt || {}), attemptId: message.attemptId || message.attempt?.attemptId, conversationId } });
+      return { ok: true, conversationId, tabId };
+    }
     if (action === 'capturedResult') {
-      const result = await this.workbench.importImage(message.payload);
-      await this.emit('RESULT_IMPORTED', { attemptId: message.payload.attemptId, resultSetId: message.payload.resultSetId, resultIndex: message.payload.resultIndex, result });
+      const payload = { ...(message.payload || {}), bytes: normalizeBytes(message.payload?.bytes) };
+      const result = await this.workbench.importImage(payload);
+      await this.emit('RESULT_IMPORTED', { attemptId: payload.attemptId, resultSetId: payload.resultSetId, resultIndex: payload.resultIndex, result });
       return { ok: true, result };
     }
     if (action === 'adapterError') {
@@ -190,7 +221,9 @@ export class BackgroundController {
 export function registerBackground(chromeApi = globalThis.chrome, options = {}) {
   if (!chromeApi?.runtime?.onMessage) return null;
   const controller = new BackgroundController({ chromeApi, ...options });
-  chromeApi.runtime.onMessage.addListener((message, sender, reply) => { controller.handle(message, sender).then(reply).catch((error) => reply({ ok: false, error: error.message })); return true; });
+  const listener = (message, sender, reply) => { controller.handle(message, sender).then(reply).catch((error) => reply({ ok: false, error: error.message })); return true; };
+  chromeApi.runtime.onMessage.addListener(listener);
+  chromeApi.runtime.onMessageExternal?.addListener(listener);
   chromeApi.runtime.onStartup?.addListener(() => controller.flush()); chromeApi.runtime.onInstalled?.addListener(() => controller.flush());
   chromeApi.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
     if (changeInfo?.status && changeInfo.status !== 'complete') return;

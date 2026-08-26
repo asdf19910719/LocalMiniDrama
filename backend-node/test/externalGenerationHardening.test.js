@@ -61,4 +61,23 @@ describe('external generation hardening', () => {
     assert.equal(bound.selected, 1);
     assert.equal(db.prepare('SELECT image_url FROM storyboards WHERE id=11').get().image_url, 'https://example.invalid/a.png');
   });
+
+  it('keeps one selected external result per storyboard across revision jobs', async () => {
+    const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#00ff00' } }).png().toBuffer();
+    const firstJob = createExternalJob(db, { id: 'job-first', dramaId: 7, storyboardId: 11, site: 'chatgpt', promptSnapshot: 'first' });
+    const firstAttempt = createGenerationAttempt(db, firstJob.id, { id: 'attempt-first', status: 'submitted' });
+    const first = await importExternalResult(db, { attemptId: firstAttempt.id, conversationId: 'conversation-1', assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/first.png', bytes });
+    rebindExternalResult(db, first.resultId, 11);
+
+    const revisionJob = createExternalJob(db, { id: 'job-revision', dramaId: 7, storyboardId: 11, site: 'chatgpt', promptSnapshot: 'revision' });
+    const revisionAttempt = createGenerationAttempt(db, revisionJob.id, { id: 'attempt-revision', status: 'submitted' });
+    const revision = await importExternalResult(db, { attemptId: revisionAttempt.id, conversationId: 'conversation-1', assistantMessageId: 'assistant-2', resultIndex: 0, sourceUrl: 'https://example.invalid/revision.png', bytes });
+    rebindExternalResult(db, revision.resultId, 11);
+
+    const selected = db.prepare(`SELECT result.id FROM external_generation_results result
+      JOIN external_generation_attempts attempt ON attempt.id=result.attempt_id
+      JOIN external_generation_jobs job ON job.id=attempt.job_id
+      WHERE job.drama_id=7 AND job.storyboard_id=11 AND result.selected=1`).all();
+    assert.deepEqual(selected, [{ id: revision.resultId }]);
+  });
 });

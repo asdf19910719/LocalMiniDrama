@@ -20,13 +20,16 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useExternalGeneration } from '@/composables/useExternalGeneration'
 
 const props = defineProps({ dramaId: [Number, String], storyboardId: [Number, String], initialPrompt: { type: String, default: '' }, references: { type: Array, default: () => [] }, site: { type: String, default: 'chatgpt' }, provider: { type: String, default: 'chatgpt-web' } })
 const prompt = ref(props.initialPrompt)
-const { state, job, results, error, prepare: create, createAttempt, refresh, selectResult } = useExternalGeneration()
+const { state, job, results, error, prepare: create, restoreLatest, createAttempt, refresh, selectResult } = useExternalGeneration()
 watch(() => props.initialPrompt, (value) => { if (!prompt.value) prompt.value = value || '' })
+async function restore() { await restoreLatest(props.dramaId, props.storyboardId) }
+onMounted(restore)
+watch(() => [props.dramaId, props.storyboardId], restore)
 const extensionId = import.meta.env.VITE_EXTERNAL_EXTENSION_ID || ''
 async function notifyExtension(message) {
   if (extensionId && globalThis.chrome?.runtime?.sendMessage) {

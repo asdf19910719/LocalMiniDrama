@@ -5,7 +5,7 @@
     file: 'input[type="file"]',
     send: 'button[data-testid="send-button"], button[aria-label*="Send"]',
     message: '[data-message-id],[data-testid^="conversation-turn-"]',
-    assistant: '[data-message-author-role="assistant"], [data-message-author-role="assistant"] [data-message-id]',
+    assistant: '[data-message-author-role="assistant"], [data-message-author-role="assistant"] [data-message-id], [data-turn="assistant"], [data-turn="assistant"] [data-testid^="conversation-turn-"]',
     user: '[data-message-author-role="user"]'
   };
 
@@ -13,7 +13,7 @@
   function messageIdentity(node) {
     if (!node) return null;
     const messageId = node.dataset?.messageId || node.getAttribute?.("data-message-id");
-    const domId = node.getAttribute?.("data-testid") || node.id || null;
+    const domId = node.getAttribute?.("data-testid") || node.getAttribute?.("data-turn-id-container") || node.id || null;
     if (messageId) return { messageId, confidence: "provider" };
     if (domId) return { messageId: domId, confidence: "dom" };
     return null;
@@ -116,6 +116,22 @@
       const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []];
       return nodes.find((node) => identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
     }
+    recoverAttempt(identity, onResult, onError = () => {
+    }) {
+      this.capturePaused = false;
+      this.seenResultFingerprints.clear();
+      const requested = identity?.assistantMessageId || identity?.messageId;
+      const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []];
+      const target = requested ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested })) : nodes.filter((node) => messageIdentity(node)).at(-1);
+      const assistantMessageId = messageIdentity(target)?.messageId;
+      if (!target || !assistantMessageId) {
+        const error = Object.assign(new Error("UNBOUND_RESULT"), { code: "UNBOUND_RESULT" });
+        onError(error);
+        return () => {
+        };
+      }
+      return this.observeAttempt({ ...identity, assistantMessageId }, onResult, onError);
+    }
     conversationRoot() {
       return this.document?.querySelector?.("main[data-conversation-id], main") || this.document?.body || this.document;
     }
@@ -131,13 +147,15 @@
         };
       }
       let activeStop = null;
+      let activeAssistantId = null;
       const discover = () => {
-        const candidates = [...root.querySelectorAll?.(selectors.assistant) || []].map((node) => ({ node, id: messageIdentity(node)?.messageId })).filter((entry) => entry.id && !known.has(entry.id));
-        if (!candidates.length || activeStop) return;
+        const candidates = [...root.querySelectorAll?.(selectors.assistant) || []].map((node) => ({ node, id: messageIdentity(node)?.messageId })).filter((entry) => entry.id && (!known.has(entry.id) || entry.id === activeAssistantId && entry.node !== activeStop?.root));
+        if (!candidates.length) return;
         const selected = candidates[candidates.length - 1];
+        activeStop?.();
         known.add(selected.id);
+        activeAssistantId = selected.id;
         activeStop = this.observeAttempt({ ...identity, assistantMessageId: selected.id }, onResult, onError);
-        observer.disconnect();
       };
       const observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(discover);
       if (!observer) {
@@ -182,7 +200,9 @@
           } else {
             const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
             if (fresh.length) {
-              Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => setTimeout(emit, 1e3));
+              Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => {
+                this.capturePaused = true;
+              });
             }
           }
         } catch (error) {
@@ -226,26 +246,47 @@
 
   // src/sites/chatgpt/contentRuntime.js
   async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
-    for (const result of resultSet.results || []) {
-      const original = await adapter.fetchOriginal(result);
-      const response = await chromeApi.runtime.sendMessage({
-        action: "capturedResult",
-        payload: {
-          ...result,
-          attemptId: attempt.attemptId,
-          resultSetId: resultSet.resultSetId,
-          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
-          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
-          sourceMime: original.mime,
-          bytes: original.bytes
-        }
-      });
-      if (!response?.ok) throw new Error(response?.error || "RESULT_IMPORT_NOT_ACKNOWLEDGED");
+    try {
+      for (const result of resultSet.results || []) {
+        const original = await adapter.fetchOriginal(result);
+        const response = await chromeApi.runtime.sendMessage({
+          action: "capturedResult",
+          payload: {
+            ...result,
+            attemptId: attempt.attemptId,
+            resultSetId: resultSet.resultSetId,
+            conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+            assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+            sourceMime: original.mime,
+            bytes: original.bytes
+          }
+        });
+        if (!response?.ok) throw new Error(response?.error || "RESULT_IMPORT_NOT_ACKNOWLEDGED");
+      }
+    } catch (error) {
+      try {
+        await chromeApi.runtime.sendMessage({
+          action: "adapterError",
+          payload: {
+            attemptId: attempt.attemptId,
+            code: error.code || "RESULT_CAPTURE_FAILED",
+            message: error.message,
+            assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+            resultSetId: resultSet.resultSetId || null
+          }
+        });
+      } catch (_) {
+      }
+      throw error;
     }
   }
   var INSTALL_FLAG = "__AISTORY_CHATGPT_BRIDGE_INSTALLED__";
+  var DOM_INSTALL_FLAG = "data-aistory-chatgpt-bridge";
   function installChatGPTContentBridge({ chromeApi, adapter, globalRef = globalThis }) {
     if (globalRef[INSTALL_FLAG]) return false;
+    const documentElement = globalRef.document?.documentElement;
+    if (documentElement?.hasAttribute?.(DOM_INSTALL_FLAG)) return false;
+    documentElement?.setAttribute?.(DOM_INSTALL_FLAG, "v1");
     globalRef[INSTALL_FLAG] = true;
     let activeObservation = null;
     chromeApi.runtime.onMessage.addListener((message, _sender, reply) => {
@@ -259,6 +300,23 @@
             activeObservation?.();
             const attempt = message.attempt || {};
             activeObservation = adapter.beginAttempt(
+              attempt,
+              (resultSet) => captureResults({ adapter, chromeApi, attempt, resultSet }),
+              (error) => chromeApi.runtime.sendMessage({
+                action: "adapterError",
+                payload: {
+                  attemptId: attempt.attemptId,
+                  code: error.code || "ADAPTER_ERROR",
+                  message: error.message
+                }
+              })
+            );
+            return reply({ ok: true });
+          }
+          if (message.action === "recoverAttempt") {
+            activeObservation?.();
+            const attempt = message.attempt || {};
+            activeObservation = adapter.recoverAttempt(
               attempt,
               (resultSet) => captureResults({ adapter, chromeApi, attempt, resultSet }),
               (error) => chromeApi.runtime.sendMessage({

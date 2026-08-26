@@ -64,6 +64,21 @@ test('result capture rejects a failed import acknowledgement so the adapter can 
   }), /NEEDS_REVIEW/);
 });
 
+test('result capture reports source or import failures to the background', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) { messages.push(message); return { ok: true }; } } };
+  const adapter = { async fetchOriginal() { throw new Error('ORIGINAL_FETCH_FAILED:403'); } };
+  await assert.rejects(() => captureResults({
+    adapter,
+    chromeApi,
+    attempt: { attemptId: 'attempt-3', conversationId: 'conversation-1' },
+    resultSet: { resultSetId: 'set-3', assistantMessageId: 'assistant-11', results: [{ resultIndex: 0, sourceUrl: 'https://chatgpt.com/result.png' }] },
+  }), /ORIGINAL_FETCH_FAILED:403/);
+  assert.equal(messages.at(-1).action, 'adapterError');
+  assert.equal(messages.at(-1).payload.attemptId, 'attempt-3');
+  assert.match(messages.at(-1).payload.message, /ORIGINAL_FETCH_FAILED:403/);
+});
+
 test('provider bridge installs one runtime listener and never forwards page messages', () => {
   const runtimeListeners = [];
   const pageListeners = [];
@@ -81,4 +96,20 @@ test('provider bridge installs one runtime listener and never forwards page mess
   assert.equal(installChatGPTContentBridge({ chromeApi, adapter, globalRef }), false);
   assert.equal(runtimeListeners.length, 1);
   assert.deepEqual(pageListeners, []);
+});
+
+test('provider bridge uses a DOM marker to avoid duplicate isolated-world listeners', () => {
+  const runtimeListeners = [];
+  const attrs = new Map([['data-aistory-chatgpt-bridge', 'v1']]);
+  const chromeApi = { runtime: { onMessage: { addListener(listener) { runtimeListeners.push(listener); } } } };
+  const documentRef = {
+    documentElement: {
+      hasAttribute(name) { return attrs.has(name); },
+      setAttribute(name, value) { attrs.set(name, value); },
+    },
+  };
+  const globalRef = { document: documentRef };
+  const adapter = { getConversationIdentity() { return null; } };
+  assert.equal(installChatGPTContentBridge({ chromeApi, adapter, globalRef }), false);
+  assert.equal(runtimeListeners.length, 0);
 });

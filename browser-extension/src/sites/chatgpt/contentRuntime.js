@@ -1,26 +1,48 @@
 export async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
-  for (const result of resultSet.results || []) {
-    const original = await adapter.fetchOriginal(result);
-    const response = await chromeApi.runtime.sendMessage({
-      action: 'capturedResult',
-      payload: {
-        ...result,
-        attemptId: attempt.attemptId,
-        resultSetId: resultSet.resultSetId,
-        conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
-        assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
-        sourceMime: original.mime,
-        bytes: original.bytes,
-      },
-    });
-    if (!response?.ok) throw new Error(response?.error || 'RESULT_IMPORT_NOT_ACKNOWLEDGED');
+  try {
+    for (const result of resultSet.results || []) {
+      const original = await adapter.fetchOriginal(result);
+      const response = await chromeApi.runtime.sendMessage({
+        action: 'capturedResult',
+        payload: {
+          ...result,
+          attemptId: attempt.attemptId,
+          resultSetId: resultSet.resultSetId,
+          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+          sourceMime: original.mime,
+          bytes: original.bytes,
+        },
+      });
+      if (!response?.ok) throw new Error(response?.error || 'RESULT_IMPORT_NOT_ACKNOWLEDGED');
+    }
+  } catch (error) {
+    try {
+      await chromeApi.runtime.sendMessage({
+        action: 'adapterError',
+        payload: {
+          attemptId: attempt.attemptId,
+          code: error.code || 'RESULT_CAPTURE_FAILED',
+          message: error.message,
+          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+          resultSetId: resultSet.resultSetId || null,
+        },
+      });
+    } catch (_) {
+      // Keep the original capture error when the diagnostic event cannot be queued.
+    }
+    throw error;
   }
 }
 
 const INSTALL_FLAG = '__AISTORY_CHATGPT_BRIDGE_INSTALLED__';
+const DOM_INSTALL_FLAG = 'data-aistory-chatgpt-bridge';
 
 export function installChatGPTContentBridge({ chromeApi, adapter, globalRef = globalThis }) {
   if (globalRef[INSTALL_FLAG]) return false;
+  const documentElement = globalRef.document?.documentElement;
+  if (documentElement?.hasAttribute?.(DOM_INSTALL_FLAG)) return false;
+  documentElement?.setAttribute?.(DOM_INSTALL_FLAG, 'v1');
   globalRef[INSTALL_FLAG] = true;
   let activeObservation = null;
 
@@ -35,6 +57,23 @@ export function installChatGPTContentBridge({ chromeApi, adapter, globalRef = gl
           activeObservation?.();
           const attempt = message.attempt || {};
           activeObservation = adapter.beginAttempt(
+            attempt,
+            (resultSet) => captureResults({ adapter, chromeApi, attempt, resultSet }),
+            (error) => chromeApi.runtime.sendMessage({
+              action: 'adapterError',
+              payload: {
+                attemptId: attempt.attemptId,
+                code: error.code || 'ADAPTER_ERROR',
+                message: error.message,
+              },
+            }),
+          );
+          return reply({ ok: true });
+        }
+        if (message.action === 'recoverAttempt') {
+          activeObservation?.();
+          const attempt = message.attempt || {};
+          activeObservation = adapter.recoverAttempt(
             attempt,
             (resultSet) => captureResults({ adapter, chromeApi, attempt, resultSet }),
             (error) => chromeApi.runtime.sendMessage({

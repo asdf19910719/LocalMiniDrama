@@ -86,7 +86,8 @@ function rebindExternalResult(db, resultId, storyboardId) {
     if (!sb) throw new Error('Storyboard not found');
     if (Number(sb.drama_id) !== Number(row.job_drama_id)) throw new Error('Storyboard belongs to another drama');
     const now = new Date().toISOString();
-    db.prepare('UPDATE external_generation_results SET selected=0, updated_at=? WHERE attempt_id=?').run(now, row.attempt_id);
+    db.prepare(`UPDATE external_generation_results SET selected=0, updated_at=?
+      WHERE image_generation_id IN (SELECT id FROM image_generations WHERE storyboard_id=?)`).run(now, storyboardId);
     db.prepare('UPDATE external_generation_results SET status=\'bound\', selected=1, updated_at=? WHERE id=?').run(now, resultId);
     db.prepare('UPDATE image_generations SET storyboard_id=?, updated_at=? WHERE id=?').run(storyboardId, now, row.image_generation_id);
     db.prepare(`UPDATE storyboards SET image_url=?, local_path=?, status='generated', updated_at=? WHERE id=?`)

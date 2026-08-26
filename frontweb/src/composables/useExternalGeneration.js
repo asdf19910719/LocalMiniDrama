@@ -35,6 +35,22 @@ export function useExternalGeneration() {
     return loaded
   }
 
+  async function restoreLatest(dramaId, storyboardId) {
+    const version = ++requestVersion.value
+    error.value = null
+    try {
+      const loaded = await externalGenerationAPI.restoreLatestJob(dramaId, storyboardId)
+      if (version === requestVersion.value) {
+        job.value = loaded
+        state.value = loaded ? ((loaded.attempts || []).some((attempt) => (attempt.results || []).length) ? 'review' : 'ready') : 'idle'
+      }
+      return loaded
+    } catch (e) {
+      if (version === requestVersion.value) { error.value = e; state.value = 'failed' }
+      throw e
+    }
+  }
+
   async function createAttempt(input = {}) {
     if (!job.value) throw new Error('Prepare a job first')
     state.value = 'sending'
@@ -65,5 +81,5 @@ export function useExternalGeneration() {
     }
   }
 
-  return { state, job, results, error, prepare, refresh, createAttempt, selectResult }
+  return { state, job, results, error, prepare, restoreLatest, refresh, createAttempt, selectResult }
 }

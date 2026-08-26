@@ -43,6 +43,22 @@ export class ChatGPTAdapter {
     const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
     return nodes.find((node) => identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
   }
+  recoverAttempt(identity, onResult, onError = () => {}) {
+    this.capturePaused = false;
+    this.seenResultFingerprints.clear();
+    const requested = identity?.assistantMessageId || identity?.messageId;
+    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
+    const target = requested
+      ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }))
+      : nodes.filter((node) => messageIdentity(node)).at(-1);
+    const assistantMessageId = messageIdentity(target)?.messageId;
+    if (!target || !assistantMessageId) {
+      const error = Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' });
+      onError(error);
+      return () => {};
+    }
+    return this.observeAttempt({ ...identity, assistantMessageId }, onResult, onError);
+  }
   conversationRoot() {
     return this.document?.querySelector?.('main[data-conversation-id], main') || this.document?.body || this.document;
   }
@@ -54,15 +70,17 @@ export class ChatGPTAdapter {
     const root = this.conversationRoot();
     if (!root) { onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); return () => {}; }
     let activeStop = null;
+    let activeAssistantId = null;
     const discover = () => {
       const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
         .map((node) => ({ node, id: messageIdentity(node)?.messageId }))
-        .filter((entry) => entry.id && !known.has(entry.id));
-      if (!candidates.length || activeStop) return;
+        .filter((entry) => entry.id && (!known.has(entry.id) || (entry.id === activeAssistantId && entry.node !== activeStop?.root)));
+      if (!candidates.length) return;
       const selected = candidates[candidates.length - 1];
+      activeStop?.();
       known.add(selected.id);
+      activeAssistantId = selected.id;
       activeStop = this.observeAttempt({ ...identity, assistantMessageId: selected.id }, onResult, onError);
-      observer.disconnect();
     };
     const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(discover);
     if (!observer) { onError(Object.assign(new Error('ADAPTER_BROKEN'), { code: 'ADAPTER_BROKEN' })); return () => {}; }
@@ -79,7 +97,9 @@ export class ChatGPTAdapter {
     const emit = () => { try { const result = extractResultSet(root, identity); if (result.status === 'UNBOUND_RESULT' || result.status === 'NEEDS_REVIEW') { this.capturePaused = true; onError(Object.assign(new Error(result.status), { code: result.status })); } else {
       const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
       if (fresh.length) {
-        Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => setTimeout(emit, 1000));
+        Promise.resolve(onResult({ ...result, results: fresh }))
+          .then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint)))
+          .catch(() => { this.capturePaused = true; });
       }
     } } catch (error) { this.capturePaused = true; onError(error); } };
     emit(); const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(emit); observer?.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });

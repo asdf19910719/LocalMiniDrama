@@ -1,7 +1,7 @@
 export function messageIdentity(node) {
   if (!node) return null;
   const messageId = node.dataset?.messageId || node.getAttribute?.('data-message-id');
-  const domId = node.getAttribute?.('data-testid') || node.id || null;
+  const domId = node.getAttribute?.('data-testid') || node.getAttribute?.('data-turn-id-container') || node.id || null;
   if (messageId) return { messageId, confidence: 'provider' };
   if (domId) return { messageId: domId, confidence: 'dom' };
   return null;
