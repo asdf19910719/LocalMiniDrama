@@ -1,6 +1,8 @@
 const aiClient = require('./aiClient');
+const { createH3SkillAgent } = require('./h3SkillAgent');
+const { loadSkillPackage } = require('./skillRegistry');
 
-const COMPILER_VERSION = 'h3-v1';
+const COMPILER_VERSION = 'h3-skill-agent-v1';
 const BASE_REQUIRED_FIELDS = ['integrated_multimodal_description:', 'overall_soundscape:', 'non_diegetic_music:'];
 const REF_REQUIRED_FIELDS = [
   'subject_definitions:',
@@ -67,32 +69,6 @@ function validateH3Prompt(prompt, { durationSeconds, mode } = {}) {
   return value;
 }
 
-function compilerInstruction(mode, durationSeconds) {
-  if (mode === 'Ref2VA') {
-    return [
-      `Rewrite the source storyboard into a MiniMax H3 ${mode} full-reference video prompt for exactly ${Number(durationSeconds) || 5} seconds.`,
-      'Output only the final prompt in English using these exact sections and order:',
-      'subject_definitions: ...',
-      'summary: ...',
-      'retention_analysis: ...',
-      'detailed_description: ...',
-      'overall_soundscape: ...',
-      'non_diegetic_music: ...',
-      'Define stable <Subject N>, <Picture N>, <Video N>, and <Audio N> labels before using them, keep labels consistent, and include [Shot 1] in detailed_description.',
-      'Preserve dialogue and visible text verbatim in the original language inside <d>[Language] ...</d>. Do not output analysis, JSON, markdown fences, or Chinese section names.',
-    ].join('\n');
-  }
-  return [
-    `Rewrite the source storyboard into a MiniMax H3 ${mode} video prompt for exactly ${Number(durationSeconds) || 5} seconds.`,
-    'Output only the final prompt in English using these exact fields and order:',
-    'integrated_multimodal_description: [Shot 1] ...',
-    'overall_soundscape: ...',
-    'non_diegetic_music: ...',
-    'Preserve dialogue and visible text verbatim in the original language inside <d>[Language] ...</d>.',
-    'Describe composition, subjects, environment, actions, camera movement, sound, and timing. Do not output analysis, JSON, markdown fences, or Chinese section names.',
-  ].join('\n');
-}
-
 function sourceBundle(input, mode) {
   return [
     `MODE: ${mode}`,
@@ -107,8 +83,13 @@ function sourceBundle(input, mode) {
   ].filter(Boolean).join('\n');
 }
 
-function createH3PromptCompiler({ generateText = aiClient.generateText } = {}) {
-  if (typeof generateText !== 'function') throw new Error('H3 prompt compiler requires generateText');
+const defaultSkillAgent = createH3SkillAgent({
+  createChatCompletion: aiClient.createChatCompletion,
+  loadSkillPackage,
+});
+
+function createH3PromptCompiler({ skillAgent = defaultSkillAgent } = {}) {
+  if (!skillAgent || typeof skillAgent.run !== 'function') throw new Error('H3 prompt compiler requires skillAgent');
   return {
     version: COMPILER_VERSION,
     async compile(db, log, input = {}) {
@@ -117,35 +98,24 @@ function createH3PromptCompiler({ generateText = aiClient.generateText } = {}) {
       const durationSeconds = Number(input.durationSeconds ?? input.duration) || 5;
       const mode = h3Mode(input);
       try {
-        let output = await generateText(
-          db,
-          log,
-          'text',
-          sourceBundle(input, mode),
-          compilerInstruction(mode, durationSeconds),
-          { scene_key: 'h3_prompt_compile', max_tokens: 1800, temperature: 0.2 },
-        );
-        try {
-          output = validateH3Prompt(output, { durationSeconds, mode });
-        } catch (firstError) {
-          const retry = await generateText(
-            db,
-            log,
-            'text',
-            `${sourceBundle(input, mode)}\n\nINVALID DRAFT TO CORRECT:\n${String(output || '')}`,
-            `${compilerInstruction(mode, durationSeconds)}\nThe previous draft was invalid. Return all three required fields, each with non-empty content, and nothing else.`,
-            { scene_key: 'h3_prompt_compile', max_tokens: 2200, temperature: 0.1 },
-          );
-          output = validateH3Prompt(retry, { durationSeconds, mode });
-        }
+        const generated = await skillAgent.run(db, log, {
+          mode,
+          durationSeconds,
+          sourceBundle: sourceBundle(input, mode),
+        });
+        const output = validateH3Prompt(generated?.prompt, { durationSeconds, mode });
         return {
           sourcePrompt: source,
           compiledPrompt: output,
           promptFormat: mode,
           compilerVersion: COMPILER_VERSION,
+          skillProvenance: generated?.provenance || null,
         };
       } catch (error) {
         if (error instanceof H3PromptError) throw error;
+        if (typeof error?.code === 'string' && error.code.startsWith('H3_SKILL_')) {
+          throw new H3PromptError(error.code, error.message, error.details || {});
+        }
         throw new H3PromptError('H3_PROMPT_COMPILE_FAILED', `H3 prompt compilation failed: ${error.message}`, { cause: error.code || error.message });
       }
     },
