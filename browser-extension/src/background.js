@@ -51,6 +51,26 @@ export class BackgroundController {
   queueFor(sessionKey, task) { const prior = this.queues.get(sessionKey) || Promise.resolve(); const next = prior.catch(() => {}).then(task); this.queues.set(sessionKey, next.finally(() => { if (this.queues.get(sessionKey) === next) this.queues.delete(sessionKey); })); return next; }
   async emit(type, payload, sequence = 1, id) { const event = envelope(type, payload, sequence, id); await this.outbox.add(event); await this.flush(); return event; }
   async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : null; if (!endpoint) return { ok: true }; const body = { ...event.payload, id: event.id, idempotencyKey: event.id, eventType: event.type === 'ADAPTER_ERROR' ? 'ADAPTER_ERROR' : event.payload.eventType }; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
+  async resolveProviderTab(message, sender) {
+    const existing = this.sessions.get(message.dramaId, message.site)
+    if (existing?.tabId) return existing.tabId
+    if (sender?.tab?.id && isChatGPTUrl(sender.tab.url)) return sender.tab.id
+    const tabs = await this.chromeApi?.tabs?.query?.({ url: ['https://chatgpt.com/*', 'https://www.chatgpt.com/*', 'https://chat.openai.com/*'] }) || []
+    return tabs.find((tab) => Number.isInteger(tab?.id))?.id ?? null
+  }
+  async ensureProviderSession(message, sender) {
+    if (!message?.dramaId || !message?.site || message.site !== 'chatgpt') return null
+    const existing = this.sessions.get(message.dramaId, message.site)
+    if (existing?.conversationId && existing?.tabId) return existing
+    const tabId = await this.resolveProviderTab(message, sender)
+    if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
+    const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' })
+    const conversationId = identity?.value?.conversationId
+    if (!conversationId) return null
+    const session = await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: identity.value.confidence || 'url' })
+    await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
+    return session
+  }
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
     if (action === 'flush') return { ok: true, confirmed: await this.flush() };
@@ -63,7 +83,8 @@ export class BackgroundController {
     if (action === 'rebind') return { ok: true, session: await this.sessions.rebind(message.dramaId, message.site, message.session) };
     if (action === 'state') return { ok: true, session: this.sessions.get(message.dramaId, message.site), outbox: this.outbox.pending() };
     if (action === 'prepare') {
-      const tabId = message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
+      const session = await this.ensureProviderSession(message, sender);
+      const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'fill', prompt: message.prompt });
       if (tabId && message.references?.length && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'upload', files: message.references });
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };

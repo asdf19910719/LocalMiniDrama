@@ -12,6 +12,8 @@ test('FilmCreate renders external generation panel for every storyboard row', ()
   assert.match(source, /ExternalWebGenerationPanel/)
   assert.match(source, /:storyboard-id="sb\.id"/)
   assert.match(source, /v-for="\(sb, i\) in storyboards"/)
+  const panel = fs.readFileSync(path.join(root, 'src/components/dramaCanvas/ExternalWebGenerationPanel.vue'), 'utf8')
+  assert.match(panel, /action: 'prepare', dramaId: props\.dramaId, site: props\.site/)
 })
 
 test('shot context keeps identity and deterministic reference order', () => {
