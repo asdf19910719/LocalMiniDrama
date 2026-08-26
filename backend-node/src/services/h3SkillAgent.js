@@ -34,6 +34,9 @@ function invalid(message, details = {}) {
 }
 
 function getToolCall(message) {
+  if (!message || message.role !== 'assistant') {
+    throw invalid('The skill tool call must be returned by an assistant message');
+  }
   if (!message || !Array.isArray(message.tool_calls) || message.tool_calls.length === 0) {
     throw new H3SkillAgentError(
       'H3_SKILL_TOOL_CALL_UNSUPPORTED',
@@ -135,6 +138,12 @@ function createH3SkillAgent({ createChatCompletion, loadSkillPackage } = {}) {
         max_tokens: 2200,
       });
       const finalMessage = second?.message;
+      if (finalMessage && finalMessage.role !== 'assistant') {
+        throw new H3SkillAgentError(
+          'H3_SKILL_TOOL_CALL_INVALID',
+          'The final H3 prompt must be returned by an assistant message',
+        );
+      }
       if (hasToolCalls(finalMessage)) {
         throw new H3SkillAgentError(
           'H3_SKILL_TOOL_CALL_REPEATED',
