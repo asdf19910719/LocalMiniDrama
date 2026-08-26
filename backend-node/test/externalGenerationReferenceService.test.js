@@ -65,4 +65,21 @@ describe('external generation reference packages', () => {
     const result = prepareReferencePackage(db, job.id, [{ fileName: 'reference.png', localPath: 'projects/3/reference.png' }]);
     assert.equal(fs.readFileSync(getReferenceFile(db, job.id, result.manifest.references[0].path), 'utf8'), 'stored-reference');
   });
+
+  it('resolves image_url-only references only when they point to local static storage', () => {
+    const dbFile = path.join(root, 'drama.db');
+    db.close();
+    db = new Database(dbFile);
+    db.exec(fs.readFileSync('migrations/24_external_web_generation.sql', 'utf8'));
+    const storageFile = path.join(root, 'storage', 'projects', '3', 'url-reference.png');
+    fs.mkdirSync(path.dirname(storageFile), { recursive: true });
+    fs.writeFileSync(storageFile, Buffer.from('url-reference'));
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'prompt' });
+
+    const result = prepareReferencePackage(db, job.id, [{ name: 'url-reference.png', role: 'scene', url: '/static/projects/3/url-reference.png' }]);
+    assert.equal(fs.readFileSync(getReferenceFile(db, job.id, result.manifest.references[0].path), 'utf8'), 'url-reference');
+
+    const rejected = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'prompt-2' });
+    assert.throws(() => prepareReferencePackage(db, rejected.id, [{ name: 'remote.png', url: 'https://cdn.example/remote.png' }]), /local static storage|local path/i);
+  });
 });

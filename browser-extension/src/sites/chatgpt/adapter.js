@@ -16,7 +16,14 @@ export class ChatGPTAdapter {
   getConversationIdentity() { return conversationIdentity(this.location?.href); }
   fillPrompt(prompt) {
     const element = this.document?.querySelector(selectors.composer); if (!element) throw new Error('ADAPTER_BROKEN');
-    element.focus?.(); if ('value' in element) element.value = prompt; else element.textContent = prompt;
+    element.focus?.();
+    if ('value' in element) element.value = prompt;
+    else {
+      const execDocument = element.ownerDocument || this.document;
+      execDocument?.execCommand?.('selectAll', false);
+      const inserted = execDocument?.execCommand?.('insertText', false, String(prompt));
+      if (!inserted) element.textContent = prompt;
+    }
     const Input = globalThis.InputEvent || globalThis.Event; element.dispatchEvent?.(new Input('input', { bubbles: true, inputType: 'insertText', data: prompt })); return { promptLength: String(prompt).length };
   }
   async uploadReferences(files = []) {

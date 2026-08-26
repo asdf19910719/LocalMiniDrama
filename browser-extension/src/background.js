@@ -23,9 +23,15 @@ export function isChatGPTUrl(url = '') {
 
 export async function injectChatGPTContentScript(chromeApi, tabId, url) {
   if (!isChatGPTUrl(url) || !Number.isInteger(tabId) || !chromeApi?.scripting?.executeScript) return false;
+  if (chromeApi?.tabs?.sendMessage) {
+    const active = await chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null);
+    if (active?.ok) return true;
+  }
   try {
     await chromeApi.scripting.executeScript({ target: { tabId }, files: [CHATGPT_CONTENT_BUNDLE] });
-    return true;
+    if (!chromeApi?.tabs?.sendMessage) return true;
+    const recovered = await chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null);
+    return recovered?.ok === true;
   } catch (_) {
     // Chrome can reject restricted, discarded, or already-closing tabs.
     return false;
@@ -36,7 +42,7 @@ function makeEventId() { return globalThis.crypto?.randomUUID?.() || `write-${Da
 
 export class BackgroundController {
   constructor({ chromeApi = globalThis.chrome, fetchImpl = globalThis.fetch, apiBase = DEFAULT_API, storage } = {}) {
-    this.chromeApi = chromeApi; this.fetchImpl = fetchImpl; this.apiBase = apiBase.replace(/\/$/, '');
+    this.chromeApi = chromeApi; this.fetchImpl = fetchImpl === globalThis.fetch && typeof fetchImpl === 'function' ? fetchImpl.bind(globalThis) : fetchImpl; this.apiBase = apiBase.replace(/\/$/, '');
     this.storage = storage || chromeStorageLocal(chromeApi); this.outbox = new Outbox(this.storage); this.sessions = new SessionRegistry(this.storage); this.queues = new Map(); this.ready = null;
     this.bridge = new BridgeClient(); this.workbench = new WorkbenchClient({ baseUrl: this.apiBase });
   }
@@ -48,7 +54,16 @@ export class BackgroundController {
     const data = await response.json().catch(() => null); if (!response.ok) { const error = new Error(data?.error || `HTTP ${response.status}`); error.status = response.status; throw error; }
     return data?.data ?? data;
   }
-  queueFor(sessionKey, task) { const prior = this.queues.get(sessionKey) || Promise.resolve(); const next = prior.catch(() => {}).then(task); this.queues.set(sessionKey, next.finally(() => { if (this.queues.get(sessionKey) === next) this.queues.delete(sessionKey); })); return next; }
+  queueFor(sessionKey, task) {
+    const prior = this.queues.get(sessionKey) || Promise.resolve()
+    const next = prior.catch(() => {}).then(task)
+    const tracked = next.then(
+      () => { if (this.queues.get(sessionKey) === tracked) this.queues.delete(sessionKey) },
+      () => { if (this.queues.get(sessionKey) === tracked) this.queues.delete(sessionKey) },
+    )
+    this.queues.set(sessionKey, tracked)
+    return next
+  }
   async emit(type, payload, sequence = 1, id) { const event = envelope(type, payload, sequence, id); await this.outbox.add(event); await this.flush(); return event; }
   async flush() { await this.init(); return this.outbox.flush(async (event) => { const endpoint = event.type === 'ATTEMPT_EVENT' || event.type === 'ADAPTER_ERROR' ? `external-generation/attempts/${event.payload.attemptId}/events` : null; if (!endpoint) return { ok: true }; const body = { ...event.payload, id: event.id, idempotencyKey: event.id, eventType: event.type === 'ADAPTER_ERROR' ? 'ADAPTER_ERROR' : event.payload.eventType }; try { await this.api(endpoint, { method: 'POST', body, idempotencyKey: event.id }); return { ok: true }; } catch { return { ok: false }; } }); }
   async resolveProviderTab(message, sender) {
@@ -61,23 +76,48 @@ export class BackgroundController {
   async ensureProviderSession(message, sender) {
     if (!message?.dramaId || !message?.site || message.site !== 'chatgpt') return null
     const existing = this.sessions.get(message.dramaId, message.site)
-    if (existing?.conversationId && existing?.tabId) return existing
+    const ping = async (tabId) => this.chromeApi?.tabs?.sendMessage
+      ? this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
+      : null
+    if (existing?.conversationId && existing?.tabId) {
+      const identity = await ping(existing.tabId)
+      if (identity?.value?.conversationId === existing.conversationId) return existing
+      const tabs = await this.chromeApi?.tabs?.query?.({ url: ['https://chatgpt.com/*', 'https://www.chatgpt.com/*', 'https://chat.openai.com/*'] }) || []
+      for (const tab of tabs) {
+        if (!Number.isInteger(tab?.id) || tab.id === existing.tabId) continue
+        const candidate = await ping(tab.id)
+        if (candidate?.value?.conversationId === existing.conversationId) {
+          const rebound = await this.sessions.attach(message.dramaId, message.site, { tabId: tab.id, confidence: candidate.value.confidence || 'url' })
+          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...rebound }, idempotencyKey: message.id || makeEventId() })
+          return rebound
+        }
+      }
+      await this.sessions.pause(message.dramaId, message.site, identity ? 'conversation identity mismatch' : 'provider tab unavailable')
+      throw new Error(identity ? 'conversation identity mismatch' : 'provider tab unavailable')
+    }
     const tabId = await this.resolveProviderTab(message, sender)
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
-    const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' })
+    const identity = await ping(tabId)
     const conversationId = identity?.value?.conversationId
     const session = await this.sessions.attach(message.dramaId, message.site, { conversationId: conversationId || null, tabId, confidence: identity?.value?.confidence || 'tab' })
     await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
     return session
   }
-  async waitForConversationIdentity(tabId, attempts = 20) {
+  async waitForConversationIdentity(tabId, attempts = 20, intervalMs = 250) {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
     for (let index = 0; index < attempts; index += 1) {
       const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
-      if (identity?.value?.conversationId) return identity.value
-      await new Promise((resolve) => setTimeout(resolve, 250))
+      const conversationId = identity?.value?.conversationId
+      if (conversationId && !String(conversationId).startsWith('WEB:')) return identity.value
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
     }
     return null
+  }
+  async sendToProviderTab(tabId, message) {
+    if (!tabId || !this.chromeApi?.tabs?.sendMessage) throw new Error('provider tab is unavailable')
+    const response = await this.chromeApi.tabs.sendMessage(tabId, message)
+    if (response?.ok === false) throw new Error(response.error || 'provider adapter rejected request')
+    return response
   }
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
@@ -93,8 +133,8 @@ export class BackgroundController {
     if (action === 'prepare') {
       const session = await this.ensureProviderSession(message, sender);
       const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
-      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'fill', prompt: message.prompt });
-      if (tabId && message.references?.length && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'upload', files: message.references });
+      if (tabId) await this.sendToProviderTab(tabId, { action: 'fill', prompt: message.prompt });
+      if (tabId && message.references?.length) await this.sendToProviderTab(tabId, { action: 'upload', files: message.references });
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };
     }
     if (action === 'send') return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
@@ -107,12 +147,16 @@ export class BackgroundController {
       if (message.dramaId !== undefined && message.site && conversationId) {
         const session = this.sessions.get(message.dramaId, message.site)
         if (!session?.conversationId || session.conversationId !== conversationId) {
+          if (session?.conversationId) {
+            await this.sessions.pause(message.dramaId, message.site, 'conversation identity mismatch')
+            throw new Error('conversation identity mismatch; rebind is required')
+          }
           await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: 'url' })
           await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
         } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
       }
-      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
-      if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'submit' });
+      if (tabId) await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
+      if (tabId) await this.sendToProviderTab(tabId, { action: 'submit' });
       if (!conversationId) {
         const identity = await this.waitForConversationIdentity(tabId)
         if (identity?.conversationId) {
@@ -150,7 +194,7 @@ export function registerBackground(chromeApi = globalThis.chrome, options = {}) 
   chromeApi.runtime.onStartup?.addListener(() => controller.flush()); chromeApi.runtime.onInstalled?.addListener(() => controller.flush());
   chromeApi.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
     if (changeInfo?.status && changeInfo.status !== 'complete') return;
-    void injectChatGPTContentScript(chromeApi, tabId, tab?.url || changeInfo?.url);
+    return injectChatGPTContentScript(chromeApi, tabId, tab?.url || changeInfo?.url);
   });
   return controller;
 }

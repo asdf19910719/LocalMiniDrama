@@ -28,9 +28,17 @@ const prompt = ref(props.initialPrompt)
 const { state, job, results, error, prepare: create, createAttempt, refresh, selectResult } = useExternalGeneration()
 watch(() => props.initialPrompt, (value) => { if (!prompt.value) prompt.value = value || '' })
 const extensionId = import.meta.env.VITE_EXTERNAL_EXTENSION_ID || ''
-function notifyExtension(message) {
-  if (extensionId && globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime.sendMessage(extensionId, message)
-  if (typeof window !== 'undefined') window.postMessage({ source: 'aistory-external-generation', message }, '*')
+async function notifyExtension(message) {
+  if (extensionId && globalThis.chrome?.runtime?.sendMessage) {
+    const response = await globalThis.chrome.runtime.sendMessage(extensionId, message)
+    if (!response?.ok) throw new Error(response?.error || 'Extension rejected the request')
+    return response
+  }
+  if (typeof window !== 'undefined') {
+    window.postMessage({ source: 'aistory-external-generation', message }, '*')
+    return { ok: true }
+  }
+  throw new Error('External generation bridge is unavailable')
 }
 async function hydrateReferences(references) {
   return Promise.all((references || []).map(async (reference) => {
@@ -43,9 +51,9 @@ async function hydrateReferences(references) {
 async function prepare() {
   const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, props.references)
   const hydratedReferences = await hydrateReferences(props.references)
-  notifyExtension({ action: 'prepare', dramaId: props.dramaId, site: props.site, jobId: prepared.id, prompt: prompt.value, references: hydratedReferences, conversationId: prepared.conversation_id })
+  await notifyExtension({ action: 'prepare', dramaId: props.dramaId, site: props.site, jobId: prepared.id, prompt: prompt.value, references: hydratedReferences, conversationId: prepared.conversation_id })
 }
-async function send() { const attempt = await createAttempt({ conversationId: job.value?.conversation_id, sent_prompt_hash: job.value?.prompt_hash, status: 'ready_to_send' }); notifyExtension({ action: 'send', dramaId: props.dramaId, site: props.site, attemptId: attempt.id, conversationId: job.value?.conversation_id, payload: attempt }) }
+async function send() { const attempt = await createAttempt({ conversationId: job.value?.conversation_id, sent_prompt_hash: job.value?.prompt_hash, status: 'ready_to_send' }); await notifyExtension({ action: 'send', dramaId: props.dramaId, site: props.site, attemptId: attempt.id, conversationId: job.value?.conversation_id, payload: attempt }) }
 async function select(resultId) { await selectResult(resultId, props.storyboardId) }
 </script>
 

@@ -46,7 +46,13 @@
       if (!sourceUrl) return null;
       return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
     }).filter(Boolean);
-    return { status: results.length ? "RESULT_READY" : "GENERATING", resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`, attemptId: attempt.attemptId, results };
+    return {
+      status: results.length ? "RESULT_READY" : "GENERATING",
+      resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`,
+      attemptId: attempt.attemptId,
+      assistantMessageId: actual.messageId,
+      results
+    };
   }
 
   // src/sites/chatgpt/adapter.js
@@ -76,7 +82,12 @@
       if (!element) throw new Error("ADAPTER_BROKEN");
       element.focus?.();
       if ("value" in element) element.value = prompt;
-      else element.textContent = prompt;
+      else {
+        const execDocument = element.ownerDocument || this.document;
+        execDocument?.execCommand?.("selectAll", false);
+        const inserted = execDocument?.execCommand?.("insertText", false, String(prompt));
+        if (!inserted) element.textContent = prompt;
+      }
       const Input = globalThis.InputEvent || globalThis.Event;
       element.dispatchEvent?.(new Input("input", { bubbles: true, inputType: "insertText", data: prompt }));
       return { promptLength: String(prompt).length };
@@ -213,56 +224,70 @@
     }
   };
 
-  // src/sites/chatgpt/content.js
-  var adapter = new ChatGPTAdapter();
-  var activeObservation = null;
-  window.addEventListener("message", (event) => {
-    if (event.source !== window || event.data?.source !== "aistory-external-generation") return;
-    const message = event.data.message;
-    if (message) chrome.runtime.sendMessage(message);
-  });
-  async function captureResults(attempt, resultSet) {
+  // src/sites/chatgpt/contentRuntime.js
+  async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
     for (const result of resultSet.results || []) {
-      try {
-        const original = await adapter.fetchOriginal(result);
-        chrome.runtime.sendMessage({ action: "capturedResult", payload: {
+      const original = await adapter.fetchOriginal(result);
+      const response = await chromeApi.runtime.sendMessage({
+        action: "capturedResult",
+        payload: {
           ...result,
           attemptId: attempt.attemptId,
           resultSetId: resultSet.resultSetId,
-          conversationId: attempt.conversationId || adapter.getConversationIdentity()?.conversationId || null,
-          assistantMessageId: attempt.assistantMessageId || null,
+          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
           sourceMime: original.mime,
           bytes: original.bytes
-        } });
-      } catch (error) {
-        chrome.runtime.sendMessage({ action: "adapterError", payload: { attemptId: attempt.attemptId, code: error.code || "ORIGINAL_FETCH_FAILED", message: error.message } });
-        throw error;
-      }
+        }
+      });
+      if (!response?.ok) throw new Error(response?.error || "RESULT_IMPORT_NOT_ACKNOWLEDGED");
     }
   }
-  chrome.runtime.onMessage.addListener((message, _sender, reply) => {
-    (async () => {
-      try {
-        if (message.action === "identity") return reply({ ok: true, value: adapter.getConversationIdentity() });
-        if (message.action === "fill") return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
-        if (message.action === "upload") return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
-        if (message.action === "submit") return reply({ ok: true, value: adapter.submit() });
-        if (message.action === "beginAttempt") {
-          activeObservation?.();
-          activeObservation = adapter.beginAttempt(message.attempt || {}, (resultSet) => captureResults(message.attempt || {}, resultSet), (error) => chrome.runtime.sendMessage({ action: "adapterError", payload: { attemptId: message.attempt?.attemptId, code: error.code || "ADAPTER_ERROR", message: error.message } }));
-          return reply({ ok: true });
+  var INSTALL_FLAG = "__AISTORY_CHATGPT_BRIDGE_INSTALLED__";
+  function installChatGPTContentBridge({ chromeApi, adapter, globalRef = globalThis }) {
+    if (globalRef[INSTALL_FLAG]) return false;
+    globalRef[INSTALL_FLAG] = true;
+    let activeObservation = null;
+    chromeApi.runtime.onMessage.addListener((message, _sender, reply) => {
+      (async () => {
+        try {
+          if (message.action === "identity") return reply({ ok: true, value: adapter.getConversationIdentity() });
+          if (message.action === "fill") return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
+          if (message.action === "upload") return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
+          if (message.action === "submit") return reply({ ok: true, value: adapter.submit() });
+          if (message.action === "beginAttempt") {
+            activeObservation?.();
+            const attempt = message.attempt || {};
+            activeObservation = adapter.beginAttempt(
+              attempt,
+              (resultSet) => captureResults({ adapter, chromeApi, attempt, resultSet }),
+              (error) => chromeApi.runtime.sendMessage({
+                action: "adapterError",
+                payload: {
+                  attemptId: attempt.attemptId,
+                  code: error.code || "ADAPTER_ERROR",
+                  message: error.message
+                }
+              })
+            );
+            return reply({ ok: true });
+          }
+          if (message.action === "stopAttempt") {
+            activeObservation?.();
+            activeObservation = null;
+            return reply({ ok: true });
+          }
+          if (message.action === "fetchOriginal") return reply({ ok: true, value: await adapter.fetchOriginal(message.result) });
+          return reply({ ok: false, error: "Unknown action" });
+        } catch (error) {
+          return reply({ ok: false, error: error.code || error.message });
         }
-        if (message.action === "stopAttempt") {
-          activeObservation?.();
-          activeObservation = null;
-          return reply({ ok: true });
-        }
-        if (message.action === "fetchOriginal") return reply({ ok: true, value: await adapter.fetchOriginal(message.result) });
-        return reply({ ok: false, error: "Unknown action" });
-      } catch (error) {
-        return reply({ ok: false, error: error.code || error.message });
-      }
-    })();
+      })();
+      return true;
+    });
     return true;
-  });
+  }
+
+  // src/sites/chatgpt/content.js
+  installChatGPTContentBridge({ chromeApi: chrome, adapter: new ChatGPTAdapter() });
 })();

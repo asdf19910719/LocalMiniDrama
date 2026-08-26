@@ -17,6 +17,7 @@ function referenceFor(item, role, assetImageUrl) {
     ...(item.local_path ? { filePath: item.local_path } : {}),
     role,
     sourceId: item.id,
+    assetId: item.id,
   }
 }
 

@@ -30,9 +30,15 @@ test('shot context keeps identity and deterministic reference order', () => {
     storyboardId: 42,
     prompt: 'shot prompt',
     references: [
-      { name: 'scene-3', mime: 'image/png', url: '/scene.png', role: 'scene', sourceId: 3 },
-      { name: 'character-8', mime: 'image/png', url: '/a.png', role: 'character', sourceId: 8 },
-      { name: 'prop-9', mime: 'image/png', url: '/key.png', role: 'prop', sourceId: 9 },
+      { name: 'scene-3', mime: 'image/png', url: '/scene.png', role: 'scene', sourceId: 3, assetId: 3 },
+      { name: 'character-8', mime: 'image/png', url: '/a.png', role: 'character', sourceId: 8, assetId: 8 },
+      { name: 'prop-9', mime: 'image/png', url: '/key.png', role: 'prop', sourceId: 9, assetId: 9 },
     ],
   })
+})
+
+test('external generation panel awaits extension acknowledgement before reporting success', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/dramaCanvas/ExternalWebGenerationPanel.vue'), 'utf8')
+  assert.match(source, /await notifyExtension\(/)
+  assert.match(source, /if \(!response\?\.ok\) throw new Error/)
 })

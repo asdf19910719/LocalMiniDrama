@@ -47,7 +47,16 @@ function referenceBytes(db, reference, job) {
       sourcePath = asset?.local_path;
     }
   }
-  if (!sourcePath) throw new Error('Reference content or local path is required');
+  if (!sourcePath) {
+    const imageUrl = referenceValue(reference, 'url', 'url', referenceValue(reference, 'imageUrl', 'image_url'));
+    if (imageUrl) {
+      let parsed;
+      try { parsed = new URL(String(imageUrl), 'http://localminidrama.invalid'); } catch (_) { parsed = null; }
+      const isLocalHost = !parsed?.host || ['localminidrama.invalid', '127.0.0.1', 'localhost'].includes(parsed.hostname);
+      if (isLocalHost && parsed?.pathname?.startsWith('/static/')) sourcePath = parsed.pathname.slice('/static/'.length);
+    }
+  }
+  if (!sourcePath) throw new Error('Reference content, local path, or local static URL is required');
   const rawSource = String(sourcePath)
   const dbDir = typeof db.name === 'string' && db.name !== ':memory:' ? path.dirname(path.resolve(db.name)) : null
   const storageRoot = dbDir ? path.resolve(dbDir, 'storage') : null

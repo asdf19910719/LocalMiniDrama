@@ -14,7 +14,13 @@ export function extractResultSet(node, attempt = {}) {
     if (!sourceUrl) return null;
     return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
   }).filter(Boolean);
-  return { status: results.length ? 'RESULT_READY' : 'GENERATING', resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`, attemptId: attempt.attemptId, results };
+  return {
+    status: results.length ? 'RESULT_READY' : 'GENERATING',
+    resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`,
+    attemptId: attempt.attemptId,
+    assistantMessageId: actual.messageId,
+    results,
+  };
 }
 
 export function resultIdentity(result, attempt) {
