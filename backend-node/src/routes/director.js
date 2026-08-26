@@ -35,12 +35,98 @@ function storyboardContext(db, shotId) {
   }
 }
 
-function generationInput(body, { shot, groupId, structured, inputs }) {
+function resolveReferencePath(value, storageRoot) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let relative = raw;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname.startsWith('/static/')) relative = decodeURIComponent(parsed.pathname.slice('/static/'.length));
+  } catch (_) {
+    if (relative.startsWith('/static/')) relative = relative.slice('/static/'.length);
+  }
+  if (relative !== raw || !/^https?:\/\//i.test(raw)) {
+    const root = path.resolve(storageRoot);
+    const absolute = path.resolve(root, relative.replace(/^[/\\]+/, '').replace(/[\\/]+/g, path.sep));
+    const rel = path.relative(root, absolute);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absolute) && fs.statSync(absolute).isFile()) return absolute;
+  }
+  return raw;
+}
+
+function collectStoryboardReferenceImages(db, shot, { storageRoot = path.join(process.cwd(), 'data', 'storage') } = {}) {
+  if (!shot || !db) return [];
+  const refs = [];
+  const seen = new Set();
+  const resolve = (row) => {
+    if (!row) return '';
+    const local = String(row.local_path || '').trim();
+    if (local) {
+      const absolute = path.isAbsolute(local) ? local : path.resolve(storageRoot, local);
+      if (fs.existsSync(absolute)) return absolute;
+    }
+    return resolveReferencePath(row.image_url, storageRoot);
+  };
+  const add = (row, role) => {
+    const imageFile = resolve(row);
+    if (!imageFile || seen.has(imageFile)) return;
+    seen.add(imageFile);
+    refs.push({ imageFile, role });
+  };
+
+  try {
+    if (shot.scene_id != null) {
+      add(db.prepare('SELECT image_url, local_path FROM scenes WHERE id = ? AND deleted_at IS NULL').get(shot.scene_id), 'environment');
+    }
+  } catch (_) {}
+
+  const characterIds = [];
+  try {
+    const parsed = shot.characters ? JSON.parse(shot.characters) : [];
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const id = Number(typeof item === 'object' ? item?.id : item);
+        if (Number.isFinite(id)) characterIds.push(id);
+      }
+    }
+  } catch (_) {}
+  if (!characterIds.length) {
+    try {
+      characterIds.push(...db.prepare('SELECT character_id FROM storyboard_characters WHERE storyboard_id = ? ORDER BY id ASC').all(shot.id).map((r) => Number(r.character_id)).filter(Number.isFinite));
+    } catch (_) {}
+  }
+  for (const id of characterIds) {
+    let row = null;
+    try { row = db.prepare('SELECT image_url, local_path FROM characters WHERE id = ? AND deleted_at IS NULL').get(id); } catch (_) {}
+    if (!row) {
+      try { row = db.prepare('SELECT image_url, local_path FROM character_libraries WHERE id = ? AND deleted_at IS NULL').get(id); } catch (_) {}
+    }
+    add(row, 'subject');
+    if (refs.length >= 10) return refs;
+  }
+  try {
+    const props = db.prepare(`SELECT p.image_url, p.local_path FROM storyboard_props sp
+      JOIN props p ON p.id = sp.prop_id AND p.deleted_at IS NULL
+      WHERE sp.storyboard_id = ? ORDER BY sp.prop_id ASC`).all(shot.id);
+    for (const row of props) {
+      add(row, 'prop');
+      if (refs.length >= 10) break;
+    }
+  } catch (_) {}
+  return refs;
+}
+
+function generationInput(body, { db, shot, groupId, structured, inputs, storageRoot }) {
   const source = { ...inputs, ...(structured || {}) };
   const prompt = String(structured?.prompt || legacyPromptText(body.prompt) || '').trim();
   if (!prompt) throw new Error('prompt or structured input is required');
-  const referenceUrls = source.referenceImageUrls || source.referenceUrls
+  const explicitRefs = source.referenceImageUrls || source.referenceUrls || source.reference_image_urls || source.reference_urls
     || (source.referenceImagePath ? [source.referenceImagePath] : undefined);
+  const explicitList = Array.isArray(explicitRefs) ? explicitRefs : (explicitRefs ? [explicitRefs] : []);
+  const collectedRefs = explicitList.length ? explicitList : collectStoryboardReferenceImages(db, shot, { storageRoot });
+  const referenceUrls = Array.isArray(collectedRefs)
+    ? collectedRefs.map((ref) => resolveReferencePath(typeof ref === 'object' ? ref.imageFile : ref, storageRoot)).filter(Boolean)
+    : collectedRefs;
   return {
     drama_id: Number(shot.drama_id) || 0,
     storyboard_id: Number(shot.id),
@@ -96,6 +182,7 @@ async function createGenerationBatch(db, videoGenerationService, {
   body,
   structured,
   inputs,
+  storageRoot,
 }) {
   const initial = candidateService.createVideoCandidateGroup(db, {
     shotId: String(shot.id),
@@ -105,7 +192,7 @@ async function createGenerationBatch(db, videoGenerationService, {
   try {
     for (const candidate of initial.candidates) {
       const generation = await videoGenerationService.createVideoGeneration(
-        generationInput(body, { shot, groupId: initial.id, structured, inputs }),
+        generationInput(body, { db, shot, groupId: initial.id, structured, inputs, storageRoot }),
       );
       videoGenerations.push(generation);
       candidateService.linkCandidateVideoGeneration(db, initial.id, candidate.id, generation.id);
@@ -128,14 +215,16 @@ async function createGenerationBatch(db, videoGenerationService, {
 }
 
 function isFileWithin(rootPath, filePath) {
+  const roots = Array.isArray(rootPath) ? rootPath : [rootPath];
+  if (!roots.length) return false;
   try {
-    const realRoot = fs.realpathSync(rootPath);
     const realFile = fs.realpathSync(filePath);
-    const relative = path.relative(realRoot, realFile);
-    return Boolean(relative)
-      && !relative.startsWith('..')
-      && !path.isAbsolute(relative)
-      && fs.statSync(realFile).isFile();
+    if (!fs.statSync(realFile).isFile()) return false;
+    return roots.some((root) => {
+      const realRoot = fs.realpathSync(root);
+      const relative = path.relative(realRoot, realFile);
+      return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
+    });
   } catch {
     return false;
   }
@@ -148,6 +237,7 @@ function routes(db, log, {
   allowExperimental = false,
   artifactRoot = path.join(process.cwd(), 'data', 'director-artifacts'),
   allowedLocalRoots = [artifactRoot],
+  storageRoot = path.join(process.cwd(), 'data', 'storage'),
   ffmpegPath = 'ffmpeg',
   timelineRenderer = null,
   anchorCreator = createContinuityAnchor,
@@ -250,6 +340,7 @@ function routes(db, log, {
           body,
           structured,
           inputs,
+          storageRoot,
         });
         response.accepted(res, { ...batch, cacheHit: false, resource: null });
       } catch (error) {
@@ -293,7 +384,7 @@ function routes(db, log, {
     getArtifactContent: (req, res) => {
       try {
         const artifact = candidateService.getCandidateArtifact(db, req.params.artifactId);
-        if (!artifact || artifact.status !== 'ready' || !isFileWithin(artifactRoot, artifact.artifact_path)) {
+        if (!artifact || artifact.status !== 'ready' || !isFileWithin([artifactRoot, storageRoot], artifact.artifact_path)) {
           return response.notFound(res, 'director artifact not found');
         }
         res.sendFile(artifact.artifact_path);
@@ -537,3 +628,5 @@ function routes(db, log, {
 }
 
 module.exports = routes;
+module.exports.collectStoryboardReferenceImages = collectStoryboardReferenceImages;
+module.exports.generationInput = generationInput;

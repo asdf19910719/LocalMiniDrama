@@ -149,6 +149,35 @@ test('preserves the normal editor generation context in the unified candidate pa
   }])
 })
 
+test('keeps the newly generated candidates when a stale history refresh returns no groups', async () => {
+  const generatedGroup = {
+    id: 'new-group',
+    status: 'running',
+    candidates: [
+      { id: 'candidate-1', status: 'pending', video_generation: { id: 101, status: 'waiting' } },
+      { id: 'candidate-2', status: 'pending', video_generation: { id: 102, status: 'queued' } },
+    ],
+  }
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    generateCandidates: async () => ({ group: generatedGroup }),
+  }
+  const props = reactive({
+    storyboardId: 13,
+    storyboard: { id: 13, video_prompt: '山路上的人物向前行走', duration: 5 },
+  })
+  const panel = useVideoGenerationPanel(props, () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.generateCandidates()
+
+  assert.equal(panel.currentGroup.value?.id, 'new-group')
+  assert.deepEqual(panel.candidates.value.map((candidate) => candidate.id), ['candidate-1', 'candidate-2'])
+  assert.match(panel.queueLabel.value, /正在生成|排队中/)
+})
+
 test('provides Chinese lifecycle and error summaries while preserving technical details', () => {
   assert.equal(videoStatusLabel('queued'), '排队中')
   assert.equal(videoStatusLabel('running'), '生成中')

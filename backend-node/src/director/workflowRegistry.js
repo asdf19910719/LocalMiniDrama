@@ -54,6 +54,27 @@ function findDirectorNode(prompt) {
   return Object.values(prompt || {}).find((node) => node?.class_type === 'MiniMaxH3Director');
 }
 
+function normalizeReferenceImages(input = {}) {
+  const raw = input.referenceUrls ?? input.reference_urls ?? input.referenceImageUrls ?? input.reference_image_urls;
+  const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const roles = Array.isArray(input.referenceRoles) ? input.referenceRoles : [];
+  const refs = [];
+  const push = (value, index) => {
+    if (value == null) return;
+    const item = typeof value === 'object' ? value : { imageFile: value };
+    const imageFile = String(
+      item.imageFile ?? item.image_file ?? item.local_path ?? item.localPath ?? item.fileName ?? item.url ?? item.image_url ?? ''
+    ).trim();
+    if (!imageFile || refs.some((ref) => ref.imageFile === imageFile)) return;
+    const fallbackRole = values.length > 1 ? (index === 0 ? 'environment' : 'subject') : 'state';
+    const role = String(item.role ?? roles[index] ?? input.referenceRole ?? fallbackRole).trim() || fallbackRole;
+    refs.push({ index: refs.length, imageFile, role });
+  };
+  values.forEach(push);
+  if (!refs.length && input.referenceImagePath) push(input.referenceImagePath, 0);
+  return refs;
+}
+
 function buildStructuredWorkflowPrompt(workflow, input = {}) {
   if (!workflow || typeof workflow !== 'object' || !workflow.prompt || typeof workflow.prompt !== 'object') {
     throw new WorkflowRegistryError('workflow must contain a ComfyUI prompt object', 'WORKFLOW_TEMPLATE_INVALID');
@@ -77,10 +98,7 @@ function buildStructuredWorkflowPrompt(workflow, input = {}) {
   const seed = Number.isInteger(Number(input.seed)) ? Number(input.seed) : Number(nodeInputs.seed || 42);
   const overlapFrames = Number.isInteger(Number(input.overlapFrames)) ? Number(input.overlapFrames) : Number(nodeInputs.continuityOverlapFrames || 22);
   const continuityEnabled = input.continuityMode !== 'none';
-  const referenceImagePath = String(input.referenceImagePath || '').trim();
-  const refs = referenceImagePath
-    ? [{ index: 0, imageFile: referenceImagePath, role: String(input.referenceRole || 'state') }]
-    : [];
+  const refs = normalizeReferenceImages(input);
 
   nodeInputs.global_prompt = text;
   nodeInputs.seed = seed;
@@ -89,7 +107,7 @@ function buildStructuredWorkflowPrompt(workflow, input = {}) {
   nodeInputs.height = height;
   nodeInputs.ref_max_size = Math.max(width, height);
   nodeInputs.total_frames = totalFrames;
-  if (refs.length) nodeInputs.task_type = 'r2v';
+  nodeInputs.task_type = refs.length ? 'r2v' : 't2v';
 
   let timeline = {};
   try { timeline = JSON.parse(String(nodeInputs.timeline_data || '{}')); } catch { timeline = {}; }
@@ -246,6 +264,7 @@ module.exports = {
   loadRegistry,
   readWorkflowTemplate,
   buildStructuredWorkflowPrompt,
+  normalizeReferenceImages,
   selectWorkflow,
   sha256File,
 };

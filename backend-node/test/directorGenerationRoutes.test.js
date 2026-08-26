@@ -223,6 +223,22 @@ describe('Director generation routes', () => {
     assert.equal(enqueued.length, 0);
   });
 
+  it('uses the backend default when a legacy caller omits workflowId', async () => {
+    const res = responseCapture();
+    await routes.generateCandidates({
+      params: { shotId: '1' },
+      body: { candidateCount: 1, structured: { prompt: 'shot without explicit workflow' } },
+    }, res);
+
+    assert.equal(res.statusCode, 202);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.data.video_generations.length, 1);
+    const generation = db.prepare('SELECT provider, model FROM video_generations WHERE id = ?')
+      .get(res.body.data.video_generations[0].id);
+    assert.equal(generation.provider, 'cloud-provider');
+    assert.equal(generation.model, 'cloud-default-model');
+  });
+
   it('cancels created videos and removes the whole group when a later candidate fails', async () => {
     let creationAttempt = 0;
     const compensatingLifecycle = {
@@ -620,9 +636,13 @@ describe('Director generation routes', () => {
   it('serves only ready persisted artifacts through the content handler', () => {
     const createdAt = new Date().toISOString();
     const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'director-artifacts-'));
+    const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'director-storage-'));
     const readyPath = path.join(artifactRoot, 'ready.mp4');
+    const storedVideoPath = path.join(storageRoot, 'projects', 'shot-5.mp4');
     const outsidePath = path.join(os.tmpdir(), `director-outside-${Date.now()}.mp4`);
     fs.writeFileSync(readyPath, 'test');
+    fs.mkdirSync(path.dirname(storedVideoPath), { recursive: true });
+    fs.writeFileSync(storedVideoPath, 'test');
     fs.writeFileSync(outsidePath, 'test');
     db.prepare(`INSERT INTO director_artifacts
       (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size,
@@ -631,7 +651,12 @@ describe('Director generation routes', () => {
              ('artifact-failed', 'job-failed', 1, 1, 'failed', 'E:/artifacts/failed.mp4', '', 0, '{}', ?, NULL),
              ('artifact-outside', 'job-outside', 1, 1, 'ready', ?, 'hash', 1, '{}', ?, ?)`)
       .run(readyPath, createdAt, createdAt, createdAt, outsidePath, createdAt, createdAt);
-    const contentRoutes = createRoutes(db, { error() {} }, { artifactRoot });
+    db.prepare(`INSERT INTO director_artifacts
+      (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size,
+       manifest_json, created_at, ready_at)
+      VALUES ('artifact-storage', 'job-storage', 1, 1, 'ready', ?, 'hash', 1, '{}', ?, ?)`)
+      .run(storedVideoPath, createdAt, createdAt);
+    const contentRoutes = createRoutes(db, { error() {} }, { artifactRoot, storageRoot });
 
     const ready = responseCapture();
     contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-ready' } }, ready);
@@ -645,7 +670,12 @@ describe('Director generation routes', () => {
     const outside = responseCapture();
     contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-outside' } }, outside);
     assert.equal(outside.statusCode, 404);
+    const stored = responseCapture();
+    contentRoutes.getArtifactContent({ params: { artifactId: 'artifact-storage' } }, stored);
+    assert.equal(stored.statusCode, null);
+    assert.equal(stored.sentFile, storedVideoPath);
     fs.rmSync(artifactRoot, { recursive: true, force: true });
+    fs.rmSync(storageRoot, { recursive: true, force: true });
     fs.rmSync(outsidePath, { force: true });
   });
 });

@@ -74,6 +74,15 @@ test('builds a validated Director generation request from panel fields', () => {
   })
 })
 
+test('falls back to the default H3 workflow when the advanced field is blank', () => {
+  assert.equal(buildDirectorGenerationRequest({
+    workflowId: '  ',
+    candidateCount: 1,
+    promptText: '{"1":{"text":"a quiet mountain gate"}}',
+    inputsText: '{}',
+  }).workflowId, 'h3-continuity-v1')
+})
+
 test('rejects malformed generation JSON before sending a request', () => {
   assert.throws(() => buildDirectorGenerationRequest({ promptText: '{broken' }), /prompt must be valid JSON/)
 })

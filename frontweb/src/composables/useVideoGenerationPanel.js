@@ -439,7 +439,20 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     }
   }
 
-  async function refreshHistory({ quiet = false } = {}) {
+  function mergeProtectedGroup(fetchedGroups, protectedGroup) {
+    if (!protectedGroup?.id) return fetchedGroups
+    const existing = fetchedGroups.find((item) => item.id === protectedGroup.id)
+    if (!existing) return [protectedGroup, ...fetchedGroups]
+    const fetchedCandidates = Array.isArray(existing.candidates) ? existing.candidates : []
+    const protectedCandidates = Array.isArray(protectedGroup.candidates) ? protectedGroup.candidates : []
+    const byId = new Map(protectedCandidates.map((candidate) => [candidate.id, candidate]))
+    for (const candidate of fetchedCandidates) byId.set(candidate.id, candidate)
+    return fetchedGroups.map((item) => item.id === protectedGroup.id
+      ? { ...protectedGroup, ...item, candidates: [...byId.values()] }
+      : item)
+  }
+
+  async function refreshHistory({ quiet = false, preserveGroup = null } = {}) {
     const requestVersion = ++refreshVersion
     const requestStoryboardId = props.storyboardId
     if (!quiet) loading.value = true
@@ -447,7 +460,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     try {
       const state = await videosAPI.getCandidateHistory(props.storyboardId)
       if (requestVersion !== refreshVersion) return
-      groups.value = Array.isArray(state?.groups) ? state.groups : []
+      const fetchedGroups = Array.isArray(state?.groups) ? state.groups : []
+      groups.value = mergeProtectedGroup(fetchedGroups, preserveGroup)
       if (!activeGroupId.value || !groups.value.some((item) => item.id === activeGroupId.value)) {
         activeGroupId.value = state?.latest?.id || groups.value[0]?.id || ''
       }
@@ -491,7 +505,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
         activeGroupId.value = group.id
       }
       syncPolling()
-      await refreshHistory({ quiet: true })
+      await refreshHistory({ quiet: true, preserveGroup: group })
     } catch (caught) {
       if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) setError(caught)
     } finally {

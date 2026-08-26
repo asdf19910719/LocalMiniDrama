@@ -112,6 +112,7 @@ function setupRouter(cfg, db, log) {
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
     artifactRoot: directorArtifactRoot,
+    storageRoot: path.resolve(cfg.storage?.local_path || './data/storage'),
     allowedLocalRoots: directorAllowedRoots,
     ffmpegPath: getFfmpegPath(),
   });

@@ -203,4 +203,23 @@ describe('structured Director workflow input', () => {
     assert.deepEqual(timeline.segments[0].refs, [{ index: 0, imageFile: 'E:/anchors/door-open.png', role: 'state' }]);
     assert.equal(timeline.segments[0].continuityFromPrev, false);
   });
+
+  it('binds all supplied reference images to Ref2VA timeline metadata', () => {
+    const { buildStructuredWorkflowPrompt } = loadSut();
+    const workflow = { prompt: { '5': { class_type: 'MiniMaxH3Director', inputs: { timeline_data: '{}' } } } };
+    const prompt = buildStructuredWorkflowPrompt(workflow, {
+      prompt: 'Preserve the character and mountain path from both references.',
+      referenceUrls: ['shot13_character_ref.png', 'shot13_scene_ref.png'],
+      referenceRoles: ['subject', 'environment'],
+      durationSeconds: 5,
+    });
+    const node = prompt['5'];
+    const timeline = JSON.parse(node.inputs.timeline_data);
+    assert.equal(node.inputs.task_type, 'r2v');
+    assert.deepEqual(timeline.global.refs, [
+      { index: 0, imageFile: 'shot13_character_ref.png', role: 'subject' },
+      { index: 1, imageFile: 'shot13_scene_ref.png', role: 'environment' },
+    ]);
+    assert.deepEqual(timeline.segments[0].refs, timeline.global.refs);
+  });
 });
