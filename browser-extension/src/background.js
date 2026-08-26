@@ -70,6 +70,15 @@ export class BackgroundController {
     await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
     return session
   }
+  async waitForConversationIdentity(tabId, attempts = 20) {
+    if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
+    for (let index = 0; index < attempts; index += 1) {
+      const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
+      if (identity?.value?.conversationId) return identity.value
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    return null
+  }
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
     if (action === 'flush') return { ok: true, confirmed: await this.flush() };
@@ -104,6 +113,14 @@ export class BackgroundController {
       }
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
       if (tabId && this.chromeApi?.tabs?.sendMessage) await this.chromeApi.tabs.sendMessage(tabId, { action: 'submit' });
+      if (!conversationId) {
+        const identity = await this.waitForConversationIdentity(tabId)
+        if (identity?.conversationId) {
+          conversationId = identity.conversationId
+          await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: identity.confidence || 'url' })
+          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
+        }
+      }
       return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
     });
     if (action === 'capturedResult') {
