@@ -1010,6 +1010,15 @@
             </el-button>
           </div>
           <div :id="'sb-' + sb.id" class="storyboard-row">
+            <ExternalWebGenerationPanel
+              class="film-create-external-generation"
+              :drama-id="dramaId"
+              :storyboard-id="sb.id"
+              :initial-prompt="externalGenerationContext(sb).prompt"
+              :references="externalGenerationContext(sb).references"
+              site="chatgpt"
+              provider="chatgpt-web"
+            />
             <!-- 左：分镜脚本 -->
             <div class="sb-panel sb-script">
               <div class="sb-script-row sb-script-selects">
@@ -2658,6 +2667,7 @@ import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
+import ExternalWebGenerationPanel from '@/components/dramaCanvas/ExternalWebGenerationPanel.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -2671,6 +2681,7 @@ import { runGenerateStoryFromPremise } from '@/composables/useStoryGeneration'
 import { useCharacters } from '@/composables/filmCreate/useCharacters'
 import { useProps as usePropsComposable } from '@/composables/filmCreate/useProps'
 import { useScenes } from '@/composables/filmCreate/useScenes'
+import { buildExternalGenerationShotContext } from '@/utils/externalGenerationShot'
 
 const route = useRoute()
 const router = useRouter()
@@ -2808,6 +2819,17 @@ const currentEpisode = computed(() => store.currentEpisode)
 const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
 const videoProgress = computed(() => store.videoProgress)
 const videoStatus = computed(() => store.videoStatus)
+
+function externalGenerationContext(sb) {
+  return buildExternalGenerationShotContext({
+    dramaId: dramaId.value,
+    storyboard: sb,
+    getScene: getSbSelectedScene,
+    getCharacters: getSbSelectedCharacters,
+    getProps: getSbSelectedProps,
+    assetImageUrl,
+  })
+}
 
 function trackFilmCreateAction(_action, _payload = {}) {
   // 单机版：无埋点上报
@@ -9652,6 +9674,12 @@ html.light .segment-shot-range { color: #9ca3af; }
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
   animation: sb-fade-in 0.35s ease both;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+.film-create-external-generation {
+  flex: 0 0 300px;
+  max-width: 300px;
+  align-self: stretch;
+  background: rgba(15, 23, 42, 0.42);
 }
 .storyboard-row:hover {
   border-color: rgba(255, 255, 255, 0.1);

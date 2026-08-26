@@ -32,7 +32,19 @@ function notifyExtension(message) {
   if (extensionId && globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime.sendMessage(extensionId, message)
   if (typeof window !== 'undefined') window.postMessage({ source: 'aistory-external-generation', message }, '*')
 }
-async function prepare() { const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, props.references); notifyExtension({ action: 'prepare', jobId: prepared.id, prompt: prompt.value, references: props.references, conversationId: prepared.conversation_id }) }
+async function hydrateReferences(references) {
+  return Promise.all((references || []).map(async (reference) => {
+    if (reference?.bytes || reference?.content || !reference?.url) return reference
+    const response = await fetch(reference.url, { credentials: 'include' })
+    if (!response.ok) throw new Error(`Reference download failed: ${response.status}`)
+    return { ...reference, bytes: Array.from(new Uint8Array(await response.arrayBuffer())) }
+  }))
+}
+async function prepare() {
+  const hydratedReferences = await hydrateReferences(props.references)
+  const prepared = await create({ dramaId: props.dramaId, storyboardId: props.storyboardId, site: props.site, provider: props.provider, promptSnapshot: prompt.value }, hydratedReferences)
+  notifyExtension({ action: 'prepare', jobId: prepared.id, prompt: prompt.value, references: hydratedReferences, conversationId: prepared.conversation_id })
+}
 async function send() { const attempt = await createAttempt({ conversationId: job.value?.conversation_id, sent_prompt_hash: job.value?.prompt_hash, status: 'ready_to_send' }); notifyExtension({ action: 'send', dramaId: props.dramaId, site: props.site, attemptId: attempt.id, conversationId: job.value?.conversation_id, payload: attempt }) }
 async function select(resultId) { await selectResult(resultId, props.storyboardId) }
 </script>
