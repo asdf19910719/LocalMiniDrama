@@ -147,6 +147,37 @@ test('prepare hydrates local reference URLs before uploading them', async () => 
   assert.deepEqual(upload[1].files[0].bytes, [137, 80, 78, 71])
 })
 
+test('prepare rejects local reference responses that are not images', async () => {
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => {
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async (url) => String(url).includes('/static/')
+      ? {
+          ok: true,
+          headers: { get: () => 'text/html; charset=utf-8' },
+          arrayBuffer: async () => new TextEncoder().encode('<!doctype html>').buffer,
+        }
+      : { ok: true, json: async () => ({ data: {} }) },
+  })
+
+  await assert.rejects(
+    () => controller.handle({
+      action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello',
+      references: [{ role: 'character', sourceId: 3, url: 'http://localhost:5679/static/character.png' }],
+    }),
+    /reference response is not an image/i,
+  )
+})
+
 test('send pauses instead of rebinding when the provider conversation drifts after prepare', async () => {
   const messages = []
   const chromeApi = {

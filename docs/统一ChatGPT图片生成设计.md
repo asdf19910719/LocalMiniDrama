@@ -1,5 +1,7 @@
 # 全项目统一 ChatGPT 图片生成设计
 
+> 实际浏览器验收（2026-08-28）：已使用真实登录态 ChatGPT + Playwright Chromium + MV3 扩展完成道具入口的完整流程：工作台选择“ChatGPT 生成”→真实网页发送→监听 assistant turn→恢复并导入 3 个候选→选择候选并绑定道具。Task `1684a88f-690c-49fb-9799-2272dce7c37d` 已为 `completed`，原图已写入本地并通过 `200 image/png` 预览接口提供。扩展回归 39/39、后端统一生图相关回归 15/15；启动参数和验收命令见 `docs/真实ChatGPT图片生成模拟测试启动与验收.md`。
+
 > 实施状态同步（2026-08-27）：当前分支已完成统一任务/批次模型、六类资源适配、统一 API、持久化串行队列、共享前端入口，以及 ChatGPT 的 `prepare -> fill -> upload -> send -> acknowledge` 执行链路。本轮提交为 `b8bc743`。Node 22.22.3 下后端定向测试 12/12、扩展测试 37/37、前端统一图片测试 5/5 和前端生产构建均通过。真实网页生图尚未计为通过：已有 profile 当时被 Cloudflare 返回 `Unable to load site`，可控扩展 profile 未登录。
 
 > 用户侧自动化边界：安装并启用扩展、完成一次 ChatGPT 登录后，tab 查找、扩展注入、会话绑定、提示词填充、参考图上传、提交和 ACK 均自动完成。仅首次安装/登录失效、浏览器权限、Cloudflare/VPN 或网络不可用时需要人工处理。

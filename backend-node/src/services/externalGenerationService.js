@@ -40,6 +40,11 @@ function getExternalJob(db, jobId) {
   job.attempts = db.prepare('SELECT * FROM external_generation_attempts WHERE job_id = ? ORDER BY sequence').all(jobId);
   for (const attempt of job.attempts) {
     attempt.results = db.prepare('SELECT * FROM external_generation_results WHERE attempt_id = ? ORDER BY result_index').all(attempt.id);
+    for (const result of attempt.results) {
+      if (result.status === 'imported' || result.status === 'bound') {
+        result.preview_url = `/api/v1/external-generation/results/${encodeURIComponent(result.id)}/content`;
+      }
+    }
   }
   return job;
 }

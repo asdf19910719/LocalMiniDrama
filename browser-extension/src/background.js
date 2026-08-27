@@ -158,6 +158,13 @@ export class BackgroundController {
       const response = await this.fetchImpl(url)
       if (!response?.ok) throw new Error(`reference download failed: ${response?.status || 'unknown'}`)
       const bytes = Array.from(new Uint8Array(await response.arrayBuffer()))
+      const contentType = response.headers?.get?.('content-type')?.split(';', 1)[0].trim().toLowerCase() || ''
+      if (contentType && !contentType.startsWith('image/')) throw new Error(`reference response is not an image: ${contentType}`)
+      const isImageBytes = (contentType === 'image/png' && bytes.slice(0, 4).join(',') === '137,80,78,71')
+        || (contentType === 'image/jpeg' && bytes.slice(0, 3).join(',') === '255,216,255')
+        || (contentType === 'image/gif' && String.fromCharCode(...bytes.slice(0, 3)) === 'GIF')
+        || (contentType === 'image/webp' && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP')
+      if (contentType && contentType.startsWith('image/') && !isImageBytes && bytes.length >= 12) throw new Error(`reference response is not an image: invalid ${contentType} bytes`)
       return {
         ...reference,
         bytes,
