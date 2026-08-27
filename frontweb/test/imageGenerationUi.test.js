@@ -12,6 +12,7 @@ test('shared image generation controls expose concise channel copy and one summa
   const drawer = read('src/components/imageGeneration/ImageGenerationDrawer.vue')
   const queue = read('src/components/imageGeneration/ImageGenerationQueue.vue')
   const composable = read('src/composables/useImageGeneration.js')
+  const bridge = read('src/utils/imageGenerationBridge.js')
 
   assert.match(api, /image-generation-summary/)
   assert.match(api, /image-generation-batches/)
@@ -23,4 +24,8 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(queue, /暂停/)
   assert.match(queue, /跳过当前/)
   assert.match(composable, /loadSummary/)
+  assert.match(api, /prepare-send/)
+  assert.match(api, /acknowledge/)
+  assert.match(bridge, /aistory-external-generation-response/)
+  assert.doesNotMatch(bridge, /return \{ ok: true \}/)
 })

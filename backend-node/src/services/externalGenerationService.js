@@ -119,8 +119,9 @@ function createExternalJob(db, input = {}) {
   const insert = db.prepare(`
     INSERT INTO external_generation_jobs
       (id, drama_id, storyboard_id, asset_type, provider, site, conversation_id,
-       prompt_snapshot, prompt_hash, reference_manifest_hash, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       prompt_snapshot, prompt_hash, reference_manifest_hash, status, created_at, updated_at,
+       image_generation_task_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   insert.run(
     jobId,
@@ -136,6 +137,7 @@ function createExternalJob(db, input = {}) {
     String(value(input, 'status', 'status', 'pending') || 'pending'),
     createdAt,
     createdAt,
+    value(input, 'imageGenerationTaskId', 'image_generation_task_id'),
   );
   return getExternalJob(db, jobId);
 }

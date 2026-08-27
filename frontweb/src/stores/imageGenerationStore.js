@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
+import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 
 export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const dramaId = ref(null)
@@ -35,7 +36,21 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     currentTask.value = await imageGenerationTaskAPI.get(currentTask.value.id)
     return currentTask.value
   }
+  async function sendToChatGPT(task = currentTask.value) {
+    if (!task?.id) throw new Error('图片生成任务不存在')
+    const prepared = await imageGenerationTaskAPI.prepareSend(task.id)
+    currentTask.value = prepared.task
+    const job = prepared.external_job
+    const attempt = prepared.attempt
+    await sendImageGenerationBridgeMessage({
+      action: 'send', dramaId: task.drama_id, site: 'chatgpt', jobId: job.id,
+      attemptId: attempt.id, conversationId: job.conversation_id, payload: attempt,
+    })
+    currentTask.value = await imageGenerationTaskAPI.acknowledge(task.id, attempt.id)
+    await loadSummary(task.drama_id)
+    return currentTask.value
+  }
   function closeDrawer() { drawerVisible.value = false }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, loadSummary, loadDefault, openTask, refreshTask, closeDrawer }
+  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, closeDrawer }
 })

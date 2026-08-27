@@ -12,6 +12,19 @@ function safeResultId(value) {
   return resultId;
 }
 
+function markUnifiedTaskNeedsReview(db, attemptId) {
+  const hasTasks = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='image_generation_tasks'").get();
+  if (!hasTasks) return false;
+  const linked = db.prepare(`SELECT job.image_generation_task_id AS task_id
+    FROM external_generation_attempts attempt JOIN external_generation_jobs job ON job.id=attempt.job_id
+    WHERE attempt.id=?`).get(attemptId);
+  if (!linked?.task_id) return false;
+  const result = db.prepare(`UPDATE image_generation_tasks SET status='needs_review', updated_at=?
+    WHERE id=? AND status IN ('preparing','submitted','generating')`)
+    .run(new Date().toISOString(), linked.task_id);
+  return result.changes > 0;
+}
+
 async function importExternalResult(db, input) {
   const attempt = db.prepare(`SELECT a.*, j.drama_id, j.storyboard_id, j.provider, j.prompt_snapshot
     FROM external_generation_attempts a JOIN external_generation_jobs j ON j.id=a.job_id WHERE a.id=?`).get(input.attemptId);
@@ -59,6 +72,7 @@ async function importExternalResult(db, input) {
       VALUES (?, ?, 'image', 'external-web', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(attempt.drama_id, path.basename(localPath), input.sourceUrl || null, localPath, input.bytes.length, input.sourceMime || `image/${meta.format}`, meta.width, meta.height, ig.lastInsertRowid, now, now);
     db.prepare(`INSERT INTO external_generation_results (id, attempt_id, result_set_id, provider_result_id, result_index, candidate_index, selected, source_url, source_mime, source_width, source_height, download_hash, image_generation_id, asset_id, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'imported', ?, ?)`).run(resultId, input.attemptId, input.resultSetId || null, input.providerResultId || null, resultIndex, resultIndex, input.sourceUrl || null, input.sourceMime || `image/${meta.format}`, meta.width, meta.height, hash, ig.lastInsertRowid, asset.lastInsertRowid, now, now);
+    markUnifiedTaskNeedsReview(db, input.attemptId);
     return { resultId, imageGenerationId: ig.lastInsertRowid, assetId: asset.lastInsertRowid, status: 'imported', sha256: hash, width: meta.width, height: meta.height };
   });
   try {
@@ -95,4 +109,4 @@ function rebindExternalResult(db, resultId, storyboardId) {
     return db.prepare('SELECT * FROM external_generation_results WHERE id=?').get(resultId);
   })();
 }
-module.exports = { importExternalResult, rebindExternalResult };
+module.exports = { importExternalResult, rebindExternalResult, markUnifiedTaskNeedsReview };

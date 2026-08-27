@@ -10,6 +10,7 @@ export function useImageGeneration() {
     loadDefault: store.loadDefault,
     open: store.openTask,
     refresh: store.refreshTask,
+    sendToChatGPT: store.sendToChatGPT,
     close: store.closeDrawer,
   }
 }

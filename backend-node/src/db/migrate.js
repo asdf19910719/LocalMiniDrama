@@ -582,6 +582,9 @@ function ensureAllColumns(database) {
   )`);
   database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_drama_status ON image_generation_tasks(drama_id, status, created_at)');
   database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_batch_queue ON image_generation_tasks(batch_id, queue_position)');
+  ensureColumns(database, 'external_generation_jobs', [
+    { name: 'image_generation_task_id', type: 'TEXT' },
+  ]);
 }
 
 /** 对已打开的 database 执行迁移与兜底补列（供 app 启动时调用） */
