@@ -24,6 +24,7 @@ const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const directorRoutes = require('./director');
 const externalGenerationRoutes = require('./externalGeneration');
+const imageGenerationTaskRoutes = require('./imageGenerationTasks');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
@@ -136,6 +137,7 @@ function setupRouter(cfg, db, log) {
   });
   const externalGeneration = externalGenerationRoutes(db, cfg, log);
   r.use(externalGeneration);
+  r.use(imageGenerationTaskRoutes(db, log));
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
