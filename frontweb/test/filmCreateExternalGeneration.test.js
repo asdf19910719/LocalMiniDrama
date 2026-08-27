@@ -40,6 +40,7 @@ test('shot context keeps identity and deterministic reference order', () => {
 
 test('unified image store awaits extension acknowledgement before reporting success', () => {
   const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  assert.match(source, /action:\s*'prepare'/)
   assert.match(source, /await sendImageGenerationBridgeMessage\(/)
   assert.match(source, /await imageGenerationTaskAPI\.acknowledge/)
 })

@@ -3,6 +3,17 @@ import { ref } from 'vue'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 
+function parseReferenceManifest(value) {
+  if (Array.isArray(value)) return value
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (_) {
+    return []
+  }
+}
+
 export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const dramaId = ref(null)
   const defaultChannel = ref('api')
@@ -43,11 +54,16 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     const job = prepared.external_job
     const attempt = prepared.attempt
     await sendImageGenerationBridgeMessage({
-      action: 'send', dramaId: task.drama_id, site: 'chatgpt', jobId: job.id,
+      action: 'prepare', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
+      conversationId: job.conversation_id, prompt: prepared.task.prompt_snapshot,
+      references: parseReferenceManifest(prepared.task.reference_manifest),
+    })
+    await sendImageGenerationBridgeMessage({
+      action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
       attemptId: attempt.id, conversationId: job.conversation_id, payload: attempt,
     })
-    currentTask.value = await imageGenerationTaskAPI.acknowledge(task.id, attempt.id)
-    await loadSummary(task.drama_id)
+    currentTask.value = await imageGenerationTaskAPI.acknowledge(prepared.task.id, attempt.id)
+    await loadSummary(prepared.task.drama_id)
     return currentTask.value
   }
   async function selectResult(result) {

@@ -116,13 +116,23 @@ export class BackgroundController {
       await this.sessions.pause(message.dramaId, message.site, identity ? 'conversation identity mismatch' : 'provider tab unavailable')
       throw new Error(identity ? 'conversation identity mismatch' : 'provider tab unavailable')
     }
-    const tabId = await this.resolveProviderTab(message, sender)
-    if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
-    const identity = await ping(tabId)
-    const conversationId = identity?.value?.conversationId
-    const session = await this.sessions.attach(message.dramaId, message.site, { conversationId: conversationId || null, tabId, confidence: identity?.value?.confidence || 'tab' })
-    await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
-    return session
+    if (!this.chromeApi?.tabs?.sendMessage) return null
+    const queriedTabs = await this.chromeApi?.tabs?.query?.({ url: ['https://chatgpt.com/*', 'https://www.chatgpt.com/*', 'https://chat.openai.com/*'] }) || []
+    const candidates = []
+    if (sender?.tab?.id && isChatGPTUrl(sender.tab.url)) candidates.push(sender.tab)
+    for (const tab of queriedTabs) {
+      if (!candidates.some((candidate) => candidate.id === tab?.id)) candidates.push(tab)
+    }
+    for (const tab of candidates) {
+      if (!Number.isInteger(tab?.id)) continue
+      const identity = await ping(tab.id)
+      if (!identity?.ok) continue
+      const conversationId = identity.value?.conversationId
+      const session = await this.sessions.attach(message.dramaId, message.site, { conversationId: conversationId || null, tabId: tab.id, confidence: identity.value?.confidence || 'tab' })
+      await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...session }, idempotencyKey: message.id || makeEventId() })
+      return session
+    }
+    return null
   }
   async waitForConversationIdentity(tabId, attempts = 20, intervalMs = 250) {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
@@ -140,6 +150,22 @@ export class BackgroundController {
     if (response?.ok === false) throw new Error(response.error || 'provider adapter rejected request')
     return response
   }
+  async hydrateReferences(references = []) {
+    if (!Array.isArray(references) || !references.length) return []
+    return Promise.all(references.map(async (reference) => {
+      if (!reference?.url || reference.bytes || reference.data || reference.content) return reference
+      const url = new URL(String(reference.url), this.apiBase).href
+      const response = await this.fetchImpl(url)
+      if (!response?.ok) throw new Error(`reference download failed: ${response?.status || 'unknown'}`)
+      const bytes = Array.from(new Uint8Array(await response.arrayBuffer()))
+      return {
+        ...reference,
+        bytes,
+        name: reference.name || reference.fileName || `reference-${reference.sourceId || 'image'}`,
+        mime: reference.mime || 'image/png',
+      }
+    }))
+  }
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
     if (action === 'flush') return { ok: true, confirmed: await this.flush() };
@@ -155,11 +181,17 @@ export class BackgroundController {
       const session = await this.ensureProviderSession(message, sender);
       const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
       if (tabId) await this.sendToProviderTab(tabId, { action: 'fill', prompt: message.prompt });
-      if (tabId && message.references?.length) await this.sendToProviderTab(tabId, { action: 'upload', files: message.references });
+      if (tabId && message.references?.length) {
+        const references = await this.hydrateReferences(message.references)
+        await this.sendToProviderTab(tabId, { action: 'upload', files: references })
+      }
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };
     }
     if (action === 'send') return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
-      const tabId = message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
+      const session = message.dramaId !== undefined && message.site === 'chatgpt'
+        ? await this.ensureProviderSession(message, sender)
+        : null
+      const tabId = session?.tabId ?? message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
       let conversationId = message.conversationId || this.sessions.get(message.dramaId, message.site)?.conversationId || null
       if (tabId && this.chromeApi?.tabs?.sendMessage) {
         const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
