@@ -2,6 +2,7 @@ const express = require('express');
 const response = require('../response');
 const tasks = require('../services/imageGenerationTaskService');
 const targets = require('../services/imageGenerationTargetService');
+const queue = require('../services/imageGenerationQueueService');
 
 module.exports = (db, log = console) => {
   const router = express.Router();
@@ -50,6 +51,19 @@ module.exports = (db, log = console) => {
     generationChannel: req.body?.generationChannel,
     targets: req.body?.targets,
   })));
+
+  router.post('/image-generation-batches/:batchId/pause', (req, res) =>
+    handle(res, () => queue.pauseBatch(db, req.params.batchId)));
+  router.post('/image-generation-batches/:batchId/resume', (req, res) =>
+    handle(res, () => queue.resumeBatch(db, req.params.batchId)));
+  router.post('/image-generation-batches/:batchId/run-next', (req, res) =>
+    handle(res, () => queue.runNext(db, req.params.batchId)));
+  router.post('/image-generation-tasks/:taskId/retry', (req, res) =>
+    handle(res, () => queue.retryTask(db, req.params.taskId)));
+  router.post('/image-generation-tasks/:taskId/skip', (req, res) =>
+    handle(res, () => queue.skipTask(db, req.params.taskId)));
+  router.post('/image-generation-tasks/:taskId/cancel', (req, res) =>
+    handle(res, () => queue.skipTask(db, req.params.taskId)));
 
   return router;
 };

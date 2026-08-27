@@ -32,6 +32,15 @@ it('creates a unified task and exposes one drama summary', async () => {
     const summary = (await (await fetch(`${base}/dramas/7/image-generation-summary`)).json()).data;
     assert.equal(summary.total, 1);
     assert.equal(summary.draft, 1);
+
+    const batch = (await (await fetch(`${base}/image-generation-batches`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dramaId: 7, scope: 'characters', generationChannel: 'chatgpt_web', targets: [{ targetType: 'character', targetId: 1 }] }),
+    })).json()).data;
+    const paused = (await (await fetch(`${base}/image-generation-batches/${batch.id}/pause`, { method: 'POST' })).json()).data;
+    assert.equal(paused.status, 'paused');
+    const resumed = (await (await fetch(`${base}/image-generation-batches/${batch.id}/resume`, { method: 'POST' })).json()).data;
+    assert.equal(resumed.status, 'queued');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     db.close();
