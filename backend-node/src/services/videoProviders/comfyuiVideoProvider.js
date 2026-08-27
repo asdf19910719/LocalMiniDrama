@@ -6,6 +6,8 @@ const {
   selectWorkflow,
   sha256File,
 } = require('../../director/workflowRegistry');
+const { getAdapter } = require('../../director/adapters');
+const { stageReferenceAssets } = require('./referenceAssetStaging');
 const {
   validateH3Dimensions,
   validateVramBudget,
@@ -35,20 +37,23 @@ function contextSettings(context) {
 function contextInput(context) {
   const input = context?.input || context?.request || context || {};
   const settings = contextSettings(context);
+  const continuityMode = input.continuityMode ?? input.continuity_mode ?? settings.continuity_mode;
   return {
     ...input,
     width: input.width ?? settings.width,
     height: input.height ?? settings.height,
     frameRate: input.frameRate ?? input.frame_rate ?? settings.frame_rate,
     seed: input.seed ?? settings.seed,
-    continuityMode: input.continuityMode ?? input.continuity_mode ?? settings.continuity_mode,
+    continuityMode: continuityMode === false || continuityMode === 0 || continuityMode === '0' || continuityMode === '0.0'
+      ? 'none' : continuityMode,
   };
 }
 
 function workflowIdFor(context) {
   const settings = contextSettings(context);
   return String(
-    context?.workflowId
+      context?.workflowId
+      || context?.snapshot?.workflowId
       || context?.model
       || context?.snapshot?.model
       || settings.workflow_id
@@ -71,7 +76,10 @@ function normalizeVramMb(value) {
 
 function detectedVramMb(systemStats) {
   const totals = (Array.isArray(systemStats?.devices) ? systemStats.devices : [])
-    .map((device) => normalizeVramMb(device?.torch_vram_total || device?.vram_total))
+    .map((device) => Math.max(
+      normalizeVramMb(device?.torch_vram_total),
+      normalizeVramMb(device?.vram_total),
+    ))
     .filter((value) => value > 0);
   return totals.length ? Math.max(...totals) : 0;
 }
@@ -87,6 +95,23 @@ function modelFolders(selected) {
     .filter(Boolean))];
 }
 
+function safeSubmitInputs(input = {}, stagedAssets = []) {
+  const scalarKeys = [
+    'prompt', 'negativePrompt', 'negative_prompt', 'width', 'height',
+    'frameRate', 'frame_rate', 'durationSeconds', 'duration', 'seed',
+    'continuityMode', 'continuity_mode',
+  ];
+  const safe = {};
+  for (const key of scalarKeys) {
+    const value = input[key];
+    if (value == null || ['string', 'number', 'boolean'].includes(typeof value)) safe[key] = value;
+  }
+  if (stagedAssets.length) {
+    safe.references = stagedAssets.map(({ index, role, comfyFilename }) => ({ index, role, comfyFilename }));
+  }
+  return safe;
+}
+
 function createComfyUIVideoProvider({
   registry,
   comfyClient,
@@ -94,12 +119,15 @@ function createComfyUIVideoProvider({
   gpuMutex,
   allowExperimental = false,
   leaseMs = 30 * 60 * 1000,
+  referenceStager = null,
+  referenceCleanup = null,
 } = {}) {
   if (!registry) throw new Error('ComfyUI video provider requires a workflow registry');
   if (!comfyClient) throw new Error('ComfyUI video provider requires a ComfyUI client');
   if (!gpuMutex) throw new Error('ComfyUI video provider requires a GPU mutex');
 
   const leases = new Map();
+  const stagedByTask = new Map();
 
   function select(context) {
     const workflowId = workflowIdFor(context);
@@ -108,10 +136,15 @@ function createComfyUIVideoProvider({
   }
 
   function clientForConnection(context) {
-    const baseUrl = String(context?.base_url || context?.config?.base_url || '').trim().replace(/\/$/, '');
+    const baseUrl = String(context?.base_url || context?.config?.base_url || context?.snapshot?.baseUrl || '').trim().replace(/\/$/, '');
     return baseUrl && typeof createComfyClient === 'function'
       ? createComfyClient(baseUrl)
       : comfyClient;
+  }
+
+  function clientFor(context) {
+    const baseUrl = String(context?.base_url || context?.config?.base_url || context?.snapshot?.baseUrl || '').trim().replace(/\/$/, '');
+    return baseUrl && typeof createComfyClient === 'function' ? createComfyClient(baseUrl) : comfyClient;
   }
 
   function releaseLease(providerTaskId) {
@@ -119,6 +152,18 @@ function createComfyUIVideoProvider({
     if (!handle) return false;
     leases.delete(providerTaskId);
     return gpuMutex.release(handle);
+  }
+
+  async function cleanupStaged(providerTaskId, context) {
+    const staged = stagedByTask.get(providerTaskId);
+    if (!staged) return;
+    stagedByTask.delete(providerTaskId);
+    try {
+      if (typeof referenceCleanup === 'function') await referenceCleanup(staged, context);
+    } catch (error) {
+      // Cleanup is best effort and must not overwrite a terminal video result.
+      console.warn('Reference asset cleanup failed', { providerTaskId, error: error.message });
+    }
   }
 
   function maintainActiveLease(providerTaskId, context) {
@@ -158,6 +203,8 @@ function createComfyUIVideoProvider({
       reserveMb: settings.vram_reserve_mb || 512,
     });
     const template = readWorkflowTemplate(selected.workflowPath);
+    const owner = String(context.taskId || context.videoGenerationId || `comfyui-${crypto.randomUUID()}`);
+    let stagedAssets = [];
     if ((selected.id === 'h3-continuity-v1' || String(context.model || '').toLowerCase().includes('h3'))
       && (context.videoGenerationId || context.promptFormat || context.input?.promptFormat)) {
       validateH3Prompt(normalizedInput.prompt, {
@@ -165,44 +212,71 @@ function createComfyUIVideoProvider({
         mode: context.promptFormat || context.input?.promptFormat,
       });
     }
-    const prompt = buildStructuredWorkflowPrompt(template, normalizedInput);
-    const owner = String(context.taskId || context.videoGenerationId || `comfyui-${crypto.randomUUID()}`);
-    const handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });
+    let prompt;
+    let handle = null;
     try {
-      const submitted = await comfyClient.submitWorkflow({
+      if (selected.adapter) {
+        const adapter = getAdapter(selected.adapter);
+        stagedAssets = Array.isArray(normalizedInput.stagedAssets) ? normalizedInput.stagedAssets : [];
+        const rawRefs = normalizedInput.referenceUrls || normalizedInput.reference_urls || [];
+        const refs = Array.isArray(rawRefs) ? rawRefs : (rawRefs ? [rawRefs] : []);
+        if (!stagedAssets.length && refs.length && typeof referenceStager === 'function') {
+          stagedAssets = await referenceStager(refs, context);
+        }
+        if (!stagedAssets.length && refs.some((ref) => typeof ref === 'string' && /^[A-Za-z]:[\\/]|^\//.test(ref))) {
+          throw new Error('VIDEO_REFERENCE_STAGING_REQUIRED');
+        }
+        normalizedInput.stagedAssets = stagedAssets;
+        if (stagedAssets.length) stagedByTask.set(owner, stagedAssets);
+        adapter.validate({ ...normalizedInput, stagedAssets }, template);
+        prompt = adapter.buildPrompt(template, normalizedInput, stagedAssets);
+      } else {
+        prompt = buildStructuredWorkflowPrompt(template, normalizedInput);
+      }
+      handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });
+      const submitted = await clientFor(context).submitWorkflow({
         registry,
         workflowId: selected.id,
         prompt,
-        inputs: normalizedInput,
+        inputs: safeSubmitInputs(normalizedInput, stagedAssets),
         clientId: context.clientId,
       });
       leases.set(submitted.promptId, handle);
+      if (stagedAssets.length) {
+        stagedByTask.delete(owner);
+        stagedByTask.set(submitted.promptId, stagedAssets);
+      }
       return normalized(submitted.promptId, 'running', 0);
     } catch (error) {
-      gpuMutex.release(handle);
+      if (handle) gpuMutex.release(handle);
+      await cleanupStaged(owner, context);
       throw error;
     }
   }
 
   async function resolveCompletedOutput(context, providerTaskId, state) {
     if (state.output) return state.output;
-    if (!state.history || typeof comfyClient.downloadOutput !== 'function') return state.history || null;
-    const downloaded = await comfyClient.downloadOutput({
+    const client = clientFor(context);
+    if (!state.history || typeof client.downloadOutput !== 'function') return state.history || null;
+    const downloaded = await client.downloadOutput({
       history: state.history,
       promptId: providerTaskId,
       outputFileName: context.outputFileName,
     });
-    const ffprobe = typeof comfyClient.probeArtifact === 'function'
-      ? await comfyClient.probeArtifact(downloaded.artifactPath)
+    const ffprobe = typeof client.probeArtifact === 'function'
+      ? await client.probeArtifact(downloaded.artifactPath)
       : null;
     return { ...downloaded, ffprobe, history: state.history };
   }
 
   async function query(context = {}) {
     const providerTaskId = providerTaskIdFor(context);
-    const state = await comfyClient.getPromptStatus(providerTaskId);
+    const state = await clientFor(context).getPromptStatus(providerTaskId);
     const terminal = TERMINAL_STATUSES.has(state.status);
-    if (terminal) releaseLease(providerTaskId);
+    if (terminal) {
+      releaseLease(providerTaskId);
+      await cleanupStaged(providerTaskId, context);
+    }
     else maintainActiveLease(providerTaskId, context);
     const output = state.status === 'completed'
       ? await resolveCompletedOutput(context, providerTaskId, state)
@@ -212,8 +286,9 @@ function createComfyUIVideoProvider({
 
   async function cancel(context = {}) {
     const providerTaskId = providerTaskIdFor(context);
-    await comfyClient.cancel(providerTaskId);
+    await clientFor(context).cancel(providerTaskId);
     releaseLease(providerTaskId);
+    await cleanupStaged(providerTaskId, context);
     return normalized(providerTaskId, 'cancelled', 100);
   }
 
@@ -252,6 +327,7 @@ function createComfyUIVideoProvider({
 
     return normalized(null, 'completed', 100, {
       workflow: { id: selected.id, status: selected.status, sha256: actualSha256 },
+      capabilities: selected.capabilities || null,
       queue,
       nodes: { required: requiredNodes },
       models: { required: [...selected.modelFiles], folders },

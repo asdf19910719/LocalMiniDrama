@@ -184,6 +184,8 @@ export function buildVideoCandidateRequest(form = {}) {
     frameRate: positiveNumber(form.frameRate ?? 24, '帧率'),
     seed: nonNegativeInteger(form.seed ?? 42, '随机种子'),
     continuityMode: trimmed(form.continuityMode) || 'none',
+    workflowId: trimmed(form.workflowId) || 'minimax_h3_director_r2v',
+    generationMode: trimmed(form.generationMode) || 'single_reference',
   }
   const optional = {
     anchorId: trimmed(form.anchorId),
@@ -254,7 +256,9 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     frameRate: 24,
     seed: 42,
     candidateCount: 2,
-    continuityMode: 'motion_overlap',
+    continuityMode: 'none',
+    workflowId: 'minimax_h3_director_r2v',
+    generationMode: 'single_reference',
     anchorId: '',
     sourceArtifactId: '',
     imageUrl: '',
@@ -267,6 +271,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   })
   const generationMode = ref('default')
   const defaultConfig = ref(null)
+  const capabilities = ref(null)
   const configLoading = ref(false)
   const loading = ref(false)
   const creating = ref(false)
@@ -374,7 +379,9 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     form.sourceArtifactId = anchor?.sourceArtifactId || ''
     form.continuityMode = anchor
       ? (anchor.reference_role === 'composition' ? 'composition_only' : 'state_anchor')
-      : trimmed(storyboard?.continuity_mode) || 'motion_overlap'
+      : (trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui'
+        ? 'none'
+        : (trimmed(storyboard?.continuity_mode) || 'motion_overlap'))
     const localPath = trimmed(storyboard?.local_path)
     form.imageUrl = context.imageUrl || trimmed(storyboard?.image_url) || (localPath ? `/static/${localPath.replace(/^\/+/, '')}` : '')
     form.firstFrameUrl = context.firstFrameUrl || trimmed(storyboard?.first_frame_image_url) || form.imageUrl
@@ -411,6 +418,14 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configLoading.value = true
     try {
       defaultConfig.value = await videosAPI.getDefaultConfig()
+      if (typeof videosAPI.capabilities === 'function' && trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui') {
+        capabilities.value = await videosAPI.capabilities()
+        const workflow = capabilities.value?.workflow
+        if (workflow?.id) form.workflowId = workflow.id
+        const mode = capabilities.value?.capabilities?.modes?.[0]
+        if (mode) form.generationMode = mode
+        if (capabilities.value?.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
+      }
       applyConfigDefaults(defaultConfig.value)
     } catch (caught) {
       defaultConfig.value = null
@@ -686,7 +701,9 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     if (anchor) {
       form.anchorId = anchor.id || ''
       form.sourceArtifactId = anchor.sourceArtifactId || ''
-      form.continuityMode = anchor.reference_role === 'composition' ? 'composition_only' : 'state_anchor'
+      form.continuityMode = trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui'
+        ? 'none'
+        : (anchor.reference_role === 'composition' ? 'composition_only' : 'state_anchor')
     }
   })
 
@@ -707,6 +724,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     displayMode,
     generationMode,
     defaultConfig,
+    capabilities,
     configLoading,
     configStatus,
     providerName,

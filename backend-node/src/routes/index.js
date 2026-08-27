@@ -35,6 +35,7 @@ const {
 } = require('../services/videoProviders');
 const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
+const { stageReferenceAssets, cleanupReferenceAssets } = require('../services/videoProviders/referenceAssetStaging');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -70,6 +71,7 @@ function setupRouter(cfg, db, log) {
   const directorComfyClient = createDirectorComfyClient(
     process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
   );
+  const comfyInputDir = process.env.DIRECTOR_COMFYUI_INPUT_DIR || null;
   const videoGpuMutex = createGpuMutex();
   const videoProviderRegistry = createVideoProviderRegistry({
     comfyui: createComfyUIVideoProvider({
@@ -77,6 +79,20 @@ function setupRouter(cfg, db, log) {
       comfyClient: directorComfyClient,
       createComfyClient: createDirectorComfyClient,
       gpuMutex: videoGpuMutex,
+      referenceStager: (refs, context) => stageReferenceAssets(refs, {
+        allowedRoots: directorAllowedRoots,
+        inputDir: comfyInputDir,
+        remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
+        client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
+        remote: !comfyInputDir,
+      }),
+      referenceCleanup: (staged, context) => cleanupReferenceAssets(staged, {
+        inputDir: comfyInputDir,
+        remote: !comfyInputDir,
+        remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
+        client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
+        log,
+      }),
       allowExperimental: cfg.director.allow_experimental,
     }),
   });
@@ -85,6 +101,7 @@ function setupRouter(cfg, db, log) {
     db,
     log,
     providerRegistry: videoProviderRegistry,
+    workflowRegistry: directorRegistry,
   });
   require('../services/videoService').configureUnifiedVideoGenerationService(
     db,
@@ -322,6 +339,7 @@ function setupRouter(cfg, db, log) {
 
   // ---------- videos ----------
   r.get('/videos', videos.list);
+  r.get('/videos/capabilities', videos.capabilities);
   r.post('/videos', videos.create);
   r.post('/videos/h3-preview', videos.h3Preview);
   r.post('/videos/image/:image_gen_id', videos.fromImage);

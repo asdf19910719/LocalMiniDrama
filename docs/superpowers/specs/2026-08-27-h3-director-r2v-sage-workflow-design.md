@@ -1,7 +1,7 @@
 # H3 Director R2V 工作流与视频模式设计
 
 日期：2026-08-27
-状态：已确认，待实现
+状态：已确认，V1 后端、前端契约与 ComfyUI 主机验收已完成
 范围：V1 官方多参考图 + Sage 加速；连续多段仅完成设计，不在 V1 实现
 
 ## 1. 背景
@@ -60,7 +60,10 @@ V1 的唯一可执行模式为：
 single_reference
 ```
 
-它表示单段 R2V，而不是“只能有一张参考图”。参考图数量为 1 到 9 张。
+它表示单段 R2V，而不是“只能有一张参考图”。参考图数量为 1 到 9 张。实现内部同时接受
+`single_segment_r2v` 作为规范化输入别名，但快照和能力接口统一输出 `single_reference`，以兼容已有客户端。
+
+`workflowId` 是运行时唯一的工作流选择字段；`model` 仅作为旧 API 的兼容投影，二者同时提供且不一致时请求必须拒绝。
 
 ### 3.2 Sage 是工作流实现细节
 
@@ -215,6 +218,8 @@ V1 的计划校验规则：
 
 H3 prompt 编译仍由现有 skill agent 完成。单段模式要求保留 H3 结构字段和 `[Shot 1]`，参考图模式要求存在 `<Picture N>` 等标签。适配器将编译后的 prompt 写入 `global_prompt` 和单个 segment 的 prompt 字段。
 
+当请求同时包含首帧字段和多张参考图时，参考图数量优先决定 `Ref2VA` 模式；首帧字段不得把多参考图请求误判为 `I2VA`。
+
 ## 7. 参考图素材桥接
 
 ### 7.1 问题
@@ -272,7 +277,7 @@ ComfyUI 的 `settings` 保存尺寸、帧率、VRAM 预算、工作流注册信�
 }
 ```
 
-重试、恢复和服务重启后的轮询都使用该快照。默认配置变化、工作流文件变化或 Sage 节点变化不得改变运行中任务的语义。只有明确的“按当前配置重新生成”操作才创建新任务并解析新的默认配置。
+重试、恢复和服务重启后的轮询都使用该快照。默认配置变化、工作流文件变化或 Sage 节点变化不得改变运行中任务的语义。只有明确的“按当前配置重新生成”操作才创建新任务并解析新的默认配置。ComfyUI 本地任务在原配置记录被停用或删除后仍可依据快照恢复；云端 Provider 仍要求原始凭据记录存在。
 
 ### 8.3 历史任务
 
@@ -422,7 +427,16 @@ load default config
 - 增加官方 `MiniMaxH3ReferenceToVideo` 独立适配器（如仍有产品需求）；
 - 评估 FL2V、V2V、RV2V 和 Refine。
 
-## 15. V1 完成判定
+## 15. V1 verification record
+
+- Backend: Node 22 full suite from `backend-node` completed with 284/284 tests passing.
+- Frontend: `frontweb` production build completed successfully.
+- Host acceptance: ComfyUI 0.33.1 at `http://127.0.0.1:8188`; workflow `minimax_h3_director_r2v`; one local reference; 864x480; 24 fps; 5 seconds; seed 42. The task completed with workflow hash `sha256:f80969d8c86a1fbabb20fc0ce915a4fa494fe016a256ef47939ef8ce5d4599fe` and produced an H.264 video stream (864x480, 24 fps) plus AAC audio (5 seconds). The staged input was removed after completion.
+- Browser user-flow acceptance: on `http://127.0.0.1:3013/film/3`, the video panel opened without the former `H3 Director R2V adapter requires an API-format workflow` error, showed the `minimax_h3_director_r2v` Sage workflow and disabled continuity mode, and a real DOM click on `生成候选` created two candidates for storyboard 5. Tasks 27 and 28 both reached `review` with local H.264/AAC artifacts (1280x704, 24 fps, 5 seconds). Evidence: `docs/research/_artifacts/h3-director-r2v-candidate-ui-smoke.json` and `.png`.
+- Remote ComfyUI cleanup is capability-based. When a deployment does not expose `/delete/image`, cleanup emits a warning and does not alter the task result; operators must provide that endpoint or configure a shared input directory with local cleanup.
+- `workflow_id` overrides that differ from the active default are rejected in V1. `single_segment_r2v` is accepted as an input alias; snapshots and capabilities expose `single_reference`.
+
+## 16. V1 完成判定
 
 V1 只有在以下条件全部满足时才算完成：
 

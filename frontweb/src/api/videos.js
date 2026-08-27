@@ -15,6 +15,9 @@ export const videosAPI = {
   create(body) {
     return request.post('/videos', body)
   },
+  capabilities() {
+    return request.get('/videos/capabilities')
+  },
   previewH3Prompt(body) {
     return request.post('/videos/h3-preview', body)
   },

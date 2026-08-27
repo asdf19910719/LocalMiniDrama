@@ -61,11 +61,25 @@ function nonSensitiveBaseUrl(value) {
 
 function buildVideoConfigSnapshot(resolved = {}) {
   const config = resolved.config || {};
+  const workflow = resolved.workflow || config.workflow || null;
+  const workflowId = resolved.workflowId || workflow?.id || config.workflow_id || resolved.model || config.default_model || null;
+  const workflowSha256 = resolved.workflowSha256 || workflow?.workflowSha256 || config.workflow_sha256 || null;
+  const mode = resolved.generationMode || resolved.mode || config.generation_mode || 'single_reference';
   return {
     configId: config.id ?? null,
     provider: resolved.provider ?? config.provider ?? null,
     protocol: resolved.protocol ?? config.api_protocol ?? null,
     model: resolved.model ?? config.default_model ?? null,
+    workflowId,
+    workflowSha256,
+    workflowVariant: resolved.workflowVariant || workflow?.variant || null,
+    adapter: resolved.adapter || workflow?.adapter || null,
+    adapterVersion: resolved.adapterVersion || workflow?.adapterVersion || null,
+    generationMode: mode === 'single_segment_r2v' ? 'single_reference' : mode,
+    sage: resolved.sage || workflow?.sage || (workflow?.capabilities?.supportsSage ? {
+      node: 'PathchSageAttentionKJ', attention: 'auto', allowCompile: false,
+    } : null),
+    planHash: resolved.planHash || null,
     baseUrl: nonSensitiveBaseUrl(config.base_url),
     endpoint: nonSensitivePath(config.endpoint),
     queryEndpoint: nonSensitivePath(config.query_endpoint),

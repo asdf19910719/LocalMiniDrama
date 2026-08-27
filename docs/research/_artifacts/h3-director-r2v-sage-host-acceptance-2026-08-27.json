@@ -1,0 +1,33 @@
+{
+  "workflowId": "minimax_h3_director_r2v",
+  "workflowSha256": "sha256:f80969d8c86a1fbabb20fc0ce915a4fa494fe016a256ef47939ef8ce5d4599fe",
+  "comfyUi": {
+    "baseUrl": "http://127.0.0.1:8188",
+    "version": "0.33.1",
+    "inferenceStarted": true
+  },
+  "request": {
+    "width": 864,
+    "height": 480,
+    "frameRate": 24,
+    "durationSeconds": 5,
+    "referenceCount": 1,
+    "seed": 42
+  },
+  "providerTaskId": "02005704-bdc9-4858-9d9c-060665e24807",
+  "result": {
+    "status": "completed",
+    "video": { "codec": "h264", "width": 864, "height": 480, "frameRate": "24/1" },
+    "audio": { "codec": "aac" },
+    "durationSeconds": 5,
+    "sha256": "ff9ac58738e8e1b2fdb796de3fce3ad33c28e45891b3eb5e6314f646087cf1d1"
+  },
+  "cleanup": {
+    "stagedComfyFilename": "reference-0-56d509b630b920a76dae0d67.png",
+    "removedAfterTerminalState": true
+  },
+  "notes": [
+    "The standalone provider acceptance completed and produced audio/video media.",
+    "Unified service persistence maps completed provider output to review; this host run exercised the provider boundary directly."
+  ]
+}

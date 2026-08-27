@@ -1,0 +1,46 @@
+{
+  "url": "http://127.0.0.1:3013/film/3",
+  "openPanelClicked": true,
+  "before": {
+    "panelVisible": true,
+    "config": true,
+    "sage": true,
+    "continuityDisabled": true,
+    "buttonFound": true,
+    "buttonDisabled": false,
+    "text": "统一视频生成\n分镜 1\n当前默认服务\n服务已配置\nComfyUI（本机工作流） 视频\n模型或工作流：minimax_h3_director_r2v\n生成模式：全能多参考图\n视频提示词\n负面提示词\n工作流：官方多参考图（Sage 加速）\n生成模式：单段多参考图\n预览 H3 提示词\n宽度\n高度\n时长（秒）\n帧率\n随机种子\n候选数量\n尺寸快捷值\n864 × 480\n1280 × 704\n连续性方式\n不使用连续性\n生成候选\n生成队列\n队列空闲\n候选与历史\n待审核\n第 4 组 · 待审核 · 1a6f3bf9\n候选 1\n待审核\n任务：26\ncomfyui · minimax_h3_director_r2v\n质量检查\n选用候选"
+  },
+  "clicked": true,
+  "states": [
+    {
+      "atMs": 2500,
+      "text": "统一视频生成\n分镜 1\n当前默认服务\n服务已配置\nComfyUI（本机工作流） 视频\n模型或工作流：minimax_h3_director_r2v\n生成模式：全能多参考图\n视频提示词\n负面提示词\n工作流：官方多参考图（Sage 加速）\n生成模式：单段多参考图\n预览 H3 提示词\n宽度\n高度\n时长（秒）\n帧率\n随机种子\n候选数量\n尺寸快捷值\n864 × 480\n1280 × 704\n连续性方式\n不使用连续性\n生成候选\n生成队列\n队列空闲\n候选与历史\n待审核\n第 4 组 · 待审核 · 1a6f3bf9\n候选 1\n待审核\n任务：26\ncomfyui · minimax_h3_director_r2v\n质量检查\n选用候选",
+      "hasError": false,
+      "generating": false,
+      "review": true,
+      "selectedTask": [
+        "任务：26"
+      ],
+      "buttons": [
+        "预览 H3 提示词",
+        "864 × 480",
+        "1280 × 704",
+        "生成候选",
+        "质量检查",
+        "选用候选"
+      ]
+    }
+  ],
+  "checkedAt": "2026-08-27T00:32:08.820Z",
+  "backendVerification": {
+    "checkedAt": "2026-08-27T00:40:50.538Z",
+    "storyboardId": 5,
+    "candidateGroupId": "18937010-ff8d-4a56-94f7-4edb578fc7fb",
+    "status": "review",
+    "tasks": [
+      { "videoGenerationId": 27, "status": "review", "artifact": { "width": 1280, "height": 704, "frameRate": "24/1", "durationSeconds": 5, "videoCodec": "h264", "audioCodec": "aac" } },
+      { "videoGenerationId": 28, "status": "review", "artifact": { "width": 1280, "height": 704, "frameRate": "24/1", "durationSeconds": 5, "videoCodec": "h264", "audioCodec": "aac" } }
+    ],
+    "errors": []
+  }
+}

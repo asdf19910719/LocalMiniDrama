@@ -28,10 +28,10 @@ function h3Mode(input = {}) {
   const refs = Array.isArray(input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls)
     ? (input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls).filter(Boolean)
     : [];
+  if (refs.length) return 'Ref2VA';
   if (first && last) return 'FL2VA';
   if (first) return 'I2VA';
   if (last) return 'L2VA';
-  if (refs.length) return 'Ref2VA';
   return 'T2VA';
 }
 

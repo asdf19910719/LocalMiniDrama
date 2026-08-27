@@ -39,6 +39,21 @@ function routes(db, log, { providerRegistry, lifecycleService } = {}) {
       }
     },
 
+    capabilities: (req, res) => {
+      try {
+        if (typeof lifecycle.getVideoCapabilities !== 'function') {
+          const unavailable = new Error('VIDEO_CAPABILITIES_UNAVAILABLE');
+          unavailable.code = 'VIDEO_CAPABILITIES_UNAVAILABLE';
+          unavailable.status = 500;
+          throw unavailable;
+        }
+        response.success(res, lifecycle.getVideoCapabilities());
+      } catch (error) {
+        log.error('videos capabilities', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
     h3Preview: async (req, res) => {
       try {
         if (!lifecycle.previewH3Prompt) throw new Error('H3 prompt preview is not configured');

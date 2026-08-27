@@ -100,8 +100,8 @@
     "overflow": false,
     "hasChineseActions": false,
     "hasEnglishAction": false,
-    "text": "统一视频生成\n分镜 1\n当前默认服务\n服务已配置\nLocal Shim Video\n模型或工作流：local-video-shim\n生成模式：全能多参考图\n视频提示词\n负面提示词\n宽度\n高度\n时长（秒）\n帧率\n随机种子\n候选数量\n尺寸快捷值\n864 × 480\n1280 × 704\n连续性方式\n动作重叠\n生成候选\n生成队列\n队列空闲\n候选与历史\n失败\n第 1 组 · 失败 · 62a5e28d\n已取消\n候选 1\n已取消\n任务：pending-artifact-5f7c4112-ebc5-461a-b0e4-8e858afa4eb6\n视频生成操作失败，请展开查看技术详情。\n质量检查\n选用候选"
+    "text": "统一视频生成\n分镜 1\n当前默认服务\n服务已配置\nComfyUI（本机工作流） 视频\n模型或工作流：minimax_h3_director_r2v\n生成模式：全能多参考图\n视频提示词\n负面提示词\n工作流：官方多参考图（Sage 加速）\n生成模式：单段多参考图\n预览 H3 提示词\n宽度\n高度\n时长（秒）\n帧率\n随机种子\n候选数量\n尺寸快捷值\n864 × 480\n1280 × 704\n连续性方式\n不使用连续性\n生成候选\n生成队列\n队列空闲\n候选与历史\n待审核\n第 4 组 · 待审核 · 1a6f3bf9\n候选 1\n待审核\n任务：26\ncomfyui · minimax_h3_director_r2v\n质量检查\n选用候选"
   },
   "generationPanelClicked": true,
-  "checkedAt": "2026-08-25T11:10:08.991Z"
+  "checkedAt": "2026-08-27T00:27:01.186Z"
 }

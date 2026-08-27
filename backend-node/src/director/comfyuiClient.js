@@ -146,6 +146,27 @@ function createComfyUIClient({
     return { promptId: body.prompt_id, queue: body, workflow: selected };
   }
 
+  async function uploadImage({ filePath, filename }) {
+    if (!filePath || !fs.existsSync(filePath)) throw new ComfyUIClientError('Reference image does not exist', 'COMFYUI_IMAGE_NOT_FOUND');
+    const bytes = fs.readFileSync(filePath);
+    const form = new FormData();
+    form.append('image', new Blob([bytes]), filename || path.basename(filePath));
+    form.append('overwrite', 'false');
+    const { body } = await request('/upload/image', { method: 'POST', body: form });
+    return body;
+  }
+
+  // Optional endpoint exposed by deployments that allow removing uploaded inputs.
+  async function deleteImage(filename) {
+    const name = String(filename || '').replace(/[\\/]/g, '');
+    if (!name) throw new ComfyUIClientError('Reference image filename is required', 'COMFYUI_IMAGE_NAME_REQUIRED');
+    return (await request('/delete/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })).body;
+  }
+
   async function getSystemStats() {
     return (await request('/system_stats')).body;
   }
@@ -315,6 +336,8 @@ function createComfyUIClient({
 
   return {
     submitWorkflow,
+    uploadImage,
+    deleteImage,
     getSystemStats,
     getQueue,
     getObjectInfo,

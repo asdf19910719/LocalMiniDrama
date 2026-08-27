@@ -6,6 +6,8 @@ const candidateService = require('../director/candidateGroupService');
 const { resolveDefaultVideoConfig } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 const { createH3PromptCompiler } = require('./h3PromptCompiler');
+const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
+const { selectWorkflow, readWorkflowTemplate } = require('../director/workflowRegistry');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -122,6 +124,7 @@ function createUnifiedVideoGenerationService({
   prepareVideoOutput = videoService.prepareSuccessfulVideoOutput,
   importVideoArtifact = videoService.importSuccessfulVideoArtifact,
   h3PromptCompiler = createH3PromptCompiler(),
+  workflowRegistry = null,
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
   if (!log) throw new Error('Unified video generation service requires a logger');
@@ -133,7 +136,7 @@ function createUnifiedVideoGenerationService({
     const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
     const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
     const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimaxh3') || model.includes('minimax-h3'))
       || protocol === 'minimax_h3';
   }
 
@@ -373,7 +376,7 @@ function createUnifiedVideoGenerationService({
 
   function providerFor(context) {
     const providerName = String(context.snapshot.provider || '').trim().toLowerCase();
-    if (!context.originalConfigFound) {
+    if (!context.originalConfigFound && providerName !== 'comfyui') {
       throw new VideoLifecycleError(
         'VIDEO_CONFIG_CREDENTIALS_MISSING',
         '原始视频配置已不存在，无法取得任务所需凭据',
@@ -562,8 +565,17 @@ function createUnifiedVideoGenerationService({
 
   async function createVideoGeneration(input = {}) {
     const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
-    const snapshot = buildVideoConfigSnapshot(resolved);
-    const settings = snapshot.settings || {};
+    const explicitWorkflowId = input.workflow_id || input.workflowId;
+    if (workflowRegistry && explicitWorkflowId && String(explicitWorkflowId).trim() !== String(resolved.model).trim()) {
+      const error = new Error('VIDEO_WORKFLOW_NOT_ALLOWED');
+      error.code = 'VIDEO_WORKFLOW_NOT_ALLOWED';
+      throw error;
+    }
+    const requestedWorkflowId = explicitWorkflowId || resolved.model;
+    const workflow = workflowRegistry && requestedWorkflowId
+      ? selectWorkflow(workflowRegistry, requestedWorkflowId, { allowExperimental: false })
+      : null;
+    const settings = resolved.config?.settings || {};
     const now = new Date().toISOString();
     const dramaId = Number(input.drama_id ?? input.dramaId) || 0;
     const storyboardValue = input.storyboard_id ?? input.storyboardId;
@@ -584,6 +596,7 @@ function createUnifiedVideoGenerationService({
         if (Number(storyboard?.duration) > 0) duration = Number(storyboard.duration);
       } catch (_) {}
     }
+    if (workflow?.adapter && !(Number(duration) > 0)) duration = 5;
     const sourcePrompt = appendStyle(input.prompt, input.style);
     let prompt = sourcePrompt;
     let compiled = null;
@@ -595,6 +608,35 @@ function createUnifiedVideoGenerationService({
       });
       prompt = compiled.compiledPrompt;
     }
+    let planResult = null;
+    if (workflow?.adapter) {
+      planResult = buildVideoGenerationPlan({
+        prompt,
+        negativePrompt: input.negativePrompt ?? input.negative_prompt,
+        reference_image_urls: refs,
+        workflow_id: workflow.id,
+        generation_mode: input.generation_mode ?? input.generationMode,
+        storyboard_id: storyboardId,
+        continuity_enabled: false,
+        width: input.width ?? settings.width ?? 864,
+        height: input.height ?? settings.height ?? 480,
+        durationSeconds: duration || 5,
+        frameRate: input.frame_rate ?? input.frameRate ?? settings.frame_rate ?? 24,
+        seed: input.seed ?? settings.seed ?? 42,
+      }, { workflowId: workflow.id });
+    }
+    const planCommon = planResult?.plan?.common || null;
+    if (planCommon) {
+      duration = planCommon.durationSeconds;
+    }
+    const snapshot = buildVideoConfigSnapshot({
+      ...resolved,
+      workflow,
+      workflowId: workflow?.id || resolved.model,
+      generationMode: planResult?.plan.mode || input.generation_mode || 'single_reference',
+      planHash: planResult?.planHash || null,
+    });
+    const snapshotSettings = snapshot.settings || {};
     let createdId;
 
     db.transaction(() => {
@@ -619,13 +661,13 @@ function createUnifiedVideoGenerationService({
         duration,
         aspectRatio,
         input.resolution ?? null,
-        input.width ?? settings.width ?? null,
-        input.height ?? settings.height ?? null,
-        input.frame_rate ?? input.frameRate ?? settings.frame_rate ?? null,
-        input.seed ?? settings.seed ?? null,
+        planCommon?.width ?? input.width ?? snapshotSettings.width ?? null,
+        planCommon?.height ?? input.height ?? snapshotSettings.height ?? null,
+        planCommon?.frameRate ?? input.frame_rate ?? input.frameRate ?? snapshotSettings.frame_rate ?? null,
+        planCommon?.seed ?? input.seed ?? snapshotSettings.seed ?? null,
         input.camera_fixed != null ? (input.camera_fixed ? 1 : 0) : null,
         input.watermark != null ? (input.watermark ? 1 : 0) : 0,
-        input.continuity_mode ?? input.continuityMode ?? settings.continuity_mode ?? null,
+        workflow?.capabilities?.supportsContinuity === false ? 'none' : (input.continuity_mode ?? input.continuityMode ?? snapshotSettings.continuity_mode ?? null),
         input.anchor_id ?? input.anchorId ?? null,
         input.candidate_group_id ?? input.candidateGroupId ?? null,
         input.image_url ?? input.imageUrl ?? null,
@@ -762,6 +804,33 @@ function createUnifiedVideoGenerationService({
     return videoService.getById(db, id);
   }
 
+  function getVideoCapabilities() {
+    const resolved = resolveDefaultVideoConfig(db);
+    const workflowId = resolved.model;
+    const workflow = resolved.provider === 'comfyui' && workflowRegistry && workflowId
+      ? selectWorkflow(workflowRegistry, workflowId, { allowExperimental: false })
+      : null;
+    const capabilities = workflow?.capabilities ? { ...workflow.capabilities } : {};
+    if (workflow?.adapter) {
+      const adapter = require('../director/workflowRegistry').getWorkflowAdapter(workflow);
+      const template = readWorkflowTemplate(workflow.workflowPath);
+      Object.assign(capabilities, adapter.describeCapabilities(template));
+    }
+    return {
+      provider: resolved.provider,
+      protocol: resolved.protocol,
+      model: resolved.model,
+      workflow: workflow ? {
+        id: workflow.id,
+        status: workflow.status,
+        variant: workflow.variant,
+        sha256: workflow.workflowSha256,
+      } : null,
+      capabilities: Object.keys(capabilities).length ? capabilities : null,
+      connection: { status: 'unknown', inferenceStarted: false },
+    };
+  }
+
   return {
     createVideoGeneration,
     previewH3Prompt,
@@ -771,6 +840,7 @@ function createUnifiedVideoGenerationService({
     recoverVideoGenerations,
     processVideoGeneration,
     getVideoGeneration,
+    getVideoCapabilities,
   };
 }
 

@@ -47,6 +47,10 @@
       </el-form-item>
 
       <template v-if="isH3Config">
+        <div class="h3-workflow-meta">
+          <el-tag size="small" effect="plain">工作流：官方多参考图（Sage 加速）</el-tag>
+          <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
+        </div>
         <div class="h3-preview-actions">
           <el-button size="small" :loading="h3Previewing" @click="previewH3Prompt">预览 H3 提示词</el-button>
           <el-tag v-if="h3Preview?.promptFormat" size="small" type="success" effect="plain">{{ h3Preview.promptFormat }}</el-tag>
@@ -357,7 +361,7 @@ const isH3Config = computed(() => {
   const cfg = defaultConfig.value || {}
   const provider = String(cfg.provider || '').toLowerCase()
   const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.includes('minimax-h3') || model.includes('minimaxh3'))
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
 })
 
 function setDimensions(width, height) {
