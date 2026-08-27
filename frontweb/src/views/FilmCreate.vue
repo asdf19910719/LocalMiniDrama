@@ -2703,6 +2703,7 @@ const {
   loadSummary: loadImageGenerationSummary,
   loadDefault: loadImageGenerationDefault,
   sendToChatGPT: sendImageGenerationToChatGPT,
+  selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
 } = useImageGeneration()
 
@@ -2855,11 +2856,10 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
 }
 
 function onImageGenerationSelect(result) {
-  const id = imageGenerationTask.value?.id
-  if (!id || !result?.id) return
-  imageGenerationTask.value = { ...imageGenerationTask.value, status: 'completed', image_generation_id: result.id }
-  closeImageGenerationDrawer()
-  refreshStoryboardsOnly().catch(() => {})
+  selectImageGenerationResult(result).then(() => {
+    closeImageGenerationDrawer()
+    return refreshStoryboardsOnly()
+  }).catch((error) => ElMessage.error(error?.message || '缁撴灉缁戝畾澶辫触'))
 }
 
 function trackFilmCreateAction(_action, _payload = {}) {

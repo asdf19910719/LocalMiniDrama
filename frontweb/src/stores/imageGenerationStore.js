@@ -50,7 +50,13 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     await loadSummary(task.drama_id)
     return currentTask.value
   }
+  async function selectResult(result) {
+    if (!currentTask.value?.id || !result?.id) throw new Error('鍊欓€夌粨鏋滀笉瀛樺湪')
+    currentTask.value = (await imageGenerationTaskAPI.selectResult(currentTask.value.id, result.id)).task
+    await loadSummary(currentTask.value.drama_id)
+    return currentTask.value
+  }
   function closeDrawer() { drawerVisible.value = false }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, closeDrawer }
+  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, selectResult, closeDrawer }
 })
