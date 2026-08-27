@@ -7,13 +7,14 @@ import { buildExternalGenerationShotContext } from '../src/utils/externalGenerat
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('FilmCreate renders external generation panel for every storyboard row', () => {
+test('FilmCreate uses one unified drawer and explicit storyboard targets', () => {
   const source = fs.readFileSync(path.join(root, 'src/views/FilmCreate.vue'), 'utf8')
-  assert.match(source, /ExternalWebGenerationPanel/)
-  assert.match(source, /:storyboard-id="sb\.id"/)
+  assert.doesNotMatch(source, /ExternalWebGenerationPanel|film-create-external-generation/)
+  assert.match(source, /ImageGenerationDrawer/)
+  assert.match(source, /storyboard_main/)
+  assert.match(source, /storyboard_first/)
+  assert.match(source, /storyboard_last/)
   assert.match(source, /v-for="\(sb, i\) in storyboards"/)
-  const panel = fs.readFileSync(path.join(root, 'src/components/dramaCanvas/ExternalWebGenerationPanel.vue'), 'utf8')
-  assert.match(panel, /action: 'prepare', dramaId: props\.dramaId, site: props\.site/)
 })
 
 test('shot context keeps identity and deterministic reference order', () => {
@@ -37,8 +38,8 @@ test('shot context keeps identity and deterministic reference order', () => {
   })
 })
 
-test('external generation panel awaits extension acknowledgement before reporting success', () => {
-  const source = fs.readFileSync(path.join(root, 'src/components/dramaCanvas/ExternalWebGenerationPanel.vue'), 'utf8')
-  assert.match(source, /await notifyExtension\(/)
-  assert.match(source, /if \(!response\?\.ok\) throw new Error/)
+test('unified image store awaits extension acknowledgement before reporting success', () => {
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  assert.match(source, /await sendImageGenerationBridgeMessage\(/)
+  assert.match(source, /await imageGenerationTaskAPI\.acknowledge/)
 })

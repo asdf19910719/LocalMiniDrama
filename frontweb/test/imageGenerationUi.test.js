@@ -29,3 +29,19 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(bridge, /aistory-external-generation-response/)
   assert.doesNotMatch(bridge, /return \{ ok: true \}/)
 })
+
+test('all project asset and storyboard entry points use the unified controls', () => {
+  const film = read('src/views/FilmCreate.vue')
+  const canvas = read('src/views/DramaCanvas.vue')
+  const detail = read('src/views/DramaDetail.vue')
+  const assetPanel = read('src/components/dramaCanvas/CanvasAssetPanel.vue')
+
+  for (const target of ['character', 'scene', 'prop', 'storyboard_main', 'storyboard_first', 'storyboard_last']) {
+    assert.match(film + canvas + detail + assetPanel, new RegExp(target))
+  }
+  assert.match(film, /ImageGenerateSplitButton/)
+  assert.match(canvas, /ImageGenerateSplitButton|CanvasAssetPanel/)
+  assert.match(detail, /ImageGenerateSplitButton/)
+  assert.match(assetPanel, /ImageGenerateSplitButton/)
+  assert.doesNotMatch(film, /ExternalWebGenerationPanel|film-create-external-generation/)
+})

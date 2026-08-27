@@ -582,10 +582,7 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
-                      <el-button type="primary" size="small" :loading="generatingCharIds.has(char.id)" @click="onGenerateCharacterImage(char)">
-                        <el-icon v-if="!generatingCharIds.has(char.id)"><MagicStick /></el-icon>
-                        AI 生成
-                      </el-button>
+                      <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingCharIds.has(char.id)" @generate="(channel) => generateUnifiedImage(channel, 'character', char, () => onGenerateCharacterImage(char))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'char-' + char.id" @click="onUploadResourceClick('character', char.id)">
                         <el-icon v-if="uploadingResourceId !== 'char-' + char.id"><Upload /></el-icon>
                         上传
@@ -680,10 +677,7 @@
                     </div>
                     <div class="asset-cover-actions">
                       <el-tooltip :content="propUseQuadGrid ? '四视图道具（前/侧/后/顶，纯色无缝背景）' : '单图道具（纯色无缝背景）'" placement="top">
-                        <el-button type="primary" size="small" :loading="generatingPropIds.has(prop.id)" @click="onGeneratePropImage(prop, propUseQuadGrid)">
-                          <el-icon v-if="!generatingPropIds.has(prop.id)"><MagicStick /></el-icon>
-                          AI 生成
-                        </el-button>
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingPropIds.has(prop.id)" @generate="(channel) => generateUnifiedImage(channel, 'prop', prop, () => onGeneratePropImage(prop, propUseQuadGrid))" />
                       </el-tooltip>
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'prop-' + prop.id" @click="onUploadResourceClick('prop', prop.id)">
                         <el-icon v-if="uploadingResourceId !== 'prop-' + prop.id"><Upload /></el-icon>
@@ -781,10 +775,7 @@
                     </div>
                     <div class="asset-cover-actions">
                       <el-tooltip :content="sceneUseQuadGrid ? '四宫格场景（正/侧/俯/仰）' : '单图场景'" placement="top">
-                        <el-button type="primary" size="small" :loading="generatingSceneIds.has(scene.id)" @click="onGenerateSceneImage(scene, sceneUseQuadGrid)">
-                          <el-icon v-if="!generatingSceneIds.has(scene.id)"><MagicStick /></el-icon>
-                          AI 生成
-                        </el-button>
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene, sceneUseQuadGrid))" />
                       </el-tooltip>
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'scene-' + scene.id" @click="onUploadResourceClick('scene', scene.id)">
                         <el-icon v-if="uploadingResourceId !== 'scene-' + scene.id"><Upload /></el-icon>
@@ -1010,15 +1001,6 @@
             </el-button>
           </div>
           <div :id="'sb-' + sb.id" class="storyboard-row">
-            <ExternalWebGenerationPanel
-              class="film-create-external-generation"
-              :drama-id="dramaId"
-              :storyboard-id="sb.id"
-              :initial-prompt="externalGenerationContext(sb).prompt"
-              :references="externalGenerationContext(sb).references"
-              site="chatgpt"
-              provider="chatgpt-web"
-            />
             <!-- 左：分镜脚本 -->
             <div class="sb-panel sb-script">
               <div class="sb-script-row sb-script-selects">
@@ -1306,7 +1288,7 @@
                         {{ getSbFirstImage(sb.id).prompt }}
                       </div>
                       <div class="sb-fl-slot-actions">
-                        <el-button type="primary" size="small" :loading="generatingSbFirstImageIds.has(sb.id)" @click="onGenerateSbFrameImage(sb, 'first')">生成</el-button>
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbFirstImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_first', sb, () => onGenerateSbFrameImage(sb, 'first'), framePromptForUnified(sb, 'first'))" />
                         <el-tooltip v-if="canUsePrevTailAsFirst(sb)" content="直接使用上一分镜的尾帧图片（高清原图）替换本首帧，画面更清晰" placement="top">
                           <el-button size="small" :loading="usingPrevTailAsFirstIds.has(sb.id)" @click="onUsePrevTailAsFirst(sb)">上镜尾帧</el-button>
                         </el-tooltip>
@@ -1335,7 +1317,7 @@
                         {{ getSbLastImage(sb.id).prompt }}
                       </div>
                       <div class="sb-fl-slot-actions">
-                        <el-button type="primary" size="small" :loading="generatingSbLastImageIds.has(sb.id)" @click="onGenerateSbFrameImage(sb, 'last')">生成</el-button>
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbLastImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_last', sb, () => onGenerateSbFrameImage(sb, 'last'), framePromptForUnified(sb, 'last'))" />
                         <el-checkbox
                           v-model="lastFrameUseFirstLayoutLock"
                           class="sb-fl-first-lock-opt"
@@ -1393,17 +1375,11 @@
                   </template>
                   <template v-else-if="sb.error_msg || sb.errorMsg">
                     <div class="sb-image-error" :title="sb.error_msg || sb.errorMsg">{{ sb.error_msg || sb.errorMsg }}</div>
-                    <el-button type="primary" size="small" class="sb-gen-btn" :loading="generatingSbImageIds.has(sb.id)" @click="onGenerateSbImage(sb)">
-                      <el-icon><Refresh /></el-icon>
-                      重试
-                    </el-button>
+                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                     <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                   </template>
                   <template v-else>
-                    <el-button type="primary" size="small" class="sb-gen-btn" :loading="generatingSbImageIds.has(sb.id)" @click="onGenerateSbImage(sb)">
-                      <el-icon><MagicStick /></el-icon>
-                      生成分镜参考图
-                    </el-button>
+                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                     <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                   </template>
                 </div>
@@ -1439,7 +1415,7 @@
                   </el-tooltip>
                 </template>
                 <template v-else>
-                <el-button size="small" :loading="generatingSbImageIds.has(sb.id)" @click="onGenerateSbImage(sb)">重新生成</el-button>
+                <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                 <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                 <el-tooltip content="高清放大（2x超分辨率）" placement="top">
                   <el-button
@@ -2641,6 +2617,14 @@
     <el-dialog v-model="showAiConfigDialog" title="AI 配置" width="90%" destroy-on-close class="ai-config-dialog">
       <AIConfigContent v-if="showAiConfigDialog" />
     </el-dialog>
+    <ImageGenerationDrawer
+      :visible="imageGenerationDrawerVisible"
+      :task="imageGenerationTask"
+      :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
+      @close="closeImageGenerationDrawer"
+      @send="sendImageGenerationToChatGPT"
+      @select="onImageGenerationSelect"
+    />
 
     <!-- 图片放大预览：点击遮罩或图片关闭 -->
     <Teleport to="body">
@@ -2688,7 +2672,8 @@ import StylePickerButton from '@/components/StylePickerButton.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
 import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
-import ExternalWebGenerationPanel from '@/components/dramaCanvas/ExternalWebGenerationPanel.vue'
+import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -2702,7 +2687,7 @@ import { runGenerateStoryFromPremise } from '@/composables/useStoryGeneration'
 import { useCharacters } from '@/composables/filmCreate/useCharacters'
 import { useProps as usePropsComposable } from '@/composables/filmCreate/useProps'
 import { useScenes } from '@/composables/filmCreate/useScenes'
-import { buildExternalGenerationShotContext } from '@/utils/externalGenerationShot'
+import { useImageGeneration } from '@/composables/useImageGeneration'
 
 const route = useRoute()
 const router = useRouter()
@@ -2710,6 +2695,16 @@ const store = useFilmStore()
 const genStore = useGenerationTaskStore()
 const { isDark, toggle: toggleTheme } = useTheme()
 const { videoResolution: storeVideoResolution } = storeToRefs(store)
+const {
+  defaultChannel: imageGenerationDefaultChannel,
+  currentTask: imageGenerationTask,
+  drawerVisible: imageGenerationDrawerVisible,
+  open: openImageGenerationTask,
+  loadSummary: loadImageGenerationSummary,
+  loadDefault: loadImageGenerationDefault,
+  sendToChatGPT: sendImageGenerationToChatGPT,
+  close: closeImageGenerationDrawer,
+} = useImageGeneration()
 
 // ── Composable: Navigation ─────────────────────────────
 const { navCollapsed, storyboardMenuExpanded, toggleNav, scrollToTop, scrollToAnchor } = useNavigation()
@@ -2841,15 +2836,30 @@ const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
 const videoProgress = computed(() => store.videoProgress)
 const videoStatus = computed(() => store.videoStatus)
 
-function externalGenerationContext(sb) {
-  return buildExternalGenerationShotContext({
+function framePromptForUnified(sb, slot) {
+  const value = slot === 'last' ? getSbLastImage(sb?.id) : getSbFirstImage(sb?.id)
+  return value?.prompt || sb?.[slot === 'last' ? 'last_frame_prompt' : 'first_frame_prompt'] || sb?.image_prompt || sb?.description || ''
+}
+
+async function generateUnifiedImage(channel, targetType, target, legacyGenerate, prompt = '') {
+  if (channel !== 'chatgpt_web') return legacyGenerate?.()
+  const task = await openImageGenerationTask({
     dramaId: dramaId.value,
-    storyboard: sb,
-    getScene: getSbSelectedScene,
-    getCharacters: getSbSelectedCharacters,
-    getProps: getSbSelectedProps,
-    assetImageUrl,
+    targetType,
+    targetId: target?.id,
+    generationChannel: channel,
+    prompt: prompt || target?.prompt || target?.image_prompt || target?.description || target?.name || target?.location || '',
+    aspectRatio: projectAspectRatio.value,
   })
+  await sendImageGenerationToChatGPT(task)
+}
+
+function onImageGenerationSelect(result) {
+  const id = imageGenerationTask.value?.id
+  if (!id || !result?.id) return
+  imageGenerationTask.value = { ...imageGenerationTask.value, status: 'completed', image_generation_id: result.id }
+  closeImageGenerationDrawer()
+  refreshStoryboardsOnly().catch(() => {})
 }
 
 function trackFilmCreateAction(_action, _payload = {}) {
@@ -8258,6 +8268,12 @@ function applyRouteToStore() {
 onMounted(async () => {
   loadPipelineConcurrency()
   applyRouteToStore()
+  if (dramaId.value) {
+    await Promise.allSettled([
+      loadImageGenerationSummary(dramaId.value),
+      loadImageGenerationDefault(dramaId.value),
+    ])
+  }
 })
 
 watch(() => route.params.id, () => {
@@ -9748,12 +9764,6 @@ html.light .segment-shot-range { color: #9ca3af; }
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
   animation: sb-fade-in 0.35s ease both;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-}
-.film-create-external-generation {
-  flex: 0 0 300px;
-  max-width: 300px;
-  align-self: stretch;
-  background: rgba(15, 23, 42, 0.42);
 }
 .storyboard-row:hover {
   border-color: rgba(255, 255, 255, 0.1);

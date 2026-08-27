@@ -309,7 +309,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaCharForm.imgUploading" @click="dramaCharFileRef.click()">上传图片</el-button>
-              <el-button size="small" type="primary" :loading="editDramaCharForm.imgGenerating" @click="generateDramaCharImg">AI 生成</el-button>
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaCharForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'character', editDramaCharForm, generateDramaCharImg)" />
             </div>
           </div>
           <input ref="dramaCharFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaCharImg" />
@@ -343,7 +343,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaSceneForm.imgUploading" @click="dramaSceneFileRef.click()">上传图片</el-button>
-              <el-button size="small" type="primary" :loading="editDramaSceneForm.imgGenerating" @click="generateDramaSceneImg">AI 生成</el-button>
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaSceneForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'scene', editDramaSceneForm, generateDramaSceneImg)" />
             </div>
           </div>
           <input ref="dramaSceneFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaSceneImg" />
@@ -370,7 +370,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaPropForm.imgUploading" @click="dramaPropFileRef.click()">上传图片</el-button>
-              <el-button size="small" type="primary" :loading="editDramaPropForm.imgGenerating" @click="generateDramaPropImg">AI 生成</el-button>
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaPropForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'prop', editDramaPropForm, generateDramaPropImg)" />
             </div>
           </div>
           <input ref="dramaPropFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaPropImg" />
@@ -515,6 +515,13 @@
     </el-dialog>
 
     <!-- 图片预览 -->
+    <ImageGenerationDrawer
+      :visible="imageGenerationDrawerVisible"
+      :task="imageGenerationTask"
+      :results="imageGenerationTask?.candidates || []"
+      @close="imageGeneration.close"
+      @send="imageGeneration.sendToChatGPT"
+    />
     <Teleport to="body">
       <div v-if="previewUrl" class="image-preview-overlay" @click="previewUrl = null">
         <img :src="previewUrl" alt="" class="image-preview-img" @click.stop="previewUrl = null" />
@@ -527,6 +534,8 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid } from '@element-plus/icons-vue'
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
@@ -541,6 +550,7 @@ import { taskAPI } from '@/api/task'
 import { characterAPI } from '@/api/characters'
 import { sceneAPI } from '@/api/scenes'
 import { propAPI } from '@/api/props'
+import { useImageGeneration } from '@/composables/useImageGeneration'
 import {
   generationStyleOptions,
   stylePromptMetadataForSave,
@@ -552,6 +562,22 @@ const route = useRoute()
 const { isDark, toggle: toggleTheme } = useTheme()
 const router = useRouter()
 const dramaId = Number(route.params.id)
+const imageGeneration = useImageGeneration()
+const imageGenerationDefaultChannel = imageGeneration.defaultChannel
+const imageGenerationDrawerVisible = imageGeneration.drawerVisible
+const imageGenerationTask = imageGeneration.currentTask
+
+async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
+  if (channel !== 'chatgpt_web') return legacy()
+  const task = await imageGeneration.open({
+    dramaId,
+    targetType,
+    targetId: form?.id,
+    generationChannel: channel,
+    prompt: form?.prompt || form?.description || form?.appearance || form?.name || form?.location || '',
+  })
+  return imageGeneration.sendToChatGPT(task)
+}
 
 // 图片编辑 – 文件输入 refs（各资源类型独立）
 const charFileRef  = ref(null)

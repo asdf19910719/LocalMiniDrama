@@ -15,6 +15,7 @@ describe('image generation target adapters and binding', () => {
       CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER);
       CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, scene_id INTEGER, title TEXT, description TEXT, image_prompt TEXT, polished_prompt TEXT, image_url TEXT, local_path TEXT, first_frame_image_id INTEGER, last_frame_image_id INTEGER, last_frame_image_url TEXT, last_frame_local_path TEXT, deleted_at TEXT, updated_at TEXT);
       CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
+      CREATE TABLE frame_prompts (id INTEGER PRIMARY KEY, storyboard_id INTEGER, frame_type TEXT, prompt TEXT, description TEXT, layout TEXT, created_at TEXT, updated_at TEXT);
     `);
     db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL)").run();
     db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL)").run();
@@ -54,7 +55,9 @@ describe('image generation target adapters and binding', () => {
   });
 
   it('binds storyboard main, first, and last to their authoritative fields', () => {
+    const before = db.prepare('SELECT first_frame_image_id FROM storyboards WHERE id=4').get().first_frame_image_id;
     targets.bindResult(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }, 53);
+    assert.equal(db.prepare('SELECT first_frame_image_id FROM storyboards WHERE id=4').get().first_frame_image_id, before);
     targets.bindResult(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }, 54);
     targets.bindResult(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }, 55);
 
@@ -64,6 +67,13 @@ describe('image generation target adapters and binding', () => {
     assert.equal(storyboard.last_frame_image_url, '/new-55.png');
     assert.equal(db.prepare('SELECT frame_type FROM image_generations WHERE id=54').get().frame_type, 'storyboard_first');
     assert.equal(db.prepare('SELECT frame_type FROM image_generations WHERE id=55').get().frame_type, 'storyboard_last');
+  });
+
+  it('uses the matching frame prompt for first and last targets', () => {
+    db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'first', '专业首帧提示', '2026-01-01')").run();
+    db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'last', '专业尾帧提示', '2026-01-02')").run();
+    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, '专业首帧提示');
+    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, '专业尾帧提示');
   });
 
   it('rejects binding an image or target from another drama', () => {

@@ -25,7 +25,16 @@ function bindStoryboardFrameImage(db, storyboardId, frameType, imageGenId, image
     try { require('../logger').info?.('[绑定] 尾帧图片已正确绑定到 storyboards.last_frame_*（不会污染主图或历史）', { storyboard_id: sid, image_gen_id: igId }); } catch (_) {}
     return;
   }
-  // 首帧或普通分镜图：写入主图/首帧字段
+  // Explicit first-frame results update the first-frame binding. A generic/main
+  // result must leave an existing first-frame selection untouched.
+  if (ft == null) {
+    db.prepare(
+      `UPDATE storyboards SET image_url = ?, local_path = ?, updated_at = ?
+       WHERE id = ? AND deleted_at IS NULL`
+    ).run(url, lp, now, sid);
+    return;
+  }
+  // 首帧：写入主图/首帧字段
   db.prepare(
     `UPDATE storyboards SET image_url = ?, local_path = ?, first_frame_image_id = ?, updated_at = ?
      WHERE id = ? AND deleted_at IS NULL`

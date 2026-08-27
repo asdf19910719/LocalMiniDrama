@@ -8,6 +8,7 @@ import { getDramaGenerationOptions } from '@/utils/canvasWorkflow'
 import { runImageStep, runVideoStep } from '@/composables/useCanvasWorkflowRunner'
 import { hasStoryboardImage, hasStoryboardVideo } from '@/utils/storyboardMedia'
 import { CANVAS_NODE_STATUS_LABELS } from '@/composables/useCanvasNodeStatus'
+import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 
 async function pollTask(taskId, onTick, maxAttempts = 450, interval = 2000) {
   if (!taskId) return { status: 'completed' }
@@ -150,7 +151,7 @@ export function useCanvasEpisodeGenerate(deps) {
     }
   }
 
-  async function batchGenerateImages() {
+  async function batchGenerateImages(channel = 'api') {
     const ep = getEpisode()
     if (!ep) {
       ElMessage.warning('请先选择集数')
@@ -163,6 +164,20 @@ export function useCanvasEpisodeGenerate(deps) {
     if (!todo.length) {
       ElMessage.info('当前集分镜均已有图片（全能模式分镜请直接生视频）')
       return
+    }
+    if (channel === 'chatgpt_web') {
+      const batch = await imageGenerationTaskAPI.createBatch({
+        dramaId: drama.value.id,
+        scope: 'storyboards',
+        generationChannel: channel,
+        targets: todo.map((sb) => ({
+          targetType: 'storyboard_main',
+          targetId: sb.id,
+          prompt: sb.polished_prompt || sb.image_prompt || sb.description || sb.title || '',
+        })),
+      })
+      ElMessage.success(`已创建 ${todo.length} 个 ChatGPT 生图任务`)
+      return batch
     }
     try {
       await ElMessageBox.confirm(

@@ -34,7 +34,12 @@ function appendHistory(row) {
 
 function resolveTarget(db, task) {
   const { dramaId, targetType, targetId } = targetValues(task);
-  if (!Number.isFinite(dramaId) || !Number.isFinite(targetId)) throw new Error('Invalid image generation target identity');
+  if (!Number.isInteger(dramaId) || dramaId <= 0 || !Number.isInteger(targetId) || targetId <= 0) {
+    throw new Error('Invalid image generation target identity');
+  }
+  if (!['character', 'scene', 'prop', 'storyboard_main', 'storyboard_first', 'storyboard_last'].includes(targetType)) {
+    throw new Error(`Unsupported image generation target type: ${targetType}`);
+  }
   if (TABLES[targetType]) {
     const config = TABLES[targetType];
     const row = db.prepare(`SELECT * FROM ${config.table} WHERE id=? AND deleted_at IS NULL`).get(targetId);
@@ -56,6 +61,31 @@ function reference(role, sourceId, url) {
   return url ? { role, sourceId, url } : null;
 }
 
+function collectStoryboardReferences(db, target, dramaId) {
+  const references = [];
+  if (target.scene_id) {
+    const scene = db.prepare('SELECT * FROM scenes WHERE id=? AND deleted_at IS NULL').get(target.scene_id);
+    if (scene && Number(scene.drama_id) === dramaId) {
+      const ref = reference('scene', scene.id, scene.ref_image || scene.image_url || scene.local_path);
+      if (ref) references.push(ref);
+    }
+  }
+  const linked = (table, idColumn, role) => {
+    try {
+      const rows = db.prepare(`SELECT r.* FROM ${table} link JOIN ${role === 'character' ? 'characters' : 'props'} r ON r.id=link.${idColumn}
+        WHERE link.storyboard_id=? AND r.deleted_at IS NULL ORDER BY r.id ASC`).all(target.id);
+      for (const row of rows) {
+        if (Number(row.drama_id) !== dramaId) continue;
+        const ref = reference(role, row.id, row.ref_image || row.image_url || row.local_path);
+        if (ref) references.push(ref);
+      }
+    } catch (_) {}
+  };
+  linked('storyboard_characters', 'character_id', 'character');
+  linked('storyboard_props', 'prop_id', 'prop');
+  return references;
+}
+
 function buildGenerationInput(db, task) {
   const target = resolveTarget(db, task);
   let prompt = '';
@@ -74,15 +104,22 @@ function buildGenerationInput(db, task) {
     const ref = reference('prop', target.id, target.ref_image || target.image_url || target.local_path);
     if (ref) references.push(ref);
   } else {
-    prompt = target.polished_prompt || target.image_prompt || target.description || target.title || '';
     frameType = target.target_type === 'storyboard_first'
       ? 'storyboard_first'
       : target.target_type === 'storyboard_last' ? 'storyboard_last' : null;
-    if (target.scene_id) {
-      const scene = db.prepare('SELECT id, ref_image, image_url, local_path FROM scenes WHERE id=? AND deleted_at IS NULL').get(target.scene_id);
-      const ref = scene && reference('scene', scene.id, scene.ref_image || scene.image_url || scene.local_path);
-      if (ref) references.push(ref);
+    // Dedicated frame prompts are authoritative for first/last generation;
+    // generic storyboard polishing must not replace them.
+    if (frameType) {
+      try {
+        const frameKind = frameType === 'storyboard_first' ? 'first' : 'last';
+        const frame = db.prepare(
+          'SELECT prompt FROM frame_prompts WHERE storyboard_id=? AND frame_type IN (?,?) ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+        ).get(target.id, frameType, frameKind);
+        prompt = frame?.prompt || '';
+      } catch (_) {}
     }
+    if (!prompt) prompt = target.polished_prompt || target.image_prompt || target.description || target.title || '';
+    references.push(...collectStoryboardReferences(db, target, Number(target.drama_id)));
     if (target.target_type === 'storyboard_last' && target.first_frame_image_id) {
       const first = db.prepare('SELECT id, image_url, local_path FROM image_generations WHERE id=?').get(target.first_frame_image_id);
       const ref = first && reference('storyboard_first', first.id, first.image_url || first.local_path);

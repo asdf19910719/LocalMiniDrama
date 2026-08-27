@@ -41,6 +41,8 @@ it('creates a unified task and exposes one drama summary', async () => {
     const prepared = (await (await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' })).json()).data;
     assert.equal(prepared.task.status, 'preparing');
     const attempt = prepared.attempt;
+    const preparedAgain = (await (await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' })).json()).data;
+    assert.equal(preparedAgain.attempt.id, attempt.id);
     const acknowledged = (await (await fetch(`${base}/image-generation-tasks/${created.id}/acknowledge`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ attemptId: attempt.id }),
     })).json()).data;
@@ -66,6 +68,13 @@ it('creates a unified task and exposes one drama summary', async () => {
     assert.equal(paused.status, 'paused');
     const resumed = (await (await fetch(`${base}/image-generation-batches/${batch.id}/resume`, { method: 'POST' })).json()).data;
     assert.equal(resumed.status, 'queued');
+    const next = (await (await fetch(`${base}/image-generation-batches/${batch.id}/run-next`, { method: 'POST' })).json()).data;
+    assert.equal(next.status, 'preparing');
+    const batchPreparedResponse = await fetch(`${base}/image-generation-tasks/${next.id}/prepare-send`, { method: 'POST' });
+    assert.equal(batchPreparedResponse.status, 200);
+    const batchPrepared = (await batchPreparedResponse.json()).data;
+    assert.ok(batchPrepared.task.external_job_id);
+    assert.equal(batchPrepared.external_job.image_generation_task_id, next.id);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     db.close();

@@ -3,6 +3,7 @@ const response = require('../response');
 const tasks = require('../services/imageGenerationTaskService');
 const targets = require('../services/imageGenerationTargetService');
 const queue = require('../services/imageGenerationQueueService');
+const orchestrator = require('../services/imageGenerationOrchestrator');
 const { createExternalJob, getExternalJob, createGenerationAttempt } = require('../services/externalGenerationService');
 
 module.exports = (db, log = console) => {
@@ -63,7 +64,9 @@ module.exports = (db, log = console) => {
     dramaId: req.body?.dramaId,
     resourceScope: req.body?.scope,
     generationChannel: req.body?.generationChannel,
-    targets: req.body?.targets,
+    targets: req.body?.targets || (Array.isArray(req.body?.targetIds)
+      ? req.body.targetIds.map((targetId) => ({ targetType: req.body.targetType || 'storyboard_main', targetId }))
+      : []),
   })));
 
   router.post('/image-generation-batches/:batchId/pause', (req, res) =>
@@ -77,16 +80,41 @@ module.exports = (db, log = console) => {
   router.post('/image-generation-tasks/:taskId/skip', (req, res) =>
     handle(res, () => queue.skipTask(db, req.params.taskId)));
   router.post('/image-generation-tasks/:taskId/cancel', (req, res) =>
-    handle(res, () => queue.skipTask(db, req.params.taskId)));
+    handle(res, () => queue.cancelTask(db, req.params.taskId)));
 
   router.post('/image-generation-tasks/:taskId/prepare-send', (req, res) => handle(res, () => {
     let task = tasks.getTask(db, req.params.taskId);
-    if (!task || task.generation_channel !== 'chatgpt_web' || !task.external_job_id) throw new Error('ChatGPT image generation task not found');
+    if (!task || task.generation_channel !== 'chatgpt_web') throw new Error('ChatGPT image generation task not found');
+    if (!task.external_job_id) {
+      const job = createExternalJob(db, {
+        dramaId: task.drama_id,
+        storyboardId: task.target_type.startsWith('storyboard_') ? task.target_id : null,
+        assetType: task.target_type,
+        provider: 'chatgpt-web',
+        site: 'chatgpt',
+        promptSnapshot: task.prompt_snapshot,
+        imageGenerationTaskId: task.id,
+      });
+      task = tasks.transitionTask(db, task.id, task.status, { externalJobId: job.id });
+    }
     if (task.status === 'draft' || task.status === 'queued') task = tasks.transitionTask(db, task.id, 'preparing');
     if (task.status !== 'preparing') throw new Error(`Image generation task cannot prepare from ${task.status}`);
+    const existingAttempt = db.prepare(`SELECT * FROM external_generation_attempts
+      WHERE job_id=? AND status IN ('ready_to_send','submitted') ORDER BY sequence DESC LIMIT 1`).get(task.external_job_id);
+    if (existingAttempt) return { task, attempt: existingAttempt, external_job: getExternalJob(db, task.external_job_id) };
     const attempt = createGenerationAttempt(db, task.external_job_id, { status: 'ready_to_send' });
     return { task, attempt, external_job: getExternalJob(db, task.external_job_id) };
   }));
+
+  router.post('/image-generation-tasks/:taskId/submit', async (req, res) => {
+    try {
+      const task = await orchestrator.submitTask(db, log, req.params.taskId);
+      response.success(res, task);
+    } catch (error) {
+      log.error?.('imageGenerationTasks submit', { error: error.message });
+      response.badRequest(res, error.message);
+    }
+  });
 
   router.post('/image-generation-tasks/:taskId/acknowledge', (req, res) => handle(res, () => db.transaction(() => {
     const task = tasks.getTask(db, req.params.taskId);

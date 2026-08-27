@@ -67,4 +67,8 @@ function retryTask(db, taskId) {
   return updated;
 }
 
-module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, refreshBatch };
+function cancelTask(db, taskId) {
+  return skipTask(db, taskId);
+}
+
+module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, cancelTask, refreshBatch };

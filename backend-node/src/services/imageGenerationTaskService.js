@@ -24,7 +24,7 @@ const TERMINAL = new Set(['completed', 'cancelled']);
 const TRANSITIONS = {
   draft: new Set(['queued', 'preparing', 'cancelled']),
   queued: new Set(['preparing', 'cancelled']),
-  preparing: new Set(['queued', 'submitted', 'failed', 'cancelled']),
+  preparing: new Set(['queued', 'submitted', 'generating', 'failed', 'cancelled']),
   submitted: new Set(['generating', 'needs_review', 'completed', 'failed', 'cancelled']),
   generating: new Set(['needs_review', 'completed', 'failed', 'cancelled']),
   needs_review: new Set(['completed', 'failed', 'cancelled']),
