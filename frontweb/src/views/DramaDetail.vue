@@ -551,6 +551,7 @@ import { characterAPI } from '@/api/characters'
 import { sceneAPI } from '@/api/scenes'
 import { propAPI } from '@/api/props'
 import { useImageGeneration } from '@/composables/useImageGeneration'
+import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import {
   generationStyleOptions,
   stylePromptMetadataForSave,
@@ -574,7 +575,7 @@ async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
     targetType,
     targetId: form?.id,
     generationChannel: channel,
-    prompt: form?.prompt || form?.description || form?.appearance || form?.name || form?.location || '',
+    prompt: resolveImageGenerationPrompt(targetType, form),
   })
   return imageGeneration.sendToChatGPT(task)
 }

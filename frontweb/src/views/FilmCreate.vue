@@ -2688,6 +2688,7 @@ import { useCharacters } from '@/composables/filmCreate/useCharacters'
 import { useProps as usePropsComposable } from '@/composables/filmCreate/useProps'
 import { useScenes } from '@/composables/filmCreate/useScenes'
 import { useImageGeneration } from '@/composables/useImageGeneration'
+import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 
 const route = useRoute()
 const router = useRouter()
@@ -2849,7 +2850,7 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
     targetType,
     targetId: target?.id,
     generationChannel: channel,
-    prompt: prompt || target?.prompt || target?.image_prompt || target?.description || target?.name || target?.location || '',
+    prompt: resolveImageGenerationPrompt(targetType, target, prompt),
     aspectRatio: projectAspectRatio.value,
   })
   await sendImageGenerationToChatGPT(task)

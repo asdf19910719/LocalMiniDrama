@@ -143,6 +143,7 @@ import { generateAssetReferenceImage } from '@/composables/useCanvasAssetGenerat
 import { assetImageUrl } from '@/utils/mediaUrl'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
+import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 
 const props = defineProps({
   kind: { type: String, required: true },
@@ -291,7 +292,7 @@ async function generateImage(channel = imageGeneration.defaultChannel.value) {
         targetType: props.kind,
         targetId: props.entity.id,
         generationChannel: channel,
-        prompt: form.prompt || form.description || form.name || form.location,
+        prompt: resolveImageGenerationPrompt(props.kind, props.entity, form.prompt),
       })
       await imageGeneration.sendToChatGPT(task)
       return

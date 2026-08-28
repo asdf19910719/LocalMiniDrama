@@ -9,7 +9,7 @@ describe('image generation target adapters and binding', () => {
   beforeEach(() => {
     db = new Database(':memory:');
     db.exec(`
-      CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
+      CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, description TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
       CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER, location TEXT, time TEXT, prompt TEXT, polished_prompt TEXT, polished_prompt_single TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, status TEXT, deleted_at TEXT, updated_at TEXT);
       CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, description TEXT, prompt TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
       CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER);
@@ -17,7 +17,7 @@ describe('image generation target adapters and binding', () => {
       CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
       CREATE TABLE frame_prompts (id INTEGER PRIMARY KEY, storyboard_id INTEGER, frame_type TEXT, prompt TEXT, description TEXT, layout TEXT, created_at TEXT, updated_at TEXT);
     `);
-    db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL)").run();
+    db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL)").run();
     db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL)").run();
     db.prepare("INSERT INTO props VALUES (3,7,'钥匙','青铜古钥匙','道具提示','道具润色','/prop-ref.png','/old-prop.png','old-prop.png',NULL,NULL,NULL)").run();
     db.prepare('INSERT INTO episodes VALUES (10,7)').run();
@@ -36,6 +36,11 @@ describe('image generation target adapters and binding', () => {
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'scene', target_id: 2 }).prompt, '场景单图');
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'prop', target_id: 3 }).prompt, '道具润色');
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }).prompt, '分镜润色');
+  });
+
+  it('never falls back to a character background description when building an image prompt', () => {
+    db.prepare('UPDATE characters SET polished_prompt=NULL WHERE id=1').run();
+    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, '黑发少年');
   });
 
   it('binds character, scene, and prop results while preserving old images', () => {
