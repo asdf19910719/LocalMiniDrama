@@ -35,7 +35,7 @@ test('exposes the same video-generation actions in drawer and sidebar layouts', 
   assert.deepEqual(drawerActions, ['刷新', '生成候选', '取消生成', '重试生成', '质量检查', '选用候选', '创建连续性锚点'])
 })
 
-test('builds numeric candidate input without a client-selected provider, model, or workflow', () => {
+test('builds numeric candidate input with the default H3 workflow and mode', () => {
   const request = buildVideoCandidateRequest({
     prompt: '雨夜车站，人物撑伞转身',
     negativePrompt: '画面抖动',
@@ -61,13 +61,16 @@ test('builds numeric candidate input without a client-selected provider, model, 
       frameRate: 24,
       seed: 77,
       continuityMode: 'motion_overlap',
+      workflowId: 'minimax_h3_director_r2v',
+      generationMode: 'single_reference',
       anchorId: 'anchor-1',
       sourceArtifactId: 'artifact-1',
     },
   })
   assert.equal('provider' in request, false)
   assert.equal('model' in request, false)
-  assert.equal('workflowId' in request, false)
+  assert.equal(request.structured.workflowId, 'minimax_h3_director_r2v')
+  assert.equal(request.structured.generationMode, 'single_reference')
 })
 
 test('accepts zero as a deterministic random seed', () => {
@@ -134,6 +137,8 @@ test('preserves the normal editor generation context in the unified candidate pa
       frameRate: 24,
       seed: 42,
       continuityMode: 'motion_overlap',
+      workflowId: 'minimax_h3_director_r2v',
+      generationMode: 'single_reference',
       imageUrl: 'https://assets.example.test/selected-first.png',
       firstFrameUrl: 'https://assets.example.test/selected-first.png',
       lastFrameUrl: 'https://assets.example.test/selected-last.png',
