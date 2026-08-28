@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
+import { normalizeImageGenerationTask, shouldPollImageGenerationTask } from '@/utils/imageGenerationTaskState'
 
 function parseReferenceManifest(value) {
   if (Array.isArray(value)) return value
@@ -22,6 +23,26 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const drawerVisible = ref(false)
   const loading = ref(false)
   const errorMessage = ref('')
+  let taskPollTimer = null
+
+  function stopTaskPolling() {
+    if (taskPollTimer != null) globalThis.clearTimeout(taskPollTimer)
+    taskPollTimer = null
+  }
+
+  function startTaskPolling(delayMs = 3000) {
+    stopTaskPolling()
+    if (!shouldPollImageGenerationTask(currentTask.value)) return
+    taskPollTimer = globalThis.setTimeout(async () => {
+      taskPollTimer = null
+      try {
+        await refreshTask()
+      } catch (error) {
+        errorMessage.value = error?.message || '图片任务状态刷新失败'
+        startTaskPolling(5000)
+      }
+    }, delayMs)
+  }
 
   async function loadSummary(id) {
     if (id == null) return null
@@ -35,10 +56,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     return defaultChannel.value
   }
   async function openTask(input) {
+    stopTaskPolling()
     loading.value = true
     errorMessage.value = ''
     try {
-      currentTask.value = await imageGenerationTaskAPI.create(input)
+      currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.create(input))
       drawerVisible.value = true
       await loadSummary(input.dramaId)
       return currentTask.value
@@ -46,7 +68,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   }
   async function refreshTask() {
     if (!currentTask.value?.id) return null
-    currentTask.value = await imageGenerationTaskAPI.get(currentTask.value.id)
+    const taskId = currentTask.value.id
+    const refreshed = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(taskId))
+    if (currentTask.value?.id !== taskId) return currentTask.value
+    currentTask.value = refreshed
+    startTaskPolling()
     return currentTask.value
   }
   async function sendToChatGPT(task = currentTask.value) {
@@ -55,7 +81,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     errorMessage.value = ''
     try {
       const prepared = await imageGenerationTaskAPI.prepareSend(task.id)
-      currentTask.value = prepared.task
+      currentTask.value = normalizeImageGenerationTask(prepared.task)
       const job = prepared.external_job
       const attempt = prepared.attempt
       await sendImageGenerationBridgeMessage({
@@ -67,7 +93,8 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
         action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
         attemptId: attempt.id, conversationId: job.conversation_id, payload: attempt,
       })
-      currentTask.value = await imageGenerationTaskAPI.acknowledge(prepared.task.id, attempt.id)
+      currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.acknowledge(prepared.task.id, attempt.id))
+      startTaskPolling()
       await loadSummary(prepared.task.drama_id)
       return currentTask.value
     } catch (error) {
@@ -81,13 +108,43 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       loading.value = false
     }
   }
+  async function recoverCapture(task = currentTask.value) {
+    if (!task?.id) throw new Error('图片生成任务不存在')
+    loading.value = true
+    errorMessage.value = ''
+    try {
+      const detailed = task.external_job
+        ? normalizeImageGenerationTask(task)
+        : normalizeImageGenerationTask(await imageGenerationTaskAPI.get(task.id))
+      const job = detailed?.external_job
+      const attempt = (job?.attempts || []).filter((item) => ['submitted', 'generating'].includes(item?.status)).at(-1)
+        || (job?.attempts || []).at(-1)
+      if (!job?.id || !attempt?.id) throw new Error('找不到可恢复的 ChatGPT 生成记录')
+      currentTask.value = { ...detailed, error_code: null, error_message: null }
+      await sendImageGenerationBridgeMessage({
+        action: 'recoverAttempt', dramaId: detailed.drama_id, site: 'chatgpt', jobId: job.id,
+        attemptId: attempt.id, conversationId: attempt.conversation_id || job.conversation_id,
+        attempt,
+      })
+      startTaskPolling(0)
+      return currentTask.value
+    } catch (error) {
+      const message = error?.message || '恢复结果捕获失败，请检查 ChatGPT 页面和浏览器插件'
+      errorMessage.value = message
+      if (currentTask.value?.id === task.id) currentTask.value = { ...currentTask.value, error_message: message }
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
   async function selectResult(result) {
     if (!currentTask.value?.id || !result?.id) throw new Error('鍊欓€夌粨鏋滀笉瀛樺湪')
-    currentTask.value = (await imageGenerationTaskAPI.selectResult(currentTask.value.id, result.id)).task
+    currentTask.value = normalizeImageGenerationTask((await imageGenerationTaskAPI.selectResult(currentTask.value.id, result.id)).task)
+    stopTaskPolling()
     await loadSummary(currentTask.value.drama_id)
     return currentTask.value
   }
   function closeDrawer() { drawerVisible.value = false }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, selectResult, closeDrawer }
+  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer }
 })

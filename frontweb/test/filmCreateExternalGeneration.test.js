@@ -43,4 +43,7 @@ test('unified image store awaits extension acknowledgement before reporting succ
   assert.match(source, /action:\s*'prepare'/)
   assert.match(source, /await sendImageGenerationBridgeMessage\(/)
   assert.match(source, /await imageGenerationTaskAPI\.acknowledge/)
+  assert.match(source, /startTaskPolling/)
+  assert.match(source, /normalizeImageGenerationTask/)
+  assert.match(source, /action:\s*'recoverAttempt'/)
 })

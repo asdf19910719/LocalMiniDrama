@@ -32,6 +32,7 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(setting, /setDefault/)
   assert.match(setting, /默认生图方式/)
   assert.match(drawer, /重试发送/)
+  assert.match(drawer, /恢复结果捕获/)
   assert.match(drawer, /task\.error_message/)
 })
 

@@ -372,6 +372,8 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 - 按统一任务 ID 展示提示词、参考图、插件状态、候选图和恢复操作；
 - 桥接失败时保留 `preparing` 任务并显示错误原因，提供“重试发送”；
 - 等待扩展 ACK 时显示明确的等待状态，不把无响应误报为已发送；
+- `submitted` / `generating` 任务自动轮询后端并归一化 External Job 候选；
+- 浏览器刷新、ChatGPT 标签关闭或扩展观察器中断后，可“恢复结果捕获”，不得重新提交提示词；
 - 不内置角色或分镜专属绑定逻辑。
 
 ### `ImageGenerationChannelSetting`

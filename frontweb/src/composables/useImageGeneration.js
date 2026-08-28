@@ -11,6 +11,7 @@ export function useImageGeneration() {
     open: store.openTask,
     refresh: store.refreshTask,
     sendToChatGPT: store.sendToChatGPT,
+    recoverCapture: store.recoverCapture,
     selectResult: store.selectResult,
     close: store.closeDrawer,
   }

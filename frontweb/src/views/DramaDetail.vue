@@ -524,7 +524,8 @@
       :results="imageGenerationTask?.candidates || []"
       :sending="imageGenerationSending"
       @close="imageGeneration.close"
-      @send="imageGeneration.sendToChatGPT"
+      @send="onImageGenerationSend"
+      @recover="onImageGenerationRecover"
     />
     <Teleport to="body">
       <div v-if="previewUrl" class="image-preview-overlay" @click="previewUrl = null">
@@ -587,6 +588,22 @@ async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
     return imageGeneration.sendToChatGPT(task)
   } catch (error) {
     ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+  }
+}
+
+async function onImageGenerationSend(task) {
+  try {
+    await imageGeneration.sendToChatGPT(task)
+  } catch (error) {
+    ElMessage.error(error?.message || '发送到 ChatGPT 失败')
+  }
+}
+
+async function onImageGenerationRecover(task) {
+  try {
+    await imageGeneration.recoverCapture(task)
+  } catch (error) {
+    ElMessage.error(error?.message || '恢复结果捕获失败')
   }
 }
 

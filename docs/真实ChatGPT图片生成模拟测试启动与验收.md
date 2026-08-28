@@ -119,6 +119,8 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 
 - 扩展不显示：确认 `ignoreDefaultArgs: ['--disable-extensions']` 和两个显式扩展参数同时存在，并关闭旧 Chrome profile 锁。
 - 点击 ChatGPT 生图无反应：打开任务抽屉查看状态；若为“准备中”且有错误提示，点击“重试发送”。重点检查扩展是否注入（ChatGPT 页面根节点有 `data-aistory-chatgpt-bridge="v1"`）、页面是否登录以及当前 profile 是否就是启动扩展的 profile。
+- 任务显示“已发送”但没有候选：保持原 ChatGPT 会话打开，点击“恢复结果捕获”。该操作只重新挂接扩展监听，不会再次发送提示词；前端随后每 3 秒刷新任务，导入结果会自动出现在候选区。
+- 2026-08-28 对遗留角色任务 `ae204682-e843-477e-9fa8-7838d502ddba` 的诊断：后端已有真实 `SUBMITTED` 事件，但 9343 profile 的 ChatGPT 页面注入标记为空且扩展 service worker 不存在，说明扩展当时未运行；任务本身并非未创建。
 - 参考图上传失败：检查 `/static/...` 响应的 `Content-Type`。扩展会拒绝 `text/html` 等 SPA fallback，不会把 HTML 上传给 ChatGPT。
 - 导入提示 attempt 不存在：从后端任务 API 读取真实 attempt ID，不要手工复用旧截图或旧脚本中的 ID。
 - 预览空白：检查任务结果是否有 `preview_url`，并直接请求该地址确认 `image/png`；不要在工作台直接使用 ChatGPT 的临时 `source_url`。

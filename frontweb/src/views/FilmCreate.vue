@@ -2624,7 +2624,8 @@
       :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
       :sending="imageGenerationSending"
       @close="closeImageGenerationDrawer"
-      @send="sendImageGenerationToChatGPT"
+      @send="onImageGenerationSend"
+      @recover="onImageGenerationRecover"
       @select="onImageGenerationSelect"
     />
 
@@ -2708,6 +2709,7 @@ const {
   loadSummary: loadImageGenerationSummary,
   loadDefault: loadImageGenerationDefault,
   sendToChatGPT: sendImageGenerationToChatGPT,
+  recoverCapture: recoverImageGenerationCapture,
   selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
 } = useImageGeneration()
@@ -2861,6 +2863,22 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
     await sendImageGenerationToChatGPT(task)
   } catch (error) {
     ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+  }
+}
+
+async function onImageGenerationSend(task) {
+  try {
+    await sendImageGenerationToChatGPT(task)
+  } catch (error) {
+    ElMessage.error(error?.message || '发送到 ChatGPT 失败')
+  }
+}
+
+async function onImageGenerationRecover(task) {
+  try {
+    await recoverImageGenerationCapture(task)
+  } catch (error) {
+    ElMessage.error(error?.message || '恢复结果捕获失败')
   }
 }
 
