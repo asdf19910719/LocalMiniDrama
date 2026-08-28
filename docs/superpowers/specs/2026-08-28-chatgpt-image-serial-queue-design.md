@@ -51,7 +51,7 @@
 
 1. 查询全局活跃任务（`chatgpt_web` 且状态 ∈ `submitted/generating`，或 `preparing` 且 `updated_at` 距今 ≤ 10 分钟）。存在活跃任务 → 返回 `{ claimed: false, active_task_id }`，不动队列。
 2. `preparing` 且 `updated_at` 距今 > 10 分钟视为弃置任务 → 转 `failed`（error_message `超时未发送，已跳过`），继续。
-3. 取最旧 `queued` 任务（`ORDER BY created_at`），`queued → preparing`，返回 `{ claimed: true, task }`（含 external_job）。
+3. 取最旧 `queued` 任务（`ORDER BY created_at`），`queued → preparing`，返回 `{ claimed: true, task }`（驱动器经 prepare-send 获取 attempt，task 本体不含 external_job）。
 4. 队列空 → `{ claimed: false }`。
 
 全局并发为 1：不按 drama 隔离——只有一个 ChatGPT 标签，跨剧集也必须串行。

@@ -201,6 +201,25 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       ElNotification({ title: '生图完成', message: count ? `${count} 张候选待选择` : '候选已导入，请选择', type: 'success', onClick: () => { openTaskById(event.taskId) } })
     } else if (event.type === 'failed') {
       ElNotification({ title: '生图失败', message: event.message || '请重新排队', type: 'error', onClick: () => { openTaskById(event.taskId) } })
+    } else if (event.type === 'terminal') {
+      // 异步追探一次领取接口，确认队列已清空才提示"全部完成"；
+      // 探针若恰好领到任务，把领取结果直接交回驱动器推进，避免其滞留 preparing。
+      void probeQueueAfterTerminal(event)
+    }
+  }
+
+  async function probeQueueAfterTerminal(event) {
+    try {
+      const result = await imageGenerationTaskAPI.claimNext()
+      if (result?.claimed) {
+        queueDriver?.tick(result)
+        return
+      }
+      if (!result?.active_task_id) {
+        ElNotification({ title: '队列完成', message: '全部生图任务已完成', type: 'success', onClick: () => { openTaskById(event.taskId) } })
+      }
+    } catch (_) {
+      // 探针失败保持静默：驱动器的下一个周期会正常领取并推进
     }
   }
 

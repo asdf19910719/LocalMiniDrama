@@ -230,5 +230,6 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 3. 驱动器立即领取道具 → preparing → submitted → 候选导入（9 候选）+ 第二条通知。
 4. 场景同样自动推进 → 导入 3 候选。
 5. 全程零手动干预、任何时刻只有一个任务在生成（严格串行）。三任务共导入 15 个候选，全部进入待选状态。
+6. 刷新页面后驱动器自动恢复推进已实测（2026-08-28 验收中驱动器随页面 reload 重启并继续消费队列，claim-next 幂等、无需额外恢复状态）。
 
 注：串行队列上线前的历史遗留任务（preparing/submitted/draft 共 23 条）已批量标记 `cancelled`（error_code `stale_test_cleanup`），避免阻塞全局并发 1。

@@ -79,6 +79,32 @@ test('does not claim again while driving and ignores claim when busy', async () 
   assert.deepEqual(events, [])
 })
 
+test('accepts a pre-claimed result so a probe claim is still driven', async () => {
+  const task = { id: 'tp', status: 'preparing' }
+  let claims = 0
+  const { driver, events } = makeDriver({
+    claimNext: async () => { claims += 1; return { claimed: false } },
+    prepareSend: async () => ({ task, attempt: { id: 'ap' }, already_submitted: false }),
+    getTask: async () => ({ id: 'tp', status: 'needs_review', candidates: [1] }),
+    acknowledge: async () => ({ id: 'tp', status: 'submitted' }),
+  })
+  await driver.tick({ claimed: true, task })
+  driver.stop()
+  assert.equal(claims, 0)
+  assert.deepEqual(events.map((e) => e.type), ['claimed', 'submitted', 'needs_review', 'terminal'])
+})
+
+test('store notifies queue completion on drained terminal events', () => {
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  // terminal 事件必须被处理并触发"队列完成"通知
+  assert.match(source, /event\.type === 'terminal'/)
+  assert.match(source, /队列完成/)
+  assert.match(source, /全部生图任务已完成/)
+  // 通过异步追探 claim-next 判定队列已空（含 active_task_id 判定）
+  assert.match(source, /claimNext\(\)/)
+  assert.match(source, /active_task_id/)
+})
+
 test('store wires the driver with real bridge/api deps and deduped notifications', () => {
   const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
   assert.match(source, /createQueueDriver\(/)

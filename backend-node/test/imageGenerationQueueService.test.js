@@ -70,6 +70,22 @@ it('claims the oldest queued chatgpt task and blocks while one is active', () =>
   db.close();
 });
 
+it('claim-next skips batch-owned queued tasks and leaves them for run-next', () => {
+  const db = setup();
+  const batchTask = taskService.createTask(db, { dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web', promptSnapshot: 'batch', status: 'queued', batchId: 'batch-1' });
+  const solo = taskService.createTask(db, { dramaId: 7, targetType: 'prop', targetId: 2, generationChannel: 'chatgpt_web', promptSnapshot: 'solo', status: 'queued' });
+  const claim = queue.claimNextChatgptTask(db);
+  assert.equal(claim.claimed, true);
+  assert.equal(claim.task.id, solo.id);
+  assert.equal(taskService.getTask(db, batchTask.id).status, 'queued');
+  taskService.transitionTask(db, solo.id, 'failed', { errorCode: 'send_failed', errorMessage: 'x' });
+  const drained = queue.claimNextChatgptTask(db);
+  assert.equal(drained.claimed, false);
+  assert.equal(drained.active_task_id, undefined);
+  assert.equal(taskService.getTask(db, batchTask.id).status, 'queued');
+  db.close();
+});
+
 it('fails stale preparing tasks and keeps fresh ones active', () => {
   const db = setup();
   const stale = taskService.createTask(db, { dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web', promptSnapshot: 's', status: 'preparing' });

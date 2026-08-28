@@ -18,11 +18,14 @@ export function createQueueDriver({
   // stop() pauses (tick no-ops, the watch loop exits), start() resumes and kicks a cycle.
   let stopped = false
   let driving = false
-  async function tick() {
+  // `preclaimed` lets the caller hand over a result it already obtained from
+  // claimNext (e.g. the store's queue-drained probe) so it is still driven
+  // instead of idling in preparing until the stale timeout.
+  async function tick(preclaimed) {
     if (stopped || driving) return
     driving = true
     try {
-      const result = await claimNext()
+      const result = preclaimed || await claimNext()
       if (!result?.claimed) return
       await drive(result.task)
     } catch (error) {

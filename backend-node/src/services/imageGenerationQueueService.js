@@ -87,8 +87,10 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
         WHERE generation_channel='chatgpt_web' AND status='preparing' AND updated_at >= ?
         ORDER BY updated_at DESC LIMIT 1`).get(staleBefore);
     if (active) return { claimed: false, active_task_id: active.id };
+    // 批次任务由 run-next 领取（批次自身串行）；领取查询只消费单独任务，
+    // 但 preparing/submitted/generating 的批次任务仍算全局活跃（并发 1 覆盖批次）。
     const next = db.prepare(`SELECT * FROM image_generation_tasks
-      WHERE generation_channel='chatgpt_web' AND status='queued'
+      WHERE generation_channel='chatgpt_web' AND status='queued' AND batch_id IS NULL
       ORDER BY created_at LIMIT 1`).get();
     if (!next) return { claimed: false };
     return { claimed: true, task: tasks.transitionTask(db, next.id, 'preparing') };

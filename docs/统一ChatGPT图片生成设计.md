@@ -519,3 +519,29 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 - 外部网页导入结果的 `local_path` 是 Windows 绝对路径，前端不再将其拼接到 `/static/`，避免命中 Vite fallback HTML。
 - 统一媒体 URL 会从 `external-web/<drama>/<storyboard>/<resultId>/...` 解析结果 ID，使用 `/api/v1/external-generation/results/<resultId>/content` 返回本地原图；旧的 storage 相对路径仍走 `/static/`。
 - 真实重载制作页后已验证赤红玉简图片返回 `200 image/png`，尺寸 `1672x941`，生成成功后页面能立即展示。
+
+## 18. 2026-08-28 单独生图串行队列与全局通知
+
+单独点击资源（角色/场景/道具/分镜）的"ChatGPT 生成"不再走立即发送路径，而是与批次共用"ChatGPT 并发固定为 1"的串行语义，由页面驱动器统一推进。spec：`docs/superpowers/specs/2026-08-28-chatgpt-image-serial-queue-design.md`。
+
+### 创建与领取
+
+- `chatgpt_web` 单独任务创建后同事务内 `draft → queued`，直接落入串行队列；批次任务创建行为不变。
+- `POST /image-generation-tasks/claim-next` 后端裁决全局并发 1：存在活跃任务（`submitted`/`generating`，或 10 分钟内的 `preparing`）时拒绝领取；超过 10 分钟的 `preparing` 视为弃置任务自动转 `failed`（error_code `send_timeout`）后继续。领取按 `created_at` 顺序，仅消费单独任务（`batch_id IS NULL`，批次任务仍由 run-next 领取；批次任务的 preparing/submitted/generating 同样计入全局活跃）。
+- `POST /image-generation-tasks/:taskId/fail`：驱动器在重试耗尽后标记 `preparing → failed`（error_code `send_failed`），单项失败不阻塞后续。
+
+### 前端驱动器与抽屉
+
+- 页面内驱动器每 5 秒调用一次 claim-next，领到任务后走既有链路：prepare-send → 桥接 prepare/send → acknowledge → 轮询至终态。刷新页面后驱动器重启即可恢复推进，无需额外恢复状态。
+- 桥接 send 抛瞬时错误（`NOT_READY` / `provider tab unavailable` / `provider composer is not ready`）时最多重试 2 次，仍失败则调 fail 接口转 `failed` 并立即领取下一个；驱动器自身异常不阻塞队列。
+- 抽屉：`queued` 显示"排队中"且无发送按钮；`failed` 提供"重新排队"（回到 queued 重新参与排序）；移除 preparing 阶段的手动"重试发送"（避免与驱动器双重驱动）。
+
+### 全局通知（ElNotification 右上角）
+
+| 事件 | 文案 | 点击行为 |
+|---|---|---|
+| 候选导入 | 生图完成：N 张候选待选择 | 打开该任务抽屉 |
+| 任务失败 | 生图失败：<原因> | 打开抽屉可重新排队 |
+| 队列完成 | 全部生图任务已完成（终态后追探 claim-next 确认队列已空且无活跃任务） | 打开抽屉 |
+
+进度态不提示；同任务同事件会话内去重（刷新重置）。DramaCanvas、DramaDetail 及资源页的生图入口均为纯入队，不再直接发送。
