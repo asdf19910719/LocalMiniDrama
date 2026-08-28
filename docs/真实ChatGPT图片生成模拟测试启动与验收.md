@@ -193,3 +193,14 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 - 首次发送环节出现过一次未复现的后端 500（`prepare-send` 对 draft 会原地转 preparing，相关路由均为 400 包装，源头待复现捕获）；修复后任务级错误已可见，复现时可直接从抽屉与日志定位。
 - 测试遗留任务：`64698fd1`（needs_review，含 3 个有效候选可选）、`44959032`（preparing）、`725feae6`（submitted，attempt needs_review）可手动取消或清理。
 - storyboard 绑定后 `status` 字段仍为 `pending`（图片显示不受影响，字段语义待确认）。
+
+## 2026-08-28 恢复按钮 postMessage 克隆错误修复
+
+用户点击"恢复结果捕获"时页面报 `Failed to execute 'postMessage' on 'Window': #<Object> could not be cloned`。根因：`recoverCapture` 把 store reactive 树里的 attempt 对象（Vue 深层 Proxy）直接传入 `window.postMessage`，而 postMessage 使用结构化克隆算法、无法克隆 Proxy。`sendToChatGPT` 的消息全部来自 API 响应（纯 JSON）不受影响，因此该错误只在恢复/重绑路径出现。
+
+修复（`2f656bf`，TDD）：
+
+1. 桥接边界 `sendImageGenerationBridgeMessage` 新增 `toPlainMessage` 规范化：递归展开 Proxy/嵌套对象为纯数据、丢弃函数值、保留 Uint8Array 等结构化克隆支持的二进制类型。
+2. `recoverCapture` 改为只传 attempt 的纯字段（id/status/sequence/assistant_message_id/conversation_id）。
+
+回归：前端 `72/72`（新增 3 个桥接规范化测试，用 Node `structuredClone` 与浏览器同算法验证）、Vite 构建通过。实机复验：场景任务真实发送成功 → 点击"恢复结果捕获"无任何错误（修复前必现）→ 80 秒后 3 个候选自动导入闭环。
