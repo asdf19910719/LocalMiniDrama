@@ -43,6 +43,8 @@ npm run dev -- --host 127.0.0.1 --port 3013
 
 工作台地址：`http://127.0.0.1:3013/drama/3/canvas`。Vite 代理默认把 `/api` 转发到 `http://127.0.0.1:5679`。
 
+项目默认生图方式可在 `FilmCreate` 的“一键全流程”工具条或“剧集管理”页面的“剧集信息”中设置为“ChatGPT 生成”。保存后，所有统一图片按钮的主操作都会使用 `chatgpt_web`；按钮下拉菜单仍可只对当前任务临时切换。
+
 ## 构建扩展
 
 扩展源码修改后，在 `browser-extension` 目录运行：
@@ -116,6 +118,7 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 ## 常见故障
 
 - 扩展不显示：确认 `ignoreDefaultArgs: ['--disable-extensions']` 和两个显式扩展参数同时存在，并关闭旧 Chrome profile 锁。
+- 点击 ChatGPT 生图无反应：打开任务抽屉查看状态；若为“准备中”且有错误提示，点击“重试发送”。重点检查扩展是否注入（ChatGPT 页面根节点有 `data-aistory-chatgpt-bridge="v1"`）、页面是否登录以及当前 profile 是否就是启动扩展的 profile。
 - 参考图上传失败：检查 `/static/...` 响应的 `Content-Type`。扩展会拒绝 `text/html` 等 SPA fallback，不会把 HTML 上传给 ChatGPT。
 - 导入提示 attempt 不存在：从后端任务 API 读取真实 attempt ID，不要手工复用旧截图或旧脚本中的 ID。
 - 预览空白：检查任务结果是否有 `preview_url`，并直接请求该地址确认 `image/png`；不要在工作台直接使用 ChatGPT 的临时 `source_url`。

@@ -13,6 +13,7 @@ test('shared image generation controls expose concise channel copy and one summa
   const queue = read('src/components/imageGeneration/ImageGenerationQueue.vue')
   const composable = read('src/composables/useImageGeneration.js')
   const bridge = read('src/utils/imageGenerationBridge.js')
+  const setting = read('src/components/imageGeneration/ImageGenerationChannelSetting.vue')
 
   assert.match(api, /image-generation-summary/)
   assert.match(api, /image-generation-batches/)
@@ -28,6 +29,10 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(api, /acknowledge/)
   assert.match(bridge, /aistory-external-generation-response/)
   assert.doesNotMatch(bridge, /return \{ ok: true \}/)
+  assert.match(setting, /setDefault/)
+  assert.match(setting, /默认生图方式/)
+  assert.match(drawer, /重试发送/)
+  assert.match(drawer, /task\.error_message/)
 })
 
 test('all project asset and storyboard entry points use the unified controls', () => {
@@ -44,4 +49,8 @@ test('all project asset and storyboard entry points use the unified controls', (
   assert.match(detail, /ImageGenerateSplitButton/)
   assert.match(assetPanel, /ImageGenerateSplitButton/)
   assert.doesNotMatch(film, /ExternalWebGenerationPanel|film-create-external-generation/)
+  assert.match(film, /ImageGenerationChannelSetting/)
+  assert.match(detail, /ImageGenerationChannelSetting/)
+  assert.match(detail, /loadDefault\(dramaId\)/)
+  assert.match(film, /catch \(error\)/)
 })

@@ -60,6 +60,9 @@
                 </el-select>
               </el-form-item>
             </el-col>
+            <el-col :span="12">
+              <ImageGenerationChannelSetting v-model="imageGenerationDefaultChannel" :drama-id="dramaId" />
+            </el-col>
             <el-col :span="24">
               <el-form-item label="故事梗概">
                 <el-input v-model="infoForm.description" type="textarea" :rows="3" placeholder="一句话描述故事梗概" @blur="saveInfo" />
@@ -519,6 +522,7 @@
       :visible="imageGenerationDrawerVisible"
       :task="imageGenerationTask"
       :results="imageGenerationTask?.candidates || []"
+      :sending="imageGenerationSending"
       @close="imageGeneration.close"
       @send="imageGeneration.sendToChatGPT"
     />
@@ -536,6 +540,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
+import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
 import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid } from '@element-plus/icons-vue'
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
@@ -567,17 +572,22 @@ const imageGeneration = useImageGeneration()
 const imageGenerationDefaultChannel = imageGeneration.defaultChannel
 const imageGenerationDrawerVisible = imageGeneration.drawerVisible
 const imageGenerationTask = imageGeneration.currentTask
+const imageGenerationSending = imageGeneration.loading
 
 async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
   if (channel !== 'chatgpt_web') return legacy()
-  const task = await imageGeneration.open({
-    dramaId,
-    targetType,
-    targetId: form?.id,
-    generationChannel: channel,
-    prompt: resolveImageGenerationPrompt(targetType, form),
-  })
-  return imageGeneration.sendToChatGPT(task)
+  try {
+    const task = await imageGeneration.open({
+      dramaId,
+      targetType,
+      targetId: form?.id,
+      generationChannel: channel,
+      prompt: resolveImageGenerationPrompt(targetType, form),
+    })
+    return imageGeneration.sendToChatGPT(task)
+  } catch (error) {
+    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+  }
 }
 
 // 图片编辑 – 文件输入 refs（各资源类型独立）
@@ -1211,6 +1221,7 @@ watch(activeResTab, (tab) => {
 
 onMounted(() => {
   loadDrama()
+  imageGeneration.loadDefault(dramaId).catch(() => {})
   loadCharList()
   if (route.query.importBatch) {
     setTimeout(() => {

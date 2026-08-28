@@ -275,6 +275,7 @@
       :visible="imageGenerationDrawerVisible"
       :task="imageGenerationTask"
       :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
+      :sending="imageGenerationSending"
       @close="closeImageGenerationDrawer"
       @send="sendImageGenerationToChatGPT"
     />
@@ -354,6 +355,7 @@ const {
   defaultChannel: imageGenerationDefaultChannel,
   currentTask: imageGenerationTask,
   drawerVisible: imageGenerationDrawerVisible,
+  loading: imageGenerationSending,
   open: openImageGenerationTask,
   loadSummary: loadImageGenerationSummary,
   loadDefault: loadImageGenerationDefault,
@@ -365,14 +367,18 @@ async function generateCanvasImage(channel = imageGenerationDefaultChannel.value
   const storyboard = (drama.value?.storyboards || []).find((item) => Number(item.id) === Number(selectedStoryboardIds.value[0]))
   if (!storyboard) return ElMessage.warning('请先选择一个分镜')
   if (channel !== 'chatgpt_web') return batchGenerateImages()
-  const task = await openImageGenerationTask({
-    dramaId: drama.value.id,
-    targetType: 'storyboard_main',
-    targetId: storyboard.id,
-    generationChannel: channel,
-    prompt: storyboard.polished_prompt || storyboard.image_prompt || storyboard.description || storyboard.title || '',
-  })
-  await sendImageGenerationToChatGPT(task)
+  try {
+    const task = await openImageGenerationTask({
+      dramaId: drama.value.id,
+      targetType: 'storyboard_main',
+      targetId: storyboard.id,
+      generationChannel: channel,
+      prompt: storyboard.polished_prompt || storyboard.image_prompt || storyboard.description || storyboard.title || '',
+    })
+    await sendImageGenerationToChatGPT(task)
+  } catch (error) {
+    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+  }
 }
 
 const loading = ref(false)
