@@ -455,9 +455,9 @@ git commit -m "test: verify unified ChatGPT image generation"
 - 项目级默认生图方式已在制作页和剧集管理页提供可见控件，支持持久化 `api` / `chatgpt_web`。
 - ChatGPT 桥接失败会保留 `preparing` 任务、显示错误原因，并支持“重试发送”；等待 ACK 时明确显示等待状态。
 
-本轮变更尚未提交，涉及共享前端 Store、抽屉、三个页面入口和默认通道控件。
+本轮修复已提交到主分支：`ecd8a76 fix: expose ChatGPT image channel and retry errors`。
 
-验证记录：Node 22.22.3 下后端图片/External Generation 定向测试 28/28 通过；扩展测试 39/39 通过；前端图片统一测试 2/2 通过；前端生产构建通过。前端全量另有 2 个既有 `videoGenerationPanel` 断言漂移，与本轮图片改动无关；使用默认 Node 24 跑后端会因 `better-sqlite3` Node 22 ABI 不匹配失败，必须使用计划指定的 Node 22。
+验证记录：主分支在 Node 22.22.3 下后端全量 359/359 通过；扩展全量 39/39 通过；前端全量 59/59 通过；前端生产构建通过。使用默认 Node 24 跑后端会因 `better-sqlite3` Node 22 ABI 不匹配失败，必须使用计划指定的 Node 22。
 
 真实用户验收已完成一轮：登录的 Playwright Chromium profile 通过扩展自动填充、参考图上传、真实点击发送、候选捕获、原图导入和统一结果绑定；任务最终为 `completed`。后续若 profile 登录态失效，从现有 `preparing` 或 `ready_to_send` 任务重试即可。
 
