@@ -204,3 +204,31 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 2. `recoverCapture` 改为只传 attempt 的纯字段（id/status/sequence/assistant_message_id/conversation_id）。
 
 回归：前端 `72/72`（新增 3 个桥接规范化测试，用 Node `structuredClone` 与浏览器同算法验证）、Vite 构建通过。实机复验：场景任务真实发送成功 → 点击"恢复结果捕获"无任何错误（修复前必现）→ 80 秒后 3 个候选自动导入闭环。
+
+## 2026-08-28 单独生图串行队列 + 全局通知上线验收
+
+实现计划 `docs/superpowers/plans/2026-08-28-chatgpt-image-serial-queue.md`（spec `2026-08-28-chatgpt-image-serial-queue-design.md`）已按子代理驱动流程完成 6 个任务，每个任务独立实现子代理 + 评审子代理把关（Task 5 经一轮修复）。
+
+### 行为变更
+
+- 单独点击任意资源的"ChatGPT 生成"：任务直接落 `queued`，抽屉显示"排队中/已加入队列"，不再立即发送；页面驱动器每 5 秒领取（`POST claim-next`，全局并发 1）自动依次发送，瞬时错误（NOT_READY 等）自动重试 2 次后转 `failed` 并推进下一个（单项失败不阻塞）。
+- 抽屉新增：queued 提示条、failed"重新排队"按钮；移除 preparing+error 的手动"重试发送"（与驱动器双重驱动冲突）。
+- 全局通知（右上角 ElNotification）：候选导入（生图完成：N 张候选待选择）、任务失败（含原因）、点击打开对应任务抽屉；进度态不提示，同任务同事件去重。
+- DramaCanvas / DramaDetail 的生图入口同步改为纯入队（修复轮 1，防回归源断言已内置）。
+- preparing 超 10 分钟的弃置任务由 claim-next 自动转 failed（error_code `send_timeout`），队列自愈。
+
+### 回归
+
+后端 `310/310`（`--test-concurrency=1`）、前端 `80/80`、扩展 `45/45`、前端 Vite 与生产构建通过。
+
+### 真实验收（专用 Chrome，一次真实生成 3 个任务）
+
+连续点击角色（云青）、道具（赤红玉简）、场景（宗门外门弟子居所）三个生图按钮：
+
+1. 三任务全部入队，角色立即被领取发送，其余保持 `queued`——全程零 NOT_READY。
+2. 约 2 分钟后角色候选导入（`needs_review`，3 候选）+ 右上角通知"生图完成：3 张候选待选择"。
+3. 驱动器立即领取道具 → preparing → submitted → 候选导入（9 候选）+ 第二条通知。
+4. 场景同样自动推进 → 导入 3 候选。
+5. 全程零手动干预、任何时刻只有一个任务在生成（严格串行）。三任务共导入 15 个候选，全部进入待选状态。
+
+注：串行队列上线前的历史遗留任务（preparing/submitted/draft 共 23 条）已批量标记 `cancelled`（error_code `stale_test_cleanup`），避免阻塞全局并发 1。
