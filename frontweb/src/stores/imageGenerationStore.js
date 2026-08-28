@@ -48,6 +48,15 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     if (id == null) return null
     dramaId.value = id
     summary.value = await imageGenerationTaskAPI.summary(id)
+    // Reattach the persisted active unified image task after a page reload.
+    if (summary.value?.active_task_id && currentTask.value?.id !== summary.value.active_task_id) {
+      try {
+        currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(summary.value.active_task_id))
+        startTaskPolling(0)
+      } catch (_) {
+        // The summary remains useful even when the task disappeared between requests.
+      }
+    }
     return summary.value
   }
   async function loadDefault(id) {

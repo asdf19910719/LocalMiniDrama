@@ -15,6 +15,7 @@ it('creates a unified task and exposes one drama summary', async () => {
     CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE image_generation_batches (id TEXT PRIMARY KEY, drama_id INTEGER, resource_scope TEXT, generation_channel TEXT, status TEXT, total_count INTEGER, completed_count INTEGER DEFAULT 0, review_count INTEGER DEFAULT 0, failed_count INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT);
     CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, drama_id INTEGER, target_type TEXT, target_id INTEGER, generation_channel TEXT, provider TEXT, model TEXT, prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT, status TEXT, batch_id TEXT, queue_position INTEGER, image_generation_id INTEGER, external_job_id TEXT, error_code TEXT, error_message TEXT, created_at TEXT, updated_at TEXT, completed_at TEXT);
+    CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
     INSERT INTO characters VALUES (1, 7, '林默', '黑发少年', '角色提示', NULL, NULL, NULL, NULL, NULL, NULL);
   `);
@@ -75,6 +76,26 @@ it('creates a unified task and exposes one drama summary', async () => {
     const batchPrepared = (await batchPreparedResponse.json()).data;
     assert.ok(batchPrepared.task.external_job_id);
     assert.equal(batchPrepared.external_job.image_generation_task_id, next.id);
+
+    taskService.setDefaultChannel(db, 7, 'chatgpt_web');
+    db.prepare("INSERT INTO global_settings (key,value,updated_at) VALUES ('chatgpt_web_enabled','false','now')").run();
+    const effectiveDefault = (await (await fetch(`${base}/dramas/7/image-generation-default`)).json()).data;
+    assert.equal(effectiveDefault.channel, 'api');
+    assert.equal(effectiveDefault.configured_channel, 'chatgpt_web');
+    const disabledDefault = await fetch(`${base}/dramas/7/image-generation-default`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ channel: 'chatgpt_web' }),
+    });
+    assert.equal(disabledDefault.status, 400);
+    const disabledTask = await fetch(`${base}/image-generation-tasks`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web' }),
+    });
+    assert.equal(disabledTask.status, 400);
+    const disabledBatch = await fetch(`${base}/image-generation-batches`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dramaId: 7, generationChannel: 'chatgpt_web', targets: [{ targetType: 'character', targetId: 1 }] }),
+    });
+    assert.equal(disabledBatch.status, 400);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     db.close();

@@ -54,6 +54,7 @@ for /l %%i in (1,1,60) do (
 
 :backend_ready
 if not defined BACKEND_READY echo WARNING: Backend did not become healthy within 60 seconds.
+if defined BACKEND_READY powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%start_chatgpt_browser.ps1"
 
 echo.
 echo Done.

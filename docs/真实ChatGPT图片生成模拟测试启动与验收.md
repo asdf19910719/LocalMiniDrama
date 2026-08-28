@@ -4,7 +4,7 @@
 
 ## 当前代码与回归状态
 
-统一图片生成已合并到本地 `main`（合并提交 `a18c1a9`，当前主分支最新修正 `1a7a2f8`）。Node 22.22.3 后端全量测试 `300/300`、扩展测试 `39/39`、前端测试 `57/57`、前端生产构建均通过。角色入口的提示词已修正为视觉外貌提示词，不再使用角色背景简介。
+统一图片生成已合并到本地 `main`。当前 Node 22.22.3 后端全量测试 `303/303`、扩展测试 `39/39`、前端测试 `61/61`、前端生产构建均通过。角色入口的提示词已修正为视觉外貌提示词，不再使用角色背景简介。
 
 ## 环境要求
 
@@ -55,6 +55,16 @@ npm run build
 ```
 
 ## 启动真实浏览器
+
+日常启动可直接运行仓库根目录脚本：
+
+```powershell
+.\start_chatgpt_browser.ps1
+```
+
+脚本默认使用 Chrome for Testing 和 `data/chatgpt-browser-profile`。可通过 `CHATGPT_BROWSER_PATH`、`CHATGPT_BROWSER_PROFILE` 覆盖路径。它不会替用户登录；首次登录后凭据保存在该 Profile，后续启动自动复用。
+
+使用 `run_dev.ps1` 或 `run_dev.bat` 启动整个项目时，不必再单独运行该脚本：后端健康后会读取“API 配置 -> 生成设置 -> 统一图片通道”，若 ChatGPT Web 已启用则自动启动浏览器。浏览器可执行文件留空时会自动查找 `%LOCALAPPDATA%\ms-playwright\chromium-*\chrome-win64\chrome.exe`。
 
 必须让 Chromium 保留扩展相关默认参数被移除，并显式加载扩展目录：
 

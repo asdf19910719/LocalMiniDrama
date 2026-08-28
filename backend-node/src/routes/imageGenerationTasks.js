@@ -5,9 +5,14 @@ const targets = require('../services/imageGenerationTargetService');
 const queue = require('../services/imageGenerationQueueService');
 const orchestrator = require('../services/imageGenerationOrchestrator');
 const { createExternalJob, getExternalJob, createGenerationAttempt } = require('../services/externalGenerationService');
+const settingsService = require('../services/settingsService');
 
 module.exports = (db, log = console) => {
   const router = express.Router();
+  const chatgptWebEnabled = () => settingsService.getGlobalSetting(db, 'chatgpt_web_enabled', true) !== false;
+  const assertChannelEnabled = (channel) => {
+    if (channel === 'chatgpt_web' && !chatgptWebEnabled()) throw new Error('ChatGPT 网页生图通道未在 API 配置中启用');
+  };
   const handle = (res, operation) => {
     try { response.success(res, operation()); }
     catch (error) {
@@ -24,8 +29,11 @@ module.exports = (db, log = console) => {
       target_id: input.targetId,
       prompt_snapshot: input.prompt,
     });
+    const requestedChannel = input.generationChannel || input.generation_channel || tasks.getDefaultChannel(db, input.dramaId);
+    assertChannelEnabled(requestedChannel);
     let task = tasks.createTask(db, {
       ...input,
+      generationChannel: requestedChannel,
       promptSnapshot: generation.prompt,
       referenceManifest: input.referenceImages || generation.references,
       frameType: generation.frameType,
@@ -55,19 +63,30 @@ module.exports = (db, log = console) => {
     handle(res, () => tasks.getSummary(db, req.params.dramaId)));
 
   router.get('/dramas/:dramaId/image-generation-default', (req, res) =>
-    handle(res, () => ({ channel: tasks.getDefaultChannel(db, req.params.dramaId) })));
+    handle(res, () => {
+      const configuredChannel = tasks.getDefaultChannel(db, req.params.dramaId);
+      const channel = configuredChannel === 'chatgpt_web' && !chatgptWebEnabled() ? 'api' : configuredChannel;
+      return { channel, configured_channel: configuredChannel };
+    }));
 
   router.put('/dramas/:dramaId/image-generation-default', (req, res) =>
-    handle(res, () => ({ channel: tasks.setDefaultChannel(db, req.params.dramaId, req.body?.channel) })));
+    handle(res, () => {
+      assertChannelEnabled(req.body?.channel);
+      return { channel: tasks.setDefaultChannel(db, req.params.dramaId, req.body?.channel) };
+    }));
 
-  router.post('/image-generation-batches', (req, res) => handle(res, () => tasks.createBatch(db, {
-    dramaId: req.body?.dramaId,
-    resourceScope: req.body?.scope,
-    generationChannel: req.body?.generationChannel,
-    targets: req.body?.targets || (Array.isArray(req.body?.targetIds)
-      ? req.body.targetIds.map((targetId) => ({ targetType: req.body.targetType || 'storyboard_main', targetId }))
-      : []),
-  })));
+  router.post('/image-generation-batches', (req, res) => handle(res, () => {
+    const channel = req.body?.generationChannel || tasks.getDefaultChannel(db, req.body?.dramaId);
+    assertChannelEnabled(channel);
+    return tasks.createBatch(db, {
+      dramaId: req.body?.dramaId,
+      resourceScope: req.body?.scope,
+      generationChannel: channel,
+      targets: req.body?.targets || (Array.isArray(req.body?.targetIds)
+        ? req.body.targetIds.map((targetId) => ({ targetType: req.body.targetType || 'storyboard_main', targetId }))
+        : []),
+    });
+  }));
 
   router.post('/image-generation-batches/:batchId/pause', (req, res) =>
     handle(res, () => queue.pauseBatch(db, req.params.batchId)));

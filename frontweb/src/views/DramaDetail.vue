@@ -1239,6 +1239,7 @@ watch(activeResTab, (tab) => {
 onMounted(() => {
   loadDrama()
   imageGeneration.loadDefault(dramaId).catch(() => {})
+  imageGeneration.loadSummary(dramaId).catch(() => {})
   loadCharList()
   if (route.query.importBatch) {
     setTimeout(() => {

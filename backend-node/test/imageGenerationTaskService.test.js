@@ -105,4 +105,17 @@ describe('unified image generation task service', () => {
     assert.deepEqual(tasks.map((task) => task.queue_position), [0, 1]);
     assert.deepEqual(tasks.map((task) => task.status), ['queued', 'queued']);
   });
+
+  it('prefers a pollable task over an older draft when restoring', () => {
+    service.createTask(db, {
+      id: 'older-draft', dramaId: 7, targetType: 'character', targetId: 1,
+      generationChannel: 'chatgpt_web', status: 'draft', now: '2026-08-28T00:00:00.000Z',
+    });
+    service.createTask(db, {
+      id: 'running-task', dramaId: 7, targetType: 'character', targetId: 2,
+      generationChannel: 'chatgpt_web', status: 'submitted', now: '2026-08-28T00:01:00.000Z',
+    });
+
+    assert.equal(service.getSummary(db, 7).active_task_id, 'running-task');
+  });
 });

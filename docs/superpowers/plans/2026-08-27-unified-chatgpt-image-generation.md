@@ -458,7 +458,9 @@ git commit -m "test: verify unified ChatGPT image generation"
 
 本轮修复已提交到主分支：`ecd8a76 fix: expose ChatGPT image channel and retry errors`。
 
-验证记录：主分支在 Node 22.22.3 下后端全量 359/359 通过；扩展全量 39/39 通过；前端全量 61/61 通过；前端生产构建通过。使用默认 Node 24 跑后端会因 `better-sqlite3` Node 22 ABI 不匹配失败，必须使用计划指定的 Node 22。
+验证记录：主分支在 Node 22.22.3 下后端全量 303/303 通过；扩展全量 39/39 通过；前端全量 61/61 通过；前端生产构建通过。使用默认 Node 24 跑后端会因 `better-sqlite3` Node 22 ABI 不匹配失败，必须使用计划指定的 Node 22。
+
+本轮补齐：API 配置页统一管理 ChatGPT Web 通道启用状态、Chrome 可执行文件和 Profile；剧集页仅选择项目默认通道。`run_dev.ps1` / `run_dev.bat` 会在后端健康后读取该配置并自动启动 Chrome for Testing 与扩展。FilmCreate、DramaDetail 和 DramaCanvas 页面都会从 `active_task_id` 恢复统一图片任务，优先接回 `submitted` / `generating` 任务。
 
 真实用户验收已完成一轮：登录的 Playwright Chromium profile 通过扩展自动填充、参考图上传、真实点击发送、候选捕获、原图导入和统一结果绑定；任务最终为 `completed`。后续若 profile 登录态失效，从现有 `preparing` 或 `ready_to_send` 任务重试即可。
 

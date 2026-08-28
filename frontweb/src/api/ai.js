@@ -32,5 +32,11 @@ export const aiAPI = {
   },
   bulkUpdateKey(apiKey) {
     return request.put('/ai-configs/bulk-update-key', { api_key: apiKey })
+  },
+  getImageGenerationSettings() {
+    return request.get('/settings/image-generation')
+  },
+  updateImageGenerationSettings(chatgptWeb) {
+    return request.put('/settings/image-generation', { chatgpt_web: chatgptWeb })
   }
 }

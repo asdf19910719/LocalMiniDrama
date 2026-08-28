@@ -172,9 +172,15 @@ function getSummary(db, dramaId) {
     submitted: 0, generating: 0, needs_review: 0, completed: 0, failed: 0, cancelled: 0,
     active_task_id: null,
   };
+  const activePriority = { submitted: 0, generating: 0, needs_review: 1, preparing: 2, queued: 3, draft: 4, failed: 5 };
+  let selectedPriority = Number.POSITIVE_INFINITY;
   for (const row of rows) {
     summary[row.status] += 1;
-    if (!summary.active_task_id && !TERMINAL.has(row.status) && row.status !== 'failed') summary.active_task_id = row.id;
+    const priority = activePriority[row.status];
+    if (priority != null && priority < selectedPriority) {
+      selectedPriority = priority;
+      summary.active_task_id = row.id;
+    }
   }
   return summary;
 }

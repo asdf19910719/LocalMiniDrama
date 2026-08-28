@@ -8,7 +8,7 @@
       @change="saveChannel"
     >
       <el-option label="默认模型生成" value="api" />
-      <el-option label="ChatGPT 生成" value="chatgpt_web" />
+      <el-option label="ChatGPT 生成" value="chatgpt_web" :disabled="!chatgptWebEnabled" />
     </el-select>
     <span class="setting-hint">按钮主操作会使用此通道，也可在按钮菜单中临时切换。</span>
   </el-form-item>
@@ -18,6 +18,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
+import { aiAPI } from '@/api/ai'
 
 const props = defineProps({
   dramaId: { type: [Number, String], required: true },
@@ -25,9 +26,21 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'saved'])
 const saving = ref(false)
+const chatgptWebEnabled = ref(true)
+
+async function loadChannelAvailability() {
+  try {
+    const result = await aiAPI.getImageGenerationSettings()
+    chatgptWebEnabled.value = result?.chatgpt_web?.enabled !== false
+  } catch (_) {}
+}
 
 async function saveChannel(channel) {
   if (!props.dramaId || !channel || channel === props.modelValue) return
+  if (channel === 'chatgpt_web' && !chatgptWebEnabled.value) {
+    ElMessage.warning('请先在 API 配置中启用 ChatGPT 网页生图通道')
+    return
+  }
   saving.value = true
   try {
     const result = await imageGenerationTaskAPI.setDefault(props.dramaId, channel)
@@ -41,6 +54,8 @@ async function saveChannel(channel) {
     saving.value = false
   }
 }
+
+loadChannelAvailability()
 </script>
 
 <style scoped>

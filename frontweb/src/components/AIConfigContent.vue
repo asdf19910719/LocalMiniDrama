@@ -124,9 +124,20 @@
       </el-tab-pane>
       <el-tab-pane label="生成设置" name="generation">
         <div class="tab-content generation-settings">
+          <div class="gs-section-title">统一图片通道</div>
+          <p class="gs-desc">这里配置全局可用的图片生成通道。剧集管理只负责选择某个项目的默认通道。</p>
+          <div class="image-channel-config">
+            <div class="channel-header"><div><strong>ChatGPT 网页生图</strong><p class="field-tip">需要 Chrome for Testing、AIStory 扩展和已登录的 ChatGPT 页面。</p></div><el-tag :type="chatgptWebEnabled ? 'success' : 'info'">{{ chatgptWebEnabled ? '已启用' : '未启用' }}</el-tag></div>
+            <el-switch v-model="chatgptWebEnabled" active-text="允许项目使用 ChatGPT" />
+            <el-form label-width="150px" class="chatgpt-runtime-form">
+              <el-form-item label="浏览器可执行文件"><el-input v-model="chatgptWebExecutable" placeholder="可选，例如 C:\\Users\\...\\chrome.exe" /></el-form-item>
+              <el-form-item label="浏览器 Profile 目录"><el-input v-model="chatgptWebProfile" placeholder="可选，用于复用 ChatGPT 登录态" /></el-form-item>
+            </el-form>
+            <el-button type="primary" size="small" :loading="imageSettingSaving" @click="saveImageGenerationSettings">保存 ChatGPT 通道</el-button>
+            <el-alert v-if="imageSettingSaved" type="success" title="ChatGPT 通道设置已保存" :closable="false" show-icon style="margin-top: 10px; width: fit-content" />
+          </div>
           <div class="gs-section-title">⚡ 一键生成并发设置</div>
           <p class="gs-desc">控制「一键生成视频」和「补全并生成」流水线中，各类任务同时并行生成的数量。并发数越高速度越快，但过高可能触发 API 限流（429 错误）。建议根据你的 API 额度选择。</p>
-
           <div class="gs-row">
             <span class="gs-label">图片并发数</span>
             <el-select
@@ -1148,6 +1159,35 @@ const genConcurrencyInput = ref(3)
 const genVideoConcurrencyInput = ref(3)
 const genSettingSaving = ref(false)
 const genSettingSaved = ref(false)
+const chatgptWebEnabled = ref(true)
+const chatgptWebExecutable = ref('')
+const chatgptWebProfile = ref('')
+const imageSettingSaving = ref(false)
+const imageSettingSaved = ref(false)
+
+async function loadImageGenerationSettings() {
+  try {
+    const result = await aiAPI.getImageGenerationSettings()
+    const value = result?.chatgpt_web || {}
+    chatgptWebEnabled.value = value.enabled !== false
+    chatgptWebExecutable.value = value.executable || ''
+    chatgptWebProfile.value = value.profile || ''
+  } catch (_) {}
+}
+
+async function saveImageGenerationSettings() {
+  imageSettingSaving.value = true
+  imageSettingSaved.value = false
+  try {
+    await aiAPI.updateImageGenerationSettings({ enabled: chatgptWebEnabled.value, executable: chatgptWebExecutable.value, profile: chatgptWebProfile.value })
+    imageSettingSaved.value = true
+    setTimeout(() => { imageSettingSaved.value = false }, 2000)
+  } catch (error) {
+    ElMessage.error(error?.message || '保存 ChatGPT 通道设置失败')
+  } finally {
+    imageSettingSaving.value = false
+  }
+}
 
 async function loadGenerationSettings() {
   try {
@@ -2312,6 +2352,7 @@ onMounted(() => {
   loadVendorLock()
   loadList()
   loadGenerationSettings()
+  loadImageGenerationSettings()
 })
 </script>
 
@@ -2328,6 +2369,16 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
 }
+.image-channel-config {
+  margin: 10px 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-radius: 8px;
+  max-width: 760px;
+}
+.channel-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+.channel-header strong { font-size: 15px; }
+.chatgpt-runtime-form { margin-top: 14px; max-width: 680px; }
 .comfyui-checks {
   margin: 12px 0 0;
   padding-left: 22px;

@@ -62,11 +62,37 @@ function updateGenerationSettings(db) {
   };
 }
 
+/** Global image generation channel and browser runtime settings. */
+function getImageGenerationSettings(db) {
+  return (req, res) => {
+    const enabled = settingsService.getGlobalSetting(db, 'chatgpt_web_enabled', true) !== false;
+    const executable = settingsService.getGlobalSetting(db, 'chatgpt_web_executable', '');
+    const profile = settingsService.getGlobalSetting(db, 'chatgpt_web_profile', '');
+    response.success(res, {
+      chatgpt_web: { enabled, executable, profile },
+      channels: { api: true, chatgpt_web: enabled },
+    });
+  };
+}
+
+function updateImageGenerationSettings(db) {
+  return (req, res) => {
+    const input = req.body || {};
+    const chatgpt = input.chatgpt_web || input.chatgptWeb || {};
+    if (chatgpt.enabled !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_enabled', chatgpt.enabled === true);
+    if (chatgpt.executable !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_executable', String(chatgpt.executable || '').trim());
+    if (chatgpt.profile !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_profile', String(chatgpt.profile || '').trim());
+    return getImageGenerationSettings(db)(req, res);
+  };
+}
+
 module.exports = function settingsRoutes(db, cfg, log) {
   return {
     getLanguage: getLanguage(cfg),
     updateLanguage: updateLanguage(cfg, log),
     getGenerationSettings: getGenerationSettings(db),
     updateGenerationSettings: updateGenerationSettings(db),
+    getImageGenerationSettings: getImageGenerationSettings(db),
+    updateImageGenerationSettings: updateImageGenerationSettings(db),
   };
 };
