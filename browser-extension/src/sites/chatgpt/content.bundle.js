@@ -41,9 +41,11 @@
     const expected = attempt.assistantMessageId || attempt.messageId;
     if (!actual || !expected) return { status: "NEEDS_REVIEW", reason: "missing assistant identity", results: [] };
     if (!identityMatches(actual, { messageId: expected })) return { status: "UNBOUND_RESULT", reason: "assistant identity mismatch", results: [] };
+    const turnRole = node.getAttribute?.("data-turn") || node.getAttribute?.("data-message-author-role");
+    if (turnRole === "user") return { status: "GENERATING", resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`, attemptId: attempt.attemptId, assistantMessageId: actual.messageId, results: [] };
     const results = [...node.querySelectorAll?.("img") || []].map((img, resultIndex) => {
       const sourceUrl = img.currentSrc || img.src || img.getAttribute?.("src");
-      if (!sourceUrl) return null;
+      if (!sourceUrl || !/^https?:/i.test(sourceUrl)) return null;
       return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
     }).filter(Boolean);
     return {
@@ -56,6 +58,9 @@
   }
 
   // src/sites/chatgpt/adapter.js
+  function isUserTurn(node) {
+    return node?.getAttribute?.("data-turn") === "user" || node?.getAttribute?.("data-message-author-role") === "user";
+  }
   function asFile(input) {
     if (typeof File !== "undefined" && input instanceof File) return input;
     const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes || []);
@@ -114,14 +119,14 @@
     }
     findAssistant(identity) {
       const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []];
-      return nodes.find((node) => identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
+      return nodes.find((node) => !isUserTurn(node) && identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
     }
     recoverAttempt(identity, onResult, onError = () => {
     }) {
       this.capturePaused = false;
       this.seenResultFingerprints.clear();
       const requested = identity?.assistantMessageId || identity?.messageId;
-      const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []];
+      const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []].filter((node) => !isUserTurn(node));
       const target = requested ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested })) : nodes.filter((node) => messageIdentity(node)).at(-1);
       const assistantMessageId = messageIdentity(target)?.messageId;
       if (!target || !assistantMessageId) {
@@ -138,9 +143,11 @@
     beginAttempt(identity, onResult, onError = () => {
     }) {
       this.capturePaused = false;
-      const known = new Set([...this.conversationRoot()?.querySelectorAll?.(selectors.assistant) || []].map((node) => messageIdentity(node)?.messageId).filter(Boolean));
-      if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
       const root = this.conversationRoot();
+      const existingNodes = [...root?.querySelectorAll?.(selectors.assistant) || []];
+      const known = new Set(existingNodes.map((node) => messageIdentity(node)?.messageId).filter(Boolean));
+      const preExisting = new WeakSet(existingNodes);
+      if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
       if (!root) {
         onError(Object.assign(new Error("UNBOUND_RESULT"), { code: "UNBOUND_RESULT" }));
         return () => {
@@ -149,7 +156,7 @@
       let activeStop = null;
       let activeAssistantId = null;
       const discover = () => {
-        const candidates = [...root.querySelectorAll?.(selectors.assistant) || []].map((node) => ({ node, id: messageIdentity(node)?.messageId })).filter((entry) => entry.id && (!known.has(entry.id) || entry.id === activeAssistantId && entry.node !== activeStop?.root));
+        const candidates = [...root.querySelectorAll?.(selectors.assistant) || []].filter((node) => !preExisting.has(node) && !isUserTurn(node)).map((node) => ({ node, id: messageIdentity(node)?.messageId })).filter((entry) => entry.id && (!known.has(entry.id) || entry.id === activeAssistantId && entry.node !== activeStop?.root));
         if (!candidates.length) return;
         const selected = candidates[candidates.length - 1];
         activeStop?.();

@@ -145,3 +145,103 @@ test('adapter fills a ProseMirror contenteditable composer with an input event',
   assert.deepEqual(events, ['input']);
   globalThis.document = previousDocument;
 });
+
+test('collector treats blob placeholder images as still generating', () => {
+  const generating = extractResultSet(node('assistant-9', [image('blob:https://chatgpt.com/abc')]), { attemptId: 'attempt-9', assistantMessageId: 'assistant-9', resultSetId: 'set-9' });
+  assert.equal(generating.status, 'GENERATING');
+  assert.deepEqual(generating.results, []);
+});
+
+test('collector keeps only http(s) sources when placeholders are mixed in', () => {
+  const mixed = extractResultSet(
+    node('assistant-9', [image('blob:https://chatgpt.com/x'), image('https://chatgpt.com/backend-api/estuary/content?id=done')]),
+    { attemptId: 'attempt-9', assistantMessageId: 'assistant-9', resultSetId: 'set-9' },
+  );
+  assert.equal(mixed.status, 'RESULT_READY');
+  assert.equal(mixed.results.length, 1);
+  assert.equal(mixed.results[0].sourceUrl, 'https://chatgpt.com/backend-api/estuary/content?id=done');
+});
+
+test('beginAttempt ignores assistant nodes that existed before submit even without identity', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const ghost = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? this.dataset.testid : null; } };
+    const fresh = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-12' : null; } };
+    let nodes = [ghost];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    let observed;
+    adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
+    adapter.beginAttempt({ attemptId: 'attempt-9' }, () => {});
+    ghost.dataset.testid = 'conversation-turn-11';
+    discover();
+    assert.equal(observed, undefined);
+    nodes = [ghost, fresh];
+    discover();
+    assert.equal(observed.assistantMessageId, 'conversation-turn-12');
+    assert.equal(observed.attemptId, 'attempt-9');
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('beginAttempt never binds the freshly submitted user turn or imports its reference thumbnails', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const asFake = (turn, testid, imgs) => ({
+      dataset: { turn, testid },
+      getAttribute(name) {
+        if (name === 'data-turn' || name === 'data-message-author-role') return turn;
+        if (name === 'data-testid') return this.dataset.testid || null;
+        return null;
+      },
+      querySelectorAll() { return imgs; },
+    });
+    const userTurn = asFake('user', null, [{ currentSrc: 'https://chatgpt.com/backend-api/estuary/content?id=refthumb', src: 'https://chatgpt.com/backend-api/estuary/content?id=refthumb', dataset: {} }]);
+    const assistantTurn = asFake('assistant', null, [{ currentSrc: 'https://chatgpt.com/backend-api/estuary/content?id=generated', src: 'https://chatgpt.com/backend-api/estuary/content?id=generated', dataset: {} }]);
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const captured = [];
+    adapter.observeAttempt = (identity, onResult) => {
+      captured.push(identity.assistantMessageId);
+      // exercise the real extraction path against the bound node
+      const bound = identity.assistantMessageId === 'conversation-turn-11' ? userTurn : assistantTurn;
+      const testid = identity.assistantMessageId;
+      bound.getAttribute = function (name) {
+        if (name === 'data-turn' || name === 'data-message-author-role') return this.dataset.turn;
+        if (name === 'data-testid') return testid;
+        return null;
+      };
+      onResult(extractResultSet(bound, { attemptId: 'attempt-10', assistantMessageId: identity.assistantMessageId, resultSetId: 'set-10' }));
+      return () => {};
+    };
+    adapter.beginAttempt({ attemptId: 'attempt-10' }, (resultSet) => captured.push('result:' + resultSet.assistantMessageId + ':' + resultSet.status));
+    // submit: the user turn appears first with a reference thumbnail
+    userTurn.dataset.testid = 'conversation-turn-11';
+    nodes = [userTurn];
+    discover();
+    discover();
+    // the real assistant reply appears afterwards
+    assistantTurn.dataset.testid = 'conversation-turn-12';
+    nodes = [userTurn, assistantTurn];
+    discover();
+    assert.deepEqual(captured, ['conversation-turn-12', 'result:conversation-turn-12:RESULT_READY']);
+    // the user turn must never surface its reference thumbnail as a result
+    assert.ok(!captured.some((entry) => String(entry).includes('refthumb')));
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});

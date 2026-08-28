@@ -9,9 +9,15 @@ export function extractResultSet(node, attempt = {}) {
   const expected = attempt.assistantMessageId || attempt.messageId;
   if (!actual || !expected) return { status: 'NEEDS_REVIEW', reason: 'missing assistant identity', results: [] };
   if (!identityMatches(actual, { messageId: expected })) return { status: 'UNBOUND_RESULT', reason: 'assistant identity mismatch', results: [] };
+  // Defense in depth: a user turn bound by an older build must never surface
+  // its reference thumbnails as results — keep waiting for the real reply.
+  const turnRole = node.getAttribute?.('data-turn') || node.getAttribute?.('data-message-author-role');
+  if (turnRole === 'user') return { status: 'GENERATING', resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`, attemptId: attempt.attemptId, assistantMessageId: actual.messageId, results: [] };
   const results = [...(node.querySelectorAll?.('img') || [])].map((img, resultIndex) => {
     const sourceUrl = img.currentSrc || img.src || img.getAttribute?.('src');
-    if (!sourceUrl) return null;
+    // blob:/data: entries are transient placeholders while ChatGPT materializes
+    // the original; fetching them fails the allowlist and must not fail the attempt.
+    if (!sourceUrl || !/^https?:/i.test(sourceUrl)) return null;
     return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
   }).filter(Boolean);
   return {

@@ -2,6 +2,13 @@ import { selectors } from './selectors.js';
 import { conversationIdentity, messageIdentity, identityMatches } from './messageIdentity.js';
 import { extractResultSet } from './resultCollector.js';
 
+// The turn selectors include a broad [data-testid^="conversation-turn-"]
+// fallback that also matches freshly submitted user messages; binding one of
+// those imports its reference thumbnails instead of the generated result.
+function isUserTurn(node) {
+  return node?.getAttribute?.('data-turn') === 'user' || node?.getAttribute?.('data-message-author-role') === 'user';
+}
+
 function asFile(input) {
   if (typeof File !== 'undefined' && input instanceof File) return input;
   const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes || []);
@@ -41,13 +48,13 @@ export class ChatGPTAdapter {
   }
   findAssistant(identity) {
     const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
-    return nodes.find((node) => identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
+    return nodes.find((node) => !isUserTurn(node) && identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
   }
   recoverAttempt(identity, onResult, onError = () => {}) {
     this.capturePaused = false;
     this.seenResultFingerprints.clear();
     const requested = identity?.assistantMessageId || identity?.messageId;
-    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
+    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])].filter((node) => !isUserTurn(node));
     const target = requested
       ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }))
       : nodes.filter((node) => messageIdentity(node)).at(-1);
@@ -64,15 +71,22 @@ export class ChatGPTAdapter {
   }
   beginAttempt(identity, onResult, onError = () => {}) {
     this.capturePaused = false;
-    const known = new Set([...this.conversationRoot()?.querySelectorAll?.(selectors.assistant) || []]
-      .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
-    if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
     const root = this.conversationRoot();
+    // Any assistant node already in the DOM at submit time cannot be this
+    // attempt's reply, even when its turn identity has not rendered yet —
+    // otherwise a still-loading history turn gets bound and the observer is
+    // orphaned when ChatGPT renumbers turns mid-generation.
+    const existingNodes = [...(root?.querySelectorAll?.(selectors.assistant) || [])];
+    const known = new Set(existingNodes
+      .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
+    const preExisting = new WeakSet(existingNodes);
+    if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
     if (!root) { onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); return () => {}; }
     let activeStop = null;
     let activeAssistantId = null;
     const discover = () => {
       const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
+        .filter((node) => !preExisting.has(node) && !isUserTurn(node))
         .map((node) => ({ node, id: messageIdentity(node)?.messageId }))
         .filter((entry) => entry.id && (!known.has(entry.id) || (entry.id === activeAssistantId && entry.node !== activeStop?.root)));
       if (!candidates.length) return;
