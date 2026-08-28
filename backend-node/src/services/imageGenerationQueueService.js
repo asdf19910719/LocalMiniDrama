@@ -71,4 +71,28 @@ function cancelTask(db, taskId) {
   return skipTask(db, taskId);
 }
 
-module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, cancelTask, refreshBatch };
+const PREPARING_STALE_MS = 10 * 60 * 1000;
+
+function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
+  return db.transaction(() => {
+    const timestamp = now();
+    const staleBefore = new Date(timestamp.getTime() - PREPARING_STALE_MS).toISOString();
+    const stale = db.prepare(`SELECT * FROM image_generation_tasks
+      WHERE generation_channel='chatgpt_web' AND status='preparing' AND updated_at < ?
+      ORDER BY updated_at LIMIT 1`).get(staleBefore);
+    if (stale) tasks.transitionTask(db, stale.id, 'failed', { errorCode: 'send_timeout', errorMessage: '超时未发送，已跳过' });
+    const active = db.prepare(`SELECT id FROM image_generation_tasks
+      WHERE generation_channel='chatgpt_web' AND status IN ('submitted','generating') LIMIT 1`).get()
+      || db.prepare(`SELECT id FROM image_generation_tasks
+        WHERE generation_channel='chatgpt_web' AND status='preparing' AND updated_at >= ?
+        ORDER BY updated_at DESC LIMIT 1`).get(staleBefore);
+    if (active) return { claimed: false, active_task_id: active.id };
+    const next = db.prepare(`SELECT * FROM image_generation_tasks
+      WHERE generation_channel='chatgpt_web' AND status='queued'
+      ORDER BY created_at LIMIT 1`).get();
+    if (!next) return { claimed: false };
+    return { claimed: true, task: tasks.transitionTask(db, next.id, 'preparing') };
+  })();
+}
+
+module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, cancelTask, refreshBatch, claimNextChatgptTask };

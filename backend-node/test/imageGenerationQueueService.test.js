@@ -51,3 +51,32 @@ it('pauses, resumes, and retries failed work without creating another task', () 
   assert.equal(retried.status, 'queued');
   db.close();
 });
+
+it('claims the oldest queued chatgpt task and blocks while one is active', () => {
+  const db = setup();
+  const first = taskService.createTask(db, { dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web', promptSnapshot: 'a', status: 'queued' });
+  const second = taskService.createTask(db, { dramaId: 7, targetType: 'prop', targetId: 1, generationChannel: 'chatgpt_web', promptSnapshot: 'b', status: 'queued' });
+  const claim = queue.claimNextChatgptTask(db);
+  assert.equal(claim.claimed, true);
+  assert.equal(claim.task.id, first.id);
+  assert.equal(taskService.getTask(db, first.id).status, 'preparing');
+  const blocked = queue.claimNextChatgptTask(db);
+  assert.equal(blocked.claimed, false);
+  assert.equal(blocked.active_task_id, first.id);
+  taskService.transitionTask(db, first.id, 'failed', { errorCode: 'send_failed', errorMessage: 'x' });
+  const next = queue.claimNextChatgptTask(db);
+  assert.equal(next.claimed, true);
+  assert.equal(next.task.id, second.id);
+  db.close();
+});
+
+it('fails stale preparing tasks and keeps fresh ones active', () => {
+  const db = setup();
+  const stale = taskService.createTask(db, { dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web', promptSnapshot: 's', status: 'preparing' });
+  db.prepare("UPDATE image_generation_tasks SET updated_at='2026-08-28T00:00:00.000Z' WHERE id=?").run(stale.id);
+  const result = queue.claimNextChatgptTask(db, { now: () => new Date('2026-08-28T00:20:00.000Z') });
+  assert.equal(taskService.getTask(db, stale.id).status, 'failed');
+  assert.equal(taskService.getTask(db, stale.id).error_code, 'send_timeout');
+  assert.equal(result.claimed, false);
+  db.close();
+});
