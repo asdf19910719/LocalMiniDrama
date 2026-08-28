@@ -207,6 +207,25 @@ function recordAttemptEvent(db, attemptId, event = {}) {
     `).run(eventId, attemptId, idempotencyKey, sequence, eventType, payloadJson, timestamp);
     const nextStatus = { SUBMITTED: 'submitted', GENERATING: 'generating', RESULT_READY: 'completed', COMPLETED: 'completed', ADAPTER_ERROR: 'needs_review' }[eventType];
     if (nextStatus) db.prepare('UPDATE external_generation_attempts SET status=?, updated_at=? WHERE id=?').run(nextStatus, timestamp, attemptId);
+    // Surface capture errors on the unified task so the workbench drawer can
+    // show them; healthy lifecycle events clear any previously stored error.
+    if (nextStatus) {
+      const hasTasks = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='image_generation_tasks'").get();
+      const linked = hasTasks ? db.prepare(`SELECT job.image_generation_task_id AS task_id
+        FROM external_generation_attempts attempt JOIN external_generation_jobs job ON job.id=attempt.job_id
+        WHERE attempt.id=?`).get(attemptId) : null;
+      if (linked?.task_id) {
+        if (eventType === 'ADAPTER_ERROR') {
+          const errorCode = String(value(payload, 'code', 'error_code', '') || 'ADAPTER_ERROR').slice(0, 120);
+          const errorMessage = String(value(payload, 'message', 'error_message', '') || '生成过程出现错误，请重试或恢复捕获').slice(0, 500);
+          db.prepare('UPDATE image_generation_tasks SET error_code=?, error_message=?, updated_at=? WHERE id=?')
+            .run(errorCode, errorMessage, timestamp, linked.task_id);
+        } else {
+          db.prepare('UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?')
+            .run(timestamp, linked.task_id);
+        }
+      }
+    }
     result = db.prepare('SELECT * FROM external_generation_events WHERE id = ?').get(eventId);
   });
   record();

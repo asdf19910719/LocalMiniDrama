@@ -26,10 +26,12 @@ function markUnifiedTaskNeedsReview(db, attemptId) {
 }
 
 async function importExternalResult(db, input) {
-  const attempt = db.prepare(`SELECT a.*, j.drama_id, j.storyboard_id, j.provider, j.prompt_snapshot
+  const attempt = db.prepare(`SELECT a.*, j.drama_id, j.storyboard_id, j.provider, j.prompt_snapshot, j.image_generation_task_id
     FROM external_generation_attempts a JOIN external_generation_jobs j ON j.id=a.job_id WHERE a.id=?`).get(input.attemptId);
   if (!attempt) throw new Error('Generation attempt not found');
-  if (!['submitted', 'generating', 'completed'].includes(String(attempt.status || '').toLowerCase())) throw new Error('Attempt is not importable');
+  // needs_review attempts are exactly what result recovery re-imports; keep
+  // them importable and restore the attempt once a result lands.
+  if (!['submitted', 'generating', 'completed', 'needs_review'].includes(String(attempt.status || '').toLowerCase())) throw new Error('Attempt is not importable');
   if (!input.assistantMessageId) throw new Error('NEEDS_REVIEW: assistant message identity is required');
   if (attempt.conversation_id && input.conversationId && attempt.conversation_id !== input.conversationId) throw new Error('NEEDS_REVIEW: conversation identity mismatch');
   if (attempt.assistant_message_id && attempt.assistant_message_id !== input.assistantMessageId) throw new Error('UNBOUND_RESULT: assistant message identity mismatch');
@@ -73,6 +75,13 @@ async function importExternalResult(db, input) {
     db.prepare(`INSERT INTO external_generation_results (id, attempt_id, result_set_id, provider_result_id, result_index, candidate_index, selected, source_url, source_mime, source_width, source_height, download_hash, image_generation_id, asset_id, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'imported', ?, ?)`).run(resultId, input.attemptId, input.resultSetId || null, input.providerResultId || null, resultIndex, resultIndex, input.sourceUrl || null, input.sourceMime || `image/${meta.format}`, meta.width, meta.height, hash, ig.lastInsertRowid, asset.lastInsertRowid, now, now);
     markUnifiedTaskNeedsReview(db, input.attemptId);
+    if (String(attempt.status || '').toLowerCase() === 'needs_review') {
+      db.prepare("UPDATE external_generation_attempts SET status='submitted', updated_at=? WHERE id=?").run(now, attempt.id);
+    }
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='image_generation_tasks'").get() && attempt.image_generation_task_id) {
+      db.prepare('UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?')
+        .run(now, attempt.image_generation_task_id);
+    }
     return { resultId, imageGenerationId: ig.lastInsertRowid, assetId: asset.lastInsertRowid, status: 'imported', sha256: hash, width: meta.width, height: meta.height };
   });
   try {

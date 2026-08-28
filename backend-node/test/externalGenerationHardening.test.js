@@ -80,4 +80,21 @@ describe('external generation hardening', () => {
       WHERE job.drama_id=7 AND job.storyboard_id=11 AND result.selected=1`).all();
     assert.deepEqual(selected, [{ id: revision.resultId }]);
   });
+
+  it('imports results for needs_review attempts so recovery can complete', async () => {
+    const job = createExternalJob(db, { id: 'job-review', dramaId: 7, storyboardId: 11, site: 'chatgpt', promptSnapshot: 'review' });
+    const attempt = createGenerationAttempt(db, job.id, { id: 'attempt-review', status: 'submitted' });
+    db.prepare("UPDATE external_generation_attempts SET status='needs_review' WHERE id=?").run(attempt.id);
+    db.exec("CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)");
+    db.prepare("INSERT INTO image_generation_tasks (id, status) VALUES ('task-review', 'submitted')").run();
+    db.prepare("UPDATE external_generation_jobs SET image_generation_task_id='task-review' WHERE id=?").run(job.id);
+    const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#0000ff' } }).png().toBuffer();
+    const imported = await importExternalResult(db, {
+      attemptId: attempt.id, conversationId: 'conversation-9', assistantMessageId: 'conversation-turn-12',
+      resultIndex: 0, sourceUrl: 'https://example.invalid/recovered.png', bytes,
+    });
+    assert.equal(imported.status, 'imported');
+    assert.equal(db.prepare("SELECT status FROM external_generation_attempts WHERE id=?").get(attempt.id).status, 'submitted');
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id IN (SELECT image_generation_task_id FROM external_generation_jobs WHERE id=?)").get(job.id)?.status, 'needs_review');
+  });
 });

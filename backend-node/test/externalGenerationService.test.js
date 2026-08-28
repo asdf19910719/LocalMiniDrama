@@ -73,4 +73,19 @@ describe('external generation service', () => {
     const result = getExternalJob(db, job.id).attempts[0].results[0];
     assert.equal(result.preview_url, '/api/v1/external-generation/results/result-preview/content');
   });
+
+  it('mirrors adapter errors onto the unified task and clears them on the next submit', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'mirror', imageGenerationTaskId: 'task-1' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status) VALUES ('task-1', 'submitted')").run();
+    const attempt = createGenerationAttempt(db, job.id);
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'evt-err-1', eventType: 'ADAPTER_ERROR', payload: { code: 'RESULT_CAPTURE_FAILED', message: 'ORIGINAL_URL_NOT_ALLOWED' } });
+    const errored = db.prepare("SELECT error_code, error_message FROM image_generation_tasks WHERE id='task-1'").get();
+    assert.equal(errored.error_code, 'RESULT_CAPTURE_FAILED');
+    assert.equal(errored.error_message, 'ORIGINAL_URL_NOT_ALLOWED');
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'evt-sub-1', eventType: 'SUBMITTED', payload: {} });
+    const cleared = db.prepare("SELECT error_code, error_message FROM image_generation_tasks WHERE id='task-1'").get();
+    assert.equal(cleared.error_message, null);
+    assert.equal(cleared.error_code, null);
+  });
 });
