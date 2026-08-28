@@ -15,5 +15,7 @@ export const imageGenerationTaskAPI = {
   cancel(id) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/cancel`) },
   prepareSend(id) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/prepare-send`) },
   acknowledge(id, attemptId) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/acknowledge`, { attemptId }) },
+  claimNext() { return request.post('/image-generation-tasks/claim-next') },
+  failTask(id, message) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/fail`, { message }) },
   selectResult(id, resultId) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/select-result`, { resultId }) },
 }

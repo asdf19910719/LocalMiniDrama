@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createQueueDriver, isTransientSendError } from '../src/utils/imageGenerationQueueDriver.js'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function makeDriver(overrides = {}) {
   const events = []
@@ -72,4 +77,21 @@ test('does not claim again while driving and ignores claim when busy', async () 
   driver.stop()
   assert.equal(claims, 2)
   assert.deepEqual(events, [])
+})
+
+test('store wires the driver with real bridge/api deps and deduped notifications', () => {
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  assert.match(source, /createQueueDriver\(/)
+  assert.match(source, /ElNotification\(/)
+  assert.match(source, /notifiedEvents/)
+  assert.match(source, /openTaskById/)
+  assert.match(source, /requeueTask/)
+  // The store must keep a periodic timer ticking the driver so queued tasks
+  // keep advancing after the first claimed task reaches a terminal state.
+  assert.match(source, /setInterval/)
+  assert.match(source, /\.tick\(\)/)
+  assert.match(source, /stopQueueDriver/)
+  const api = fs.readFileSync(path.join(root, 'src/api/imageGenerationTasks.js'), 'utf8')
+  assert.match(api, /claim-next/)
+  assert.match(api, /\/fail`/)
 })

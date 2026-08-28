@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { ElNotification } from 'element-plus'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 import { buildChatGPTImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { createQueueDriver } from '@/utils/imageGenerationQueueDriver'
 import {
   normalizeImageGenerationTask,
   resolveChatGPTPrepareAction,
@@ -19,6 +21,22 @@ function parseReferenceManifest(value) {
   } catch (_) {
     return []
   }
+}
+
+// Shared by the drawer's manual send and the queue driver's automatic send:
+// bridges one prepared attempt into the ChatGPT page (prepare + send).
+async function sendChatGPTAttempt(prepared) {
+  const job = prepared.external_job
+  await sendImageGenerationBridgeMessage({
+    action: 'prepare', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
+    conversationId: job.conversation_id,
+    prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type),
+    references: parseReferenceManifest(prepared.task.reference_manifest),
+  })
+  await sendImageGenerationBridgeMessage({
+    action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
+    attemptId: prepared.attempt.id, conversationId: job.conversation_id, payload: prepared.attempt,
+  })
 }
 
 export const useImageGenerationStore = defineStore('imageGeneration', () => {
@@ -67,6 +85,9 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
         // The summary remains useful even when the task disappeared between requests.
       }
     }
+    // The driver is a page-session singleton: every summary load (re)arms it so
+    // queued chatgpt_web tasks keep draining even with the drawer closed.
+    startQueueDriver()
     return summary.value
   }
   async function loadDefault(id) {
@@ -101,22 +122,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     try {
       const prepared = await imageGenerationTaskAPI.prepareSend(task.id)
       currentTask.value = normalizeImageGenerationTask({ ...prepared.task, external_job: prepared.external_job })
-      const job = prepared.external_job
-      const attempt = prepared.attempt
       const prepareAction = resolveChatGPTPrepareAction(prepared)
       if (prepareAction === 'recover') return await recoverCapture(currentTask.value)
       if (prepareAction === 'review') return currentTask.value
-      await sendImageGenerationBridgeMessage({
-        action: 'prepare', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
-        conversationId: job.conversation_id,
-        prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type),
-        references: parseReferenceManifest(prepared.task.reference_manifest),
-      })
-      await sendImageGenerationBridgeMessage({
-        action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
-        attemptId: attempt.id, conversationId: job.conversation_id, payload: attempt,
-      })
-      currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.acknowledge(prepared.task.id, attempt.id))
+      await sendChatGPTAttempt(prepared)
+      currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.acknowledge(prepared.task.id, prepared.attempt.id))
       startTaskPolling()
       await loadSummary(prepared.task.drama_id, { reattach: false })
       return currentTask.value
@@ -177,5 +187,60 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   }
   function closeDrawer() { drawerVisible.value = false }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer }
+  const notifiedEvents = new Set()
+  let queueDriver = null
+  let queueDriverTimer = null
+
+  function notifyQueueEvent(event) {
+    if (!event.taskId || event.type === 'driver_error' || event.type === 'retrying') return
+    const key = `${event.taskId}:${event.type}`
+    if (notifiedEvents.has(key)) return
+    notifiedEvents.add(key)
+    if (event.type === 'needs_review') {
+      const count = (event.task?.candidates || []).length
+      ElNotification({ title: '生图完成', message: count ? `${count} 张候选待选择` : '候选已导入，请选择', type: 'success', onClick: () => { openTaskById(event.taskId) } })
+    } else if (event.type === 'failed') {
+      ElNotification({ title: '生图失败', message: event.message || '请重新排队', type: 'error', onClick: () => { openTaskById(event.taskId) } })
+    }
+  }
+
+  async function openTaskById(taskId) {
+    currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(taskId))
+    drawerVisible.value = true
+    startTaskPolling()
+  }
+
+  function startQueueDriver() {
+    if (queueDriver) return
+    queueDriver = createQueueDriver({
+      claimNext: imageGenerationTaskAPI.claimNext,
+      getTask: async (id) => normalizeImageGenerationTask(await imageGenerationTaskAPI.get(id)),
+      prepareSend: (id) => imageGenerationTaskAPI.prepareSend(id),
+      sendAttempt: sendChatGPTAttempt,
+      acknowledge: (id, attemptId) => imageGenerationTaskAPI.acknowledge(id, attemptId),
+      failTask: (id, message) => imageGenerationTaskAPI.failTask(id, message),
+      onEvent: notifyQueueEvent,
+    })
+    queueDriver.start()
+    // start() only pushes one claimed task to a terminal state; keep a
+    // page-session timer ticking so subsequently queued tasks drain too.
+    queueDriverTimer = globalThis.setInterval(() => { queueDriver?.tick() }, 5000)
+  }
+
+  function stopQueueDriver() {
+    if (queueDriverTimer != null) globalThis.clearInterval(queueDriverTimer)
+    queueDriverTimer = null
+    queueDriver?.stop()
+    queueDriver = null
+  }
+
+  async function requeueTask(task) {
+    if (!task?.id) throw new Error('图片生成任务不存在')
+    currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.retry(task.id))
+    startTaskPolling(0)
+    await loadSummary(task.drama_id ?? dramaId.value, { reattach: false })
+    return currentTask.value
+  }
+
+  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
 })
