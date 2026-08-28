@@ -75,6 +75,8 @@ const context = await chromium.launchPersistentContext(
 
 上例中的第一个参数最终值必须是 `--disable-extensions-except=<extension>`，不要保留示例代码中的空格。若浏览器仍显示未加载扩展，先完全退出使用该 profile 的 Chrome 进程，再重新启动。启动后可检查：
 
+不要把可执行文件替换为 `C:\Program Files\Google\Chrome\Application\chrome.exe`。正式版 Chrome 151 即使命令行里保留 `--load-extension`，也可能直接忽略未打包扩展；本项目验收必须使用上方 Playwright Chrome for Testing/Chromium 可执行文件。2026-08-28 已复现并确认：正式版 Chrome 的扩展列表为空，换回 Chrome for Testing 后 ChatGPT 根节点恢复 `data-aistory-chatgpt-bridge="v1"`。
+
 - `chrome://extensions` 中出现 AIStory 扩展；
 - ChatGPT 页面根节点存在 `data-aistory-chatgpt-bridge="v1"`；
 - `context.serviceWorkers()` 能看到扩展 worker。
