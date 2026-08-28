@@ -72,12 +72,29 @@ test('drawer owns queue states: queued alert, no manual send, failed requeue', (
   assert.match(drawer, /task\.status === 'queued'/)
   assert.match(drawer, /已加入队列/)
   assert.match(drawer, /重新排队/)
+  assert.match(drawer, /自动加入队列依次发送/)
+  assert.doesNotMatch(drawer, /立即自动发送/)
   assert.doesNotMatch(drawer, /task\.status === 'preparing' && task\.error_message/)
 })
 
 test('unified entry only creates the queued task and views requeue failed ones', () => {
   const film = read('src/views/FilmCreate.vue')
+  const canvas = read('src/views/DramaCanvas.vue')
+  const detail = read('src/views/DramaDetail.vue')
 
   assert.doesNotMatch(film, /const task = await openImageGenerationTask\([\s\S]{0,400}sendImageGenerationToChatGPT\(task\)/)
   assert.match(film, /onImageGenerationRequeue/)
+  // Measured gaps (chars after the open-call paren to the next send call):
+  // a direct send sits at 280 (canvas) / 182 (detail); enqueue-only entries
+  // leave the drawer's onImageGenerationSend as the next send at 437 / 338,
+  // hence thresholds 400 and 250.
+  assert.doesNotMatch(canvas, /const task = await openImageGenerationTask\([\s\S]{0,400}(?:sendImageGenerationToChatGPT|sendToChatGPT)\(task\)/)
+  assert.doesNotMatch(detail, /await imageGeneration\.open\([\s\S]{0,250}imageGeneration\.sendToChatGPT\(task\)/)
+})
+
+test('failed requeue shows a spinner: store requeueTask drives the shared loading flag', () => {
+  const store = read('src/stores/imageGenerationStore.js')
+
+  assert.match(store, /async function requeueTask\(task\) \{[\s\S]{0,160}loading\.value = true/)
+  assert.match(store, /async function requeueTask\(task\) \{[\s\S]{0,700}finally \{\s*loading\.value = false\s*\}/)
 })

@@ -236,10 +236,21 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
 
   async function requeueTask(task) {
     if (!task?.id) throw new Error('图片生成任务不存在')
-    currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.retry(task.id))
-    startTaskPolling(0)
-    await loadSummary(task.drama_id ?? dramaId.value, { reattach: false })
-    return currentTask.value
+    loading.value = true
+    errorMessage.value = ''
+    try {
+      currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.retry(task.id))
+      startTaskPolling(0)
+      await loadSummary(task.drama_id ?? dramaId.value, { reattach: false })
+      return currentTask.value
+    } catch (error) {
+      // Keep the drawer's original failure message visible; only record why
+      // the requeue attempt itself did not go through.
+      errorMessage.value = error?.message || '重新排队失败'
+      throw error
+    } finally {
+      loading.value = false
+    }
   }
 
   return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }

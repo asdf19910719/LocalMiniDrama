@@ -381,9 +381,9 @@ async function generateCanvasImage(channel = imageGenerationDefaultChannel.value
       generationChannel: channel,
       prompt: storyboard.polished_prompt || storyboard.image_prompt || storyboard.description || storyboard.title || '',
     })
-    await sendImageGenerationToChatGPT(task)
+    return task
   } catch (error) {
-    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+    ElMessage.error(error?.message || '图片生成任务创建失败')
   }
 }
 

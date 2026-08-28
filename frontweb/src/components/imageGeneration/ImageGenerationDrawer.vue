@@ -3,7 +3,7 @@
     <template v-if="task">
       <el-tag>{{ statusText }}</el-tag>
       <el-input :model-value="task.prompt_snapshot" type="textarea" :rows="5" readonly class="prompt" />
-      <p v-if="task.generation_channel === 'chatgpt_web'">点击页面上的“ChatGPT 生成”后会立即自动发送；此处用于查看进度、重试和选择结果，无需再次确认。</p>
+      <p v-if="task.generation_channel === 'chatgpt_web'">点击“ChatGPT 生成”后会自动加入队列依次发送；此处用于查看进度和选择结果。</p>
       <el-button
         v-if="task.status === 'draft' && task.generation_channel === 'chatgpt_web'"
         type="primary"

@@ -588,9 +588,9 @@ async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
       generationChannel: channel,
       prompt: resolveImageGenerationPrompt(targetType, form),
     })
-    return imageGeneration.sendToChatGPT(task)
+    return task
   } catch (error) {
-    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+    ElMessage.error(error?.message || '图片生成任务创建失败')
   }
 }
 
