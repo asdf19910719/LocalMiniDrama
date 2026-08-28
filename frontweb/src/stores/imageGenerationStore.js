@@ -144,10 +144,18 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
         || (job?.attempts || []).at(-1)
       if (!job?.id || !attempt?.id) throw new Error('找不到可恢复的 ChatGPT 生成记录')
       currentTask.value = { ...detailed, error_code: null, error_message: null }
+      // `attempt` comes from the reactive store tree; post only the plain
+      // fields the extension reads so window.postMessage never sees a proxy.
       await sendImageGenerationBridgeMessage({
         action: 'recoverAttempt', dramaId: detailed.drama_id, site: 'chatgpt', jobId: job.id,
         attemptId: attempt.id, conversationId: attempt.conversation_id || job.conversation_id,
-        attempt,
+        attempt: {
+          id: attempt.id,
+          status: attempt.status,
+          sequence: attempt.sequence,
+          assistant_message_id: attempt.assistant_message_id ?? null,
+          conversation_id: attempt.conversation_id ?? null,
+        },
       })
       startTaskPolling(0)
       return currentTask.value
