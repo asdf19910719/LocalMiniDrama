@@ -144,3 +144,11 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 - 参考图上传失败：检查 `/static/...` 响应的 `Content-Type`。扩展会拒绝 `text/html` 等 SPA fallback，不会把 HTML 上传给 ChatGPT。
 - 导入提示 attempt 不存在：从后端任务 API 读取真实 attempt ID，不要手工复用旧截图或旧脚本中的 ID。
 - 预览空白：检查任务结果是否有 `preview_url`，并直接请求该地址确认 `image/png`；不要在工作台直接使用 ChatGPT 的临时 `source_url`。
+
+## 2026-08-28 本轮回归与真实复验
+
+代码回归结果：Node 22.22.3 后端串行全量 `305/305`、前端全量 `66/66`、扩展全量 `40/40`，前端生产构建和扩展构建均通过。后端必须使用 `--test-concurrency=1`，否则共享临时数据库的旧 Director 套件会互相争用。
+
+本轮真实浏览器已按专用 Profile 重启，`9223` 可访问，ChatGPT 页面注入 `data-aistory-chatgpt-bridge="v1"`，扩展 service worker 存在。通过真实工作台按钮创建道具任务后，抽屉显示正确的“赤红玉简”道具提示词，新任务保持独立 `preparing` 状态。
+
+重启后的自动会话恢复已在扩展层验证：首页会自动导航到项目绑定会话并等待 composer ready；中文页面的发送按钮同时兼容 `Send` 和“发送” aria-label。若 ChatGPT 仍在登录加载、限流或 composer 未 ready，任务会停留在 `preparing` 并显示可重试错误，不会伪报“已发送”；重试不创建新任务，也不重复发送已提交 Attempt。

@@ -29,7 +29,7 @@ test('prepare auto-attaches the logged-in ChatGPT tab before filling', async () 
   } })
   controller.emit = async () => ({ id: 'event-1' })
   await controller.handle({ action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello' }, { tab: { id: 9 } })
-  assert.deepEqual(messages.slice(0, 2), [[77, { action: 'identity' }], [77, { action: 'fill', prompt: 'hello' }]])
+  assert.deepEqual(messages.filter(([, message]) => message.action !== 'ready').slice(0, 2), [[77, { action: 'identity' }], [77, { action: 'fill', prompt: 'hello' }]])
   assert.equal(messages.at(-1)[0], 77)
   assert.match(apiCalls[0][0], /external-generation\/dramas\/3\/session\/attach$/)
   const body = JSON.parse(apiCalls[0][1].body)
@@ -61,12 +61,58 @@ test('prepare replaces a closed stored tab with a live tab for the same conversa
 
   await controller.handle({ action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello' })
 
-  assert.deepEqual(messages, [
+  assert.deepEqual(messages.filter(([, message]) => message.action !== 'ready'), [
     [77, { action: 'identity' }],
     [88, { action: 'identity' }],
     [88, { action: 'fill', prompt: 'hello' }],
   ])
   assert.equal(controller.sessions.get(3, 'chatgpt').tabId, 88)
+})
+
+test('prepare restores the persisted project conversation after the browser restarts on ChatGPT home', async () => {
+  const messages = []
+  const navigations = []
+  let restored = false
+  let readyChecks = 0
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 88, url: 'https://chatgpt.com/' }],
+      update: async (tabId, change) => {
+        navigations.push([tabId, change])
+        restored = true
+        return { id: tabId, url: change.url }
+      },
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (tabId === 77) throw new Error('No tab with id: 77')
+        if (message.action === 'identity') {
+          return restored
+            ? { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+            : { ok: true, value: { conversationId: 'WEB:home', confidence: 'url' } }
+        }
+        if (message.action === 'ready') {
+          readyChecks += 1
+          return { ok: true, value: { composer: true } }
+        }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: { id: 'session-1' } }) }),
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', { conversationId: 'conv-1', tabId: 77 })
+  controller.emit = async () => ({ id: 'event-1' })
+
+  await controller.handle({ action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello' })
+
+  assert.deepEqual(navigations, [[88, { url: 'https://chatgpt.com/c/conv-1' }]])
+  assert.equal(readyChecks, 1)
+  assert.equal(controller.sessions.get(3, 'chatgpt').tabId, 88)
+  assert.deepEqual(messages.at(-1), [88, { action: 'fill', prompt: 'hello' }])
 })
 
 test('prepare pauses instead of filling when the stored tab drifts to another conversation', async () => {
@@ -306,7 +352,7 @@ test('prepare upgrades a provisional WEB session to the live final conversation'
   controller.emit = async () => ({ id: 'event-1' })
   await controller.handle({ action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello' })
   assert.equal(controller.sessions.get(3, 'chatgpt').conversationId, 'conversation-final')
-  assert.deepEqual(messages.slice(-2), [[77, { action: 'identity' }], [77, { action: 'fill', prompt: 'hello' }]])
+  assert.deepEqual(messages.filter(([, message]) => message.action !== 'ready').slice(-2), [[77, { action: 'identity' }], [77, { action: 'fill', prompt: 'hello' }]])
 })
 
 test('recoverAttempt routes recovery to the bound provider tab', async () => {

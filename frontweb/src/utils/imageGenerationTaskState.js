@@ -13,3 +13,12 @@ export function normalizeImageGenerationTask(task) {
 export function shouldPollImageGenerationTask(task) {
   return task?.generation_channel === 'chatgpt_web' && POLLING_STATUSES.has(task?.status)
 }
+
+export function shouldReattachImageGenerationTask({ currentTaskId, activeTaskId, allowReattach = true }) {
+  return Boolean(allowReattach && activeTaskId && currentTaskId !== activeTaskId)
+}
+
+export function resolveChatGPTPrepareAction(prepared) {
+  if (!prepared?.already_submitted) return 'send'
+  return ['submitted', 'generating'].includes(prepared?.task?.status) ? 'recover' : 'review'
+}

@@ -2882,11 +2882,14 @@ async function onImageGenerationRecover(task) {
   }
 }
 
-function onImageGenerationSelect(result) {
-  selectImageGenerationResult(result).then(() => {
+async function onImageGenerationSelect(result) {
+  try {
+    await selectImageGenerationResult(result)
+    await loadDrama()
     closeImageGenerationDrawer()
-    return refreshStoryboardsOnly()
-  }).catch((error) => ElMessage.error(error?.message || '缁撴灉缁戝畾澶辫触'))
+  } catch (error) {
+    ElMessage.error(error?.message || '结果绑定失败')
+  }
 }
 
 function trackFilmCreateAction(_action, _payload = {}) {

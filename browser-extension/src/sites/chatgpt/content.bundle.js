@@ -1,9 +1,9 @@
 (() => {
   // src/sites/chatgpt/selectors.js
   var selectors = {
-    composer: 'textarea#prompt-textarea, textarea[placeholder*="Message"], [contenteditable="true"]',
+    composer: 'textarea#prompt-textarea, textarea[placeholder*="Message"], [contenteditable="true"], [role="textbox"][aria-label*="\u804A\u5929"], [role="textbox"][aria-label*="Message"]',
     file: 'input[type="file"]',
-    send: 'button[data-testid="send-button"], button[aria-label*="Send"]',
+    send: 'button[data-testid="send-button"], button[aria-label*="Send"], button[aria-label*="\u53D1\u9001"]',
     message: '[data-message-id],[data-testid^="conversation-turn-"]',
     assistant: '[data-message-author-role="assistant"], [data-message-author-role="assistant"] [data-message-id], [data-turn="assistant"], [data-turn="assistant"] [data-testid^="conversation-turn-"], [data-testid^="conversation-turn-"]',
     user: '[data-message-author-role="user"]'
@@ -293,6 +293,10 @@
       (async () => {
         try {
           if (message.action === "identity") return reply({ ok: true, value: adapter.getConversationIdentity() });
+          if (message.action === "ready") {
+            const composer = adapter.document?.querySelector?.('[contenteditable="true"], textarea#prompt-textarea, textarea[placeholder*="Message"], [role="textbox"][aria-label*="\u804A\u5929"], [role="textbox"][aria-label*="Message"]');
+            return reply({ ok: true, value: { composer: Boolean(composer) } });
+          }
           if (message.action === "fill") return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
           if (message.action === "upload") return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
           if (message.action === "submit") return reply({ ok: true, value: adapter.submit() });

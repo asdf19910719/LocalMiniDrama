@@ -504,3 +504,12 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 8. 删除旧常驻面板并完成全量回归。
 
 每个阶段都必须保留可回归的 API 生图路径，不能在统一层尚未验证前移除旧能力。
+
+## 16. 2026-08-28 缺陷修复补充
+
+- 新建任务后刷新项目摘要只更新统计，不再把刚创建的任务替换为旧的 `active_task_id`；页面首次加载仍允许恢复持久化活动任务。
+- 对 `submitted`、`generating`、`needs_review` 任务重复调用 `prepare-send` 时返回原 Attempt 和 `already_submitted`，前端只恢复捕获或展示候选，不会再次向 ChatGPT 发送同一提示词。
+- 业务 `prompt_snapshot` 保持原始审计内容；送入 ChatGPT 的执行消息增加独立任务隔离指令，明确忽略会话历史，只依据本次提示词和参考图生成，并标注目标类型。
+- FilmCreate、DramaCanvas、DramaDetail 在候选绑定后重新加载权威剧集数据；页面按钮点击后立即发送，抽屉只负责进度、重试、恢复捕获和候选选择。
+- 扩展在浏览器重启后若仅打开 ChatGPT 首页，会自动导航回项目绑定会话；导航完成后等待 composer ready 再填充。
+- ChatGPT 中文界面的发送按钮同时按英文 `Send` 和中文“发送” aria-label 识别。

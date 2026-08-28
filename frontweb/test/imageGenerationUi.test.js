@@ -14,6 +14,7 @@ test('shared image generation controls expose concise channel copy and one summa
   const composable = read('src/composables/useImageGeneration.js')
   const bridge = read('src/utils/imageGenerationBridge.js')
   const setting = read('src/components/imageGeneration/ImageGenerationChannelSetting.vue')
+  const store = read('src/stores/imageGenerationStore.js')
 
   assert.match(api, /image-generation-summary/)
   assert.match(api, /image-generation-batches/)
@@ -34,6 +35,11 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(drawer, /重试发送/)
   assert.match(drawer, /恢复结果捕获/)
   assert.match(drawer, /task\.error_message/)
+  assert.match(store, /loadSummary\(input\.dramaId,\s*\{\s*reattach:\s*false\s*\}\)/)
+  assert.match(store, /loadSummary\(prepared\.task\.drama_id,\s*\{\s*reattach:\s*false\s*\}\)/)
+  assert.match(store, /loadSummary\(currentTask\.value\.drama_id,\s*\{\s*reattach:\s*false\s*\}\)/)
+  assert.match(store, /buildChatGPTImageGenerationPrompt/)
+  assert.match(store, /resolveChatGPTPrepareAction/)
 })
 
 test('all project asset and storyboard entry points use the unified controls', () => {
@@ -54,4 +60,9 @@ test('all project asset and storyboard entry points use the unified controls', (
   assert.match(detail, /ImageGenerationChannelSetting/)
   assert.match(detail, /loadDefault\(dramaId\)/)
   assert.match(film, /catch \(error\)/)
+  assert.match(film, /selectImageGenerationResult\(result\)[\s\S]*loadDrama\(\)/)
+  assert.match(canvas, /@select="onImageGenerationSelect"/)
+  assert.match(canvas, /selectImageGenerationResult\(result\)[\s\S]*refreshCanvas\(true\)/)
+  assert.match(detail, /@select="onImageGenerationSelect"/)
+  assert.match(detail, /imageGeneration\.selectResult\(result\)[\s\S]*loadDrama\(\)/)
 })

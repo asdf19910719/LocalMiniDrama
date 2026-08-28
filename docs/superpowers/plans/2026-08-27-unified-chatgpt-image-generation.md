@@ -473,3 +473,14 @@ git commit -m "test: verify unified ChatGPT image generation"
 - 正式默认 Profile 已在端口 `9223` 启动；ChatGPT 页面、扩展 service worker 和 `data-aistory-chatgpt-bridge="v1"` 注入标记均已通过 CDP 验证。
 - 已补齐有效默认通道解析：项目持久默认为 ChatGPT 但全局通道停用时，未显式指定通道的单任务和批次回退 `api`；显式 ChatGPT 请求仍拒绝。
 - 新增浏览器启动器回归 2 项，以及单任务/批次有效默认回退路由覆盖。Node 22.22.3 后端全量 `305/305`、前端全量 `61/61`、扩展全量 `39/39` 均通过，前端生产构建通过。
+
+### 2026-08-28 用户反馈缺陷修复
+
+- 修复 `openTask()` 后摘要恢复旧活动任务导致道具任务调用旧角色 Attempt、提示 `cannot prepare from submitted` 的问题；执行中的摘要刷新全部关闭重挂接。
+- 新增 ChatGPT 执行提示词隔离包装和目标类型标签；业务提示词快照不被污染。
+- `prepare-send` 对已提交、生成中和待选任务幂等返回，前端改为恢复捕获或等待候选，避免重复发送。
+- FilmCreate、DramaCanvas、DramaDetail 的候选选择现在刷新完整剧集/画布数据，资源图片会立即显示。
+- 扩展增加浏览器重启后的项目会话自动导航、composer ready 等待和更宽的 ChatGPT composer 选择器。
+- 中文 ChatGPT 页面的发送按钮兼容英文和中文 aria-label。
+- 有效回归结果：后端串行 `305/305`、前端 `66/66`、扩展 `40/40`；前端与扩展构建通过。
+- 本轮真实浏览器已创建独立道具任务并验证提示词正确、扩展注入和会话自动恢复；若页面尚未 ready，任务保留 `preparing`，等待重试，不虚报 ACK。

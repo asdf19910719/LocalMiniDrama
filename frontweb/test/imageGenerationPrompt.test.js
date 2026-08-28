@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveImageGenerationPrompt } from '../src/utils/imageGenerationPrompt.js'
+import {
+  buildChatGPTImageGenerationPrompt,
+  resolveImageGenerationPrompt,
+} from '../src/utils/imageGenerationPrompt.js'
 
 test('character image generation uses visual appearance instead of story background', () => {
   assert.equal(resolveImageGenerationPrompt('character', {
@@ -14,4 +17,18 @@ test('an explicit frame prompt remains authoritative', () => {
   assert.equal(resolveImageGenerationPrompt('storyboard_first', {
     image_prompt: '普通分镜描述',
   }, '专业首帧提示'), '专业首帧提示')
+})
+
+test('ChatGPT execution prompt isolates every image task from conversation history', () => {
+  const prompt = buildChatGPTImageGenerationPrompt('白发剑客，角色设定图', 'character')
+
+  assert.match(prompt, /全新的、彼此独立的图片生成任务/)
+  assert.match(prompt, /忽略本会话此前所有人物、场景、道具、图片和提示词/)
+  assert.match(prompt, /只依据本条消息和本次附带的参考图片生成/)
+  assert.match(prompt, /角色设定图/)
+  assert.match(prompt, /白发剑客，角色设定图/)
+})
+
+test('ChatGPT execution prompt does not invent content for an empty business prompt', () => {
+  assert.equal(buildChatGPTImageGenerationPrompt('  ', 'prop'), '')
 })

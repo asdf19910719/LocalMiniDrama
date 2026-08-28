@@ -48,7 +48,26 @@ it('creates a unified task and exposes one drama summary', async () => {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ attemptId: attempt.id }),
     })).json()).data;
     assert.equal(acknowledged.status, 'submitted');
+    const submittedPrepareResponse = await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' });
+    assert.equal(submittedPrepareResponse.status, 200);
+    const submittedPrepare = (await submittedPrepareResponse.json()).data;
+    assert.equal(submittedPrepare.already_submitted, true);
+    assert.equal(submittedPrepare.attempt.id, attempt.id);
+    assert.equal(submittedPrepare.task.status, 'submitted');
+    taskService.transitionTask(db, created.id, 'generating');
+    const generatingPrepareResponse = await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' });
+    assert.equal(generatingPrepareResponse.status, 200);
+    const generatingPrepare = (await generatingPrepareResponse.json()).data;
+    assert.equal(generatingPrepare.already_submitted, true);
+    assert.equal(generatingPrepare.attempt.id, attempt.id);
+    assert.equal(generatingPrepare.task.status, 'generating');
     taskService.transitionTask(db, created.id, 'needs_review');
+    const reviewPrepareResponse = await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' });
+    assert.equal(reviewPrepareResponse.status, 200);
+    const reviewPrepare = (await reviewPrepareResponse.json()).data;
+    assert.equal(reviewPrepare.already_submitted, true);
+    assert.equal(reviewPrepare.attempt.id, attempt.id);
+    assert.equal(reviewPrepare.task.status, 'needs_review');
     db.prepare("INSERT INTO image_generations (id,drama_id,provider,prompt,image_url,local_path,status) VALUES (50,7,'external:chatgpt-web','p','/new.png','new.png','completed')").run();
     db.prepare("INSERT INTO external_generation_results (id,attempt_id,result_index,image_generation_id,status,selected,created_at,updated_at) VALUES ('result-1',?,0,50,'imported',0,'now','now')").run(attempt.id);
     const selected = (await (await fetch(`${base}/image-generation-tasks/${created.id}/select-result`, {

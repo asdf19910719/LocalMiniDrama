@@ -279,6 +279,7 @@
       @close="closeImageGenerationDrawer"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
+      @select="onImageGenerationSelect"
     />
   </div>
 </template>
@@ -362,6 +363,7 @@ const {
   loadDefault: loadImageGenerationDefault,
   sendToChatGPT: sendImageGenerationToChatGPT,
   recoverCapture: recoverImageGenerationCapture,
+  selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
 } = useImageGeneration()
 
@@ -396,6 +398,16 @@ async function onImageGenerationRecover(task) {
     await recoverImageGenerationCapture(task)
   } catch (error) {
     ElMessage.error(error?.message || '恢复结果捕获失败')
+  }
+}
+
+async function onImageGenerationSelect(result) {
+  try {
+    await selectImageGenerationResult(result)
+    await refreshCanvas(true)
+    closeImageGenerationDrawer()
+  } catch (error) {
+    ElMessage.error(error?.message || '结果绑定失败')
   }
 }
 

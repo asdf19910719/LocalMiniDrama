@@ -21,6 +21,16 @@ export function isChatGPTUrl(url = '') {
   }
 }
 
+function isChatGPTHomeUrl(url = '') {
+  if (!isChatGPTUrl(url)) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname === '/' || parsed.pathname === '';
+  } catch (_) {
+    return false;
+  }
+}
+
 export async function injectChatGPTContentScript(chromeApi, tabId, url) {
   if (!isChatGPTUrl(url) || !Number.isInteger(tabId) || !chromeApi?.scripting?.executeScript) return false;
   if (chromeApi?.tabs?.sendMessage) {
@@ -113,6 +123,19 @@ export class BackgroundController {
           return rebound
         }
       }
+      const homeTab = tabs.find((tab) => Number.isInteger(tab?.id) && isChatGPTHomeUrl(tab?.url))
+      if (homeTab && this.chromeApi?.tabs?.update) {
+        await this.chromeApi.tabs.update(homeTab.id, { url: `https://chatgpt.com/c/${encodeURIComponent(existing.conversationId)}` })
+        const restoredIdentity = await this.waitForConversationIdentity(homeTab.id, 40, 250, existing.conversationId)
+        if (restoredIdentity?.conversationId === existing.conversationId) {
+          const rebound = await this.sessions.attach(message.dramaId, message.site, {
+            tabId: homeTab.id,
+            confidence: restoredIdentity.confidence || 'url',
+          })
+          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...rebound }, idempotencyKey: message.id || makeEventId() })
+          return rebound
+        }
+      }
       await this.sessions.pause(message.dramaId, message.site, identity ? 'conversation identity mismatch' : 'provider tab unavailable')
       throw new Error(identity ? 'conversation identity mismatch' : 'provider tab unavailable')
     }
@@ -134,12 +157,13 @@ export class BackgroundController {
     }
     return null
   }
-  async waitForConversationIdentity(tabId, attempts = 20, intervalMs = 250) {
+  async waitForConversationIdentity(tabId, attempts = 20, intervalMs = 250, expectedConversationId = null) {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return null
     for (let index = 0; index < attempts; index += 1) {
       const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
       const conversationId = identity?.value?.conversationId
-      if (conversationId && !String(conversationId).startsWith('WEB:')) return identity.value
+      if (conversationId && !String(conversationId).startsWith('WEB:')
+        && (!expectedConversationId || conversationId === expectedConversationId)) return identity.value
       await new Promise((resolve) => setTimeout(resolve, intervalMs))
     }
     return null
@@ -149,6 +173,18 @@ export class BackgroundController {
     const response = await this.chromeApi.tabs.sendMessage(tabId, message)
     if (response?.ok === false) throw new Error(response.error || 'provider adapter rejected request')
     return response
+  }
+  async waitForProviderReady(tabId, attempts = 40, intervalMs = 250) {
+    if (!tabId || !this.chromeApi?.tabs?.sendMessage) return false;
+    for (let index = 0; index < attempts; index += 1) {
+      const ready = await this.chromeApi.tabs.sendMessage(tabId, { action: 'ready' }).catch(() => null);
+      // Older content scripts do not implement ready; let fill report the
+      // adapter-specific error in that case while newer scripts can gate on
+      // the composer actually being mounted.
+      if (!ready || ready.ok === false || (ready.ok && ready.value?.composer !== false)) return true;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
   }
   async hydrateReferences(references = []) {
     if (!Array.isArray(references) || !references.length) return []
@@ -187,7 +223,11 @@ export class BackgroundController {
     if (action === 'prepare') {
       const session = await this.ensureProviderSession(message, sender);
       const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
-      if (tabId) await this.sendToProviderTab(tabId, { action: 'fill', prompt: message.prompt });
+      if (tabId) {
+        const ready = await this.waitForProviderReady(tabId);
+        if (!ready) throw new Error('provider composer is not ready');
+        await this.sendToProviderTab(tabId, { action: 'fill', prompt: message.prompt });
+      }
       if (tabId && message.references?.length) {
         const references = await this.hydrateReferences(message.references)
         await this.sendToProviderTab(tabId, { action: 'upload', files: references })

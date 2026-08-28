@@ -526,6 +526,7 @@
       @close="imageGeneration.close"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
+      @select="onImageGenerationSelect"
     />
     <Teleport to="body">
       <div v-if="previewUrl" class="image-preview-overlay" @click="previewUrl = null">
@@ -604,6 +605,16 @@ async function onImageGenerationRecover(task) {
     await imageGeneration.recoverCapture(task)
   } catch (error) {
     ElMessage.error(error?.message || '恢复结果捕获失败')
+  }
+}
+
+async function onImageGenerationSelect(result) {
+  try {
+    await imageGeneration.selectResult(result)
+    await loadDrama()
+    imageGeneration.close()
+  } catch (error) {
+    ElMessage.error(error?.message || '结果绑定失败')
   }
 }
 

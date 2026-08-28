@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
-import { normalizeImageGenerationTask, shouldPollImageGenerationTask } from '@/utils/imageGenerationTaskState'
+import { buildChatGPTImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import {
+  normalizeImageGenerationTask,
+  resolveChatGPTPrepareAction,
+  shouldPollImageGenerationTask,
+  shouldReattachImageGenerationTask,
+} from '@/utils/imageGenerationTaskState'
 
 function parseReferenceManifest(value) {
   if (Array.isArray(value)) return value
@@ -44,12 +50,16 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     }, delayMs)
   }
 
-  async function loadSummary(id) {
+  async function loadSummary(id, { reattach = true } = {}) {
     if (id == null) return null
     dramaId.value = id
     summary.value = await imageGenerationTaskAPI.summary(id)
     // Reattach the persisted active unified image task after a page reload.
-    if (summary.value?.active_task_id && currentTask.value?.id !== summary.value.active_task_id) {
+    if (shouldReattachImageGenerationTask({
+      currentTaskId: currentTask.value?.id,
+      activeTaskId: summary.value?.active_task_id,
+      allowReattach: reattach,
+    })) {
       try {
         currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(summary.value.active_task_id))
         startTaskPolling(0)
@@ -71,7 +81,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     try {
       currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.create(input))
       drawerVisible.value = true
-      await loadSummary(input.dramaId)
+      await loadSummary(input.dramaId, { reattach: false })
       return currentTask.value
     } finally { loading.value = false }
   }
@@ -90,12 +100,16 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     errorMessage.value = ''
     try {
       const prepared = await imageGenerationTaskAPI.prepareSend(task.id)
-      currentTask.value = normalizeImageGenerationTask(prepared.task)
+      currentTask.value = normalizeImageGenerationTask({ ...prepared.task, external_job: prepared.external_job })
       const job = prepared.external_job
       const attempt = prepared.attempt
+      const prepareAction = resolveChatGPTPrepareAction(prepared)
+      if (prepareAction === 'recover') return await recoverCapture(currentTask.value)
+      if (prepareAction === 'review') return currentTask.value
       await sendImageGenerationBridgeMessage({
         action: 'prepare', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
-        conversationId: job.conversation_id, prompt: prepared.task.prompt_snapshot,
+        conversationId: job.conversation_id,
+        prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type),
         references: parseReferenceManifest(prepared.task.reference_manifest),
       })
       await sendImageGenerationBridgeMessage({
@@ -104,7 +118,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       })
       currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.acknowledge(prepared.task.id, attempt.id))
       startTaskPolling()
-      await loadSummary(prepared.task.drama_id)
+      await loadSummary(prepared.task.drama_id, { reattach: false })
       return currentTask.value
     } catch (error) {
       const message = error?.message || '发送到 ChatGPT 失败，请检查浏览器插件和登录状态'
@@ -150,7 +164,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     if (!currentTask.value?.id || !result?.id) throw new Error('鍊欓€夌粨鏋滀笉瀛樺湪')
     currentTask.value = normalizeImageGenerationTask((await imageGenerationTaskAPI.selectResult(currentTask.value.id, result.id)).task)
     stopTaskPolling()
-    await loadSummary(currentTask.value.drama_id)
+    await loadSummary(currentTask.value.drama_id, { reattach: false })
     return currentTask.value
   }
   function closeDrawer() { drawerVisible.value = false }

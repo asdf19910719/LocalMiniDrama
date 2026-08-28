@@ -124,12 +124,23 @@ module.exports = (db, log = console) => {
       task = tasks.transitionTask(db, task.id, task.status, { externalJobId: job.id });
     }
     if (task.status === 'draft' || task.status === 'queued') task = tasks.transitionTask(db, task.id, 'preparing');
+    if (['submitted', 'generating', 'needs_review'].includes(task.status)) {
+      const attempt = db.prepare(`SELECT * FROM external_generation_attempts
+        WHERE job_id=? ORDER BY sequence DESC LIMIT 1`).get(task.external_job_id);
+      if (!attempt) throw new Error('Submitted image generation task has no attempt');
+      return {
+        task,
+        attempt,
+        external_job: getExternalJob(db, task.external_job_id),
+        already_submitted: true,
+      };
+    }
     if (task.status !== 'preparing') throw new Error(`Image generation task cannot prepare from ${task.status}`);
     const existingAttempt = db.prepare(`SELECT * FROM external_generation_attempts
       WHERE job_id=? AND status IN ('ready_to_send','submitted') ORDER BY sequence DESC LIMIT 1`).get(task.external_job_id);
-    if (existingAttempt) return { task, attempt: existingAttempt, external_job: getExternalJob(db, task.external_job_id) };
+    if (existingAttempt) return { task, attempt: existingAttempt, external_job: getExternalJob(db, task.external_job_id), already_submitted: false };
     const attempt = createGenerationAttempt(db, task.external_job_id, { status: 'ready_to_send' });
-    return { task, attempt, external_job: getExternalJob(db, task.external_job_id) };
+    return { task, attempt, external_job: getExternalJob(db, task.external_job_id), already_submitted: false };
   }));
 
   router.post('/image-generation-tasks/:taskId/submit', async (req, res) => {
