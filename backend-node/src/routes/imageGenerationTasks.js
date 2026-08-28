@@ -56,7 +56,7 @@ module.exports = (db, log = console) => {
         promptSnapshot: task.prompt_snapshot,
         imageGenerationTaskId: task.id,
       });
-      task = tasks.transitionTask(db, task.id, task.status, { externalJobId: job.id });
+      task = tasks.transitionTask(db, task.id, 'queued', { externalJobId: job.id });
     }
     return task.external_job_id ? { ...task, external_job: getExternalJob(db, task.external_job_id) } : task;
   }));
@@ -107,6 +107,15 @@ module.exports = (db, log = console) => {
     handle(res, () => queue.skipTask(db, req.params.taskId)));
   router.post('/image-generation-tasks/:taskId/cancel', (req, res) =>
     handle(res, () => queue.cancelTask(db, req.params.taskId)));
+
+  router.post('/image-generation-tasks/claim-next', (req, res) => handle(res, () => queue.claimNextChatgptTask(db)));
+
+  router.post('/image-generation-tasks/:taskId/fail', (req, res) => handle(res, () => {
+    const task = tasks.getTask(db, req.params.taskId);
+    if (!task) throw new Error('Image generation task not found');
+    if (task.generation_channel !== 'chatgpt_web' || task.status !== 'preparing') throw new Error('Only a preparing chatgpt_web task can be failed');
+    return tasks.transitionTask(db, task.id, 'failed', { errorCode: 'send_failed', errorMessage: String(req.body?.message || '发送失败') });
+  }));
 
   router.post('/image-generation-tasks/:taskId/prepare-send', (req, res) => handle(res, () => {
     let task = tasks.getTask(db, req.params.taskId);
