@@ -1,5 +1,13 @@
 # 真实 ChatGPT 图片生成模拟测试：启动与验收
 
+## 2026-08-28 session paused 恢复复验
+
+- 根因：扩展本地会话曾因 `provider tab unavailable` 保留为 `paused`，浏览器重启后同一 ChatGPT conversation 已恢复，但旧逻辑没有清除暂停状态。
+- 修复：当前标签页确认仍是已绑定的同一 conversation 时，扩展自动恢复会话为 `active`，并同步项目会话；身份漂移仍保持暂停保护。
+- 回归测试：browser-extension 全量 `41/41`，构建通过。
+- 真实任务：Task `1ecad200-89a8-47e1-ae7c-188718da4980`，Attempt `3d1324c0-db69-4d88-b37d-8b84786d3ca3`。
+- ChatGPT 真实页面生成 3 张道具候选，扩展捕获 assistant `conversation-turn-12` 并导入；选择结果 `ab4ab05f-6a6f-4c51-8aa7-963707be907c` 后 Task 状态为 `completed`，道具主图完成绑定。
+
 本文记录通过真实登录态 ChatGPT 网页、Playwright Chromium 和 MV3 扩展执行图片生成的可复现方式。该流程会在 ChatGPT 网页中真实填写提示词、点击发送、等待生成结果，再由扩展下载原图并导入本地后端。
 
 ## 当前代码与回归状态
@@ -152,3 +160,10 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 本轮真实浏览器已按专用 Profile 重启，`9223` 可访问，ChatGPT 页面注入 `data-aistory-chatgpt-bridge="v1"`，扩展 service worker 存在。通过真实工作台按钮创建道具任务后，抽屉显示正确的“赤红玉简”道具提示词，新任务保持独立 `preparing` 状态。
 
 重启后的自动会话恢复已在扩展层验证：首页会自动导航到项目绑定会话并等待 composer ready；中文页面的发送按钮同时兼容 `Send` 和“发送” aria-label。若 ChatGPT 仍在登录加载、限流或 composer 未 ready，任务会停留在 `preparing` 并显示可重试错误，不会伪报“已发送”；重试不创建新任务，也不重复发送已提交 Attempt。
+
+## 2026-08-28 图片绑定后页面刷新复验
+
+- 发现并修复前端将 Windows 绝对 `local_path` 直接拼成 `/static/E:/...` 的问题；该地址会命中 Vite fallback HTML，导致生成成功后卡片空白。
+- 统一媒体 URL 现在会识别 `data/external-web/<drama>/<storyboard>/<resultId>/...`，改用 `/api/v1/external-generation/results/<resultId>/content` 本地内容接口；旧的 storage 相对路径仍走 `/static/`。
+- 真实重载 `http://127.0.0.1:3013/film/3?episode=3` 后，赤红玉简图片使用结果内容接口，浏览器 `naturalWidth=1672`、`naturalHeight=941`，接口返回 `200 image/png`。
+- 前端回归测试 `68/68`，前端生产构建通过；该验证覆盖 DramaDetail、FilmCreate、FilmList 和 MediaLibrary 的图片展示入口。

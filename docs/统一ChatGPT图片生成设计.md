@@ -513,3 +513,9 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 - FilmCreate、DramaCanvas、DramaDetail 在候选绑定后重新加载权威剧集数据；页面按钮点击后立即发送，抽屉只负责进度、重试、恢复捕获和候选选择。
 - 扩展在浏览器重启后若仅打开 ChatGPT 首页，会自动导航回项目绑定会话；导航完成后等待 composer ready 再填充。
 - ChatGPT 中文界面的发送按钮同时按英文 `Send` 和中文“发送” aria-label 识别。
+
+## 17. 2026-08-28 图片绑定后页面刷新修复
+
+- 外部网页导入结果的 `local_path` 是 Windows 绝对路径，前端不再将其拼接到 `/static/`，避免命中 Vite fallback HTML。
+- 统一媒体 URL 会从 `external-web/<drama>/<storyboard>/<resultId>/...` 解析结果 ID，使用 `/api/v1/external-generation/results/<resultId>/content` 返回本地原图；旧的 storage 相对路径仍走 `/static/`。
+- 真实重载制作页后已验证赤红玉简图片返回 `200 image/png`，尺寸 `1672x941`，生成成功后页面能立即展示。

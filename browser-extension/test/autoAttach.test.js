@@ -115,6 +115,37 @@ test('prepare restores the persisted project conversation after the browser rest
   assert.deepEqual(messages.at(-1), [88, { action: 'fill', prompt: 'hello' }])
 })
 
+test('prepare resumes a paused session when the same conversation is available again', async () => {
+  const apiCalls = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 88, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => {
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async (url, init) => {
+      apiCalls.push([url, init])
+      return { ok: true, json: async () => ({ data: {} }) }
+    },
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', { conversationId: 'conv-1', tabId: 88, status: 'paused', pauseReason: 'provider tab unavailable' })
+
+  const session = await controller.ensureProviderSession({ dramaId: 3, site: 'chatgpt' })
+
+  assert.equal(session.status, 'active')
+  assert.equal(session.pauseReason, null)
+  assert.equal(controller.sessions.get(3, 'chatgpt').status, 'active')
+  assert.match(apiCalls.at(-1)[0], /external-generation\/dramas\/3\/session\/attach$/)
+  assert.equal(JSON.parse(apiCalls.at(-1)[1].body).status, 'active')
+})
+
 test('prepare pauses instead of filling when the stored tab drifts to another conversation', async () => {
   const messages = []
   const chromeApi = {

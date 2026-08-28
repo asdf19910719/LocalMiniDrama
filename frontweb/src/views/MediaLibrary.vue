@@ -135,6 +135,7 @@ import {
 } from '@element-plus/icons-vue'
 import { uploadAPI } from '@/api/upload'
 import request from '@/utils/request'
+import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -211,7 +212,8 @@ function normalizeItem(item) {
 function itemUrl(item) {
   if (!item) return ''
   const lp = item.local_path || item.image_local_path || item.video_local_path
-  if (lp) return '/static/' + lp.replace(/^\//, '')
+  if (item.type !== 'video' && lp) return resolveAssetImageUrl({ ...item, local_path: lp })
+  if (lp) return '/static/' + String(lp).replace(/^\//, '')
   return item.url || item.image_url || item.video_url || ''
 }
 

@@ -101,9 +101,25 @@ export class BackgroundController {
     const ping = async (tabId) => this.chromeApi?.tabs?.sendMessage
       ? this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
       : null
+    const activate = async (session) => {
+      if (session?.status !== 'paused') return session
+      const active = await this.sessions.attach(message.dramaId, message.site, {
+        tabId: session.tabId,
+        conversationId: session.conversationId,
+        confidence: session.confidence || 'url',
+        status: 'active',
+        pauseReason: null,
+      })
+      await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, {
+        method: 'POST',
+        body: { site: message.site, ...active },
+        idempotencyKey: message.id || makeEventId(),
+      })
+      return active
+    }
     if (existing?.conversationId && existing?.tabId) {
       const identity = await ping(existing.tabId)
-      if (identity?.value?.conversationId === existing.conversationId) return existing
+      if (identity?.value?.conversationId === existing.conversationId) return activate(existing)
       if (identity?.value?.conversationId && String(existing.conversationId).startsWith('WEB:')) {
         const upgraded = await this.sessions.rebind(message.dramaId, message.site, {
           tabId: existing.tabId,
@@ -118,7 +134,7 @@ export class BackgroundController {
         if (!Number.isInteger(tab?.id) || tab.id === existing.tabId) continue
         const candidate = await ping(tab.id)
         if (candidate?.value?.conversationId === existing.conversationId) {
-          const rebound = await this.sessions.attach(message.dramaId, message.site, { tabId: tab.id, confidence: candidate.value.confidence || 'url' })
+          const rebound = await this.sessions.attach(message.dramaId, message.site, { tabId: tab.id, confidence: candidate.value.confidence || 'url', status: 'active', pauseReason: null })
           await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...rebound }, idempotencyKey: message.id || makeEventId() })
           return rebound
         }
@@ -131,6 +147,8 @@ export class BackgroundController {
           const rebound = await this.sessions.attach(message.dramaId, message.site, {
             tabId: homeTab.id,
             confidence: restoredIdentity.confidence || 'url',
+            status: 'active',
+            pauseReason: null,
           })
           await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, ...rebound }, idempotencyKey: message.id || makeEventId() })
           return rebound

@@ -559,6 +559,7 @@ import { sceneAPI } from '@/api/scenes'
 import { propAPI } from '@/api/props'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import {
   generationStyleOptions,
   stylePromptMetadataForSave,
@@ -920,10 +921,7 @@ const nextEpisodeNumber = computed(() => (
 const infoForm = reactive({ title: '', description: '', genre: '', style: '', customStylePrompt: '', aspect_ratio: '16:9' })
 
 function assetImageUrl(item) {
-  if (!item) return ''
-  const lp = item.local_path && String(item.local_path).trim()
-  if (lp) return '/static/' + lp.replace(/^\//, '')
-  return item.image_url || ''
+  return resolveAssetImageUrl(item)
 }
 
 function formatDate(val) {

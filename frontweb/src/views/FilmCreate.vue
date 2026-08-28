@@ -2693,6 +2693,7 @@ import { useProps as usePropsComposable } from '@/composables/filmCreate/useProp
 import { useScenes } from '@/composables/filmCreate/useScenes'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 
 const route = useRoute()
 const router = useRouter()
@@ -3672,15 +3673,9 @@ function imageUrl(url) {
 }
 /** 优先使用本地地址，避免远程图失效。item 为 { image_url, local_path } 或字符串 url */
 function assetImageUrl(item) {
-  if (!item) return ''
-  if (typeof item === 'string') return imageUrl(item)
-  const localPath = item.local_path && String(item.local_path).trim()
-  if (localPath) {
-    const p = localPath.replace(/^\//, '')
-    return '/static/' + p
-  }
-  if (item.image_url) return imageUrl(item.image_url)
-  return ''
+  const resolved = resolveAssetImageUrl(item)
+  if (resolved.startsWith('/') || /^https?:\/\//i.test(resolved)) return resolved
+  return imageUrl(resolved)
 }
 function hasAssetImage(item) {
   if (!item) return false

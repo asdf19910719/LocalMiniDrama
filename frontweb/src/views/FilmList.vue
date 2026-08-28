@@ -368,6 +368,7 @@ import { aiAPI } from '@/api/ai'
 import { imagesAPI } from '@/api/images'
 import { taskAPI } from '@/api/task'
 import { getStyleLabel } from '@/constants/styleOptions'
+import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 
 const router = useRouter()
 const { isDark, toggle: toggleTheme } = useTheme()
@@ -439,11 +440,7 @@ const vendorLockEnabled = ref(false)
 // 图片预览
 const previewImageUrl = ref(null)
 function assetImageUrl(item) {
-  if (!item) return ''
-  if (typeof item === 'string') return item.startsWith('http') ? item : item
-  const localPath = item.local_path && String(item.local_path).trim()
-  if (localPath) return '/static/' + localPath.replace(/^\//, '')
-  return item.image_url || ''
+  return resolveAssetImageUrl(item)
 }
 function openImagePreview(url) {
   if (url) previewImageUrl.value = url
