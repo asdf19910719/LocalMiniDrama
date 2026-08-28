@@ -167,3 +167,29 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 - 统一媒体 URL 现在会识别 `data/external-web/<drama>/<storyboard>/<resultId>/...`，改用 `/api/v1/external-generation/results/<resultId>/content` 本地内容接口；旧的 storage 相对路径仍走 `/static/`。
 - 真实重载 `http://127.0.0.1:3013/film/3?episode=3` 后，赤红玉简图片使用结果内容接口，浏览器 `naturalWidth=1672`、`naturalHeight=941`，接口返回 `200 image/png`。
 - 前端回归测试 `68/68`，前端生产构建通过；该验证覆盖 DramaDetail、FilmCreate、FilmList 和 MediaLibrary 的图片展示入口。
+
+## 2026-08-28 捕获链路缺陷修复与全链路复验
+
+按真实用户流程对分镜主图做 GUI 黑盒验收（专用 Chrome 9223 + 真实工作台页面），发现结果自动捕获链路 4 类缺陷并全部修复。修复提交：`6c59b16`（扩展）、`27ba15f`（后端），全部先写失败测试再实现。
+
+### 缺陷与修复
+
+1. **旧 turn 劫持绑定**：`beginAttempt` 在提交前快照的 turn ID 集合无法识别"已在 DOM 但身份未渲染"的旧 turn，页面刚加载完就提交时旧回复被误绑为新回复，ChatGPT 重编号后观察器成孤儿、捕获静默失败。修复：`beginAttempt` 改为快照提交前已存在的 assistant 节点（WeakSet），只绑提交后新出现的节点。
+2. **user turn 劫持导入**：selector 兜底 `[data-testid^="conversation-turn-"]` 把新提交的用户消息也当绑定候选，其参考图缩略图（estuary https URL）通过白名单被当作生成结果导入（实测导入 1254x1254 四宫格缩略图、`assistant_message_id` 记录为 user turn）。修复：候选发现与 `findAssistant` 排除 `data-turn="user"`；`extractResultSet` 对 user turn 返回 GENERATING 兜底。
+3. **blob: 占位图硬失败**：图片尚未物化时 `currentSrc` 为 `blob:`，抓取被 URL 白名单拒绝 → `ORIGINAL_URL_NOT_ALLOWED` → attempt 永久 `needs_review`。修复：`extractResultSet` 过滤非 http(s) 来源，保持 GENERATING 等真实 URL。
+4. **needs_review 无法再导入 + 失败不可见**：`importExternalResult` 拒绝 `needs_review` attempt，而恢复路径恰恰要导入该状态；且 ADAPTER_ERROR 只写 attempt 级事件，`image_generation_tasks.error_message` 恒空，抽屉看不到失败原因（toast 约 3 秒消失 + 3 秒轮询覆盖本地错误，造成"恢复按钮点击无效"假象）。修复：允许 `needs_review` 重导入并在成功后恢复 attempt 为 `submitted`、清除任务级错误字段；`recordAttemptEvent` 将 ADAPTER_ERROR 的 code/message 镜像到关联任务，健康生命周期事件清除之。
+
+### 回归与部署
+
+- Node 22.22.3：后端全量 `307/307`（`--test-concurrency=1`）、前端 `69/69`、扩展 `45/45`，前端 Vite 与扩展 esbuild 构建通过。新增测试：blob 过滤 x2、幽灵 turn 排除、user turn 劫持排除（扩展）；needs_review 导入、任务错误镜像（后端）。
+- 后端需重启加载新服务代码；扩展 content bundle 对 unpacked 安装在 tab 导航时从磁盘重读，无需扩展重载。注意：`chrome.runtime.reload()` 会把 unpacked 扩展置为 DISABLED（Chrome 怪癖），重载后若"插件未响应"先到 `chrome://extensions` 检查启用状态。
+
+### 修复后全链路复验（真实生成一次）
+
+分镜 12「记忆的倔强」点击"ChatGPT 生成"→ 任务自动创建并真实发送 → ChatGPT 生成 1672x941 → **60 秒内 3 个候选全自动导入，零手动干预**；attempt 正确绑定本次 assistant 回复（`conversation-turn-12`），user turn 被排除；抽屉显示"请选择图片"→ 选择候选后任务 `completed`、候选 `bound`、storyboard `local_path` 指向选中候选；刷新页面后分镜图正确显示。证据：AIStory 仓库 `docs/research/_artifacts/unified-chatgpt-image-fix-verification-2026-08-28.json`。
+
+### 挂起观察
+
+- 首次发送环节出现过一次未复现的后端 500（`prepare-send` 对 draft 会原地转 preparing，相关路由均为 400 包装，源头待复现捕获）；修复后任务级错误已可见，复现时可直接从抽屉与日志定位。
+- 测试遗留任务：`64698fd1`（needs_review，含 3 个有效候选可选）、`44959032`（preparing）、`725feae6`（submitted，attempt needs_review）可手动取消或清理。
+- storyboard 绑定后 `status` 字段仍为 `pending`（图片显示不受影响，字段语义待确认）。
