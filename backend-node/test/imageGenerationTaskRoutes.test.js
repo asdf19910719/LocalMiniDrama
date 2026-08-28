@@ -96,6 +96,20 @@ it('creates a unified task and exposes one drama summary', async () => {
       body: JSON.stringify({ dramaId: 7, generationChannel: 'chatgpt_web', targets: [{ targetType: 'character', targetId: 1 }] }),
     });
     assert.equal(disabledBatch.status, 400);
+
+    const fallbackTaskResponse = await fetch(`${base}/image-generation-tasks`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dramaId: 7, targetType: 'character', targetId: 1 }),
+    });
+    assert.equal(fallbackTaskResponse.status, 200);
+    assert.equal((await fallbackTaskResponse.json()).data.generation_channel, 'api');
+
+    const fallbackBatchResponse = await fetch(`${base}/image-generation-batches`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dramaId: 7, targets: [{ targetType: 'character', targetId: 1 }] }),
+    });
+    assert.equal(fallbackBatchResponse.status, 200);
+    assert.equal((await fallbackBatchResponse.json()).data.generation_channel, 'api');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     db.close();

@@ -465,3 +465,11 @@ git commit -m "test: verify unified ChatGPT image generation"
 真实用户验收已完成一轮：登录的 Playwright Chromium profile 通过扩展自动填充、参考图上传、真实点击发送、候选捕获、原图导入和统一结果绑定；任务最终为 `completed`。后续若 profile 登录态失效，从现有 `preparing` 或 `ready_to_send` 任务重试即可。
 
 用户侧自动化边界：安装并启用扩展、完成一次 ChatGPT 登录后，tab 查找、扩展注入、会话绑定、提示词填充、参考图上传、提交和 ACK 都是自动的。只有安装/登录、权限、Cloudflare/VPN 或网络不可用时需要人工介入。
+
+### 2026-08-28 默认通道与自动浏览器复验
+
+- 剧集 3 的持久默认通道已从 `api` 切换为 `chatgpt_web`；真实制作页 `film/3?episode=3` 读取到的 13 个图片入口均显示“ChatGPT 生成”。
+- 已复现启动器“报告成功但浏览器未保留”的问题，根因是 Chrome for Testing 在当前 Windows 启动上下文中缺少稳定启动参数。启动器已加入 `--do-not-de-elevate`、`--no-sandbox`，并以远程调试端口监听作为成功判据。
+- 正式默认 Profile 已在端口 `9223` 启动；ChatGPT 页面、扩展 service worker 和 `data-aistory-chatgpt-bridge="v1"` 注入标记均已通过 CDP 验证。
+- 已补齐有效默认通道解析：项目持久默认为 ChatGPT 但全局通道停用时，未显式指定通道的单任务和批次回退 `api`；显式 ChatGPT 请求仍拒绝。
+- 新增浏览器启动器回归 2 项，以及单任务/批次有效默认回退路由覆盖。Node 22.22.3 后端全量 `305/305`、前端全量 `61/61`、扩展全量 `39/39` 均通过，前端生产构建通过。

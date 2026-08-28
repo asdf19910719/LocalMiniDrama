@@ -13,6 +13,15 @@ module.exports = (db, log = console) => {
   const assertChannelEnabled = (channel) => {
     if (channel === 'chatgpt_web' && !chatgptWebEnabled()) throw new Error('ChatGPT 网页生图通道未在 API 配置中启用');
   };
+  const getEffectiveDefaultChannel = (dramaId) => {
+    const configuredChannel = tasks.getDefaultChannel(db, dramaId);
+    return configuredChannel === 'chatgpt_web' && !chatgptWebEnabled() ? 'api' : configuredChannel;
+  };
+  const resolveChannel = (dramaId, requestedChannel) => {
+    const channel = requestedChannel || getEffectiveDefaultChannel(dramaId);
+    assertChannelEnabled(channel);
+    return channel;
+  };
   const handle = (res, operation) => {
     try { response.success(res, operation()); }
     catch (error) {
@@ -29,8 +38,7 @@ module.exports = (db, log = console) => {
       target_id: input.targetId,
       prompt_snapshot: input.prompt,
     });
-    const requestedChannel = input.generationChannel || input.generation_channel || tasks.getDefaultChannel(db, input.dramaId);
-    assertChannelEnabled(requestedChannel);
+    const requestedChannel = resolveChannel(input.dramaId, input.generationChannel || input.generation_channel);
     let task = tasks.createTask(db, {
       ...input,
       generationChannel: requestedChannel,
@@ -65,7 +73,7 @@ module.exports = (db, log = console) => {
   router.get('/dramas/:dramaId/image-generation-default', (req, res) =>
     handle(res, () => {
       const configuredChannel = tasks.getDefaultChannel(db, req.params.dramaId);
-      const channel = configuredChannel === 'chatgpt_web' && !chatgptWebEnabled() ? 'api' : configuredChannel;
+      const channel = getEffectiveDefaultChannel(req.params.dramaId);
       return { channel, configured_channel: configuredChannel };
     }));
 
@@ -76,8 +84,7 @@ module.exports = (db, log = console) => {
     }));
 
   router.post('/image-generation-batches', (req, res) => handle(res, () => {
-    const channel = req.body?.generationChannel || tasks.getDefaultChannel(db, req.body?.dramaId);
-    assertChannelEnabled(channel);
+    const channel = resolveChannel(req.body?.dramaId, req.body?.generationChannel || req.body?.generation_channel);
     return tasks.createBatch(db, {
       dramaId: req.body?.dramaId,
       resourceScope: req.body?.scope,

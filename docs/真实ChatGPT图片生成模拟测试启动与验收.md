@@ -66,18 +66,22 @@ npm run build
 
 使用 `run_dev.ps1` 或 `run_dev.bat` 启动整个项目时，不必再单独运行该脚本：后端健康后会读取“API 配置 -> 生成设置 -> 统一图片通道”，若 ChatGPT Web 已启用则自动启动浏览器。浏览器可执行文件留空时会自动查找 `%LOCALAPPDATA%\ms-playwright\chromium-*\chrome-win64\chrome.exe`。
 
+Windows 下启动器会额外传入 `--do-not-de-elevate` 和 `--no-sandbox`。这是当前 Chrome for Testing 在项目启动上下文中稳定保留 Profile、扩展和调试端口所需的组合；该浏览器必须使用独立的 `data/chatgpt-browser-profile`，只用于 ChatGPT 生图，不作为日常浏览器。脚本会等待默认调试端口 `9223` 进入监听状态，端口未就绪时输出失败告警，不再仅凭 `Start-Process` 返回就报告成功。
+
 必须让 Chromium 保留扩展相关默认参数被移除，并显式加载扩展目录：
 
 ```js
 const context = await chromium.launchPersistentContext(
-  'E:/project/AIStory/docs/research/_artifacts/chrome-live-playwright-run',
+  'E:/AI/references/LocalMiniDrama/data/chatgpt-browser-profile',
   {
     headless: false,
     executablePath: 'C:/Users/26373/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe',
     ignoreDefaultArgs: ['--disable-extensions'],
     args: [
-      '--disable-extensions-except=E:/AI/references/LocalMiniDrama/.worktrees/unified-chatgpt-image-generation/browser-extension',
-      '--load-extension=E:/AI/references/LocalMiniDrama/.worktrees/unified-chatgpt-image-generation/browser-extension',
+      '--do-not-de-elevate',
+      '--no-sandbox',
+      '--disable-extensions-except=E:/AI/references/LocalMiniDrama/browser-extension',
+      '--load-extension=E:/AI/references/LocalMiniDrama/browser-extension',
     ],
   },
 )
@@ -90,6 +94,8 @@ const context = await chromium.launchPersistentContext(
 - `chrome://extensions` 中出现 AIStory 扩展；
 - ChatGPT 页面根节点存在 `data-aistory-chatgpt-bridge="v1"`；
 - `context.serviceWorkers()` 能看到扩展 worker。
+
+2026-08-28 自动启动复验：`9223` 实际监听；`/json/list` 同时列出 `https://chatgpt.com/` 页面与 `chrome-extension://.../src/background.js` service worker；CDP 读取 ChatGPT 根节点得到 `data-aistory-chatgpt-bridge="v1"`。在同一浏览器打开 `http://127.0.0.1:3013/film/3?episode=3`，13 个图片入口按钮均为“ChatGPT 生成”。
 
 ## 真实用户流程
 
@@ -130,6 +136,8 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 ## 常见故障
 
 - 扩展不显示：确认 `ignoreDefaultArgs: ['--disable-extensions']` 和两个显式扩展参数同时存在，并关闭旧 Chrome profile 锁。
+- 启动脚本显示失败或浏览器闪退：确认使用 Chrome for Testing，并检查命令行同时包含 `--do-not-de-elevate`、`--no-sandbox`、独立 `--user-data-dir` 和两个扩展参数；再检查 `Get-NetTCPConnection -LocalPort 9223 -State Listen`。不要用同一个 Profile 启动多个浏览器实例。
+- 页面仍显示“默认模型”：全局启用只表示 ChatGPT 通道可用，不会覆盖既有剧集。到剧集管理将当前剧集的“默认生图方式”切换为 ChatGPT，或调用 `PUT /api/v1/dramas/<dramaId>/image-generation-default` 保存 `{"channel":"chatgpt_web"}`，然后刷新制作页。
 - 点击 ChatGPT 生图无反应：打开任务抽屉查看状态；若为“准备中”且有错误提示，点击“重试发送”。重点检查扩展是否注入（ChatGPT 页面根节点有 `data-aistory-chatgpt-bridge="v1"`）、页面是否登录以及当前 profile 是否就是启动扩展的 profile。
 - 任务显示“已发送”但没有候选：保持原 ChatGPT 会话打开，点击“恢复结果捕获”。该操作只重新挂接扩展监听，不会再次发送提示词；前端随后每 3 秒刷新任务，导入结果会自动出现在候选区。
 - 2026-08-28 对遗留角色任务 `ae204682-e843-477e-9fa8-7838d502ddba` 的诊断：后端已有真实 `SUBMITTED` 事件，但 9343 profile 的 ChatGPT 页面注入标记为空且扩展 service worker 不存在，说明扩展当时未运行；任务本身并非未创建。

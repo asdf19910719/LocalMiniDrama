@@ -1,7 +1,8 @@
 param(
   [string]$BrowserPath = '',
   [string]$ProfilePath = '',
-  [int]$RemoteDebuggingPort = 9223
+  [int]$RemoteDebuggingPort = 9223,
+  [int]$StartupTimeoutSeconds = 10
 )
 
 $extensionPath = Join-Path $PSScriptRoot 'browser-extension'
@@ -35,6 +36,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $extensionPath 'manifest.json'))) { 
 New-Item -ItemType Directory -Force -Path $ProfilePath | Out-Null
 
 $arguments = @(
+  '--do-not-de-elevate',
+  '--no-sandbox',
   "--user-data-dir=`"$ProfilePath`"",
   "--remote-debugging-port=$RemoteDebuggingPort",
   '--no-first-run',
@@ -43,7 +46,19 @@ $arguments = @(
   "--load-extension=`"$extensionPath`"",
   'https://chatgpt.com/'
 )
-Start-Process -FilePath $BrowserPath -ArgumentList $arguments -WorkingDirectory $PSScriptRoot
+$browserProcess = Start-Process -FilePath $BrowserPath -ArgumentList $arguments -WorkingDirectory $PSScriptRoot -PassThru
+$deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
+$browserReady = $false
+do {
+  $browserReady = [bool](Get-NetTCPConnection -LocalPort $RemoteDebuggingPort -State Listen -ErrorAction SilentlyContinue)
+  if ($browserReady -or $browserProcess.HasExited) { break }
+  Start-Sleep -Milliseconds 200
+} while ((Get-Date) -lt $deadline)
+
+if (-not $browserReady) {
+  Write-Warning "ChatGPT browser failed to become ready on port $RemoteDebuggingPort."
+  return
+}
 Write-Host "ChatGPT browser started with AIStory extension." -ForegroundColor Green
 Write-Host "Profile: $ProfilePath"
 Write-Host "Sign in to ChatGPT once on first launch; this profile will be reused later."
