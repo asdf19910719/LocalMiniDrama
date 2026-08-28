@@ -442,7 +442,7 @@ git add backend-node frontweb browser-extension docs/统一ChatGPT图片生成�
 git commit -m "test: verify unified ChatGPT image generation"
 ```
 
-## 实施进度同步（2026-08-27）
+## 实施进度同步（2026-08-28）
 
 已完成并提交：
 
@@ -452,11 +452,13 @@ git commit -m "test: verify unified ChatGPT image generation"
 - ChatGPT 扩展跨 tab 自动绑定、会话身份校验、真实 ACK 和结果导入链路。
 - 共享前端图片生成入口，以及发送前的 `prepare -> fill -> upload -> send -> acknowledge` 流程。
 - 参考图 URL 在扩展后台转换为真实字节文件，并补充 localhost host permission。
+- 项目级默认生图方式已在制作页和剧集管理页提供可见控件，支持持久化 `api` / `chatgpt_web`。
+- ChatGPT 桥接失败会保留 `preparing` 任务、显示错误原因，并支持“重试发送”；等待 ACK 时明确显示等待状态。
 
-本轮提交：`b8bc743 fix: prepare ChatGPT image inputs before submit`。
+本轮变更尚未提交，涉及共享前端 Store、抽屉、三个页面入口和默认通道控件。
 
-验证记录：Node 22.22.3 下后端统一图片任务定向测试 12/12 通过；扩展测试 37/37 通过；前端统一图片测试 5/5 通过；前端生产构建通过。
+验证记录：Node 22.22.3 下后端图片/External Generation 定向测试 28/28 通过；扩展测试 39/39 通过；前端图片统一测试 2/2 通过；前端生产构建通过。前端全量另有 2 个既有 `videoGenerationPanel` 断言漂移，与本轮图片改动无关；使用默认 Node 24 跑后端会因 `better-sqlite3` Node 22 ABI 不匹配失败，必须使用计划指定的 Node 22。
 
-真实用户验收仍有一个外部前置条件：需要一个能正常访问 ChatGPT 且已登录的浏览器 profile。当前已检查的 profile 分别是“未登录”或被 Cloudflare 返回 `Unable to load site`，所以真实网页生图、图片捕获和最终业务绑定尚未获得有效通过证据。恢复登录/网络环境后，从现有 `preparing` 或 `ready_to_send` 任务重试即可。
+真实用户验收已完成一轮：登录的 Playwright Chromium profile 通过扩展自动填充、参考图上传、真实点击发送、候选捕获、原图导入和统一结果绑定；任务最终为 `completed`。后续若 profile 登录态失效，从现有 `preparing` 或 `ready_to_send` 任务重试即可。
 
 用户侧自动化边界：安装并启用扩展、完成一次 ChatGPT 登录后，tab 查找、扩展注入、会话绑定、提示词填充、参考图上传、提交和 ACK 都是自动的。只有安装/登录、权限、Cloudflare/VPN 或网络不可用时需要人工介入。

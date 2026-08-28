@@ -366,7 +366,15 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 ### `ImageGenerationDrawer`
 
 - 按统一任务 ID 展示提示词、参考图、插件状态、候选图和恢复操作；
+- 桥接失败时保留 `preparing` 任务并显示错误原因，提供“重试发送”；
+- 等待扩展 ACK 时显示明确的等待状态，不把无响应误报为已发送；
 - 不内置角色或分镜专属绑定逻辑。
+
+### `ImageGenerationChannelSetting`
+
+- 在制作页和剧集管理页显示项目级“默认生图方式”；
+- 通过 `PUT /api/v1/dramas/:dramaId/image-generation-default` 持久化 `api` 或 `chatgpt_web`；
+- 生图按钮主操作使用该默认通道，下拉菜单仍可对单次任务临时覆盖。
 
 ### `ImageGenerationQueue`
 
@@ -382,6 +390,7 @@ POST /api/v1/image-generation-tasks/:taskId/select-result
 ## 11. 插件协议与可靠性
 
 - 发送前必须完成扩展连接、ChatGPT 登录和会话预检；
+- 扩展未安装、未启用、未登录或无响应时，前端必须显示可读错误并保留任务以便重试；
 - 页面只有收到扩展真实 ACK 后才能进入 `submitted`；
 - 不能将无确认的 `window.postMessage` 当成发送成功；
 - Attempt 应在执行端确认可接收时创建，或在通知失败时可靠回滚/标记；

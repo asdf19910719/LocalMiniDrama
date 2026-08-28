@@ -383,6 +383,7 @@
             :options="generationStyleOptions"
             @change="() => saveProjectSettings(true)"
           />
+          <ImageGenerationChannelSetting v-if="dramaId" v-model="imageGenerationDefaultChannel" :drama-id="dramaId" />
           <el-button
             type="primary"
             :loading="pipelineRunning && !pipelinePaused"
@@ -2621,6 +2622,7 @@
       :visible="imageGenerationDrawerVisible"
       :task="imageGenerationTask"
       :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
+      :sending="imageGenerationSending"
       @close="closeImageGenerationDrawer"
       @send="sendImageGenerationToChatGPT"
       @select="onImageGenerationSelect"
@@ -2674,6 +2676,7 @@ import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEdi
 import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
+import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -2699,6 +2702,7 @@ const {
   defaultChannel: imageGenerationDefaultChannel,
   currentTask: imageGenerationTask,
   drawerVisible: imageGenerationDrawerVisible,
+  loading: imageGenerationSending,
   open: openImageGenerationTask,
   loadSummary: loadImageGenerationSummary,
   loadDefault: loadImageGenerationDefault,
@@ -2844,15 +2848,19 @@ function framePromptForUnified(sb, slot) {
 
 async function generateUnifiedImage(channel, targetType, target, legacyGenerate, prompt = '') {
   if (channel !== 'chatgpt_web') return legacyGenerate?.()
-  const task = await openImageGenerationTask({
-    dramaId: dramaId.value,
-    targetType,
-    targetId: target?.id,
-    generationChannel: channel,
-    prompt: prompt || target?.prompt || target?.image_prompt || target?.description || target?.name || target?.location || '',
-    aspectRatio: projectAspectRatio.value,
-  })
-  await sendImageGenerationToChatGPT(task)
+  try {
+    const task = await openImageGenerationTask({
+      dramaId: dramaId.value,
+      targetType,
+      targetId: target?.id,
+      generationChannel: channel,
+      prompt: prompt || target?.prompt || target?.image_prompt || target?.description || target?.name || target?.location || '',
+      aspectRatio: projectAspectRatio.value,
+    })
+    await sendImageGenerationToChatGPT(task)
+  } catch (error) {
+    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+  }
 }
 
 function onImageGenerationSelect(result) {
