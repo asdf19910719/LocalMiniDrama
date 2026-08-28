@@ -2626,6 +2626,7 @@
       @close="closeImageGenerationDrawer"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
+      @requeue="onImageGenerationRequeue"
       @select="onImageGenerationSelect"
     />
 
@@ -2711,6 +2712,7 @@ const {
   loadDefault: loadImageGenerationDefault,
   sendToChatGPT: sendImageGenerationToChatGPT,
   recoverCapture: recoverImageGenerationCapture,
+  requeueTask: requeueImageGenerationTask,
   selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
 } = useImageGeneration()
@@ -2861,9 +2863,9 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
       prompt: resolveImageGenerationPrompt(targetType, target, prompt),
       aspectRatio: projectAspectRatio.value,
     })
-    await sendImageGenerationToChatGPT(task)
+    return task
   } catch (error) {
-    ElMessage.error(error?.message || 'ChatGPT 生图发送失败，请检查浏览器插件和登录状态')
+    ElMessage.error(error?.message || '图片生成任务创建失败')
   }
 }
 
@@ -2880,6 +2882,15 @@ async function onImageGenerationRecover(task) {
     await recoverImageGenerationCapture(task)
   } catch (error) {
     ElMessage.error(error?.message || '恢复结果捕获失败')
+  }
+}
+
+async function onImageGenerationRequeue(task) {
+  try {
+    await requeueImageGenerationTask(task)
+    ElMessage.success('已重新排队')
+  } catch (error) {
+    ElMessage.error(error?.message || '重新排队失败')
   }
 }
 

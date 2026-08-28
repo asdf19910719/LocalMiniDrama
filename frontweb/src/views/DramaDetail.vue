@@ -526,6 +526,7 @@
       @close="imageGeneration.close"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
+      @requeue="onImageGenerationRequeue"
       @select="onImageGenerationSelect"
     />
     <Teleport to="body">
@@ -606,6 +607,15 @@ async function onImageGenerationRecover(task) {
     await imageGeneration.recoverCapture(task)
   } catch (error) {
     ElMessage.error(error?.message || '恢复结果捕获失败')
+  }
+}
+
+async function onImageGenerationRequeue(task) {
+  try {
+    await imageGeneration.requeueTask(task)
+    ElMessage.success('已重新排队')
+  } catch (error) {
+    ElMessage.error(error?.message || '重新排队失败')
   }
 }
 

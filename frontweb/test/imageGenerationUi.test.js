@@ -32,7 +32,6 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.doesNotMatch(bridge, /return \{ ok: true \}/)
   assert.match(setting, /setDefault/)
   assert.match(setting, /默认生图方式/)
-  assert.match(drawer, /重试发送/)
   assert.match(drawer, /恢复结果捕获/)
   assert.match(drawer, /task\.error_message/)
   assert.match(store, /loadSummary\(input\.dramaId,\s*\{\s*reattach:\s*false\s*\}\)/)
@@ -65,4 +64,20 @@ test('all project asset and storyboard entry points use the unified controls', (
   assert.match(canvas, /selectImageGenerationResult\(result\)[\s\S]*refreshCanvas\(true\)/)
   assert.match(detail, /@select="onImageGenerationSelect"/)
   assert.match(detail, /imageGeneration\.selectResult\(result\)[\s\S]*loadDrama\(\)/)
+})
+
+test('drawer owns queue states: queued alert, no manual send, failed requeue', () => {
+  const drawer = read('src/components/imageGeneration/ImageGenerationDrawer.vue')
+
+  assert.match(drawer, /task\.status === 'queued'/)
+  assert.match(drawer, /已加入队列/)
+  assert.match(drawer, /重新排队/)
+  assert.doesNotMatch(drawer, /task\.status === 'preparing' && task\.error_message/)
+})
+
+test('unified entry only creates the queued task and views requeue failed ones', () => {
+  const film = read('src/views/FilmCreate.vue')
+
+  assert.doesNotMatch(film, /const task = await openImageGenerationTask\([\s\S]{0,400}sendImageGenerationToChatGPT\(task\)/)
+  assert.match(film, /onImageGenerationRequeue/)
 })

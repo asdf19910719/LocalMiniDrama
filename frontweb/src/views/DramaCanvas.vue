@@ -279,6 +279,7 @@
       @close="closeImageGenerationDrawer"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
+      @requeue="onImageGenerationRequeue"
       @select="onImageGenerationSelect"
     />
   </div>
@@ -363,6 +364,7 @@ const {
   loadDefault: loadImageGenerationDefault,
   sendToChatGPT: sendImageGenerationToChatGPT,
   recoverCapture: recoverImageGenerationCapture,
+  requeueTask: requeueImageGenerationTask,
   selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
 } = useImageGeneration()
@@ -398,6 +400,15 @@ async function onImageGenerationRecover(task) {
     await recoverImageGenerationCapture(task)
   } catch (error) {
     ElMessage.error(error?.message || '恢复结果捕获失败')
+  }
+}
+
+async function onImageGenerationRequeue(task) {
+  try {
+    await requeueImageGenerationTask(task)
+    ElMessage.success('已重新排队')
+  } catch (error) {
+    ElMessage.error(error?.message || '重新排队失败')
   }
 }
 
