@@ -113,6 +113,71 @@ test('prepare stops when the provider rejects fill or upload', async () => {
   assert.deepEqual(messages.at(-1), [77, { action: 'fill', prompt: 'hello' }])
 })
 
+test('prepare hydrates local reference URLs before uploading them', async () => {
+  const messages = []
+  const requests = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async (url) => {
+      requests.push(url)
+      if (!String(url).includes('/static/')) return { ok: true, json: async () => ({ data: {} }) }
+      return { ok: true, arrayBuffer: async () => Uint8Array.from([137, 80, 78, 71]).buffer }
+    },
+  })
+
+  await controller.handle({
+    action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello',
+    references: [{ role: 'character', sourceId: 3, url: 'http://localhost:5679/static/character.png' }],
+  })
+
+  assert.deepEqual(requests.filter((url) => String(url).includes('/static/')), ['http://localhost:5679/static/character.png'])
+  const upload = messages.at(-1)
+  assert.equal(upload[1].action, 'upload')
+  assert.deepEqual(upload[1].files[0].bytes, [137, 80, 78, 71])
+})
+
+test('prepare rejects local reference responses that are not images', async () => {
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => {
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async (url) => String(url).includes('/static/')
+      ? {
+          ok: true,
+          headers: { get: () => 'text/html; charset=utf-8' },
+          arrayBuffer: async () => new TextEncoder().encode('<!doctype html>').buffer,
+        }
+      : { ok: true, json: async () => ({ data: {} }) },
+  })
+
+  await assert.rejects(
+    () => controller.handle({
+      action: 'prepare', dramaId: 3, site: 'chatgpt', jobId: 'job-1', prompt: 'hello',
+      references: [{ role: 'character', sourceId: 3, url: 'http://localhost:5679/static/character.png' }],
+    }),
+    /reference response is not an image/i,
+  )
+})
+
 test('send pauses instead of rebinding when the provider conversation drifts after prepare', async () => {
   const messages = []
   const chromeApi = {
@@ -130,6 +195,67 @@ test('send pauses instead of rebinding when the provider conversation drifts aft
   await assert.rejects(() => controller.handle({ action: 'send', dramaId: 3, site: 'chatgpt', tabId: 77, attemptId: 'attempt-1', payload: {} }), /conversation identity mismatch|rebind/i)
   assert.equal(controller.sessions.get(3, 'chatgpt').status, 'paused')
   assert.deepEqual(messages, [[77, { action: 'identity' }]])
+})
+
+test('send auto-attaches a provider tab when invoked from the workbench tab', async () => {
+  const messages = []
+  const apiCalls = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async (url, init) => {
+      apiCalls.push([url, init])
+      return { ok: true, json: async () => ({ data: { id: 'session-1' } }) }
+    },
+  })
+  controller.emit = async () => ({ id: 'event-1' })
+
+  await controller.handle({
+    action: 'send', dramaId: 3, site: 'chatgpt', jobId: 'job-1',
+    attemptId: 'attempt-1', payload: {},
+  }, { tab: { id: 9, url: 'http://127.0.0.1:3013/film/3' } })
+
+  assert.deepEqual(messages, [
+    [77, { action: 'identity' }],
+    [77, { action: 'identity' }],
+    [77, { action: 'beginAttempt', attempt: { attemptId: 'attempt-1', conversationId: 'conv-1' } }],
+    [77, { action: 'submit' }],
+  ])
+  assert.match(apiCalls[0][0], /external-generation\/dramas\/3\/session\/attach$/)
+})
+
+test('send skips ChatGPT tabs without a content-script receiver', async () => {
+  const messages = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [
+        { id: 9, url: 'https://chatgpt.com/' },
+        { id: 77, url: 'https://chatgpt.com/c/conv-1' },
+      ],
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (tabId === 9) throw new Error('Could not establish connection. Receiving end does not exist.')
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  controller.emit = async () => ({ id: 'event-1' })
+
+  await controller.handle({ action: 'send', dramaId: 3, site: 'chatgpt', attemptId: 'attempt-1', payload: {} }, { tab: { id: 100 } })
+
+  assert.equal(messages.some(([tabId, message]) => tabId === 77 && message.action === 'beginAttempt'), true)
 })
 
 test('background binds the global fetch implementation before calling it', async () => {

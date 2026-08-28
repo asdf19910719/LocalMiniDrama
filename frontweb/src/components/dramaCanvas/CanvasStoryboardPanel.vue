@@ -164,7 +164,9 @@
     <div class="panel-actions">
       <el-button size="small" :loading="saving" @click.stop="saveFields">保存</el-button>
       <el-button v-if="!isUniversal" size="small" :loading="busyStep === 'polish'" @click.stop="polishPrompt">润色</el-button>
-      <el-button v-if="!isUniversal" size="small" type="primary" :loading="busyStep === 'image'" @click.stop="runStep('image')">生图</el-button>
+      <ImageGenerateSplitButton v-if="!isUniversal" :default-channel="imageGeneration.defaultChannel.value" :loading="busyStep === 'image'" @generate="generateUnifiedMain" />
+      <ImageGenerateSplitButton :default-channel="imageGeneration.defaultChannel.value" :loading="busyStep === 'first'" @generate="(channel) => generateUnifiedFrame(channel, 'storyboard_first')" />
+      <ImageGenerateSplitButton :default-channel="imageGeneration.defaultChannel.value" :loading="busyStep === 'last'" @generate="(channel) => generateUnifiedFrame(channel, 'storyboard_last')" />
       <el-button size="small" type="primary" :loading="busyStep === 'video'" @click.stop="runStep('video')">生视频</el-button>
       <el-button size="small" type="warning" :loading="busyStep === 'audio'" @click.stop="runStep('audio')">配音</el-button>
       <el-button size="small" type="danger" plain @click.stop="deleteStoryboard">删除</el-button>
@@ -187,6 +189,8 @@ import {
 } from '@/utils/canvasEntityIds'
 import { runImageStep, runVideoStep, runAudioStep } from '@/composables/useCanvasWorkflowRunner'
 import { findStoryboardInDrama, getDramaGenerationOptions } from '@/utils/canvasWorkflow'
+import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import { useImageGeneration } from '@/composables/useImageGeneration'
 
 const props = defineProps({
   storyboard: { type: Object, required: true },
@@ -196,6 +200,7 @@ const props = defineProps({
 
 const router = useRouter()
 const ctx = useCanvasContext()
+const imageGeneration = useImageGeneration()
 const saving = ref(false)
 const busyStep = ref('')
 const characterIds = ref([])
@@ -407,6 +412,20 @@ async function runStep(step) {
     if (step === 'image') ctx?.nodeStatus?.clear(`sbimg:${sbId}`)
     if (step === 'video') ctx?.nodeStatus?.clear(`sbvid:${sbId}`)
   }
+}
+
+async function generateUnifiedMain(channel) {
+  if (channel !== 'chatgpt_web') return runStep('image')
+  const drama = ctx?.drama?.value
+  const task = await imageGeneration.open({ dramaId: drama?.id, targetType: 'storyboard_main', targetId: props.storyboard.id, generationChannel: channel, prompt: form.image_prompt || props.storyboard.image_prompt || props.storyboard.title || '' })
+  await imageGeneration.sendToChatGPT(task)
+}
+
+async function generateUnifiedFrame(channel, targetType) {
+  if (channel !== 'chatgpt_web') return runStep('image')
+  const drama = ctx?.drama?.value
+  const task = await imageGeneration.open({ dramaId: drama?.id, targetType, targetId: props.storyboard.id, generationChannel: channel, prompt: form.image_prompt || props.storyboard.image_prompt || props.storyboard.title || '' })
+  await imageGeneration.sendToChatGPT(task)
 }
 </script>
 

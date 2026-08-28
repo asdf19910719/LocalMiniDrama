@@ -12,4 +12,7 @@ test('manifest injects the workbench bridge on localhost workbench pages', () =>
   assert.ok(matches.includes('http://127.0.0.1:3013/*'));
   assert.ok(matches.includes('http://localhost:3013/*'));
   assert.ok(manifest.content_scripts.some((entry) => entry.js.includes('src/workbench/content.js')));
+  const bridge = fs.readFileSync(path.join(root, 'src/workbench/content.js'), 'utf8');
+  assert.match(bridge, /aistory-external-generation-response/);
+  assert.match(bridge, /requestId/);
 });

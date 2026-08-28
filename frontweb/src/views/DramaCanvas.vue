@@ -122,6 +122,7 @@
         >
           批量生图
         </el-button>
+        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="episodeGenerating" @generate="generateCanvasImage" />
         <el-button
           size="small"
           :loading="episodeGenerating"
@@ -270,11 +271,18 @@
       @select="onContextMenuSelect"
       @close="closeContextMenu"
     />
+    <ImageGenerationDrawer
+      :visible="imageGenerationDrawerVisible"
+      :task="imageGenerationTask"
+      :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
+      @close="closeImageGenerationDrawer"
+      @send="sendImageGenerationToChatGPT"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, markRaw, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -334,11 +342,38 @@ import CanvasFloatingToolbar from '@/components/dramaCanvas/CanvasFloatingToolba
 import CanvasFlowAligner from '@/components/dramaCanvas/CanvasFlowAligner.vue'
 import DirectorShotPanel from '@/components/dramaCanvas/DirectorShotPanel.vue'
 import DirectorTimelinePanel from '@/components/dramaCanvas/DirectorTimelinePanel.vue'
+import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
+import { useImageGeneration } from '@/composables/useImageGeneration'
 
 const route = useRoute()
 const router = useRouter()
 const { isDark, toggle: toggleTheme } = useTheme()
 const { imagesBySbId, videosBySbId, loadForDrama } = useCanvasStoryboardMedia()
+const {
+  defaultChannel: imageGenerationDefaultChannel,
+  currentTask: imageGenerationTask,
+  drawerVisible: imageGenerationDrawerVisible,
+  open: openImageGenerationTask,
+  loadSummary: loadImageGenerationSummary,
+  loadDefault: loadImageGenerationDefault,
+  sendToChatGPT: sendImageGenerationToChatGPT,
+  close: closeImageGenerationDrawer,
+} = useImageGeneration()
+
+async function generateCanvasImage(channel = imageGenerationDefaultChannel.value) {
+  const storyboard = (drama.value?.storyboards || []).find((item) => Number(item.id) === Number(selectedStoryboardIds.value[0]))
+  if (!storyboard) return ElMessage.warning('请先选择一个分镜')
+  if (channel !== 'chatgpt_web') return batchGenerateImages()
+  const task = await openImageGenerationTask({
+    dramaId: drama.value.id,
+    targetType: 'storyboard_main',
+    targetId: storyboard.id,
+    generationChannel: channel,
+    prompt: storyboard.polished_prompt || storyboard.image_prompt || storyboard.description || storyboard.title || '',
+  })
+  await sendImageGenerationToChatGPT(task)
+}
 
 const loading = ref(false)
 const drama = ref(null)
@@ -934,6 +969,14 @@ watch(() => route.params.id, () => {
   selectedStoryboardIds.value = []
   focusedNodeId.value = null
   loadDrama()
+}, { immediate: true })
+
+watch(drama, async (value) => {
+  if (!value?.id) return
+  await Promise.allSettled([
+    loadImageGenerationSummary(value.id),
+    loadImageGenerationDefault(value.id),
+  ])
 }, { immediate: true })
 
 watch(drama, () => startStatusPoll())

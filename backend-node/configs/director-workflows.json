@@ -5,7 +5,7 @@
       "id": "minimax_h3_director_r2v",
       "status": "verified",
       "workflowPath": "workflows/minimax_h3_director_r2v.json",
-      "workflowSha256": "sha256:f80969d8c86a1fbabb20fc0ce915a4fa494fe016a256ef47939ef8ce5d4599fe",
+      "workflowSha256": "sha256:c812e4b963995da6c22bba9d3e2a229da511f9c96f8a5c352b7da20d55c9f49b",
       "family": "h3_director",
       "adapter": "h3_director_r2v",
       "adapterVersion": "v1",

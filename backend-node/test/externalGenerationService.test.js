@@ -62,4 +62,15 @@ describe('external generation service', () => {
     db.prepare(sql).run('result-1', attempt.id, 0, timestamp, timestamp);
     assert.throws(() => db.prepare(sql).run('result-2', attempt.id, 0, timestamp, timestamp), /UNIQUE/i);
   });
+
+  it('adds a workbench preview URL for imported results', () => {
+    const job = createExternalJob(db, { dramaId: 1, site: 'site-a', promptSnapshot: 'prompt' });
+    const attempt = createGenerationAttempt(db, job.id);
+    const timestamp = new Date().toISOString();
+    db.prepare(`INSERT INTO external_generation_results
+      (id, attempt_id, result_index, status, created_at, updated_at)
+      VALUES (?, ?, 0, 'imported', ?, ?)`).run('result-preview', attempt.id, timestamp, timestamp);
+    const result = getExternalJob(db, job.id).attempts[0].results[0];
+    assert.equal(result.preview_url, '/api/v1/external-generation/results/result-preview/content');
+  });
 });

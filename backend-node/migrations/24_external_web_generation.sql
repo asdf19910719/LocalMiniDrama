@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS external_generation_jobs (
   created_at                 TEXT NOT NULL,
   updated_at                 TEXT NOT NULL,
   completed_at               TEXT
+  ,image_generation_task_id   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_external_generation_jobs_drama

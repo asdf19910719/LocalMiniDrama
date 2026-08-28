@@ -126,6 +126,7 @@
         生成参考图
       </el-button>
       <el-button size="small" plain @click.stop="highlightRelated">关联分镜</el-button>
+      <ImageGenerateSplitButton :default-channel="imageGeneration.defaultChannel.value" :loading="generating" @generate="generateImage" />
       <el-button size="small" type="danger" plain @click.stop="deleteAsset">删除</el-button>
     </div>
   </div>
@@ -140,6 +141,8 @@ import { propAPI } from '@/api/props'
 import { useCanvasContext } from '@/composables/useCanvasContext'
 import { generateAssetReferenceImage } from '@/composables/useCanvasAssetGenerate'
 import { assetImageUrl } from '@/utils/mediaUrl'
+import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import { useImageGeneration } from '@/composables/useImageGeneration'
 
 const props = defineProps({
   kind: { type: String, required: true },
@@ -148,6 +151,7 @@ const props = defineProps({
 })
 
 const ctx = useCanvasContext()
+const imageGeneration = useImageGeneration()
 const saving = ref(false)
 const generating = ref(false)
 const form = reactive({
@@ -277,9 +281,21 @@ async function deleteAsset() {
   }
 }
 
-async function generateImage() {
+async function generateImage(channel = imageGeneration.defaultChannel.value) {
   generating.value = true
   try {
+    if (channel === 'chatgpt_web') {
+      const dramaValue = ctx?.drama?.value || ctx?.drama
+      const task = await imageGeneration.open({
+        dramaId: dramaValue?.id,
+        targetType: props.kind,
+        targetId: props.entity.id,
+        generationChannel: channel,
+        prompt: form.prompt || form.description || form.name || form.location,
+      })
+      await imageGeneration.sendToChatGPT(task)
+      return
+    }
     await generateAssetReferenceImage(ctx, {
       kind: props.kind,
       entity: props.entity,

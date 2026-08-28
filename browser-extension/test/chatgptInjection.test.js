@@ -36,6 +36,7 @@ function chromeFixture(identityResponses = [{ ok: true, value: null }]) {
 
 test('ChatGPT content injection uses a browser-loadable bundle', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  assert.ok(manifest.host_permissions.includes('http://localhost/*'), 'localhost asset downloads must be permitted');
   const chatgptEntry = manifest.content_scripts.find((entry) => (entry.matches || []).some((match) => match.includes('chatgpt.com')));
   assert.ok(chatgptEntry, 'ChatGPT content script entry is required');
   assert.deepEqual(chatgptEntry.js, ['src/sites/chatgpt/content.bundle.js']);

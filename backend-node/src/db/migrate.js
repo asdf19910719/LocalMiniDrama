@@ -542,6 +542,49 @@ function ensureAllColumns(database) {
       updated_at TEXT NOT NULL DEFAULT ''
     )`);
   } catch (_) {}
+
+  // --- unified image generation orchestration ---
+  database.exec(`CREATE TABLE IF NOT EXISTS image_generation_batches (
+    id TEXT PRIMARY KEY,
+    drama_id INTEGER NOT NULL,
+    resource_scope TEXT NOT NULL,
+    generation_channel TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    total_count INTEGER NOT NULL DEFAULT 0,
+    completed_count INTEGER NOT NULL DEFAULT 0,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+  database.exec(`CREATE TABLE IF NOT EXISTS image_generation_tasks (
+    id TEXT PRIMARY KEY,
+    drama_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id INTEGER NOT NULL,
+    generation_channel TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    prompt_snapshot TEXT,
+    reference_manifest TEXT,
+    aspect_ratio TEXT,
+    frame_type TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    batch_id TEXT,
+    queue_position INTEGER,
+    image_generation_id INTEGER,
+    external_job_id TEXT,
+    error_code TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+  )`);
+  database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_drama_status ON image_generation_tasks(drama_id, status, created_at)');
+  database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_batch_queue ON image_generation_tasks(batch_id, queue_position)');
+  ensureColumns(database, 'external_generation_jobs', [
+    { name: 'image_generation_task_id', type: 'TEXT' },
+  ]);
 }
 
 /** 对已打开的 database 执行迁移与兜底补列（供 app 启动时调用） */

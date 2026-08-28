@@ -36,6 +36,17 @@ test('adapter finds current ChatGPT assistant turn containers', () => {
   assert.equal(adapter.findAssistant({ assistantMessageId: 'conversation-turn-2' }), assistant);
 });
 
+test('adapter recognizes ChatGPT conversation turns when author roles are omitted', () => {
+  const assistant = node('conversation-turn-2', [image('https://cdn.test/generated.png')]);
+  const doc = {
+    querySelectorAll(selector) {
+      return selector.split(',').some((part) => part.trim() === '[data-testid^="conversation-turn-"]') ? [assistant] : [];
+    },
+  };
+  const adapter = new ChatGPTAdapter({ documentRef: doc });
+  assert.equal(adapter.findAssistant({ assistantMessageId: 'conversation-turn-2' }), assistant);
+});
+
 test('adapter recovers the latest assistant turn after the content script reloads', () => {
   const oldAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-2' : null; } };
   const latestAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-4' : null; } };

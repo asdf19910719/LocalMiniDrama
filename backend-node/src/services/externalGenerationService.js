@@ -40,6 +40,11 @@ function getExternalJob(db, jobId) {
   job.attempts = db.prepare('SELECT * FROM external_generation_attempts WHERE job_id = ? ORDER BY sequence').all(jobId);
   for (const attempt of job.attempts) {
     attempt.results = db.prepare('SELECT * FROM external_generation_results WHERE attempt_id = ? ORDER BY result_index').all(attempt.id);
+    for (const result of attempt.results) {
+      if (result.status === 'imported' || result.status === 'bound') {
+        result.preview_url = `/api/v1/external-generation/results/${encodeURIComponent(result.id)}/content`;
+      }
+    }
   }
   return job;
 }
@@ -119,8 +124,9 @@ function createExternalJob(db, input = {}) {
   const insert = db.prepare(`
     INSERT INTO external_generation_jobs
       (id, drama_id, storyboard_id, asset_type, provider, site, conversation_id,
-       prompt_snapshot, prompt_hash, reference_manifest_hash, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       prompt_snapshot, prompt_hash, reference_manifest_hash, status, created_at, updated_at,
+       image_generation_task_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   insert.run(
     jobId,
@@ -136,6 +142,7 @@ function createExternalJob(db, input = {}) {
     String(value(input, 'status', 'status', 'pending') || 'pending'),
     createdAt,
     createdAt,
+    value(input, 'imageGenerationTaskId', 'image_generation_task_id'),
   );
   return getExternalJob(db, jobId);
 }
