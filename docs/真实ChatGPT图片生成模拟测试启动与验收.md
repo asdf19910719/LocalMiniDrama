@@ -261,6 +261,8 @@ H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点
 
 `voiceReference.js`（解析）、`workflowRegistry.js`（timeline 填充）、`h3PromptCompiler.js`（编译源包）、`director.js`（useVoiceReference 路由接线）、视频面板开关（默认关闭）。回归：后端 `315/315`、前端 `90/90`、构建通过。实机：面板开关显示 ✓、提示词恢复 ✓、耗时显示 ✓。
 
-### 待一次真实生成确认
+### 待一次真实生成确认 → 已确认（2026-08-29 真实验收）
 
-ComfyUI 端 `MiniMaxH3Director` 对 `refAudios.audioFile` 路径的读取（音色文件位于应用存储目录）需一次真实 H3 生成做最终确认；若节点无法读取该路径，需将音色文件复制到 ComfyUI input 目录后再填充。
+发现并修复持久化缺口（`reference_audios` 创建后未落库，执行重建 input 时丢失）：新增迁移 `28_video_generations_reference_audios.sql`（ensure 列）、创建时存列、执行重建 input 时解析回 `referenceAudios`（`854d085` 后续提交）。
+
+真实 H3 生成全链路复验：上传测试音色（`POST /characters/3/sd2-voice-upload`，active）→ 面板开启音色开关 → 生成候选 → `video_generations.reference_audios` 落库（云青 wav 绝对路径）→ ComfyUI 执行的 workflow `global.refAudios` 与 `segments[0].refAudios` 均携带该音频路径 → 生成成功（status success，1 分 44 秒，候选进待审核）。**生成视频的音色效果需人耳听验收**（链路已全通）。

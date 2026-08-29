@@ -353,6 +353,7 @@ function ensureAllColumns(database) {
     { name: 'h3_skill_name',        type: 'TEXT' },
     { name: 'h3_skill_sha256',      type: 'TEXT' },
     { name: 'h3_skill_provenance',  type: 'TEXT' },
+    { name: 'reference_audios',     type: 'TEXT' },
     { name: 'model',                type: 'TEXT' },
     { name: 'config_id',            type: 'INTEGER' },
     { name: 'config_snapshot',      type: 'TEXT' },

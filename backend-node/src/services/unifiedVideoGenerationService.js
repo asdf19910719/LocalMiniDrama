@@ -191,7 +191,11 @@ function createUnifiedVideoGenerationService({
     };
   }
 
-  function inputFor(row) {
+  function parseReferenceAudios(value) {
+  try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
+}
+
+function inputFor(row) {
     const refs = referenceImages(row.reference_image_urls);
     return {
       dramaId: row.drama_id,
@@ -228,6 +232,8 @@ function createUnifiedVideoGenerationService({
       last_frame_url: row.last_frame_url,
       referenceUrls: refs,
       reference_urls: refs,
+      referenceAudios: parseReferenceAudios(row.reference_audios),
+      reference_audios: row.reference_audios || null,
     };
   }
 
@@ -686,6 +692,11 @@ function createUnifiedVideoGenerationService({
         const provenance = compiled?.skillProvenance;
         columns.push('h3_skill_provenance');
         values.push(provenance ? JSON.stringify(provenance) : null);
+      }
+      if (tableHasColumn('video_generations', 'reference_audios')) {
+        const refAudios = Array.isArray(input.reference_audios) ? input.reference_audios : [];
+        columns.push('reference_audios');
+        values.push(refAudios.length ? JSON.stringify(refAudios) : null);
       }
       columns.push('status', 'task_id', 'created_at', 'updated_at');
       values.push('waiting', task.id, now, now);
