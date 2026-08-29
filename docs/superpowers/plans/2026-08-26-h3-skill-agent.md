@@ -90,7 +90,7 @@ it('loads the complete Ref2VA skill package with stable provenance', () => {
 Run:
 
 ```powershell
-Set-Location E:/AI/references/LocalMiniDrama/backend-node
+Set-Location E:/project/LocalMiniDrama/backend-node
 & E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/skillRegistry.test.js
 ```
 
@@ -426,7 +426,7 @@ assert.equal(
 - [ ] **Step 2: Run the frontend test and verify RED**
 
 ```powershell
-Set-Location E:/AI/references/LocalMiniDrama/frontweb
+Set-Location E:/project/LocalMiniDrama/frontweb
 & E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/videoGenerationPanel.test.js
 ```
 
@@ -445,14 +445,14 @@ Run the command from Step 2. Expected: all tests pass.
 Backend:
 
 ```powershell
-Set-Location E:/AI/references/LocalMiniDrama/backend-node
+Set-Location E:/project/LocalMiniDrama/backend-node
 & E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/*.test.js
 ```
 
 Frontend:
 
 ```powershell
-Set-Location E:/AI/references/LocalMiniDrama/frontweb
+Set-Location E:/project/LocalMiniDrama/frontweb
 & E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/*.test.js
 & E:/AI/tools/node-v22.22.3-win-x64/npm.cmd run build
 ```

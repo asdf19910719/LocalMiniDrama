@@ -8,11 +8,11 @@
 
 **Tech Stack:** Node 22（`E:/AI/tools/node-v22.22.3-win-x64/node.exe`）、Express 4、better-sqlite3、node:test、Vue 3 + Pinia、Element Plus（ElNotification）。
 
-**Spec:** `E:/AI/references/LocalMiniDrama/docs/superpowers/specs/2026-08-28-chatgpt-image-serial-queue-design.md`
+**Spec:** `E:/project/LocalMiniDrama/docs/superpowers/specs/2026-08-28-chatgpt-image-serial-queue-design.md`
 
 ## Global Constraints
 
-- 可运行仓库为 `E:/AI/references/LocalMiniDrama`；工作在 `main` 分支工作树，不得 reset/checkout/丢弃现有未提交修改。
+- 可运行仓库为 `E:/project/LocalMiniDrama`；工作在 `main` 分支工作树，不得 reset/checkout/丢弃现有未提交修改。
 - 后端全量测试必须 `--test-concurrency=1`（共享临时数据库的旧套件会互抢）。
 - Node 一律用 `E:/AI/tools/node-v22.22.3-win-x64/node.exe`。
 - 批次任务与 API 通道任务行为零变更；状态机零迁移（复用 `TRANSITIONS`）。
@@ -66,7 +66,7 @@ it('fails stale preparing tasks and keeps fresh ones active', () => {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-cd E:/AI/references/LocalMiniDrama/backend-node
+cd E:/project/LocalMiniDrama/backend-node
 E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/imageGenerationQueueService.test.js
 ```
 
@@ -304,7 +304,7 @@ test('does not claim again while driving and ignores claim when busy', async () 
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-cd E:/AI/references/LocalMiniDrama/frontweb
+cd E:/project/LocalMiniDrama/frontweb
 E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/imageGenerationQueueDriver.test.js
 ```
 
@@ -638,7 +638,7 @@ git commit -m "feat: surface queued and failed states in the generation drawer"
 - [ ] **Step 1: 后端全量 + 前端全量 + 构建**
 
 ```powershell
-cd E:/AI/references/LocalMiniDrama/backend-node
+cd E:/project/LocalMiniDrama/backend-node
 E:/AI/tools/node-v22.22.3-win-x64/node.exe --test --test-concurrency=1 test/*.test.js
 cd ../frontweb
 E:/AI/tools/node-v22.22.3-win-x64/node.exe --test test/*.test.js

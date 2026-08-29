@@ -25,7 +25,7 @@
 
 ## 启动后端
 
-在工作树 `E:\AI\references\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\backend-node` 中运行：
+在工作树 `E:\project\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\backend-node` 中运行：
 
 ```powershell
 $env:PORT='5679'
@@ -45,7 +45,7 @@ curl.exe http://127.0.0.1:5679/health
 在另一个终端的工作树根目录运行：
 
 ```powershell
-cd E:\AI\references\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\frontweb
+cd E:\project\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\frontweb
 npm run dev -- --host 127.0.0.1 --port 3013
 ```
 
@@ -58,7 +58,7 @@ npm run dev -- --host 127.0.0.1 --port 3013
 扩展源码修改后，在 `browser-extension` 目录运行：
 
 ```powershell
-cd E:\AI\references\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\browser-extension
+cd E:\project\LocalMiniDrama\.worktrees\unified-chatgpt-image-generation\browser-extension
 npm run build
 ```
 
@@ -80,7 +80,7 @@ Windows 下启动器会额外传入 `--do-not-de-elevate` 和 `--no-sandbox`。�
 
 ```js
 const context = await chromium.launchPersistentContext(
-  'E:/AI/references/LocalMiniDrama/data/chatgpt-browser-profile',
+  'E:/project/LocalMiniDrama/data/chatgpt-browser-profile',
   {
     headless: false,
     executablePath: 'C:/Users/26373/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe',
@@ -88,8 +88,8 @@ const context = await chromium.launchPersistentContext(
     args: [
       '--do-not-de-elevate',
       '--no-sandbox',
-      '--disable-extensions-except=E:/AI/references/LocalMiniDrama/browser-extension',
-      '--load-extension=E:/AI/references/LocalMiniDrama/browser-extension',
+      '--disable-extensions-except=E:/project/LocalMiniDrama/browser-extension',
+      '--load-extension=E:/project/LocalMiniDrama/browser-extension',
     ],
   },
 )

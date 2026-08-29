@@ -45,11 +45,11 @@
 
 环境给出的 cwd 是 E:\project\AIStory，但实际运行项目仓库是：
 
-    E:\AI\references\LocalMiniDrama
+    E:\project\LocalMiniDrama
 
 本功能使用隔离工作树：
 
-    工作树：E:\AI\references\LocalMiniDrama\.worktrees\h3-skill-agent-work
+    工作树：E:\project\LocalMiniDrama\.worktrees\h3-skill-agent-work
     分支：feature/h3-skill-agent
     本文档提交前 HEAD：e49ca5e
 
@@ -57,7 +57,7 @@
 
 第一次创建工作树时 Git LFS 挂起，可能留下失败目录：
 
-    E:\AI\references\LocalMiniDrama\.worktrees\h3-skill-agent
+    E:\project\LocalMiniDrama\.worktrees\h3-skill-agent
 
 有效目录是带 -work 后缀的工作树。收尾时不要粗暴删除失败目录；应先确认其绝对路径及 Git 注册状态。
 
@@ -176,7 +176,7 @@ Task 3 测试至少覆盖：
 
 ## 9. 新窗口首批命令
 
-    Set-Location E:\AI\references\LocalMiniDrama\.worktrees\h3-skill-agent-work
+    Set-Location E:\project\LocalMiniDrama\.worktrees\h3-skill-agent-work
     git status --short
     git log --oneline -6
     Get-Content -Raw docs\superpowers\handoffs\2026-08-26-h3-skill-agent-handoff.md
