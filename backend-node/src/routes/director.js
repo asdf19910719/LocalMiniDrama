@@ -149,7 +149,7 @@ function generationInput(body, { db, shot, groupId, structured, inputs, storageR
     first_frame_url: source.firstFrameUrl ?? source.first_frame_url ?? source.referenceImagePath,
     last_frame_url: source.lastFrameUrl ?? source.last_frame_url,
     reference_image_urls: referenceUrls,
-    ...(structured && structured.useVoiceReference ? { reference_audios: resolveVoiceReferenceAudios(db, Number(shot.id)) } : {}),
+    ...(structured && structured.useVoiceReference ? { reference_audios: resolveVoiceReferenceAudios(db, Number(shot.id), storageRoot) } : {}),
     ...(source.workflowId || source.workflow_id ? { workflow_id: source.workflowId ?? source.workflow_id } : {}),
     ...(source.generationMode || source.generation_mode ? { generation_mode: source.generationMode ?? source.generation_mode } : {}),
     style: source.style,
