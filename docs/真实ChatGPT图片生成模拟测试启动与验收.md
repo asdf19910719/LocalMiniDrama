@@ -233,3 +233,14 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 6. 刷新页面后驱动器自动恢复推进已实测（2026-08-28 验收中驱动器随页面 reload 重启并继续消费队列，claim-next 幂等、无需额外恢复状态）。
 
 注：串行队列上线前的历史遗留任务（preparing/submitted/draft 共 23 条）已批量标记 `cancelled`（error_code `stale_test_cleanup`），避免阻塞全局并发 1。
+
+## 2026-08-29 抽屉重开 / 提示词恢复 / 生成耗时 / 通道切换
+
+四个交互改进（`74fc4eb`，TDD）：
+
+1. **生图任务常驻入口**：项目页新增"生图任务"状态胶囊（FilmCreate / DramaCanvas / DramaDetail），实时显示"排队 N · 生成中 N · 待选 N"，点击打开对应任务抽屉——不再需要重新点生图按钮才能查看结果（成功/失败/排队中均可随时查看）。
+2. **下拉箭头改为切换默认通道**：拆分按钮的菜单项（ChatGPT 生成 / 默认模型生成）现在只切换剧集默认生图方式（持久化到剧集设置，与剧集管理页同源），不再立即触发生成；生成仍由主按钮发起。
+3. **视频面板提示词恢复**：抽屉关闭后重新打开（"视频生成与候选"/分镜"编辑"），表单自动恢复**上次生成实际使用的提示词**（统一通道取 `video_generations.prompt`，H3 通道取 `director_jobs.input_json`），并显示"已恢复上次生成使用的提示词"提示。根因是抽屉 `destroy-on-close` 销毁内存状态且候选查询未带 prompt 快照。
+4. **候选生成耗时**：视频候选卡片显示"生成耗时 X 分 X 秒"（H3 通道取 job started/completed，统一通道取 video created/completed）。
+
+回归：后端 `312/312`（`--test-concurrency=1`）、前端 `89/89`、Vite 构建通过。实机复验：分镜 1 视频抽屉重开后提示词恢复 + 耗时"1 分 51 秒"显示；下拉切换为"默认模型生成"后默认通道持久化为 `api` 且不创建新任务。
