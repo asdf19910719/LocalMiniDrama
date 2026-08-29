@@ -21,12 +21,12 @@ describe('H3 voice reference (optional)', () => {
     fs.writeFileSync(path.join(storageRoot, 'drama_3/characters/voice/yunqing.wav'), 'wav-bytes');
     fs.writeFileSync(path.join(storageRoot, 'drama_3/characters/voice/stale.wav'), 'wav-bytes');
     db.exec(`
+      CREATE TABLE storyboards (
+        id TEXT PRIMARY KEY, characters TEXT
+      );
       CREATE TABLE characters (
         id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, deleted_at TEXT,
         seedance2_voice_asset TEXT
-      );
-      CREATE TABLE storyboard_characters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, storyboard_id INTEGER NOT NULL, character_id INTEGER NOT NULL
       );
     `);
   });
@@ -38,9 +38,9 @@ describe('H3 voice reference (optional)', () => {
     insertChar.run(1, '云青', JSON.stringify({ status: 'active', local_path: 'drama_3/characters/voice/yunqing.wav' }));
     insertChar.run(2, '老郎中', JSON.stringify({ status: 'stale', local_path: 'drama_3/characters/voice/stale.wav' }));
     insertChar.run(3, '无音色', null);
-    db.prepare('INSERT INTO storyboard_characters (storyboard_id, character_id) VALUES (501, 1), (501, 2), (501, 3)').run();
+    db.prepare("INSERT INTO storyboards (id, characters) VALUES ('501', '[1,2,3]')").run();
 
-    const audios = resolveVoiceReferenceAudios(db, 501, storageRoot);
+    const audios = resolveVoiceReferenceAudios(db, '501', storageRoot);
     assert.equal(audios.length, 1);
     assert.equal(audios[0].characterName, '云青');
     assert.ok(audios[0].audioFile.endsWith('yunqing.wav'));
