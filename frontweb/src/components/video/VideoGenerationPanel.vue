@@ -48,6 +48,12 @@
       </el-form-item>
 
       <template v-if="isH3Config">
+        <el-form-item label="角色音色参考">
+          <div class="voice-ref-row">
+            <el-switch v-model="form.useVoiceReference" />
+            <small class="voice-ref-hint">可选：使用分镜绑定角色已上传的音色作为生成参考；角色未上传音色时不生效。</small>
+          </div>
+        </el-form-item>
         <div class="h3-workflow-meta">
           <el-tag size="small" effect="plain">工作流：官方多参考图（Sage 加速）</el-tag>
           <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
@@ -646,4 +652,6 @@ h2 {
     grid-column: 1;
   }
 }
+.voice-ref-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.voice-ref-hint { color: #909399; }
 </style>

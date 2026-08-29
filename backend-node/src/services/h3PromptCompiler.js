@@ -80,6 +80,8 @@ function sourceBundle(input, mode) {
     Array.isArray(input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls)
       && (input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls).length
       ? `REFERENCE_ASSETS: ${(input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls).join(', ')}` : null,
+    Array.isArray(input.referenceAudios ?? input.reference_audios) && (input.referenceAudios ?? input.reference_audios).length
+      ? `REFERENCE_AUDIO: ${(input.referenceAudios ?? input.reference_audios).map((item) => typeof item === 'object' ? (item.characterName || item.audioFile) : item).join(', ')}. The character voice must match the reference audio; lip-sync to the audio when speaking` : null,
   ].filter(Boolean).join('\n');
 }
 
@@ -127,6 +129,7 @@ function createH3PromptCompiler({ skillAgent = defaultSkillAgent } = {}) {
 }
 
 module.exports = {
+  sourceBundle,
   COMPILER_VERSION,
   H3PromptError,
   h3Mode,

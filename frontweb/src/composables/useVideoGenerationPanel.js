@@ -228,6 +228,7 @@ export function buildVideoCandidateRequest(form = {}) {
   if (Array.isArray(form.referenceImageUrls) && form.referenceImageUrls.length) {
     structured.referenceImageUrls = form.referenceImageUrls.map(trimmed).filter(Boolean)
   }
+  if (form.useVoiceReference) structured.useVoiceReference = true
 
   return { candidateCount, structured }
 }
@@ -282,6 +283,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     seed: 42,
     candidateCount: 2,
     continuityMode: 'none',
+    useVoiceReference: false,
     workflowId: 'minimax_h3_director_r2v',
     generationMode: 'single_reference',
     anchorId: '',

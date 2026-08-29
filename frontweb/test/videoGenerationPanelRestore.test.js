@@ -37,3 +37,12 @@ test('panel restores prompt and shows duration in the candidate card', () => {
   assert.match(composable, /promptRestored/)
   assert.match(composable, /restoreLastUsedPrompt\(groups\.value\)/)
 })
+
+test('optional voice reference flows into the H3 candidate request', () => {
+  const composable = fs.readFileSync(path.join(root, 'src/composables/useVideoGenerationPanel.js'), 'utf8')
+  assert.match(composable, /useVoiceReference: false/)
+  assert.match(composable, /if \(form\.useVoiceReference\) structured\.useVoiceReference = true/)
+  const panel = fs.readFileSync(path.join(root, 'src/components/video/VideoGenerationPanel.vue'), 'utf8')
+  assert.match(panel, /角色音色参考/)
+  assert.match(panel, /v-model="form\.useVoiceReference"/)
+})

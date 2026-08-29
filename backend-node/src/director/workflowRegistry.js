@@ -76,6 +76,20 @@ function normalizeReferenceImages(input = {}) {
   return refs;
 }
 
+function normalizeReferenceAudios(input = {}) {
+  const raw = input.referenceAudios ?? input.reference_audios;
+  const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const audios = [];
+  for (const value of values) {
+    if (value == null) continue;
+    const item = typeof value === 'object' ? value : { audioFile: value };
+    const audioFile = String(item.audioFile ?? item.audio_file ?? item.local_path ?? item.localPath ?? '').trim();
+    if (!audioFile || audios.some((audio) => audio.audioFile === audioFile)) continue;
+    audios.push({ audioFile, characterName: String(item.characterName ?? item.character_name ?? '').trim(), characterId: item.characterId ?? item.character_id ?? null });
+  }
+  return audios;
+}
+
 function buildStructuredWorkflowPrompt(workflow, input = {}) {
   if (!workflow || typeof workflow !== 'object' || !workflow.prompt || typeof workflow.prompt !== 'object') {
     throw new WorkflowRegistryError('workflow must contain a ComfyUI prompt object', 'WORKFLOW_TEMPLATE_INVALID');
@@ -100,6 +114,7 @@ function buildStructuredWorkflowPrompt(workflow, input = {}) {
   const overlapFrames = Number.isInteger(Number(input.overlapFrames)) ? Number(input.overlapFrames) : Number(nodeInputs.continuityOverlapFrames || 22);
   const continuityEnabled = input.continuityMode !== 'none';
   const refs = normalizeReferenceImages(input);
+  const refAudios = normalizeReferenceAudios(input);
 
   nodeInputs.global_prompt = text;
   nodeInputs.seed = seed;
@@ -124,10 +139,10 @@ function buildStructuredWorkflowPrompt(workflow, input = {}) {
     width,
     height,
   };
-  timeline.global = { ...(timeline.global || {}), prompt: text, refs };
+  timeline.global = { ...(timeline.global || {}), prompt: text, refs, refAudios };
   timeline.segments = [{
     id: 's0', start: 0, length: totalFrames, frameCount: totalFrames,
-    durationSec: durationSeconds, prompt: text, taskType: refs.length ? 'r2v' : '', refs,
+    durationSec: durationSeconds, prompt: text, taskType: refs.length ? 'r2v' : '', refs, refAudios,
     referenceVideo: {}, genImage: { imageFile: '' }, negativePrompt: String(input.negativePrompt || ''),
     continuityFromPrev: continuityEnabled && input.continuityMode === 'motion_overlap',
   }];
