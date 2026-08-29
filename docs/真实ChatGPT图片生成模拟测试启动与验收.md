@@ -244,3 +244,23 @@ $task.data.external_job.attempts[0].results | Select-Object id,status,selected,p
 4. **候选生成耗时**：视频候选卡片显示"生成耗时 X 分 X 秒"（H3 通道取 job started/completed，统一通道取 video created/completed）。
 
 回归：后端 `312/312`（`--test-concurrency=1`）、前端 `89/89`、Vite 构建通过。实机复验：分镜 1 视频抽屉重开后提示词恢复 + 耗时"1 分 51 秒"显示；下拉切换为"默认模型生成"后默认通道持久化为 `api` 且不创建新任务。
+
+## 2026-08-29 H3 视频生成支持角色音色参考（可选）
+
+H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点含 `audio_vae`/`shift_audio`，timeline v4 结构有 `global.refAudios` 与 `segments[].refAudios`）。本功能把角色已上传的音色接入该接口。
+
+### 流程
+
+1. 前置：角色卡上传音色（可选功能，不上传则该角色不参与，生成不受影响）。
+2. 视频面板（H3 配置时）出现"角色音色参考"开关，**默认关闭**。
+3. 开启后生成候选：请求带 `useVoiceReference: true` → 路由解析分镜绑定角色的**有效**音色资产（stale 的自动排除）→ 写入任务 `input_json.reference_audios`。
+4. workflow 填充：`reference_audios` 映射进 timeline `global.refAudios` + `segments[0].refAudios`，ComfyUI `MiniMaxH3Director` 消费。
+5. **提示词编译联动**（关键步骤）：编译源包加入 `REFERENCE_AUDIO: <角色名>` 与指令"角色语音必须与参考音频一致、说话时口型对齐"——编译出的 H3 提示词会包含 `<Audio N>` 参考标签与说话/口型描述（Ref2VA 格式原生允许 Audio 标签）。
+
+### 实现与回归
+
+`voiceReference.js`（解析）、`workflowRegistry.js`（timeline 填充）、`h3PromptCompiler.js`（编译源包）、`director.js`（useVoiceReference 路由接线）、视频面板开关（默认关闭）。回归：后端 `315/315`、前端 `90/90`、构建通过。实机：面板开关显示 ✓、提示词恢复 ✓、耗时显示 ✓。
+
+### 待一次真实生成确认
+
+ComfyUI 端 `MiniMaxH3Director` 对 `refAudios.audioFile` 路径的读取（音色文件位于应用存储目录）需一次真实 H3 生成做最终确认；若节点无法读取该路径，需将音色文件复制到 ComfyUI input 目录后再填充。
