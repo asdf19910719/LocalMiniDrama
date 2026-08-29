@@ -266,3 +266,11 @@ H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点
 发现并修复持久化缺口（`reference_audios` 创建后未落库，执行重建 input 时丢失）：新增迁移 `28_video_generations_reference_audios.sql`（ensure 列）、创建时存列、执行重建 input 时解析回 `referenceAudios`（`854d085` 后续提交）。
 
 真实 H3 生成全链路复验：上传测试音色（`POST /characters/3/sd2-voice-upload`，active）→ 面板开启音色开关 → 生成候选 → `video_generations.reference_audios` 落库（云青 wav 绝对路径）→ ComfyUI 执行的 workflow `global.refAudios` 与 `segments[0].refAudios` 均携带该音频路径 → 生成成功（status success，1 分 44 秒，候选进待审核）。**生成视频的音色效果需人耳听验收**（链路已全通）。
+
+## 2026-08-29 仓库迁移至 E:/project/LocalMiniDrama 后全流程验收
+
+产品从 `E:/AI/references/LocalMiniDrama` 迁移至 `E:/project/LocalMiniDrama`（文档并入本仓库，AIStory 已 zip 退役）。迁移后全流程真实验收通过：
+
+- 生图（ChatGPT 通道）：点击生成→自动入队→驱动器发送→候选导入→待选；期间发现并修复桥接 15 秒超时对慢参考图上传的误伤（`b062ea4`，放宽至 60 秒）。
+- 生视频（H3 通道 + 音色）：面板恢复上次提示词 ✓、音色开关 ✓、两个候选生成成功（生成耗时 4 分 25 秒 / 4 分 22 秒正确显示）✓。
+- 注意：迁移前旧目录的残留副本仍在 `E:/AI/references/LocalMiniDrama`（含被锁文件的旧副本），确认新位置稳定后可删除。
