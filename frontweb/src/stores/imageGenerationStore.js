@@ -25,6 +25,7 @@ function parseReferenceManifest(value) {
 
 // Shared by the drawer's manual send and the queue driver's automatic send:
 // bridges one prepared attempt into the ChatGPT page (prepare + send).
+const BRIDGE_TIMEOUT_MS = 60000
 async function sendChatGPTAttempt(prepared) {
   const job = prepared.external_job
   await sendImageGenerationBridgeMessage({
@@ -32,11 +33,11 @@ async function sendChatGPTAttempt(prepared) {
     conversationId: job.conversation_id,
     prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type),
     references: parseReferenceManifest(prepared.task.reference_manifest),
-  })
+  }, BRIDGE_TIMEOUT_MS)
   await sendImageGenerationBridgeMessage({
     action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
     attemptId: prepared.attempt.id, conversationId: job.conversation_id, payload: prepared.attempt,
-  })
+  }, BRIDGE_TIMEOUT_MS)
 }
 
 export const useImageGenerationStore = defineStore('imageGeneration', () => {
