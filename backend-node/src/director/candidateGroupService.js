@@ -116,6 +116,7 @@ function videoGenerationRow(row) {
     created_at: row.video_created_at,
     updated_at: row.video_updated_at,
     completed_at: row.video_completed_at,
+    prompt_snapshot: row.video_prompt_snapshot || null,
     preview_url: videoUrl || (localPath ? `/static/${String(localPath).replace(/^\/+/, '')}` : null),
   };
 }
@@ -290,8 +291,8 @@ function candidatesForGroup(db, groupId) {
   const hasVideoLink = columnExists(db, 'director_candidates', 'video_generation_id');
   const hasVideoTable = tableExists(db, 'video_generations');
   const jobSelect = hasJobsTable
-    ? 'job.status AS job_status, job.attempt_number AS job_attempt_number, job.max_attempts AS job_max_attempts, job.error_code AS job_error_code, job.error_message AS job_error_message,'
-    : 'NULL AS job_status, NULL AS job_attempt_number, NULL AS job_max_attempts, NULL AS job_error_code, NULL AS job_error_message,';
+    ? 'job.status AS job_status, job.attempt_number AS job_attempt_number, job.max_attempts AS job_max_attempts, job.error_code AS job_error_code, job.error_message AS job_error_message, job.input_json AS job_input_json, job.started_at AS job_started_at, job.completed_at AS job_completed_at,'
+    : 'NULL AS job_status, NULL AS job_attempt_number, NULL AS job_max_attempts, NULL AS job_error_code, NULL AS job_error_message, NULL AS job_input_json, NULL AS job_started_at, NULL AS job_completed_at,';
   const jobJoin = hasJobsTable ? 'LEFT JOIN director_jobs job ON job.id = candidate.job_id' : '';
   const videoSelect = hasVideoLink && hasVideoTable
     ? `candidate.video_generation_id,
@@ -299,11 +300,13 @@ function candidatesForGroup(db, groupId) {
       video.protocol AS video_protocol, video.model AS video_model, video.video_url,
       video.local_path AS video_local_path, video.status AS video_status,
       video.error_msg AS video_error_msg, video.created_at AS video_created_at,
-      video.updated_at AS video_updated_at, video.completed_at AS video_completed_at,`
+      video.updated_at AS video_updated_at, video.completed_at AS video_completed_at,
+      video.prompt AS video_prompt_snapshot,`
     : `NULL AS video_generation_id, NULL AS video_storyboard_id, NULL AS video_provider,
       NULL AS video_protocol, NULL AS video_model, NULL AS video_url,
       NULL AS video_local_path, NULL AS video_status, NULL AS video_error_msg,
-      NULL AS video_created_at, NULL AS video_updated_at, NULL AS video_completed_at,`;
+      NULL AS video_created_at, NULL AS video_updated_at, NULL AS video_completed_at,
+      NULL AS video_prompt_snapshot,`;
   const videoJoin = hasVideoLink && hasVideoTable
     ? 'LEFT JOIN video_generations video ON video.id = candidate.video_generation_id'
     : '';
@@ -331,6 +334,9 @@ function candidatesForGroup(db, groupId) {
       job_max_attempts: row.job_max_attempts,
       job_error_code: row.job_error_code || null,
       job_error_message: row.job_error_message || null,
+      job_input_json: row.job_input_json || null,
+      job_started_at: row.job_started_at || null,
+      job_completed_at: row.job_completed_at || null,
       error_code: row.error_code,
       error_message: row.error_message,
       created_at: row.created_at,

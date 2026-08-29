@@ -55,6 +55,7 @@ describe('Director candidate groups', () => {
       );
       CREATE TABLE video_generations (
         id INTEGER PRIMARY KEY, storyboard_id INTEGER, provider TEXT, protocol TEXT, model TEXT,
+        prompt TEXT,
         video_url TEXT, local_path TEXT, status TEXT, progress INTEGER, error_msg TEXT,
         width INTEGER, height INTEGER, frame_rate REAL, duration REAL,
         created_at TEXT, updated_at TEXT, completed_at TEXT, deleted_at TEXT
@@ -265,5 +266,46 @@ describe('Director candidate groups', () => {
       },
     );
     legacyDb.close();
+  });
+
+  it('exposes prompt snapshots and generation timing on candidates', () => {
+    db.exec(`CREATE TABLE director_jobs (
+      id TEXT PRIMARY KEY, status TEXT, attempt_number INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3, error_code TEXT, error_message TEXT,
+      input_json TEXT NOT NULL DEFAULT '{}', started_at TEXT, completed_at TEXT,
+      created_at TEXT, updated_at TEXT)`);
+    const jobId = id();
+    db.prepare(`INSERT INTO director_jobs (id, status, input_json, started_at, completed_at, created_at, updated_at)
+      VALUES (?, 'succeeded', ?, '2026-08-29T00:00:00.000Z', '2026-08-29T00:03:12.000Z', ?, ?)`)
+      .run(jobId, JSON.stringify({ prompt: 'H3 提示词快照', workflowId: 'minimax_h3_director_r2v' }), '2026-08-29T00:00:00.000Z', '2026-08-29T00:03:12.000Z');
+    const h3Artifact = id();
+    db.prepare(`INSERT INTO director_artifacts (id, job_id, attempt_number, version, status, artifact_path, sha256, file_size, manifest_json, created_at)
+      VALUES (?, ?, 1, 1, 'ready', '/tmp/h3.mp4', 'h3-hash', 1, '{}', ?)`).run(h3Artifact, jobId, '2026-08-29T00:03:12.000Z');
+    const h3Group = createCandidateGroup(db, {
+      shotId: 'shot-h3',
+      candidates: [{ artifactId: h3Artifact, jobId }],
+    });
+
+    const unifiedVideoId = Number(db.prepare(`INSERT INTO video_generations
+      (storyboard_id, provider, prompt, video_url, local_path, status, created_at, updated_at, completed_at)
+      VALUES (501, 'comfyui', '统一通道提示词快照', '/v/u.mp4', 'data/u.mp4', 'completed', '2026-08-29T01:00:00.000Z', '2026-08-29T01:04:30.000Z', '2026-08-29T01:04:30.000Z')`)
+      .run().lastInsertRowid);
+    const unifiedGroup = createVideoCandidateGroup(db, {
+      shotId: 'shot-unified',
+      candidateCount: 1,
+      videoGenerationIds: [Number(unifiedVideoId)],
+    });
+
+    const groups = getCandidateGroupsByShot(db, 'shot-h3');
+    const h3Candidate = groups.find((g) => g.id === h3Group.id).candidates[0];
+    assert.equal(h3Candidate.job_input_json, JSON.stringify({ prompt: 'H3 提示词快照', workflowId: 'minimax_h3_director_r2v' }));
+    assert.equal(h3Candidate.job_started_at, '2026-08-29T00:00:00.000Z');
+    assert.equal(h3Candidate.job_completed_at, '2026-08-29T00:03:12.000Z');
+
+    const unifiedGroups = getCandidateGroupsByShot(db, 'shot-unified');
+    const unifiedCandidate = unifiedGroups.find((g) => g.id === unifiedGroup.id).candidates[0];
+    assert.equal(unifiedCandidate.video_generation.prompt_snapshot, '统一通道提示词快照');
+    assert.equal(unifiedCandidate.video_generation.created_at, '2026-08-29T01:00:00.000Z');
+    assert.equal(unifiedCandidate.video_generation.completed_at, '2026-08-29T01:04:30.000Z');
   });
 });

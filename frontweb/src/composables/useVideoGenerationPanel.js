@@ -129,6 +129,31 @@ export function resolveStoryboardVideoPrompt(storyboard) {
   return candidates.map(trimmed).find(Boolean) || ''
 }
 
+export function restoreLastUsedPrompt(groups = []) {
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const candidate of Array.isArray(group?.candidates) ? group.candidates : []) {
+      const unifiedPrompt = trimmed(candidate?.video_generation?.prompt_snapshot)
+      if (unifiedPrompt) return unifiedPrompt
+      try {
+        const parsed = parseObject(candidate?.job_input_json)
+        const h3Prompt = trimmed(parsed.prompt)
+        if (h3Prompt) return h3Prompt
+      } catch (_) {}
+    }
+  }
+  return ''
+}
+
+export function candidateDuration(candidate) {
+  const started = Date.parse(trimmed(candidate?.job_started_at) || trimmed(candidate?.video_generation?.created_at))
+  const completed = Date.parse(trimmed(candidate?.job_completed_at) || trimmed(candidate?.video_generation?.completed_at))
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed <= started) return ''
+  const totalSeconds = Math.round((completed - started) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`
+}
+
 export function normalizeVideoGenerationContext(context = {}) {
   const referenceImageUrls = Array.isArray(context.referenceImageUrls ?? context.reference_image_urls)
     ? (context.referenceImageUrls ?? context.reference_image_urls).map(trimmed).filter(Boolean)
@@ -281,6 +306,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const error = ref(null)
   const h3Preview = ref(null)
   const h3Previewing = ref(false)
+  const promptRestored = ref(false)
   const qualityReviews = ref({})
   const analyzingCandidateId = ref('')
   const anchors = ref([])
@@ -480,6 +506,13 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       groups.value = mergeProtectedGroup(fetchedGroups, preserveGroup)
       if (!activeGroupId.value || !groups.value.some((item) => item.id === activeGroupId.value)) {
         activeGroupId.value = state?.latest?.id || groups.value[0]?.id || ''
+      }
+      if (!promptRestored.value) {
+        const lastUsed = restoreLastUsedPrompt(groups.value)
+        if (lastUsed && lastUsed !== resolveStoryboardVideoPrompt(props.storyboard)) {
+          form.prompt = lastUsed
+          promptRestored.value = true
+        }
       }
       if (currentGroup.value?.status === 'selected'
         && requestVersion === refreshVersion
@@ -685,6 +718,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     anchors.value = []
     qualityReviews.value = {}
     selectionReason.value = ''
+    promptRestored.value = false
     setError(null)
     applyStoryboard(props.storyboard, props.generationContext)
     await refresh()
@@ -740,6 +774,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     error,
     h3Preview,
     h3Previewing,
+    promptRestored,
     qualityReviews,
     analyzingCandidateId,
     anchors,
@@ -762,8 +797,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     useAnchor,
     close,
     candidateStatus,
+    candidateDuration,
     candidatePreviewUrl,
     candidateMediaId,
+    restoreLastUsedPrompt,
     videoStatusLabel,
     anchorRoleLabel,
   }

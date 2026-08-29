@@ -384,6 +384,7 @@
             @change="() => saveProjectSettings(true)"
           />
           <ImageGenerationChannelSetting v-if="dramaId" v-model="imageGenerationDefaultChannel" :drama-id="dramaId" />
+          <ImageGenerationTaskPill :drama-id="dramaId" />
           <el-button
             type="primary"
             :loading="pipelineRunning && !pipelinePaused"
@@ -583,7 +584,7 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
-                      <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingCharIds.has(char.id)" @generate="(channel) => generateUnifiedImage(channel, 'character', char, () => onGenerateCharacterImage(char))" />
+                      <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingCharIds.has(char.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'character', char, () => onGenerateCharacterImage(char))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'char-' + char.id" @click="onUploadResourceClick('character', char.id)">
                         <el-icon v-if="uploadingResourceId !== 'char-' + char.id"><Upload /></el-icon>
                         上传
@@ -678,7 +679,7 @@
                     </div>
                     <div class="asset-cover-actions">
                       <el-tooltip :content="propUseQuadGrid ? '四视图道具（前/侧/后/顶，纯色无缝背景）' : '单图道具（纯色无缝背景）'" placement="top">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingPropIds.has(prop.id)" @generate="(channel) => generateUnifiedImage(channel, 'prop', prop, () => onGeneratePropImage(prop, propUseQuadGrid))" />
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingPropIds.has(prop.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'prop', prop, () => onGeneratePropImage(prop, propUseQuadGrid))" />
                       </el-tooltip>
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'prop-' + prop.id" @click="onUploadResourceClick('prop', prop.id)">
                         <el-icon v-if="uploadingResourceId !== 'prop-' + prop.id"><Upload /></el-icon>
@@ -776,7 +777,7 @@
                     </div>
                     <div class="asset-cover-actions">
                       <el-tooltip :content="sceneUseQuadGrid ? '四宫格场景（正/侧/俯/仰）' : '单图场景'" placement="top">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene, sceneUseQuadGrid))" />
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene, sceneUseQuadGrid))" />
                       </el-tooltip>
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'scene-' + scene.id" @click="onUploadResourceClick('scene', scene.id)">
                         <el-icon v-if="uploadingResourceId !== 'scene-' + scene.id"><Upload /></el-icon>
@@ -1289,7 +1290,7 @@
                         {{ getSbFirstImage(sb.id).prompt }}
                       </div>
                       <div class="sb-fl-slot-actions">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbFirstImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_first', sb, () => onGenerateSbFrameImage(sb, 'first'), framePromptForUnified(sb, 'first'))" />
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbFirstImageIds.has(sb.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_first', sb, () => onGenerateSbFrameImage(sb, 'first'), framePromptForUnified(sb, 'first'))" />
                         <el-tooltip v-if="canUsePrevTailAsFirst(sb)" content="直接使用上一分镜的尾帧图片（高清原图）替换本首帧，画面更清晰" placement="top">
                           <el-button size="small" :loading="usingPrevTailAsFirstIds.has(sb.id)" @click="onUsePrevTailAsFirst(sb)">上镜尾帧</el-button>
                         </el-tooltip>
@@ -1318,7 +1319,7 @@
                         {{ getSbLastImage(sb.id).prompt }}
                       </div>
                       <div class="sb-fl-slot-actions">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbLastImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_last', sb, () => onGenerateSbFrameImage(sb, 'last'), framePromptForUnified(sb, 'last'))" />
+                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbLastImageIds.has(sb.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_last', sb, () => onGenerateSbFrameImage(sb, 'last'), framePromptForUnified(sb, 'last'))" />
                         <el-checkbox
                           v-model="lastFrameUseFirstLayoutLock"
                           class="sb-fl-first-lock-opt"
@@ -1376,11 +1377,11 @@
                   </template>
                   <template v-else-if="sb.error_msg || sb.errorMsg">
                     <div class="sb-image-error" :title="sb.error_msg || sb.errorMsg">{{ sb.error_msg || sb.errorMsg }}</div>
-                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
+                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                     <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                   </template>
                   <template v-else>
-                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
+                    <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                     <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                   </template>
                 </div>
@@ -1416,7 +1417,7 @@
                   </el-tooltip>
                 </template>
                 <template v-else>
-                <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
+                <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSbImageIds.has(sb.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'storyboard_main', sb, () => onGenerateSbImage(sb))" />
                 <el-button size="small" :loading="uploadingSbImageId === sb.id" @click="onUploadSbImageClick(sb)">上传</el-button>
                 <el-tooltip content="高清放大（2x超分辨率）" placement="top">
                   <el-button
@@ -2677,6 +2678,7 @@ import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
 import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
 import {
@@ -2710,6 +2712,7 @@ const {
   open: openImageGenerationTask,
   loadSummary: loadImageGenerationSummary,
   loadDefault: loadImageGenerationDefault,
+  setDefaultChannel: setImageGenerationDefaultChannel,
   sendToChatGPT: sendImageGenerationToChatGPT,
   recoverCapture: recoverImageGenerationCapture,
   requeueTask: requeueImageGenerationTask,
@@ -2866,6 +2869,15 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
     return task
   } catch (error) {
     ElMessage.error(error?.message || '图片生成任务创建失败')
+  }
+}
+
+async function onSelectImageChannel(channel) {
+  try {
+    await setImageGenerationDefaultChannel(channel)
+    ElMessage.success(channel === 'chatgpt_web' ? '默认生图方式已切换为 ChatGPT 生成' : '默认生图方式已切换为默认模型生成')
+  } catch (error) {
+    ElMessage.error(error?.message || '切换默认生图方式失败')
   }
 }
 

@@ -35,6 +35,7 @@
 
     <el-form class="generation-form" label-position="top" @submit.prevent="generateCandidates">
       <el-form-item label="视频提示词" required>
+        <small v-if="promptRestored" style="margin-left:6px;color:#909399;font-weight:normal">已恢复上次生成使用的提示词</small>
         <el-input
           v-model="form.prompt"
           type="textarea"
@@ -165,6 +166,7 @@
               </el-tag>
             </div>
             <small>任务：{{ candidateMediaId(candidate) || shortId(candidate.id) }}</small>
+            <small v-if="candidateDuration(candidate)">生成耗时：{{ candidateDuration(candidate) }}</small>
             <small v-if="candidate.video_generation?.provider || candidate.video_generation?.model">
               {{ candidate.video_generation?.provider || '默认服务' }} · {{ candidate.video_generation?.model || '默认模型' }}
             </small>
@@ -285,6 +287,7 @@ import { computed } from 'vue'
 import { Close, Loading, Plus, Refresh, VideoCamera } from '@element-plus/icons-vue'
 import { videosAPI } from '@/api/videos'
 import {
+  candidateDuration,
   candidateStatus,
   useVideoGenerationPanel,
   videoErrorCopy,
@@ -321,6 +324,7 @@ const {
   error,
   h3Preview,
   h3Previewing,
+  promptRestored,
   qualityReviews,
   analyzingCandidateId,
   anchors,

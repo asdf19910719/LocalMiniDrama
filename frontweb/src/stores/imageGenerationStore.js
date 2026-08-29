@@ -90,6 +90,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     startQueueDriver()
     return summary.value
   }
+  async function setDefaultChannel(channel) {
+    if (dramaId.value == null) throw new Error('剧集未加载')
+    defaultChannel.value = await imageGenerationTaskAPI.setDefault(dramaId.value, channel)
+    return defaultChannel.value
+  }
   async function loadDefault(id) {
     const result = await imageGenerationTaskAPI.getDefault(id)
     defaultChannel.value = result?.channel || 'api'
@@ -272,5 +277,5 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     }
   }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
+  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
 })

@@ -12,6 +12,7 @@
           <el-icon><ArrowLeft /></el-icon>返回列表
         </el-button>
         <div class="header-actions">
+          <ImageGenerationTaskPill :drama-id="dramaId" />
           <el-button class="btn-theme" :title="isDark ? '切换到浅色模式' : '切换到暗色模式'" @click="toggleTheme">
             <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
             {{ isDark ? '浅色' : '暗色' }}
@@ -312,7 +313,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaCharForm.imgUploading" @click="dramaCharFileRef.click()">上传图片</el-button>
-              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaCharForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'character', editDramaCharForm, generateDramaCharImg)" />
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaCharForm.imgGenerating" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedDramaImage(channel, 'character', editDramaCharForm, generateDramaCharImg)" />
             </div>
           </div>
           <input ref="dramaCharFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaCharImg" />
@@ -346,7 +347,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaSceneForm.imgUploading" @click="dramaSceneFileRef.click()">上传图片</el-button>
-              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaSceneForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'scene', editDramaSceneForm, generateDramaSceneImg)" />
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaSceneForm.imgGenerating" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedDramaImage(channel, 'scene', editDramaSceneForm, generateDramaSceneImg)" />
             </div>
           </div>
           <input ref="dramaSceneFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaSceneImg" />
@@ -373,7 +374,7 @@
             </div>
             <div class="lib-img-btns">
               <el-button size="small" :loading="editDramaPropForm.imgUploading" @click="dramaPropFileRef.click()">上传图片</el-button>
-              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaPropForm.imgGenerating" @generate="(channel) => generateUnifiedDramaImage(channel, 'prop', editDramaPropForm, generateDramaPropImg)" />
+              <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="editDramaPropForm.imgGenerating" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedDramaImage(channel, 'prop', editDramaPropForm, generateDramaPropImg)" />
             </div>
           </div>
           <input ref="dramaPropFileRef" type="file" accept="image/*" style="display:none" @change="uploadDramaPropImg" />
@@ -542,6 +543,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
 import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid } from '@element-plus/icons-vue'
@@ -574,9 +576,19 @@ const router = useRouter()
 const dramaId = Number(route.params.id)
 const imageGeneration = useImageGeneration()
 const imageGenerationDefaultChannel = imageGeneration.defaultChannel
+const setImageGenerationDefaultChannel = imageGeneration.setDefaultChannel
 const imageGenerationDrawerVisible = imageGeneration.drawerVisible
 const imageGenerationTask = imageGeneration.currentTask
 const imageGenerationSending = imageGeneration.loading
+
+async function onSelectImageChannel(channel) {
+  try {
+    await setImageGenerationDefaultChannel(channel)
+    ElMessage.success(channel === 'chatgpt_web' ? '默认生图方式已切换为 ChatGPT 生成' : '默认生图方式已切换为默认模型生成')
+  } catch (error) {
+    ElMessage.error(error?.message || '切换默认生图方式失败')
+  }
+}
 
 async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
   if (channel !== 'chatgpt_web') return legacy()

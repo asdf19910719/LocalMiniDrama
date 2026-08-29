@@ -8,6 +8,7 @@ export function useImageGeneration() {
     ...state,
     loadSummary: store.loadSummary,
     loadDefault: store.loadDefault,
+    setDefaultChannel: store.setDefaultChannel,
     open: store.openTask,
     refresh: store.refreshTask,
     sendToChatGPT: store.sendToChatGPT,

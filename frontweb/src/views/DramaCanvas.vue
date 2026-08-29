@@ -122,7 +122,8 @@
         >
           批量生图
         </el-button>
-        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="episodeGenerating" @generate="generateCanvasImage" />
+        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="episodeGenerating" @select-channel="onSelectImageChannel" @generate="generateCanvasImage" />
+        <ImageGenerationTaskPill :drama-id="dramaId" />
         <el-button
           size="small"
           :loading="episodeGenerating"
@@ -347,6 +348,7 @@ import CanvasFlowAligner from '@/components/dramaCanvas/CanvasFlowAligner.vue'
 import DirectorShotPanel from '@/components/dramaCanvas/DirectorShotPanel.vue'
 import DirectorTimelinePanel from '@/components/dramaCanvas/DirectorTimelinePanel.vue'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 
@@ -356,6 +358,7 @@ const { isDark, toggle: toggleTheme } = useTheme()
 const { imagesBySbId, videosBySbId, loadForDrama } = useCanvasStoryboardMedia()
 const {
   defaultChannel: imageGenerationDefaultChannel,
+  setDefaultChannel: setImageGenerationDefaultChannel,
   currentTask: imageGenerationTask,
   drawerVisible: imageGenerationDrawerVisible,
   loading: imageGenerationSending,
@@ -384,6 +387,15 @@ async function generateCanvasImage(channel = imageGenerationDefaultChannel.value
     return task
   } catch (error) {
     ElMessage.error(error?.message || '图片生成任务创建失败')
+  }
+}
+
+async function onSelectImageChannel(channel) {
+  try {
+    await setImageGenerationDefaultChannel(channel)
+    ElMessage.success(channel === 'chatgpt_web' ? '默认生图方式已切换为 ChatGPT 生成' : '默认生图方式已切换为默认模型生成')
+  } catch (error) {
+    ElMessage.error(error?.message || '切换默认生图方式失败')
   }
 }
 
