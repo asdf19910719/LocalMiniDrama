@@ -162,7 +162,18 @@
         activeStop?.();
         known.add(selected.id);
         activeAssistantId = selected.id;
-        activeStop = this.observeAttempt({ ...identity, assistantMessageId: selected.id }, onResult, onError);
+        activeStop = this.observeAttempt(
+          { ...identity, assistantMessageId: selected.id },
+          onResult,
+          (error) => {
+            if (error?.code === "UNBOUND_RESULT") {
+              this.resumeCapture();
+              discover();
+              return;
+            }
+            onError(error);
+          }
+        );
       };
       const observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(discover);
       if (!observer) {
@@ -184,43 +195,55 @@
     observeAttempt(identity, onResult, onError = () => {
     }) {
       if (this.capturePaused) {
-        const stopped = () => {
+        const stopped2 = () => {
         };
-        stopped.stop = stopped;
-        return stopped;
+        stopped2.stop = stopped2;
+        return stopped2;
       }
       const root = this.findAssistant(identity);
       if (!root) {
         this.capturePaused = true;
         onError(Object.assign(new Error("UNBOUND_RESULT"), { code: "UNBOUND_RESULT" }));
-        const stopped = () => {
+        const stopped2 = () => {
         };
-        stopped.stop = stopped;
-        return stopped;
+        stopped2.stop = stopped2;
+        return stopped2;
       }
+      let observer = null;
+      let stopped = false;
+      const halt = (error, report = true) => {
+        if (stopped) return;
+        stopped = true;
+        this.capturePaused = true;
+        observer?.disconnect();
+        if (report) onError(error);
+      };
       const emit = () => {
+        if (stopped || this.capturePaused) return;
         try {
           const result = extractResultSet(root, identity);
           if (result.status === "UNBOUND_RESULT" || result.status === "NEEDS_REVIEW") {
-            this.capturePaused = true;
-            onError(Object.assign(new Error(result.status), { code: result.status }));
+            halt(Object.assign(new Error(result.status), { code: result.status }));
           } else {
             const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
             if (fresh.length) {
-              Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => {
-                this.capturePaused = true;
-              });
+              Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => halt(null, false));
             }
           }
         } catch (error) {
-          this.capturePaused = true;
-          onError(error);
+          halt(error);
         }
       };
       emit();
-      const observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(emit);
-      observer?.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
-      const stop = () => observer?.disconnect();
+      if (!stopped && typeof MutationObserver !== "undefined") {
+        observer = new MutationObserver(emit);
+        observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+      }
+      const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        observer?.disconnect();
+      };
       stop.stop = stop;
       stop.root = root;
       return stop;

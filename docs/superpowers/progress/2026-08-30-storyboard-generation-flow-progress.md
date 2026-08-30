@@ -19,6 +19,8 @@ Plan: `docs/superpowers/plans/2026-08-30-storyboard-generation-flow.md`
 - 2026-08-30: Task 4 completed. Main-image selection now prefers an explicitly bound normal image, then a normal single image, then the configured grid panel, then panel 0; first/last frame selection remains type-bound. Storyboard media tests: 5 passed.
 - 2026-08-30: Task 5 completed locally. Backend full suite: 316 passed; frontend full suite: 97 passed; browser-extension suite: 45 passed; frontend production build succeeded. Read-only API smoke flow verified `/health`, drama/storyboards, image history, director candidates, and completed video merge records. TTS request reached the route but correctly stopped with `未配置 TTS 模型`; no active `service_type=tts` configuration exists in the local environment.
 
+- 2026-08-30: Follow-up `UNBOUND_RESULT` investigation found one old attempt emitting 18 duplicate adapter errors while its assistant identity drifted. The ChatGPT adapter now disconnects failed observers after the first error and lets a live `beginAttempt` rebind a replaced/renumbered assistant turn. Regression coverage added for single-error shutdown and identity drift recovery; browser-extension suite: 47 tests passed after rebuilding `content.bundle.js`.
+
 ## Simulation Boundary
 
 - Image generation and ChatGPT web capture require external provider credentials/browser login, so automated verification covers task creation, target-scoped reference manifests, assistant/attempt identity, and result import states rather than claiming a real ChatGPT image was generated.

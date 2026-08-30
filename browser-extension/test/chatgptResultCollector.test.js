@@ -245,3 +245,81 @@ test('beginAttempt never binds the freshly submitted user turn or imports its re
     globalThis.MutationObserver = previousObserver;
   }
 });
+
+test('adapter disconnects after an assistant identity mismatch and reports it once', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let emit;
+  let disconnects = 0;
+  globalThis.MutationObserver = class {
+    constructor(callback) { emit = callback; }
+    observe() {}
+    disconnect() { disconnects += 1; }
+  };
+  try {
+    const assistant = {
+      dataset: { turn: 'assistant', messageId: 'assistant-1' },
+      getAttribute(name) {
+        if (name === 'data-turn') return 'assistant';
+        if (name === 'data-message-id') return this.dataset.messageId;
+        return null;
+      },
+      querySelectorAll() { return [{ currentSrc: 'https://chatgpt.com/generated.png', src: 'https://chatgpt.com/generated.png', dataset: {} }]; },
+    };
+    const doc = {
+      querySelectorAll(selector) {
+        return selector.includes('data-turn="assistant"') ? [assistant] : [];
+      },
+    };
+    const adapter = new ChatGPTAdapter({ documentRef: doc });
+    let errors = 0;
+    adapter.observeAttempt({ attemptId: 'attempt-identity', assistantMessageId: 'assistant-1' }, () => {}, () => { errors += 1; });
+    assistant.dataset.messageId = 'assistant-2';
+    emit();
+    emit();
+    assert.equal(errors, 1);
+    assert.equal(disconnects, 1);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('beginAttempt rebinds a drifted assistant identity without surfacing UNBOUND_RESULT', () => {
+  const previousObserver = globalThis.MutationObserver;
+  const callbacks = [];
+  globalThis.MutationObserver = class {
+    constructor(callback) { callbacks.push(callback); }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const assistant = {
+      dataset: { turn: 'assistant', messageId: null },
+      getAttribute(name) {
+        if (name === 'data-turn') return 'assistant';
+        if (name === 'data-message-id') return this.dataset.messageId;
+        return null;
+      },
+      querySelectorAll() { return []; },
+    };
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; }, querySelectorAll() { return nodes; } } });
+    const observed = [];
+    const errors = [];
+    const observe = adapter.observeAttempt.bind(adapter);
+    adapter.observeAttempt = (identity, ...args) => { observed.push(identity.assistantMessageId); return observe(identity, ...args); };
+    const stop = adapter.beginAttempt({ attemptId: 'attempt-drift' }, () => {}, (error) => errors.push(error.code));
+    assistant.dataset.messageId = 'assistant-1';
+    nodes = [assistant];
+    callbacks[0]();
+    assistant.dataset.messageId = 'assistant-2';
+    callbacks[1]();
+    callbacks[0]();
+    assert.deepEqual(observed, ['assistant-1', 'assistant-2']);
+    assert.deepEqual(errors, []);
+    assert.equal(callbacks.length, 3);
+    stop();
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
