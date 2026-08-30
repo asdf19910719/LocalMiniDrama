@@ -9,6 +9,8 @@ function setup() {
   db.exec(`CREATE TABLE dramas (id INTEGER PRIMARY KEY, metadata TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE image_generation_batches (id TEXT PRIMARY KEY, drama_id INTEGER, resource_scope TEXT, generation_channel TEXT, status TEXT, total_count INTEGER, completed_count INTEGER DEFAULT 0, review_count INTEGER DEFAULT 0, failed_count INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT);
     CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, drama_id INTEGER, target_type TEXT, target_id INTEGER, generation_channel TEXT, provider TEXT, model TEXT, prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT, status TEXT, batch_id TEXT, queue_position INTEGER, image_generation_id INTEGER, external_job_id TEXT, error_code TEXT, error_message TEXT, created_at TEXT, updated_at TEXT, completed_at TEXT);
+    CREATE TABLE external_generation_jobs (id TEXT PRIMARY KEY, image_generation_task_id TEXT, drama_id INTEGER);
+    CREATE TABLE external_generation_attempts (id TEXT PRIMARY KEY, job_id TEXT, status TEXT, updated_at TEXT);
     INSERT INTO dramas VALUES (7, '{"default_image_generation_channel":"chatgpt_web"}', NULL, NULL);`);
   return db;
 }
@@ -93,6 +95,18 @@ it('fails stale preparing tasks and keeps fresh ones active', () => {
   const result = queue.claimNextChatgptTask(db, { now: () => new Date('2026-08-28T00:20:00.000Z') });
   assert.equal(taskService.getTask(db, stale.id).status, 'failed');
   assert.equal(taskService.getTask(db, stale.id).error_code, 'send_timeout');
+  assert.equal(result.claimed, false);
+  db.close();
+});
+
+it('reconciles a submitted task whose external attempt already needs review', () => {
+  const db = setup();
+  const task = taskService.createTask(db, { dramaId: 7, targetType: 'scene', targetId: 10, generationChannel: 'chatgpt_web', promptSnapshot: 'stale', status: 'submitted' });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-review', task.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-review', task.id, 7);
+  db.prepare('INSERT INTO external_generation_attempts (id, job_id, status, updated_at) VALUES (?, ?, ?, ?)').run('attempt-review', 'job-review', 'needs_review', new Date().toISOString());
+  const result = queue.claimNextChatgptTask(db);
+  assert.equal(taskService.getTask(db, task.id).status, 'needs_review');
   assert.equal(result.claimed, false);
   db.close();
 });

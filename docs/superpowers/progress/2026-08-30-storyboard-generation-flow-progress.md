@@ -20,6 +20,7 @@ Plan: `docs/superpowers/plans/2026-08-30-storyboard-generation-flow.md`
 - 2026-08-30: Task 5 completed locally. Backend full suite: 316 passed; frontend full suite: 97 passed; browser-extension suite: 45 passed; frontend production build succeeded. Read-only API smoke flow verified `/health`, drama/storyboards, image history, director candidates, and completed video merge records. TTS request reached the route but correctly stopped with `未配置 TTS 模型`; no active `service_type=tts` configuration exists in the local environment.
 
 - 2026-08-30: Follow-up `UNBOUND_RESULT` investigation found one old attempt emitting 18 duplicate adapter errors while its assistant identity drifted. The ChatGPT adapter now disconnects failed observers after the first error and lets a live `beginAttempt` rebind a replaced/renumbered assistant turn. Regression coverage added for single-error shutdown and identity drift recovery; browser-extension suite: 47 tests passed after rebuilding `content.bundle.js`.
+- 2026-08-30: Queue-state follow-up found the live page's `submitted` count was an orphaned task whose external attempt was already `needs_review`; this blocked all six newer queued tasks. `claimNextChatgptTask` now reconciles that mismatch before applying the single-active-task lock, and adapter errors also transition active unified tasks to `needs_review`. Live API check released the orphaned task; unavailable extension sends are now surfaced as `failed` instead of leaving phantom active work.
 
 ## Simulation Boundary
 

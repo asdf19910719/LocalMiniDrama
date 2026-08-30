@@ -77,6 +77,16 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
   return db.transaction(() => {
     const timestamp = now();
     const staleBefore = new Date(timestamp.getTime() - PREPARING_STALE_MS).toISOString();
+    // Reconcile attempts that already failed capture before applying the
+    // single-active-task lock. Older adapter builds could persist
+    // `needs_review` only on the external attempt, leaving the unified task
+    // stuck in `submitted` and blocking every queued task behind it.
+    db.prepare(`UPDATE image_generation_tasks
+      SET status='needs_review', updated_at=?
+      WHERE generation_channel='chatgpt_web' AND status IN ('preparing','submitted','generating')
+        AND external_job_id IN (
+          SELECT job_id FROM external_generation_attempts WHERE status='needs_review'
+        )`).run(timestamp.toISOString());
     const stale = db.prepare(`SELECT * FROM image_generation_tasks
       WHERE generation_channel='chatgpt_web' AND status='preparing' AND updated_at < ?
       ORDER BY updated_at LIMIT 1`).get(staleBefore);
