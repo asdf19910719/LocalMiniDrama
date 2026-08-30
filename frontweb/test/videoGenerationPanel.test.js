@@ -4,15 +4,41 @@ import { nextTick, reactive } from 'vue'
 
 import {
   buildVideoCandidateRequest,
+  candidateStartTime,
   anchorRoleLabel,
   candidateStatus,
   listVideoActions,
   normalizeVideoGenerationContext,
+  resolveVideoPromptPresentation,
   resolveStoryboardVideoPrompt,
   useVideoGenerationPanel,
   videoErrorCopy,
   videoStatusLabel,
 } from '../src/composables/useVideoGenerationPanel.js'
+
+test('prefers actual execution start time and falls back to video creation time', () => {
+  assert.equal(
+    candidateStartTime({ job_started_at: '2026-08-30T01:02:03.000Z', video_generation: { created_at: '2026-08-30T00:00:00.000Z' } }),
+    '2026-08-30T01:02:03.000Z',
+  )
+  assert.equal(
+    candidateStartTime({ video_generation: { created_at: '2026-08-30T00:00:00.000Z' } }),
+    '2026-08-30T00:00:00.000Z',
+  )
+})
+
+test('keeps universal business prompt and exposes prior compiled H3 prompt separately', () => {
+  const result = resolveVideoPromptPresentation(
+    { creation_mode: 'universal', universal_segment_text: '全能片段描述', video_prompt: '旧视频词' },
+    { prompt: '全能片段描述' },
+    [{ candidates: [{ video_generation: { compiled_prompt: '旧 H3 编译词' } }] }],
+  )
+
+  assert.deepEqual(result, {
+    businessPrompt: '全能片段描述',
+    lastCompiledPrompt: '旧 H3 编译词',
+  })
+})
 
 test('prefers the universal segment when resolving a storyboard video prompt', () => {
   const storyboard = {

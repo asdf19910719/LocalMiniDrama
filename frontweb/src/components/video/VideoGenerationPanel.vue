@@ -34,14 +34,17 @@
     </section>
 
     <el-form class="generation-form" label-position="top" @submit.prevent="generateCandidates">
-      <el-form-item label="视频提示词" required>
-        <small v-if="promptRestored" style="margin-left:6px;color:#909399;font-weight:normal">已恢复上次生成使用的提示词</small>
+      <el-form-item :label="isUniversalStoryboard ? '全能模式片段描述' : '视频提示词'" required>
+        <small v-if="promptRestored" style="margin-left:6px;color:#909399;font-weight:normal">已恢复上次生成使用的提示词展示（业务提示词保持不变）</small>
         <el-input
           v-model="form.prompt"
           type="textarea"
           :rows="displayMode === 'sidebar' ? 5 : 4"
           placeholder="描述动作、运镜、画面风格与声音"
         />
+      </el-form-item>
+      <el-form-item v-if="lastCompiledPrompt" label="上次 H3 编译提示词">
+        <el-input :model-value="lastCompiledPrompt" type="textarea" :rows="5" readonly class="h3-preview" />
       </el-form-item>
       <el-form-item label="负面提示词">
         <el-input v-model="form.negativePrompt" clearable placeholder="可选：不希望出现的内容" />
@@ -172,6 +175,7 @@
               </el-tag>
             </div>
             <small>任务：{{ candidateMediaId(candidate) || shortId(candidate.id) }}</small>
+            <small v-if="candidateStartTime(candidate)">生成开始：{{ formatCandidateStartTime(candidate) }}</small>
             <small v-if="candidateDuration(candidate)">生成耗时：{{ candidateDuration(candidate) }}</small>
             <small v-if="candidate.video_generation?.provider || candidate.video_generation?.model">
               {{ candidate.video_generation?.provider || '默认服务' }} · {{ candidate.video_generation?.model || '默认模型' }}
@@ -294,6 +298,8 @@ import { Close, Loading, Plus, Refresh, VideoCamera } from '@element-plus/icons-
 import { videosAPI } from '@/api/videos'
 import {
   candidateDuration,
+  candidateStartTime,
+  formatCandidateStartTime,
   candidateStatus,
   useVideoGenerationPanel,
   videoErrorCopy,
@@ -331,6 +337,7 @@ const {
   h3Preview,
   h3Previewing,
   promptRestored,
+  lastCompiledPrompt,
   qualityReviews,
   analyzingCandidateId,
   anchors,
@@ -366,6 +373,7 @@ const generationModeLabel = computed(() => ({
   universal_fallback: '全能兼容模式',
   classic: '传统首尾帧模式',
 }[generationMode.value] || '默认模式'))
+const isUniversalStoryboard = computed(() => props.storyboard?.creation_mode === 'universal')
 
 const isH3Config = computed(() => {
   const cfg = defaultConfig.value || {}

@@ -43,6 +43,18 @@ describe('image generation target adapters and binding', () => {
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, '黑发少年');
   });
 
+  it('does not reuse a character output image as an implicit text-to-image reference', () => {
+    const generation = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'character',
+      target_id: 1,
+      prompt_snapshot: '新的角色外观提示词',
+    });
+
+    assert.equal(generation.prompt, '新的角色外观提示词');
+    assert.deepEqual(generation.references, []);
+  });
+
   it('binds character, scene, and prop results while preserving old images', () => {
     targets.bindResult(db, { drama_id: 7, target_type: 'character', target_id: 1 }, 50);
     targets.bindResult(db, { drama_id: 7, target_type: 'scene', target_id: 2 }, 51);

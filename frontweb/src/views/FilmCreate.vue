@@ -2697,6 +2697,7 @@ import { useScenes } from '@/composables/filmCreate/useScenes'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
+import { resolveSbMainImageRecord } from '@/utils/storyboardMedia'
 
 const route = useRoute()
 const router = useRouter()
@@ -3845,7 +3846,8 @@ function getSbImage(storyboardId) {
     const found = images.find((i) => i.id === selectedId)
     if (found) return found
   }
-  return images[0]
+  const sb = (store.storyboards || []).find((item) => Number(item.id) === Number(storyboardId))
+  return resolveSbMainImageRecord(sb, sbImages.value) || images[0]
 }
 /** 取该分镜下的四宫格整图记录 */
 /** 取该分镜下的四宫格整图记录 */

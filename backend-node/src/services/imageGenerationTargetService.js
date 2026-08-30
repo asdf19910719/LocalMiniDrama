@@ -93,16 +93,10 @@ function buildGenerationInput(db, task) {
   let frameType = null;
   if (target.target_type === 'character') {
     prompt = target.polished_prompt || target.appearance || target.description || target.name || '';
-    const ref = reference('character', target.id, target.ref_image || target.image_url || target.local_path);
-    if (ref) references.push(ref);
   } else if (target.target_type === 'scene') {
     prompt = target.polished_prompt_single || target.polished_prompt || target.prompt || target.location || '';
-    const ref = reference('scene', target.id, target.ref_image || target.image_url || target.local_path);
-    if (ref) references.push(ref);
   } else if (target.target_type === 'prop') {
     prompt = target.polished_prompt || target.prompt || target.description || target.name || '';
-    const ref = reference('prop', target.id, target.ref_image || target.image_url || target.local_path);
-    if (ref) references.push(ref);
   } else {
     frameType = target.target_type === 'storyboard_first'
       ? 'storyboard_first'

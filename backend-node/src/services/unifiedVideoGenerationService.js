@@ -270,6 +270,10 @@ function inputFor(row) {
     const now = new Date().toISOString();
     const assignments = ['status = ?', 'updated_at = ?'];
     const params = [status, now];
+    if (status === 'queued' && tableHasColumn('video_generations', 'started_at') && !row.started_at) {
+      assignments.push('started_at = ?');
+      params.push(now);
+    }
     for (const [column, value] of Object.entries(fields)) {
       assignments.push(`${column} = ?`);
       params.push(value);
@@ -762,9 +766,10 @@ function inputFor(row) {
     const task = taskService.createTask(db, log, 'video_generation', String(row.drama_id || ''));
     const status = row.provider_task_id ? 'queued' : 'waiting';
     const now = new Date().toISOString();
+    const startedReset = tableHasColumn('video_generations', 'started_at') ? ', started_at = NULL' : '';
     db.prepare(
       `UPDATE video_generations
-       SET status = ?, task_id = ?, error_msg = NULL, completed_at = NULL, updated_at = ? WHERE id = ?`
+       SET status = ?, task_id = ?, error_msg = NULL, completed_at = NULL, updated_at = ?${startedReset} WHERE id = ?`
     ).run(status, task.id, now, row.id);
     if (status === 'queued') taskService.updateTaskStatus(db, task.id, 'processing', 1, '正在继续查询原视频任务');
     enqueueOperation(row.id, row.provider_task_id ? 'recover' : 'submit');

@@ -103,6 +103,7 @@ function rowToItem(row) {
     skillSha256: row.h3_skill_sha256 || null,
     skillProvenance: parseObject(row.h3_skill_provenance),
     created_at: row.created_at,
+    started_at: row.started_at || null,
     updated_at: row.updated_at,
     completed_at: row.completed_at,
     can_resume_poll: (status === 'failed' || status === 'interrupted') && hasProviderTaskId(row),

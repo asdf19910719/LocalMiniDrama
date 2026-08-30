@@ -29,11 +29,18 @@ it('creates a unified task and exposes one drama summary', async () => {
   try {
     const createdResponse = await fetch(`${base}/image-generation-tasks`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web' }),
+      body: JSON.stringify({
+        dramaId: 7,
+        targetType: 'character',
+        targetId: 1,
+        generationChannel: 'chatgpt_web',
+        referenceImages: [{ role: 'character', sourceId: 999, url: '/wrong-character.png' }],
+      }),
     });
     assert.equal(createdResponse.status, 200);
     const created = (await createdResponse.json()).data;
     assert.equal(created.prompt_snapshot, '角色提示');
+    assert.deepEqual(JSON.parse(created.reference_manifest), []);
     assert.equal(created.status, 'queued');
     assert.ok(created.external_job_id);
     assert.equal(db.prepare('SELECT image_generation_task_id FROM external_generation_jobs WHERE id=?').get(created.external_job_id).image_generation_task_id, created.id);

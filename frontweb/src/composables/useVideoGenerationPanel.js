@@ -144,8 +144,41 @@ export function restoreLastUsedPrompt(groups = []) {
   return ''
 }
 
+export function resolveVideoPromptPresentation(storyboard = {}, context = {}, groups = []) {
+  const businessPrompt = trimmed(context?.prompt) || resolveStoryboardVideoPrompt(storyboard)
+  let lastCompiledPrompt = ''
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const candidate of Array.isArray(group?.candidates) ? group.candidates : []) {
+      const video = candidate?.video_generation || {}
+      const compiled = trimmed(video.compiled_prompt)
+      if (compiled) return { businessPrompt, lastCompiledPrompt: compiled }
+      const input = parseObject(candidate?.job_input_json)
+      const inputCompiled = trimmed(input.compiled_prompt)
+      if (inputCompiled) return { businessPrompt, lastCompiledPrompt: inputCompiled }
+      if (!lastCompiledPrompt && trimmed(video.prompt_format).toLowerCase().includes('h3')) {
+        lastCompiledPrompt = trimmed(video.prompt_snapshot)
+      }
+    }
+  }
+  return { businessPrompt, lastCompiledPrompt }
+}
+
+export function candidateStartTime(candidate) {
+  return trimmed(candidate?.job_started_at)
+    || trimmed(candidate?.video_generation?.started_at)
+    || trimmed(candidate?.video_generation?.created_at)
+}
+
+export function formatCandidateStartTime(candidate) {
+  const value = candidateStartTime(candidate)
+  const date = new Date(value)
+  if (!value || Number.isNaN(date.getTime())) return ''
+  const pad = (number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 export function candidateDuration(candidate) {
-  const started = Date.parse(trimmed(candidate?.job_started_at) || trimmed(candidate?.video_generation?.created_at))
+  const started = Date.parse(candidateStartTime(candidate))
   const completed = Date.parse(trimmed(candidate?.job_completed_at) || trimmed(candidate?.video_generation?.completed_at))
   if (!Number.isFinite(started) || !Number.isFinite(completed) || completed <= started) return ''
   const totalSeconds = Math.round((completed - started) / 1000)
@@ -309,6 +342,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const h3Preview = ref(null)
   const h3Previewing = ref(false)
   const promptRestored = ref(false)
+  const lastCompiledPrompt = ref('')
   const qualityReviews = ref({})
   const analyzingCandidateId = ref('')
   const anchors = ref([])
@@ -509,13 +543,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (!activeGroupId.value || !groups.value.some((item) => item.id === activeGroupId.value)) {
         activeGroupId.value = state?.latest?.id || groups.value[0]?.id || ''
       }
-      if (!promptRestored.value) {
-        const lastUsed = restoreLastUsedPrompt(groups.value)
-        if (lastUsed && lastUsed !== resolveStoryboardVideoPrompt(props.storyboard)) {
-          form.prompt = lastUsed
-          promptRestored.value = true
-        }
-      }
+      const presentation = resolveVideoPromptPresentation(
+        props.storyboard,
+        props.generationContext,
+        groups.value,
+      )
+      const lastUsedPrompt = restoreLastUsedPrompt(groups.value)
+      // Legacy records may have no storyboard prompt. Use their source prompt
+      // only as an empty-form fallback; never replace an existing business prompt.
+      if (!trimmed(form.prompt) && lastUsedPrompt) form.prompt = lastUsedPrompt
+      lastCompiledPrompt.value = presentation.lastCompiledPrompt
+      promptRestored.value = Boolean(presentation.lastCompiledPrompt)
       if (currentGroup.value?.status === 'selected'
         && requestVersion === refreshVersion
         && String(props.storyboardId) === String(requestStoryboardId)) await loadAnchors()
@@ -721,6 +759,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     qualityReviews.value = {}
     selectionReason.value = ''
     promptRestored.value = false
+    lastCompiledPrompt.value = ''
     setError(null)
     applyStoryboard(props.storyboard, props.generationContext)
     await refresh()
@@ -777,6 +816,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Preview,
     h3Previewing,
     promptRestored,
+    lastCompiledPrompt,
     qualityReviews,
     analyzingCandidateId,
     anchors,
@@ -800,9 +840,12 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     close,
     candidateStatus,
     candidateDuration,
+    candidateStartTime,
+    formatCandidateStartTime,
     candidatePreviewUrl,
     candidateMediaId,
     restoreLastUsedPrompt,
+    resolveVideoPromptPresentation,
     videoStatusLabel,
     anchorRoleLabel,
   }

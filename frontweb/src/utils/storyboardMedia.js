@@ -15,9 +15,32 @@ function isHttpVideoUrl(url) {
 
 function isCompletedImage(i) {
   return i?.status === 'completed'
-    && i.frame_type !== 'quad_grid'
-    && i.frame_type !== 'nine_grid'
+    && !isGridSourceType(i.frame_type)
     && (i.image_url || i.local_path)
+}
+
+function isGridSourceType(frameType) {
+  return frameType === 'quad_grid' || frameType === 'nine_grid'
+}
+
+function isGridPanelType(frameType) {
+  return /^(?:quad|nine)_panel_\d+$/.test(String(frameType || ''))
+}
+
+function isFrameReferenceType(frameType) {
+  return new Set(['first', 'last', 'tail', 'last_frame', 'storyboard_first', 'storyboard_last']).has(String(frameType || '').toLowerCase())
+}
+
+function sameImageReference(record, value) {
+  if (!record || value == null) return false
+  return String(record.id) === String(value)
+    || (record.image_url && String(record.image_url) === String(value))
+    || (record.local_path && String(record.local_path) === String(value))
+}
+
+function panelIndex(frameType) {
+  const match = String(frameType || '').match(/_panel_(\d+)$/)
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
 }
 
 export function getSbImagesList(imagesBySbId, storyboardId) {
@@ -77,7 +100,25 @@ export function resolveSbLastImageRecord(sb, imagesBySbId) {
 export function resolveSbMainImageRecord(sb, imagesBySbId) {
   if (!sb) return null
   const images = getSbImagesList(imagesBySbId, sb.id)
-  if (images.length) return images[0]
+  // Keep an explicitly bound main image authoritative, even when newer history
+  // rows (for example split grid panels) were inserted after it.
+  const bound = images.find((image) => sameImageReference(image, sb.first_frame_image_id))
+    || images.find((image) => sameImageReference(image, sb.image_url))
+    || images.find((image) => sameImageReference(image, sb.local_path))
+  if (bound && !isFrameReferenceType(bound.frame_type) && !isGridPanelType(bound.frame_type)) return bound
+
+  const normal = images.filter((image) => !isFrameReferenceType(image.frame_type) && !isGridPanelType(image.frame_type))
+  if (normal.length) return normal[0]
+
+  const panels = images
+    .filter((image) => isGridPanelType(image.frame_type))
+    .sort((a, b) => {
+      const aSelected = Number(sb.main_panel_idx) === panelIndex(a.frame_type)
+      const bSelected = Number(sb.main_panel_idx) === panelIndex(b.frame_type)
+      if (aSelected !== bSelected) return aSelected ? -1 : 1
+      return panelIndex(a.frame_type) - panelIndex(b.frame_type)
+    })
+  if (panels.length) return panels[0]
   if (sb.local_path || sb.image_url) {
     return { image_url: sb.image_url, local_path: sb.local_path }
   }

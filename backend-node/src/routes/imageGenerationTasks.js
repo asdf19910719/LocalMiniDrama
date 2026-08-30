@@ -43,7 +43,9 @@ module.exports = (db, log = console) => {
       ...input,
       generationChannel: requestedChannel,
       promptSnapshot: generation.prompt,
-      referenceManifest: input.referenceImages || generation.references,
+      // References are resolved from the target identity above. Never trust a
+      // stale client manifest, which can belong to another shot or asset.
+      referenceManifest: generation.references,
       frameType: generation.frameType,
     });
     if (task.generation_channel === 'chatgpt_web') {

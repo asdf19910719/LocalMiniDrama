@@ -116,7 +116,11 @@ function videoGenerationRow(row) {
     created_at: row.video_created_at,
     updated_at: row.video_updated_at,
     completed_at: row.video_completed_at,
+    started_at: row.video_started_at || null,
     prompt_snapshot: row.video_prompt_snapshot || null,
+    source_prompt: row.video_source_prompt || null,
+    compiled_prompt: row.video_compiled_prompt || null,
+    prompt_format: row.video_prompt_format || null,
     preview_url: videoUrl || (localPath ? `/static/${String(localPath).replace(/^\/+/, '')}` : null),
   };
 }
@@ -185,6 +189,9 @@ function unifiedCandidateArtifactRow(db, videoGenerationId) {
       ${videoColumnExpression(db, 'duration', 'video_duration')},
       video.created_at AS video_created_at, video.updated_at AS video_updated_at,
       ${videoColumnExpression(db, 'completed_at', 'video_completed_at')}
+      ,${videoColumnExpression(db, 'source_prompt', 'video_source_prompt')}
+      ,${videoColumnExpression(db, 'compiled_prompt', 'video_compiled_prompt')}
+      ,${videoColumnExpression(db, 'prompt_format', 'video_prompt_format')}
     FROM director_candidates candidate
     JOIN video_generations video ON video.id = candidate.video_generation_id
     WHERE candidate.video_generation_id = ?`).get(Number(videoGenerationId)) || null;
@@ -301,12 +308,17 @@ function candidatesForGroup(db, groupId) {
       video.local_path AS video_local_path, video.status AS video_status,
       video.error_msg AS video_error_msg, video.created_at AS video_created_at,
       video.updated_at AS video_updated_at, video.completed_at AS video_completed_at,
-      video.prompt AS video_prompt_snapshot,`
+      ${videoColumnExpression(db, 'started_at', 'video_started_at')},
+      video.prompt AS video_prompt_snapshot,
+      ${videoColumnExpression(db, 'source_prompt', 'video_source_prompt')},
+      ${videoColumnExpression(db, 'compiled_prompt', 'video_compiled_prompt')},
+      ${videoColumnExpression(db, 'prompt_format', 'video_prompt_format')},`
     : `NULL AS video_generation_id, NULL AS video_storyboard_id, NULL AS video_provider,
       NULL AS video_protocol, NULL AS video_model, NULL AS video_url,
       NULL AS video_local_path, NULL AS video_status, NULL AS video_error_msg,
       NULL AS video_created_at, NULL AS video_updated_at, NULL AS video_completed_at,
-      NULL AS video_prompt_snapshot,`;
+      NULL AS video_started_at, NULL AS video_prompt_snapshot, NULL AS video_source_prompt,
+      NULL AS video_compiled_prompt, NULL AS video_prompt_format,`;
   const videoJoin = hasVideoLink && hasVideoTable
     ? 'LEFT JOIN video_generations video ON video.id = candidate.video_generation_id'
     : '';

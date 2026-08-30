@@ -86,7 +86,7 @@ describe('video generation snapshot migration', () => {
     const row = db.prepare(`
       SELECT id, provider, model, config_id, config_snapshot, protocol,
         width, height, frame_rate, negative_prompt, continuity_mode,
-        anchor_id, candidate_group_id
+        anchor_id, candidate_group_id, started_at
       FROM video_generations WHERE id = 42
     `).get();
 
@@ -104,6 +104,7 @@ describe('video generation snapshot migration', () => {
       continuity_mode: null,
       anchor_id: null,
       candidate_group_id: null,
+      started_at: null,
     });
   });
 });
