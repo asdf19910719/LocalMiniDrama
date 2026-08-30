@@ -8,7 +8,7 @@ function image(url) { return { currentSrc: url, src: url, dataset: {} }; }
 
 test('collector binds only to the registered assistant and fingerprints source nodes', () => {
   const result = extractResultSet(node('assistant-1', [image('https://cdn.test/a.png')]), { attemptId: 'attempt-1', assistantMessageId: 'assistant-1', resultSetId: 'set-1' });
-  assert.equal(result.status, 'RESULT_READY'); assert.equal(result.results[0].nodeFingerprint, 'assistant-1:0:https://cdn.test/a.png');
+  assert.equal(result.status, 'RESULT_READY'); assert.equal(result.results[0].nodeFingerprint, 'assistant-1:https://cdn.test/a.png');
   assert.equal(result.assistantMessageId, 'assistant-1');
   assert.equal(extractResultSet(node('assistant-2', [image('https://cdn.test/b.png')]), { assistantMessageId: 'assistant-1' }).status, 'UNBOUND_RESULT');
 });
@@ -160,6 +160,23 @@ test('collector keeps only http(s) sources when placeholders are mixed in', () =
   assert.equal(mixed.status, 'RESULT_READY');
   assert.equal(mixed.results.length, 1);
   assert.equal(mixed.results[0].sourceUrl, 'https://chatgpt.com/backend-api/estuary/content?id=done');
+});
+
+test('collector deduplicates repeated DOM image nodes that point to the same source', () => {
+  const duplicate = extractResultSet(
+    node('assistant-duplicate', [
+      image('https://chatgpt.com/backend-api/estuary/content?id=same-file'),
+      image('https://chatgpt.com/backend-api/estuary/content?id=same-file'),
+      image('https://chatgpt.com/backend-api/estuary/content?id=other-file'),
+    ]),
+    { attemptId: 'attempt-duplicate', assistantMessageId: 'assistant-duplicate', resultSetId: 'set-duplicate' },
+  );
+  assert.equal(duplicate.status, 'RESULT_READY');
+  assert.deepEqual(duplicate.results.map((result) => result.sourceUrl), [
+    'https://chatgpt.com/backend-api/estuary/content?id=same-file',
+    'https://chatgpt.com/backend-api/estuary/content?id=other-file',
+  ]);
+  assert.deepEqual(duplicate.results.map((result) => result.resultIndex), [0, 1]);
 });
 
 test('beginAttempt ignores assistant nodes that existed before submit even without identity', () => {

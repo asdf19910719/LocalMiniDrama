@@ -103,6 +103,11 @@ test('store notifies queue completion on drained terminal events', () => {
   // 通过异步追探 claim-next 判定队列已空（含 active_task_id 判定）
   assert.match(source, /claimNext\(\)/)
   assert.match(source, /active_task_id/)
+  // Queue drain must report review/failed counts instead of claiming every
+  // task completed when no active task remains.
+  assert.match(source, /summaryResult/)
+  assert.match(source, /needs_review/)
+  assert.match(source, /failed/)
 })
 
 test('store wires the driver with real bridge/api deps and deduped notifications', () => {

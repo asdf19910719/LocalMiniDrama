@@ -34,7 +34,7 @@
 
   // src/sites/chatgpt/resultCollector.js
   function fingerprint(node, id, index, url) {
-    return `${id}:${index}:${url}`;
+    return `${id}:${url}`;
   }
   function extractResultSet(node, attempt = {}) {
     const actual = messageIdentity(node);
@@ -43,9 +43,12 @@
     if (!identityMatches(actual, { messageId: expected })) return { status: "UNBOUND_RESULT", reason: "assistant identity mismatch", results: [] };
     const turnRole = node.getAttribute?.("data-turn") || node.getAttribute?.("data-message-author-role");
     if (turnRole === "user") return { status: "GENERATING", resultSetId: attempt.resultSetId || `${attempt.attemptId || expected}:results`, attemptId: attempt.attemptId, assistantMessageId: actual.messageId, results: [] };
-    const results = [...node.querySelectorAll?.("img") || []].map((img, resultIndex) => {
+    const seenSources = /* @__PURE__ */ new Set();
+    const results = [...node.querySelectorAll?.("img") || []].map((img) => {
       const sourceUrl = img.currentSrc || img.src || img.getAttribute?.("src");
-      if (!sourceUrl || !/^https?:/i.test(sourceUrl)) return null;
+      if (!sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
+      seenSources.add(sourceUrl);
+      const resultIndex = seenSources.size - 1;
       return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
     }).filter(Boolean);
     return {

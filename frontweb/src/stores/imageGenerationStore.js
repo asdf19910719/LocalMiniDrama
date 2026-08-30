@@ -221,9 +221,22 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
         queueDriver?.tick(result)
         return
       }
-      if (!result?.active_task_id) {
-        ElNotification({ title: '队列完成', message: '全部生图任务已完成', type: 'success', onClick: () => { openTaskById(event.taskId) } })
-      }
+      if (result?.active_task_id) return
+      // No active task does not imply every task succeeded: review and failed
+      // tasks are terminal too. Read the summary before showing completion.
+      const summaryResult = await imageGenerationTaskAPI.summary(event.task?.drama_id ?? dramaId.value)
+      const remaining = ['draft', 'queued', 'preparing', 'submitted', 'generating']
+        .reduce((total, status) => total + Number(summaryResult?.[status] || 0), 0)
+      if (remaining > 0) return
+      const review = Number(summaryResult?.needs_review || 0)
+      const failed = Number(summaryResult?.failed || 0)
+      const hasIssues = review || failed
+      ElNotification({
+        title: hasIssues ? '队列已处理' : '队列完成',
+        message: hasIssues ? `队列已处理：${review} 个待审核，${failed} 个失败` : '全部生图任务已完成',
+        type: hasIssues ? 'warning' : 'success',
+        onClick: () => { openTaskById(event.taskId) },
+      })
     } catch (_) {
       // 探针失败保持静默：驱动器的下一个周期会正常领取并推进
     }
