@@ -445,6 +445,13 @@
       </section>
 
       <!-- 资源管理：角色 / 道具 / 场景 -->
+      <EpisodeGenerationProgress
+        :episode-id="currentEpisodeId"
+        :environment="imageGenerationEnvironment"
+        @check-environment="onEpisodeProgressEnvironmentCheck"
+        @open-video="onEpisodeProgressOpenVideo"
+      />
+
       <section class="section card resource-panel">
         <div class="collapse-header" @click="resourcePanelCollapsed = !resourcePanelCollapsed">
           <h2 class="section-title">资源管理</h2>
@@ -2683,6 +2690,7 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -6656,6 +6664,21 @@ function openVideoGenerationPanel(sb) {
   if (!sb?.id) return
   videoGenerationTarget.value = sb
   showVideoGenerationDrawer.value = true
+}
+
+function onEpisodeProgressOpenVideo(storyboardId) {
+  const storyboard = storyboards.value.find((item) => Number(item.id) === Number(storyboardId))
+  if (!storyboard) return
+  scrollToAnchor('sb-' + storyboard.id)
+  openVideoGenerationPanel(storyboard)
+}
+
+async function onEpisodeProgressEnvironmentCheck() {
+  if (dramaId.value == null) return
+  await checkImageGenerationEnvironment({
+    dramaId: dramaId.value,
+    channel: imageGenerationDefaultChannel.value,
+  }, { force: true }).catch(() => {})
 }
 
 function onVideoGenerationAnchorCreated(anchor) {

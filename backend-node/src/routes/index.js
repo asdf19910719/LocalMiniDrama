@@ -25,6 +25,7 @@ const sceneModelMapRoutes = require('./sceneModelMap');
 const directorRoutes = require('./director');
 const externalGenerationRoutes = require('./externalGeneration');
 const imageGenerationTaskRoutes = require('./imageGenerationTasks');
+const episodeGenerationProgressRoutes = require('./episodeGenerationProgress');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
@@ -57,6 +58,7 @@ function setupRouter(cfg, db, log) {
   const storyboards = storyboardRoutes(db, log);
   const tailFrameLink = tailFrameLinkRoutes(db, cfg, log);
   const images = imageRoutes(db, cfg, log);
+  const episodeGenerationProgress = episodeGenerationProgressRoutes(db, log);
   const videoMerges = videoMergeRoutes(db, log);
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
@@ -338,6 +340,9 @@ function setupRouter(cfg, db, log) {
   r.post('/images/upload', images.upload);
   r.get('/images/:id', images.get);
   r.delete('/images/:id', images.delete);
+
+  // ---------- episode generation progress ----------
+  r.get('/episodes/:episodeId/generation-progress', episodeGenerationProgress.get);
 
   // ---------- videos ----------
   r.get('/videos', videos.list);
