@@ -2624,7 +2624,9 @@
       :task="imageGenerationTask"
       :results="imageGenerationTask?.candidates || imageGenerationTask?.results || []"
       :sending="imageGenerationSending"
+      :environment="imageGenerationEnvironment"
       @close="closeImageGenerationDrawer"
+      @check-environment="checkImageGenerationEnvironment"
       @send="onImageGenerationSend"
       @recover="onImageGenerationRecover"
       @requeue="onImageGenerationRequeue"
@@ -2708,6 +2710,8 @@ const { videoResolution: storeVideoResolution } = storeToRefs(store)
 const {
   defaultChannel: imageGenerationDefaultChannel,
   currentTask: imageGenerationTask,
+  environment: imageGenerationEnvironment,
+  checkEnvironment: checkImageGenerationEnvironment,
   drawerVisible: imageGenerationDrawerVisible,
   loading: imageGenerationSending,
   open: openImageGenerationTask,

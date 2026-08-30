@@ -230,6 +230,38 @@ export class BackgroundController {
   async handle(message, sender = {}) {
     await this.init(); const action = message?.action;
     if (action === 'flush') return { ok: true, confirmed: await this.flush() };
+    if (action === 'diagnostics') {
+      const checks = [];
+      let session = null;
+      try { session = await this.ensureProviderSession(message, sender); } catch (error) {
+        checks.push({ key: 'provider_tab', status: 'failed', code: 'PROVIDER_TAB_UNAVAILABLE', message: error.message });
+      }
+      const tabId = session?.tabId ?? message.tabId ?? sender.tab?.id;
+      if (!tabId) {
+        checks.push({ key: 'provider_tab', status: 'failed', code: 'PROVIDER_TAB_MISSING', message: '未找到 ChatGPT 标签页' });
+      } else if (!checks.some((check) => check.key === 'provider_tab')) {
+        const identity = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'identity' }).catch(() => null);
+        if (!identity?.ok) {
+          checks.push({ key: 'provider_tab', status: 'failed', code: 'CONTENT_SCRIPT_UNAVAILABLE', message: 'ChatGPT 页面扩展脚本未响应' });
+        } else {
+          checks.push({ key: 'provider_tab', status: 'ok', message: 'ChatGPT 标签页可通信' });
+          const expectedConversation = message.conversationId || session?.conversationId || null;
+          const actualConversation = identity.value?.conversationId || null;
+          checks.push(expectedConversation && actualConversation !== expectedConversation
+            ? { key: 'conversation', status: 'failed', code: 'CONVERSATION_MISMATCH', message: 'ChatGPT 会话与项目绑定不一致' }
+            : actualConversation
+              ? { key: 'conversation', status: 'ok', message: '项目会话匹配' }
+              : { key: 'conversation', status: 'failed', code: 'CONVERSATION_MISSING', message: 'ChatGPT 当前没有可用会话' });
+          const ready = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'ready' }).catch(() => null);
+          checks.push(ready?.ok && ready.value?.composer === false
+            ? { key: 'composer', status: 'failed', code: 'COMPOSER_NOT_READY', message: 'ChatGPT 输入框尚未就绪' }
+            : ready?.ok === false
+              ? { key: 'composer', status: 'failed', code: 'CONTENT_SCRIPT_UNAVAILABLE', message: 'ChatGPT 页面扩展脚本未响应' }
+              : { key: 'composer', status: 'ok', message: 'ChatGPT 输入框可用' });
+        }
+      }
+      return { ok: true, diagnostics: { canProceed: checks.length > 0 && checks.every((check) => check.status !== 'failed'), checkedAt: new Date().toISOString(), checks } };
+    }
     if (action === 'pairBridge') { const result = await this.bridge.pair(message.pairingToken); await this.storage.set({ bridgeConfig: { baseUrl: this.bridge.baseUrl, accessToken: this.bridge.accessToken } }); return { ok: true, result }; }
     if (action === 'createAttempt') { const attempt = await this.workbench.createAttempt(message.jobId, message.payload || {}); await this.emit('ATTEMPT_CREATED', { jobId: message.jobId, attemptId: attempt.id }); return { ok: true, attempt }; }
     if (action === 'importResult') { const result = await this.workbench.importImage(message.payload); await this.emit('RESULT_IMPORTED', { attemptId: message.payload.attemptId, resultSetId: message.payload.resultSetId, resultIndex: message.payload.resultIndex, result }); return { ok: true, result }; }

@@ -6,6 +6,7 @@ import {
   shouldPollImageGenerationTask,
   shouldReattachImageGenerationTask,
 } from '../src/utils/imageGenerationTaskState.js'
+import { clearImageGenerationEnvironmentCache, runImageGenerationEnvironmentCheck } from '../src/utils/imageGenerationEnvironment.js'
 
 test('flattens imported external results into drawer candidates', () => {
   const task = normalizeImageGenerationTask({
@@ -50,4 +51,26 @@ test('an idempotent prepare response never submits the same ChatGPT prompt twice
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'submitted' } }), 'recover')
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'generating' } }), 'recover')
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'needs_review' } }), 'review')
+})
+
+test('environment check combines backend and ChatGPT diagnostics by channel', async () => {
+  clearImageGenerationEnvironmentCache()
+  let backendCalls = 0
+  let bridgeCalls = 0
+  const result = await runImageGenerationEnvironmentCheck({
+    dramaId: 7, channel: 'chatgpt_web', targetType: 'scene', targetId: 3,
+    requestBackend: async () => { backendCalls += 1; return { canProceed: true, checks: [{ key: 'backend', status: 'ok' }] } },
+    requestBridge: async () => { bridgeCalls += 1; return { canProceed: true, checks: [{ key: 'provider_tab', status: 'ok' }] } },
+  })
+  assert.equal(result.canProceed, true)
+  assert.equal(result.checks.length, 2)
+  assert.equal(backendCalls, 1)
+  assert.equal(bridgeCalls, 1)
+  await runImageGenerationEnvironmentCheck({
+    dramaId: 7, channel: 'chatgpt_web', targetType: 'scene', targetId: 3,
+    requestBackend: async () => { backendCalls += 1; return { canProceed: true, checks: [] } },
+    requestBridge: async () => { bridgeCalls += 1; return { canProceed: true, checks: [] } },
+  })
+  assert.equal(backendCalls, 1)
+  assert.equal(bridgeCalls, 1)
 })

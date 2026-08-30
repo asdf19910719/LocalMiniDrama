@@ -5,6 +5,7 @@ import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 import { buildChatGPTImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { createQueueDriver } from '@/utils/imageGenerationQueueDriver'
+import { runImageGenerationEnvironmentCheck, clearImageGenerationEnvironmentCache } from '@/utils/imageGenerationEnvironment'
 import {
   normalizeImageGenerationTask,
   resolveChatGPTPrepareAction,
@@ -48,6 +49,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const drawerVisible = ref(false)
   const loading = ref(false)
   const errorMessage = ref('')
+  const environment = ref(null)
   let taskPollTimer = null
 
   function stopTaskPolling() {
@@ -101,11 +103,31 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     defaultChannel.value = result?.channel || 'api'
     return defaultChannel.value
   }
+  async function checkEnvironment(input = {}, { force = false } = {}) {
+    const channel = input.channel || input.generationChannel || defaultChannel.value || 'api'
+    const result = await runImageGenerationEnvironmentCheck({
+      dramaId: input.dramaId ?? dramaId.value,
+      channel,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      force,
+      requestBackend: ({ dramaId: id, channel: selectedChannel, targetType, targetId }) => imageGenerationTaskAPI.environment(id, { channel: selectedChannel, targetType, targetId }),
+      requestBridge: (message) => sendImageGenerationBridgeMessage(message, 10000).then((response) => response?.diagnostics || { canProceed: false, checks: [{ key: 'workbench_bridge', status: 'failed', code: 'BRIDGE_INVALID', message: '扩展诊断返回无效' }] }),
+    })
+    environment.value = result
+    if (result.canProceed) queueDriver?.resume?.()
+    return result
+  }
   async function openTask(input) {
     stopTaskPolling()
     loading.value = true
     errorMessage.value = ''
     try {
+      const readiness = await checkEnvironment(input, { force: true })
+      if (!readiness.canProceed) {
+        const failed = readiness.checks.find((check) => check.status === 'failed')
+        throw new Error(failed?.message || '生图环境未就绪，请先修复环境后重试')
+      }
       currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.create(input))
       drawerVisible.value = true
       await loadSummary(input.dramaId, { reattach: false })
@@ -207,6 +229,9 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       ElNotification({ title: '生图完成', message: count ? `${count} 张候选待选择` : '候选已导入，请选择', type: 'success', onClick: () => { openTaskById(event.taskId) } })
     } else if (event.type === 'failed') {
       ElNotification({ title: '生图失败', message: event.message || '请重新排队', type: 'error', onClick: () => { openTaskById(event.taskId) } })
+    } else if (event.type === 'environment_blocked') {
+      const failed = event.diagnostics?.checks?.find((check) => check.status === 'failed')
+      ElNotification({ title: '生图环境未就绪', message: failed?.message || '请修复环境后重新检测', type: 'warning', onClick: () => { openTaskById(event.taskId) } })
     } else if (event.type === 'terminal') {
       // 异步追探一次领取接口，确认队列已清空才提示"全部完成"；
       // 探针若恰好领到任务，把领取结果直接交回驱动器推进，避免其滞留 preparing。
@@ -257,6 +282,8 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       sendAttempt: sendChatGPTAttempt,
       acknowledge: (id, attemptId) => imageGenerationTaskAPI.acknowledge(id, attemptId),
       failTask: (id, message) => imageGenerationTaskAPI.failTask(id, message),
+      deferTask: (id) => imageGenerationTaskAPI.deferTask(id),
+      beforeSend: (task) => checkEnvironment({ dramaId: task.drama_id, channel: task.generation_channel, targetType: task.target_type, targetId: task.target_id }, { force: true }),
       onEvent: notifyQueueEvent,
     })
     queueDriver.start()
@@ -291,5 +318,5 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     }
   }
 
-  return { dramaId, defaultChannel, summary, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
+  return { dramaId, defaultChannel, summary, environment, checkEnvironment, clearEnvironmentCache: clearImageGenerationEnvironmentCache, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
 })

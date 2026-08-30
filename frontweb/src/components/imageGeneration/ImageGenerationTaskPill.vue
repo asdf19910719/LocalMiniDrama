@@ -1,18 +1,24 @@
 <template>
-  <el-tooltip v-if="visible" :content="'点击查看生图任务抽屉'" placement="top">
-    <el-button size="small" :type="attention ? 'warning' : 'info'" plain class="image-task-pill" @click="open">
-      {{ label }}
-    </el-button>
-  </el-tooltip>
+  <span v-if="visible || environment">
+    <ImageGenerationEnvironmentStatus :environment="environment" :checking="checking" @check="check" />
+    <el-tooltip v-if="visible" :content="'点击查看生图任务抽屉'" placement="top">
+      <el-button size="small" :type="attention ? 'warning' : 'info'" plain class="image-task-pill" @click="open">
+        {{ label }}
+      </el-button>
+    </el-tooltip>
+  </span>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useImageGenerationStore } from '@/stores/imageGenerationStore'
+import ImageGenerationEnvironmentStatus from './ImageGenerationEnvironmentStatus.vue'
 
 const props = defineProps({ dramaId: { type: [Number, String], required: true } })
 const store = useImageGenerationStore()
 const summary = ref(null)
+const environment = store.environment
+const checking = ref(false)
 let timer = null
 
 const counts = computed(() => summary.value || {})
@@ -33,9 +39,17 @@ const label = computed(() => {
 async function refresh() {
   try {
     summary.value = await store.loadSummary(props.dramaId, { reattach: false })
+    await check()
   } catch (_) {
     // 摘要暂时不可用时保持上次内容，下个周期重试
   }
+}
+
+async function check() {
+  if (checking.value) return
+  checking.value = true
+  try { await store.checkEnvironment({ dramaId: props.dramaId, channel: store.defaultChannel }) } catch (_) {}
+  finally { checking.value = false }
 }
 
 function open() {

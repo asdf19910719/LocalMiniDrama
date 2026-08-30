@@ -69,6 +69,24 @@ test('retries transient send errors within budget then fails and does not block'
   assert.ok(events.some((e) => e.type === 'failed'))
 })
 
+test('pauses and defers a task when the environment preflight fails', async () => {
+  const task = { id: 'env-blocked', status: 'preparing' }
+  let sends = 0
+  let deferred = 0
+  const { driver, events } = makeDriver({
+    claimNext: async () => ({ claimed: true, task }),
+    beforeSend: async () => ({ canProceed: false, checks: [{ key: 'bridge', status: 'failed', message: '扩展未响应' }] }),
+    deferTask: async () => { deferred += 1; return { ...task, status: 'queued' } },
+    sendAttempt: async () => { sends += 1 },
+  })
+  await driver.tick()
+  await driver.tick()
+  driver.stop()
+  assert.equal(deferred, 1)
+  assert.equal(sends, 0)
+  assert.equal(events.at(-1).type, 'environment_blocked')
+})
+
 test('does not claim again while driving and ignores claim when busy', async () => {
   let claims = 0
   const { driver, events } = makeDriver({ claimNext: async () => { claims += 1; return { claimed: false } } })

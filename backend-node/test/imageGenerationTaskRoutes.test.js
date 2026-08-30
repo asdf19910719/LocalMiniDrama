@@ -7,6 +7,31 @@ const routes = require('../src/routes/imageGenerationTasks');
 const { createGenerationAttempt } = require('../src/services/externalGenerationService');
 const taskService = require('../src/services/imageGenerationTaskService');
 
+it('reports channel-specific image generation environment readiness without creating a task', async () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE dramas (id INTEGER PRIMARY KEY, metadata TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE ai_service_configs (id INTEGER PRIMARY KEY, service_type TEXT, provider TEXT, base_url TEXT, api_key TEXT, default_model TEXT, model TEXT, is_active INTEGER, is_default INTEGER, deleted_at TEXT);
+    INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
+    INSERT INTO characters VALUES (1, 7, '角色', '外观', '提示词', NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO ai_service_configs VALUES (1, 'image', 'openai', 'https://api.test', 'key', 'img-1', '["img-1"]', 1, 1, NULL);
+  `);
+  const app = express(); app.use(express.json()); app.use('/api/v1', routes(db, console));
+  const server = app.listen(0); const base = `http://127.0.0.1:${server.address().port}/api/v1`;
+  try {
+    const api = (await (await fetch(`${base}/dramas/7/image-generation-environment?channel=api&targetType=character&targetId=1`)).json()).data;
+    assert.equal(api.canProceed, true);
+    assert.equal(api.channel, 'api');
+    const chatgpt = (await (await fetch(`${base}/dramas/7/image-generation-environment?channel=chatgpt_web&targetType=character&targetId=1`)).json()).data;
+    assert.equal(chatgpt.canProceed, true);
+    assert.ok(chatgpt.checks.some((check) => check.key === 'chatgpt_web_enabled'));
+    const missing = await fetch(`${base}/dramas/999/image-generation-environment?channel=api`);
+    assert.equal(missing.status, 400);
+  } finally { await new Promise((resolve) => server.close(resolve)); db.close(); }
+});
+
 it('creates a unified task and exposes one drama summary', async () => {
   const db = new Database(':memory:');
   db.exec(`

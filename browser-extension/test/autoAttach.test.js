@@ -69,6 +69,34 @@ test('prepare replaces a closed stored tab with a live tab for the same conversa
   assert.equal(controller.sessions.get(3, 'chatgpt').tabId, 88)
 })
 
+test('diagnostics reports provider readiness and conversation identity', async () => {
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => {
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        if (message.action === 'ready') return { ok: true, value: { composer: true } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  const result = await controller.handle({ action: 'diagnostics', dramaId: 3, site: 'chatgpt', conversationId: 'conv-1' })
+  assert.equal(result.ok, true)
+  assert.equal(result.diagnostics.canProceed, true)
+  assert.equal(result.diagnostics.checks.find((check) => check.key === 'provider_tab').status, 'ok')
+  assert.equal(result.diagnostics.checks.find((check) => check.key === 'conversation').status, 'ok')
+})
+
+test('diagnostics reports missing provider tab instead of throwing', async () => {
+  const chromeApi = { tabs: { query: async () => [], sendMessage: async () => { throw new Error('missing') } } }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  const result = await controller.handle({ action: 'diagnostics', dramaId: 3, site: 'chatgpt' })
+  assert.equal(result.ok, true)
+  assert.equal(result.diagnostics.canProceed, false)
+  assert.equal(result.diagnostics.checks.find((check) => check.key === 'provider_tab').code, 'PROVIDER_TAB_MISSING')
+})
+
 test('prepare restores the persisted project conversation after the browser restarts on ChatGPT home', async () => {
   const messages = []
   const navigations = []

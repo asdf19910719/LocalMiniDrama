@@ -2,12 +2,14 @@
   <el-drawer :model-value="visible" title="图片生成" size="420px" @close="$emit('close')">
     <template v-if="task">
       <el-tag>{{ statusText }}</el-tag>
+      <ImageGenerationEnvironmentStatus :environment="environment" :checking="environmentChecking" @check="$emit('check-environment')" />
       <el-input :model-value="task.prompt_snapshot" type="textarea" :rows="5" readonly class="prompt" />
       <p v-if="task.generation_channel === 'chatgpt_web'">点击“ChatGPT 生成”后会自动加入队列依次发送；此处用于查看进度和选择结果。</p>
       <el-button
         v-if="task.status === 'draft' && task.generation_channel === 'chatgpt_web'"
         type="primary"
         :loading="sending"
+        :disabled="environment?.canProceed === false"
         @click="$emit('send', task)"
       >
         发送到 ChatGPT
@@ -36,8 +38,9 @@
 
 <script setup>
 import { computed } from 'vue'
-const props = defineProps({ visible: Boolean, task: Object, results: { type: Array, default: () => [] }, sending: Boolean })
-defineEmits(['close', 'send', 'recover', 'requeue', 'select'])
+import ImageGenerationEnvironmentStatus from './ImageGenerationEnvironmentStatus.vue'
+const props = defineProps({ visible: Boolean, task: Object, results: { type: Array, default: () => [] }, sending: Boolean, environment: { type: Object, default: null }, environmentChecking: Boolean })
+defineEmits(['close', 'send', 'recover', 'requeue', 'select', 'check-environment'])
 const labels = { draft: '待确认', queued: '排队中', preparing: '准备中', submitted: '已发送', generating: '生成中', needs_review: '请选择图片', completed: '已完成', failed: '失败', cancelled: '已取消' }
 const statusText = computed(() => labels[props.task?.status] || props.task?.status || '')
 </script>

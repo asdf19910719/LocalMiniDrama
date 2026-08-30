@@ -41,6 +41,15 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(store, /resolveChatGPTPrepareAction/)
 })
 
+test('image generation UI exposes environment checks in the pill and drawer', () => {
+  const pill = fs.readFileSync(path.join(root, 'src/components/imageGeneration/ImageGenerationTaskPill.vue'), 'utf8')
+  const drawer = fs.readFileSync(path.join(root, 'src/components/imageGeneration/ImageGenerationDrawer.vue'), 'utf8')
+  assert.match(pill, /ImageGenerationEnvironmentStatus/)
+  assert.match(pill, /checkEnvironment/)
+  assert.match(drawer, /environment\?\.canProceed === false/)
+  assert.match(drawer, /check-environment/)
+})
+
 test('all project asset and storyboard entry points use the unified controls', () => {
   const film = read('src/views/FilmCreate.vue')
   const canvas = read('src/views/DramaCanvas.vue')

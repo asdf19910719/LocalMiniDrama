@@ -67,6 +67,15 @@ function retryTask(db, taskId) {
   return updated;
 }
 
+function deferTask(db, taskId) {
+  const task = tasks.getTask(db, taskId);
+  if (!task) throw new Error('Image generation task not found');
+  if (task.status !== 'preparing') throw new Error('Only a preparing image generation task can be deferred');
+  const updated = tasks.transitionTask(db, taskId, 'queued');
+  if (task.batch_id) db.prepare("UPDATE image_generation_batches SET status='queued', updated_at=? WHERE id=?").run(new Date().toISOString(), task.batch_id);
+  return updated;
+}
+
 function cancelTask(db, taskId) {
   return skipTask(db, taskId);
 }
@@ -107,4 +116,4 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
   })();
 }
 
-module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, cancelTask, refreshBatch, claimNextChatgptTask };
+module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, deferTask, cancelTask, refreshBatch, claimNextChatgptTask };

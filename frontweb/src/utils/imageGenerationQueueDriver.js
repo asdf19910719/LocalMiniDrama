@@ -7,7 +7,7 @@ export function isTransientSendError(error) {
 const TERMINAL = new Set(['needs_review', 'completed', 'failed', 'cancelled'])
 
 export function createQueueDriver({
-  claimNext, getTask, prepareSend, sendAttempt, acknowledge, failTask,
+  claimNext, getTask, prepareSend, sendAttempt, acknowledge, failTask, beforeSend, deferTask,
   onEvent = () => {},
   intervalMs = 5000,
   retryLimit = 2,
@@ -18,11 +18,12 @@ export function createQueueDriver({
   // stop() pauses (tick no-ops, the watch loop exits), start() resumes and kicks a cycle.
   let stopped = false
   let driving = false
+  let blocked = false
   // `preclaimed` lets the caller hand over a result it already obtained from
   // claimNext (e.g. the store's queue-drained probe) so it is still driven
   // instead of idling in preparing until the stale timeout.
   async function tick(preclaimed) {
-    if (stopped || driving) return
+    if (stopped || driving || blocked) return
     driving = true
     try {
       const result = preclaimed || await claimNext()
@@ -38,6 +39,15 @@ export function createQueueDriver({
     onEvent({ type: 'claimed', taskId: task.id, task })
     let attemptId = null
     try {
+      if (beforeSend) {
+        const readiness = await beforeSend(task)
+        if (readiness?.canProceed === false) {
+          if (deferTask) await deferTask(task.id).catch(() => {})
+          blocked = true
+          onEvent({ type: 'environment_blocked', taskId: task.id, task, diagnostics: readiness })
+          return
+        }
+      }
       const prepared = await prepareSend(task.id)
       attemptId = prepared.attempt?.id
       if (!prepared.already_submitted) await sendWithRetry(prepared)
@@ -82,8 +92,9 @@ export function createQueueDriver({
     }
   }
   return {
-    start() { stopped = false; tick() },
+    start() { stopped = false; blocked = false; tick() },
     stop() { stopped = true },
+    resume() { blocked = false; if (!stopped) tick() },
     tick,
     isDriving: () => driving,
   }

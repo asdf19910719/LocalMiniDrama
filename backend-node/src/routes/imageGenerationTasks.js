@@ -6,6 +6,7 @@ const queue = require('../services/imageGenerationQueueService');
 const orchestrator = require('../services/imageGenerationOrchestrator');
 const { createExternalJob, getExternalJob, createGenerationAttempt } = require('../services/externalGenerationService');
 const settingsService = require('../services/settingsService');
+const { checkImageGenerationEnvironment } = require('../services/imageGenerationEnvironmentService');
 
 module.exports = (db, log = console) => {
   const router = express.Router();
@@ -72,6 +73,14 @@ module.exports = (db, log = console) => {
   router.get('/dramas/:dramaId/image-generation-summary', (req, res) =>
     handle(res, () => tasks.getSummary(db, req.params.dramaId)));
 
+  router.get('/dramas/:dramaId/image-generation-environment', (req, res) =>
+    handle(res, () => checkImageGenerationEnvironment(db, {
+      dramaId: req.params.dramaId,
+      channel: req.query.channel,
+      targetType: req.query.targetType,
+      targetId: req.query.targetId,
+    })));
+
   router.get('/dramas/:dramaId/image-generation-default', (req, res) =>
     handle(res, () => {
       const configuredChannel = tasks.getDefaultChannel(db, req.params.dramaId);
@@ -118,6 +127,8 @@ module.exports = (db, log = console) => {
     if (task.generation_channel !== 'chatgpt_web' || task.status !== 'preparing') throw new Error('Only a preparing chatgpt_web task can be failed');
     return tasks.transitionTask(db, task.id, 'failed', { errorCode: 'send_failed', errorMessage: String(req.body?.message || '发送失败') });
   }));
+
+  router.post('/image-generation-tasks/:taskId/defer', (req, res) => handle(res, () => queue.deferTask(db, req.params.taskId)));
 
   router.post('/image-generation-tasks/:taskId/prepare-send', (req, res) => handle(res, () => {
     let task = tasks.getTask(db, req.params.taskId);
