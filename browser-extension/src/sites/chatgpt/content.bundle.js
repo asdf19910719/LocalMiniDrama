@@ -128,6 +128,15 @@
       this.referencesReady = false;
       return { submittedAt: (/* @__PURE__ */ new Date()).toISOString() };
     }
+    async submitWhenReady({ timeoutMs = 12e4, intervalMs = 250 } = {}) {
+      const deadline = Date.now() + Math.max(0, timeoutMs);
+      do {
+        if (this.isSubmitReady()) return this.submit();
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(0, intervalMs), Math.max(0, deadline - Date.now()))));
+      } while (Date.now() <= deadline);
+      throw new Error("NOT_READY");
+    }
     findAssistant(identity) {
       const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []];
       return nodes.find((node) => !isUserTurn(node) && identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;
@@ -342,7 +351,10 @@
           }
           if (message.action === "fill") return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
           if (message.action === "upload") return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
-          if (message.action === "submit") return reply({ ok: true, value: adapter.submit() });
+          if (message.action === "submit") {
+            const submit = typeof adapter.submitWhenReady === "function" ? await adapter.submitWhenReady() : adapter.submit();
+            return reply({ ok: true, value: submit });
+          }
           if (message.action === "beginAttempt") {
             activeObservation?.();
             const attempt = message.attempt || {};

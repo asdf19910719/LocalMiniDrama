@@ -52,6 +52,15 @@ export class ChatGPTAdapter {
     button.click(); this.referencesReady = false;
     return { submittedAt: new Date().toISOString() };
   }
+  async submitWhenReady({ timeoutMs = 120000, intervalMs = 250 } = {}) {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    do {
+      if (this.isSubmitReady()) return this.submit();
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(0, intervalMs), Math.max(0, deadline - Date.now()))));
+    } while (Date.now() <= deadline);
+    throw new Error('NOT_READY');
+  }
   findAssistant(identity) {
     const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])];
     return nodes.find((node) => !isUserTurn(node) && identityMatches(messageIdentity(node), { messageId: identity.assistantMessageId || identity.messageId })) || null;

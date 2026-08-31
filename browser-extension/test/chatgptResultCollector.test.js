@@ -125,6 +125,17 @@ test('adapter uploads byte references through DataTransfer and exposes authentic
   const original = await adapter.fetchOriginal({ sourceUrl: 'https://files.oaiusercontent.com/a.png' }); assert.equal(original.mime, 'image/png'); assert.deepEqual([...original.bytes], [1, 2]);
 });
 
+test('adapter waits for a transiently disabled submit button before clicking', async () => {
+  let checks = 0;
+  const button = { get disabled() { checks += 1; return checks < 3; }, click() { this.clicked = true; } };
+  const composer = {};
+  const doc = { querySelector(selector) { return selector.includes('send') ? button : composer; }, querySelectorAll() { return []; } };
+  const adapter = new ChatGPTAdapter({ documentRef: doc });
+  await adapter.submitWhenReady({ timeoutMs: 100, intervalMs: 0 });
+  assert.equal(button.clicked, true);
+  assert.ok(checks >= 3);
+});
+
 test('adapter fills a ProseMirror contenteditable composer with an input event', () => {
   const previousDocument = globalThis.document;
   const events = [];

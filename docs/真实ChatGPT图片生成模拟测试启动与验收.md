@@ -287,6 +287,18 @@ H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点
 
 本轮还修复了顶部任务胶囊环境状态不响应的问题：组件改用 Pinia `storeToRefs`，并为环境检查增加版本保护，避免旧请求覆盖新通道结果。最终回归：后端 `325/325`（Node 22.22.3）、前端 `105/105`、扩展 `50/50`，前端与扩展构建均通过。
 
+## 2026-08-31 提交点击竞态的最终修复与全量资源连点复验
+
+前一轮 9 连点中道具项仍出现 `send_failed:NOT_READY`。调查确认后台第二次 `ready` 检查与内容脚本真正 `button.click()` 之间仍存在窗口：ChatGPT 可在检查后瞬时禁用发送按钮。新增 `ChatGPTAdapter.submitWhenReady()`，由内容脚本在最终提交请求内部再次按条件等待，最长 120 秒后才点击或返回 `NOT_READY`；runtime 的 `submit` 请求等待该异步门控。扩展回归测试先失败后修复通过，最终 `54/54`，bundle 已重建并重载。
+
+使用专用 Chrome for Testing Profile（CDP `9223`）刷新 ChatGPT 与工作台后，按用户此前顺序快速点击资源管理区的 9 个入口：
+
+1. 角色 `character:3`：Task `d040581f-9c17-43ce-b3e1-7b9d074f5456`，`submitted -> needs_review`，1 个候选。
+2. 道具 `prop:1`：Task `b58c8e95-343f-4b07-a3da-d321862e8fb9`，`submitted -> needs_review`，1 个候选。
+3. 场景 `scene:4` 至 `scene:10`：Tasks `e602d11b-54fe-45b8-962b-6eb7cc688026`、`982b6827-bd24-406c-988c-3a18a2a431c2`、`c0090f6a-4ef8-439f-a468-79405f3c515a`、`1f596d1f-38ef-4983-8c75-0668f099258a`、`53e87ddf-dff2-46b7-b5b1-e32a23fee5ac`、`042737b4-5dc8-4ef6-954a-9aecb6cdcce0`、`6e200ad7-b0be-4fe8-96c1-d610d49505c0`，全部 `submitted -> needs_review`，各 1 个候选。
+
+9 个 attempt 均只有一个 `SUBMITTED` 事件，均绑定同一 ChatGPT 会话 `6a8e99a4-ce38-83ec-9bdd-2690b8f16433`，assistant turn 从 `conversation-turn-12` 连续到 `conversation-turn-28`；无 `NOT_READY`、无 `send_failed`、无 `preparing` 遗留。后端 `chatgpt_web` 环境检查返回 `canProceed: true`，工作台实时显示“环境正常”和 9 个“候选待选择”。本轮保留 `needs_review`，未自动选择候选，避免测试脚本替用户改变素材绑定。
+
 ## 2026-08-31 第三项连续生图失败修复与重试验收
 
 针对连续点击时第三项提示“生图失败”的复现，确认失败任务 `1398410b-acb0-4cd1-bb94-c48e48bd077b` 只有 `ready_to_send` attempt、没有 `SUBMITTED` 事件，根因是前一项刚被捕获为 `needs_review` 时 ChatGPT 发送按钮仍处于禁用状态。扩展现已在 `beginAttempt` 前轮询 composer 与发送按钮，最长等待 120 秒；未就绪时不会伪提交，也不会把尚未发送的任务误报为已发送。

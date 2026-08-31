@@ -58,7 +58,10 @@ export function installChatGPTContentBridge({ chromeApi, adapter, globalRef = gl
         }
         if (message.action === 'fill') return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
         if (message.action === 'upload') return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
-        if (message.action === 'submit') return reply({ ok: true, value: adapter.submit() });
+        if (message.action === 'submit') {
+          const submit = typeof adapter.submitWhenReady === 'function' ? await adapter.submitWhenReady() : adapter.submit();
+          return reply({ ok: true, value: submit });
+        }
         if (message.action === 'beginAttempt') {
           activeObservation?.();
           const attempt = message.attempt || {};
