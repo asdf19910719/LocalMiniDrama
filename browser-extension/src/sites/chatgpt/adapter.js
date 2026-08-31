@@ -21,6 +21,12 @@ export class ChatGPTAdapter {
   }
   matches(url = this.location?.href || '') { return /^https:\/\/(www\.)?chatgpt\.com\//.test(url); }
   getConversationIdentity() { return conversationIdentity(this.location?.href); }
+  isComposerReady() { return Boolean(this.document?.querySelector?.(selectors.composer)); }
+  isSubmitReady() {
+    const composer = this.isComposerReady();
+    const button = this.document?.querySelector?.(selectors.send);
+    return composer && Boolean(button && !button.disabled);
+  }
   fillPrompt(prompt) {
     const element = this.document?.querySelector(selectors.composer); if (!element) throw new Error('ADAPTER_BROKEN');
     element.focus?.();

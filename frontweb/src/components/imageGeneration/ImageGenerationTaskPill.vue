@@ -11,13 +11,14 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useImageGenerationStore } from '@/stores/imageGenerationStore'
 import ImageGenerationEnvironmentStatus from './ImageGenerationEnvironmentStatus.vue'
 
 const props = defineProps({ dramaId: { type: [Number, String], required: true } })
 const store = useImageGenerationStore()
 const summary = ref(null)
-const environment = store.environment
+const { environment, defaultChannel } = storeToRefs(store)
 const checking = ref(false)
 let timer = null
 
@@ -48,7 +49,7 @@ async function refresh() {
 async function check() {
   if (checking.value) return
   checking.value = true
-  try { await store.checkEnvironment({ dramaId: props.dramaId, channel: store.defaultChannel }) } catch (_) {}
+  try { await store.checkEnvironment({ dramaId: props.dramaId, channel: defaultChannel.value }) } catch (_) {}
   finally { checking.value = false }
 }
 

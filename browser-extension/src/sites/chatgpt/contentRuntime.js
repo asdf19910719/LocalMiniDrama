@@ -52,7 +52,9 @@ export function installChatGPTContentBridge({ chromeApi, adapter, globalRef = gl
         if (message.action === 'identity') return reply({ ok: true, value: adapter.getConversationIdentity() });
         if (message.action === 'ready') {
           const composer = adapter.document?.querySelector?.('[contenteditable="true"], textarea#prompt-textarea, textarea[placeholder*="Message"], [role="textbox"][aria-label*="聊天"], [role="textbox"][aria-label*="Message"]');
-          return reply({ ok: true, value: { composer: Boolean(composer) } });
+          const composerReady = typeof adapter.isComposerReady === 'function' ? adapter.isComposerReady() : Boolean(composer);
+          const submit = typeof adapter.isSubmitReady === 'function' ? adapter.isSubmitReady() : undefined;
+          return reply({ ok: true, value: { composer: composerReady, ...(submit === undefined ? {} : { submit }) } });
         }
         if (message.action === 'fill') return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
         if (message.action === 'upload') return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });

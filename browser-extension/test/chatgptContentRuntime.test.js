@@ -98,6 +98,22 @@ test('provider bridge installs one runtime listener and never forwards page mess
   assert.deepEqual(pageListeners, []);
 });
 
+test('provider ready reports whether the submit button is currently enabled', async () => {
+  const listeners = [];
+  const chromeApi = { runtime: { onMessage: { addListener(listener) { listeners.push(listener); } } } };
+  const adapter = {
+    getConversationIdentity() { return { conversationId: 'conv-1' }; },
+    isComposerReady() { return true; },
+    isSubmitReady() { return false; },
+  };
+  const documentRef = { documentElement: { hasAttribute() { return false; }, setAttribute() {} } };
+  installChatGPTContentBridge({ chromeApi, adapter, globalRef: { document: documentRef } });
+  let response;
+  listeners[0]({ action: 'ready' }, {}, (value) => { response = value; });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(response, { ok: true, value: { composer: true, submit: false } });
+});
+
 test('provider bridge uses a DOM marker to avoid duplicate isolated-world listeners', () => {
   const runtimeListeners = [];
   const attrs = new Map([['data-aistory-chatgpt-bridge', 'v1']]);

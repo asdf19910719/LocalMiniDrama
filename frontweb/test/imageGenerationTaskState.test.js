@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   normalizeImageGenerationTask,
   resolveChatGPTPrepareAction,
@@ -73,4 +76,27 @@ test('environment check combines backend and ChatGPT diagnostics by channel', as
   })
   assert.equal(backendCalls, 1)
   assert.equal(bridgeCalls, 1)
+})
+
+test('loading the saved default channel refreshes its environment status', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  const loadDefault = source.match(/async function loadDefault\(id\) \{([\s\S]*?)\n  \}/)?.[1] || ''
+  assert.match(loadDefault, /checkEnvironment\(\{ dramaId: id, channel: defaultChannel\.value \}, \{ force: true \}\)/)
+})
+
+test('stale environment checks cannot overwrite a newer channel result', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  assert.match(source, /let environmentCheckVersion = 0/)
+  assert.match(source, /const checkVersion = \+\+environmentCheckVersion/)
+  assert.match(source, /if \(checkVersion !== environmentCheckVersion\) return result/)
+})
+
+test('task pill keeps environment and default channel reactive', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const source = fs.readFileSync(path.join(root, 'src/components/imageGeneration/ImageGenerationTaskPill.vue'), 'utf8')
+  assert.match(source, /import \{ storeToRefs \} from ['"]pinia['"]/)
+  assert.match(source, /const \{ environment, defaultChannel \} = storeToRefs\(store\)/)
+  assert.match(source, /channel: defaultChannel\.value/)
 })

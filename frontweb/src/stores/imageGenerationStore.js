@@ -51,6 +51,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const errorMessage = ref('')
   const environment = ref(null)
   let taskPollTimer = null
+  let environmentCheckVersion = 0
 
   function stopTaskPolling() {
     if (taskPollTimer != null) globalThis.clearTimeout(taskPollTimer)
@@ -101,9 +102,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   async function loadDefault(id) {
     const result = await imageGenerationTaskAPI.getDefault(id)
     defaultChannel.value = result?.channel || 'api'
+    await checkEnvironment({ dramaId: id, channel: defaultChannel.value }, { force: true })
     return defaultChannel.value
   }
   async function checkEnvironment(input = {}, { force = false } = {}) {
+    const checkVersion = ++environmentCheckVersion
     const channel = input.channel || input.generationChannel || defaultChannel.value || 'api'
     const result = await runImageGenerationEnvironmentCheck({
       dramaId: input.dramaId ?? dramaId.value,
@@ -114,6 +117,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       requestBackend: ({ dramaId: id, channel: selectedChannel, targetType, targetId }) => imageGenerationTaskAPI.environment(id, { channel: selectedChannel, targetType, targetId }),
       requestBridge: (message) => sendImageGenerationBridgeMessage(message, 10000).then((response) => response?.diagnostics || { canProceed: false, checks: [{ key: 'workbench_bridge', status: 'failed', code: 'BRIDGE_INVALID', message: '扩展诊断返回无效' }] }),
     })
+    if (checkVersion !== environmentCheckVersion) return result
     environment.value = result
     if (result.canProceed) queueDriver?.resume?.()
     return result

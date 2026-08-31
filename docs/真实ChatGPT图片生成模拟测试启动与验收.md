@@ -274,3 +274,27 @@ H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点
 - 生图（ChatGPT 通道）：点击生成→自动入队→驱动器发送→候选导入→待选；期间发现并修复桥接 15 秒超时对慢参考图上传的误伤（`b062ea4`，放宽至 60 秒）。
 - 生视频（H3 通道 + 音色）：面板恢复上次提示词 ✓、音色开关 ✓、两个候选生成成功（生成耗时 4 分 25 秒 / 4 分 22 秒正确显示）✓。
 - 注意：迁移前旧目录的残留副本仍在 `E:/AI/references/LocalMiniDrama`（含被锁文件的旧副本），确认新位置稳定后可删除。
+
+## 2026-08-30 环境检测与连续三次 ChatGPT 生图复验
+
+本轮使用已登录的专用 Chrome for Testing Profile（CDP `9223`），前端 `http://127.0.0.1:3013`，后端 `http://127.0.0.1:5679`。在 `film/3?episode=3` 工作台连续执行三次“ChatGPT 生成”：
+
+1. 角色 `character:3`：Task `a0c85924-5c58-4148-ac9c-9d3e90f1ab32`，导入 1 个候选，`1448x1086`，选择后 `completed`。
+2. 道具 `prop:1`：Task `3e6207c4-0b28-47c1-8684-bbe1d45832be`，导入 2 个候选，均为 `1672x941`，选择后 `completed`。
+3. 场景 `scene:4`：Task `ef9a2708-43b4-4fa7-acb7-ca760d2b1d59`，导入 1 个候选，`1254x1254`，选择后 `completed`。
+
+四个候选内容接口均返回 `200 image/png`。后端 `chatgpt_web` 与 `api` 环境检查均为 `canProceed: true`；扩展诊断 `provider_tab`、`conversation`、`composer` 全部 `ok`。工作台顶部状态显示“环境正常”，任务胶囊显示“生图任务：待选 13”。
+
+本轮还修复了顶部任务胶囊环境状态不响应的问题：组件改用 Pinia `storeToRefs`，并为环境检查增加版本保护，避免旧请求覆盖新通道结果。最终回归：后端 `325/325`（Node 22.22.3）、前端 `105/105`、扩展 `50/50`，前端与扩展构建均通过。
+
+## 2026-08-31 第三项连续生图失败修复与重试验收
+
+针对连续点击时第三项提示“生图失败”的复现，确认失败任务 `1398410b-acb0-4cd1-bb94-c48e48bd077b` 只有 `ready_to_send` attempt、没有 `SUBMITTED` 事件，根因是前一项刚被捕获为 `needs_review` 时 ChatGPT 发送按钮仍处于禁用状态。扩展现已在 `beginAttempt` 前轮询 composer 与发送按钮，最长等待 120 秒；未就绪时不会伪提交，也不会把尚未发送的任务误报为已发送。
+
+重载扩展与页面后，将该任务重新排队并清理一个已确认的旧 `scene:7` 孤立 `submitted` 任务（无会话、无 assistant、无结果，已取消）以释放串行锁。真实重试结果：
+
+- `scene:4`：`queued -> submitted -> needs_review -> completed`；
+- ChatGPT 会话 `6a8e99a4-ce38-83ec-9bdd-2690b8f16433`，assistant `conversation-turn-12`；
+- 导入 1 个候选，`1254x1254`，内容接口 `200 image/png`；
+- 选择候选后绑定本地图片记录，任务无 `NOT_READY`、无 `send_failed`；
+- 后端与扩展环境诊断仍为 `canProceed: true`，工作台显示“环境正常”。

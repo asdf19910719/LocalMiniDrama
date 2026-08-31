@@ -85,6 +85,14 @@
     getConversationIdentity() {
       return conversationIdentity(this.location?.href);
     }
+    isComposerReady() {
+      return Boolean(this.document?.querySelector?.(selectors.composer));
+    }
+    isSubmitReady() {
+      const composer = this.isComposerReady();
+      const button = this.document?.querySelector?.(selectors.send);
+      return composer && Boolean(button && !button.disabled);
+    }
     fillPrompt(prompt) {
       const element = this.document?.querySelector(selectors.composer);
       if (!element) throw new Error("ADAPTER_BROKEN");
@@ -328,7 +336,9 @@
           if (message.action === "identity") return reply({ ok: true, value: adapter.getConversationIdentity() });
           if (message.action === "ready") {
             const composer = adapter.document?.querySelector?.('[contenteditable="true"], textarea#prompt-textarea, textarea[placeholder*="Message"], [role="textbox"][aria-label*="\u804A\u5929"], [role="textbox"][aria-label*="Message"]');
-            return reply({ ok: true, value: { composer: Boolean(composer) } });
+            const composerReady = typeof adapter.isComposerReady === "function" ? adapter.isComposerReady() : Boolean(composer);
+            const submit = typeof adapter.isSubmitReady === "function" ? adapter.isSubmitReady() : void 0;
+            return reply({ ok: true, value: { composer: composerReady, ...submit === void 0 ? {} : { submit } } });
           }
           if (message.action === "fill") return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
           if (message.action === "upload") return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });

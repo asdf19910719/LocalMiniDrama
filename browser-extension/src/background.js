@@ -192,14 +192,17 @@ export class BackgroundController {
     if (response?.ok === false) throw new Error(response.error || 'provider adapter rejected request')
     return response
   }
-  async waitForProviderReady(tabId, attempts = 40, intervalMs = 250) {
+  async waitForProviderReady(tabId, attempts = 40, intervalMs = 250, { submit = false } = {}) {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return false;
     for (let index = 0; index < attempts; index += 1) {
       const ready = await this.chromeApi.tabs.sendMessage(tabId, { action: 'ready' }).catch(() => null);
       // Older content scripts do not implement ready; let fill report the
       // adapter-specific error in that case while newer scripts can gate on
       // the composer actually being mounted.
-      if (!ready || ready.ok === false || (ready.ok && ready.value?.composer !== false)) return true;
+      const blocked = submit
+        ? ready?.ok && ready.value?.submit === false
+        : ready?.ok && ready.value?.composer === false;
+      if (!blocked) return true;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
     return false;
@@ -305,7 +308,11 @@ export class BackgroundController {
           await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
         } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
       }
-      if (tabId) await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
+      if (tabId) {
+        const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
+        if (!ready) throw new Error('provider composer is not ready');
+        await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
+      }
       if (tabId) await this.sendToProviderTab(tabId, { action: 'submit' });
       if (!conversationId) {
         const identity = await this.waitForConversationIdentity(tabId)
