@@ -298,3 +298,17 @@ H3 官方 ComfyUI 工作流原生支持参考音频（`MiniMaxH3Director` 节点
 - 导入 1 个候选，`1254x1254`，内容接口 `200 image/png`；
 - 选择候选后绑定本地图片记录，任务无 `NOT_READY`、无 `send_failed`；
 - 后端与扩展环境诊断仍为 `canProceed: true`，工作台显示“环境正常”。
+
+## 2026-08-31 第二次真实连续操作复现与提交前竞态修复
+
+按用户之前的操作顺序，在真实工作台 UI 中快速点击角色 `character:3`、道具 `prop:1`、场景 `scene:4` 三个“ChatGPT 生成”入口。第一次使用单个 120 秒门控时，角色和道具正常进入 `needs_review`，场景仍出现 `send_failed:NOT_READY`；该 attempt 只有 `ready_to_send`、没有 `SUBMITTED` 事件，说明失败发生在 `beginAttempt` 之后、真正点击发送按钮之前。
+
+修复为两阶段条件等待：`beginAttempt` 前等待一次，绑定观察器后、调用 `submit` 前再次等待一次。每次等待最长 120 秒，实际最坏情况是两次门控合计 240 秒；这段时间只用于 ChatGPT 页面就绪，不包含图片生成耗时。对当前真实登录环境而言，120 秒足以覆盖页面状态切换：新扩展重载后重试场景从重新排队到候选回传约 90 秒（含 ChatGPT 生成）。
+
+重新加载扩展和 ChatGPT 页面后，重复相同三连操作并完成候选选择：
+
+- `character:3`：Task `75b9a603-846d-425a-8ba5-aa651b187bc0`，候选 `1448x1086`，`completed`；
+- `prop:1`：Task `3ba6f415-34ca-4729-970e-911d862ca966`，候选 `1672x941`，`completed`；
+- `scene:4`：Task `fe84d76f-6b78-4740-b57b-5f6e0973124e`，候选 `1254x1254`，`completed`。
+
+三项均有真实 ChatGPT 会话和 assistant turn，候选内容接口均返回 `200 image/png`，本轮无 `NOT_READY`、无 `send_failed`。新增回归后扩展测试为 `53/53`，构建通过；后端服务健康检查正常，工作台环境状态仍显示“环境正常”。

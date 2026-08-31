@@ -67,6 +67,39 @@ test('send waits for the provider submit button before beginning an attempt', as
   assert.deepEqual(messages.slice(-2).map(([, message]) => message.action), ['beginAttempt', 'submit'])
 })
 
+test('send checks submit readiness again after binding the attempt', async () => {
+  const messages = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({
+    chromeApi,
+    storage: storage(),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }),
+  })
+  const readinessChecks = []
+  controller.waitForProviderReady = async (...args) => {
+    readinessChecks.push(args)
+    return true
+  }
+  controller.emit = async () => ({ id: 'event-1' })
+
+  await controller.handle({
+    action: 'send', dramaId: 3, site: 'chatgpt', jobId: 'job-1', attemptId: 'attempt-1',
+    conversationId: 'conv-1', payload: { id: 'attempt-1' },
+  })
+
+  assert.equal(readinessChecks.filter((args) => args[3]?.submit === true).length, 2)
+  assert.deepEqual(messages.slice(-2).map(([, message]) => message.action), ['beginAttempt', 'submit'])
+})
+
 test('prepare replaces a closed stored tab with a live tab for the same conversation', async () => {
   const messages = []
   const chromeApi = {
@@ -365,6 +398,7 @@ test('send auto-attaches a provider tab when invoked from the workbench tab', as
     [77, { action: 'identity' }],
     [77, { action: 'ready' }],
     [77, { action: 'beginAttempt', attempt: { attemptId: 'attempt-1', conversationId: 'conv-1' } }],
+    [77, { action: 'ready' }],
     [77, { action: 'submit' }],
   ])
   assert.match(apiCalls[0][0], /external-generation\/dramas\/3\/session\/attach$/)

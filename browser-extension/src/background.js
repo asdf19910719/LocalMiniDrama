@@ -313,7 +313,13 @@ export class BackgroundController {
         if (!ready) throw new Error('provider composer is not ready');
         await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
       }
-      if (tabId) await this.sendToProviderTab(tabId, { action: 'submit' });
+      if (tabId) {
+        // Binding the observer can overlap ChatGPT's own turn transition. Check
+        // the live button once more immediately before the click.
+        const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
+        if (!ready) throw new Error('provider composer is not ready');
+        await this.sendToProviderTab(tabId, { action: 'submit' });
+      }
       if (!conversationId) {
         const identity = await this.waitForConversationIdentity(tabId)
         if (identity?.conversationId) {
