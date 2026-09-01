@@ -172,6 +172,20 @@ test('store wires the send timeout raise and background cancellation', () => {
   assert.match(source, /cancelSend: \(attemptId\)/)
 })
 
+test('emits completed when the watched task auto-finalizes', async () => {
+  const task = { id: 'tc', status: 'submitted' }
+  let poll = 0
+  const { driver, events } = makeDriver({
+    claimNext: async () => ({ claimed: true, task }),
+    prepareSend: async () => ({ task, attempt: { id: 'ac' }, already_submitted: false }),
+    getTask: async () => (poll++ === 0 ? { id: 'tc', status: 'generating' } : { id: 'tc', status: 'completed' }),
+    acknowledge: async () => ({ id: 'tc', status: 'generating' }),
+  })
+  await driver.tick()
+  driver.stop()
+  assert.deepEqual(events.map((e) => e.type), ['claimed', 'submitted', 'completed', 'terminal'])
+})
+
 test('store notifies queue completion on drained terminal events', () => {
   const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
   // terminal 事件必须被处理并触发"队列完成"通知

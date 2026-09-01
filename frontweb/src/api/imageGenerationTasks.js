@@ -25,4 +25,5 @@ export const imageGenerationTaskAPI = {
   failTask(id, message) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/fail`, { message }) },
   deferTask(id) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/defer`) },
   selectResult(id, resultId) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/select-result`, { resultId }) },
+  batchSelectFirst(dramaId) { return request.post(`/dramas/${encodeURIComponent(dramaId)}/image-generation-tasks/review/batch-select-first`) },
 }

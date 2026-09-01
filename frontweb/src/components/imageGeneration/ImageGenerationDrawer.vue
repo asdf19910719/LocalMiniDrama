@@ -31,20 +31,30 @@
           <el-button type="primary" size="small" @click="$emit('select', result)">设为当前图片</el-button>
         </div>
       </div>
+      <div class="auto-select-row">
+        <el-switch :model-value="autoSelect" @change="onAutoSelect" />
+        <span>自动采用首个候选</span>
+      </div>
       <el-alert v-if="task.error_message" type="error" :title="task.error_message" show-icon />
     </template>
   </el-drawer>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import ImageGenerationEnvironmentStatus from './ImageGenerationEnvironmentStatus.vue'
+import { useImageGenerationStore } from '@/stores/imageGenerationStore'
 const props = defineProps({ visible: Boolean, task: Object, results: { type: Array, default: () => [] }, sending: Boolean, environment: { type: Object, default: null }, environmentChecking: Boolean })
 defineEmits(['close', 'send', 'recover', 'requeue', 'select', 'check-environment'])
+const store = useImageGenerationStore()
+const autoSelect = computed(() => store.autoSelect)
+onMounted(() => { store.loadAutoSelect().catch(() => {}) })
+function onAutoSelect(value) { store.setAutoSelect(value).catch(() => {}) }
 const labels = { draft: '待确认', queued: '排队中', preparing: '准备中', submitted: '已发送', generating: '生成中', needs_review: '请选择图片', completed: '已完成', failed: '失败', cancelled: '已取消' }
 const statusText = computed(() => labels[props.task?.status] || props.task?.status || '')
 </script>
 
 <style scoped>
 .prompt { margin: 14px 0; }.results { display:grid;gap:12px;margin-top:16px }.result { display:flex;gap:10px;align-items:center }.result img { width:96px;height:96px;object-fit:cover;border-radius:6px }
+.auto-select-row { display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--el-text-color-secondary) }
 </style>

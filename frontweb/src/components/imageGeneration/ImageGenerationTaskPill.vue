@@ -1,6 +1,16 @@
 <template>
   <span v-if="visible || environment">
     <ImageGenerationEnvironmentStatus :environment="environment" :checking="checking" @check="check" />
+    <el-button
+      v-if="Number(counts.needs_review) > 0"
+      size="small"
+      type="warning"
+      plain
+      :loading="recovering"
+      @click="recoverAll"
+    >
+      全部采用首选
+    </el-button>
     <el-tooltip v-if="visible" :content="'点击查看生图任务抽屉'" placement="top">
       <el-button size="small" :type="attention ? 'warning' : 'info'" plain class="image-task-pill" @click="open">
         {{ label }}
@@ -20,6 +30,7 @@ const store = useImageGenerationStore()
 const summary = ref(null)
 const { environment, defaultChannel } = storeToRefs(store)
 const checking = ref(false)
+const recovering = ref(false)
 let timer = null
 
 const counts = computed(() => summary.value || {})
@@ -51,6 +62,13 @@ async function check() {
   checking.value = true
   try { await store.checkEnvironment({ dramaId: props.dramaId, channel: defaultChannel.value }) } catch (_) {}
   finally { checking.value = false }
+}
+
+async function recoverAll() {
+  if (recovering.value) return
+  recovering.value = true
+  try { await store.batchSelectFirst(props.dramaId) } catch (_) {}
+  finally { recovering.value = false; refresh() }
 }
 
 function open() {

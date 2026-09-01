@@ -87,6 +87,7 @@ export function createQueueDriver({
       if (task.status !== lastStatus) {
         if (task.status === 'needs_review') onEvent({ type: 'needs_review', taskId, task })
         if (task.status === 'failed') onEvent({ type: 'failed', taskId, task, message: task.error_message })
+        if (task.status === 'completed') onEvent({ type: 'completed', taskId, task })
         lastStatus = task.status
       }
       if (TERMINAL.has(task.status)) { onEvent({ type: 'terminal', taskId, task, status: task.status }); return }

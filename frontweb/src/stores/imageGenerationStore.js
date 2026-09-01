@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ElNotification } from 'element-plus'
 import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
+import { aiAPI } from '@/api/ai'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 import { buildChatGPTImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { createQueueDriver } from '@/utils/imageGenerationQueueDriver'
@@ -58,6 +59,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const loading = ref(false)
   const errorMessage = ref('')
   const environment = ref(null)
+  const autoSelect = ref(true)
   let taskPollTimer = null
   let environmentCheckVersion = 0
 
@@ -239,9 +241,11 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     const key = `${event.taskId}:${event.type}`
     if (notifiedEvents.has(key)) return
     notifiedEvents.add(key)
-    if (event.type === 'needs_review') {
+    if (event.type === 'completed') {
+      ElNotification({ title: '生图完成', message: '已生成并挂载到对应位置，点击查看', type: 'success', onClick: () => { openTaskById(event.taskId) } })
+    } else if (event.type === 'needs_review') {
       const count = (event.task?.candidates || []).length
-      ElNotification({ title: '生图完成', message: count ? `${count} 张候选待选择` : '候选已导入，请选择', type: 'success', onClick: () => { openTaskById(event.taskId) } })
+      ElNotification({ title: '生图完成', message: count > 1 ? `${count} 张候选已挂载，请选择主图` : '候选已导入，请选择', type: 'success', onClick: () => { openTaskById(event.taskId) } })
     } else if (event.type === 'failed') {
       ElNotification({ title: '生图失败', message: event.message || '请重新排队', type: 'error', onClick: () => { openTaskById(event.taskId) } })
     } else if (event.type === 'environment_blocked') {
@@ -280,6 +284,22 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     } catch (_) {
       // 探针失败保持静默：驱动器的下一个周期会正常领取并推进
     }
+  }
+
+  async function loadAutoSelect() {
+    const settings = await aiAPI.getImageGenerationSettings()
+    autoSelect.value = settings?.chatgpt_web?.auto_select !== false
+    return autoSelect.value
+  }
+  async function setAutoSelect(value) {
+    const settings = await aiAPI.updateImageGenerationSettings({ auto_select: value === true })
+    autoSelect.value = settings?.chatgpt_web?.auto_select !== false
+    return autoSelect.value
+  }
+  async function batchSelectFirst(id) {
+    const report = await imageGenerationTaskAPI.batchSelectFirst(id)
+    await loadSummary(id, { reattach: false })
+    return report
   }
 
   async function openTaskById(taskId) {
@@ -334,5 +354,5 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     }
   }
 
-  return { dramaId, defaultChannel, summary, environment, checkEnvironment, clearEnvironmentCache: clearImageGenerationEnvironmentCache, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
+  return { dramaId, defaultChannel, summary, environment, autoSelect, loadAutoSelect, setAutoSelect, batchSelectFirst, checkEnvironment, clearEnvironmentCache: clearImageGenerationEnvironmentCache, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
 })
