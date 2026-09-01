@@ -7,6 +7,9 @@ import { WorkbenchClient } from './workbenchClient.js';
 const DEFAULT_API = 'http://127.0.0.1:5679/api/v1';
 const WRITE_PATHS = new Set(['jobs', 'prepare', 'attempts', 'events', 'results/import', 'session/attach']);
 const CHATGPT_CONTENT_BUNDLE = 'src/sites/chatgpt/content.bundle.js';
+// A cancel mark only needs to outlive the in-flight chain it targets; the TTL
+// keeps a mark from wedging the same attempt's much later retry.
+const SEND_CANCEL_TTL_MS = 15 * 60 * 1000;
 
 export function isChatGPTUrl(url = '') {
   try {
@@ -66,9 +69,19 @@ export class BackgroundController {
   constructor({ chromeApi = globalThis.chrome, fetchImpl = globalThis.fetch, apiBase = DEFAULT_API, storage } = {}) {
     this.chromeApi = chromeApi; this.fetchImpl = fetchImpl === globalThis.fetch && typeof fetchImpl === 'function' ? fetchImpl.bind(globalThis) : fetchImpl; this.apiBase = apiBase.replace(/\/$/, '');
     this.storage = storage || chromeStorageLocal(chromeApi); this.outbox = new Outbox(this.storage); this.sessions = new SessionRegistry(this.storage); this.queues = new Map(); this.ready = null;
+    this.cancelledSends = new Map();
     this.bridge = new BridgeClient(); this.workbench = new WorkbenchClient({ baseUrl: this.apiBase });
   }
   async init() { if (!this.ready) this.ready = Promise.all([this.outbox.load(), this.sessions.load(), this.storage.get('bridgeConfig').then((value) => { const config = value?.bridgeConfig || value; if (config?.baseUrl) this.bridge = new BridgeClient(config); })]); return this.ready; }
+  isSendCancelled(attemptId) {
+    const markedAt = this.cancelledSends.get(attemptId);
+    if (!markedAt) return false;
+    if (Date.now() - markedAt > SEND_CANCEL_TTL_MS) {
+      this.cancelledSends.delete(attemptId);
+      return false;
+    }
+    return true;
+  }
   async api(path, { method = 'GET', body, idempotencyKey } = {}) {
     const headers = { Accept: 'application/json' }; if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET') headers['Idempotency-Key'] = idempotencyKey || makeEventId();
@@ -287,49 +300,73 @@ export class BackgroundController {
       }
       return { ok: true, event: await this.emit('JOB_PREPARED', { jobId: message.jobId, conversationId: message.conversationId }, message.sequence, message.id) };
     }
-    if (action === 'send') return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
-      const session = message.dramaId !== undefined && message.site === 'chatgpt'
-        ? await this.ensureProviderSession(message, sender)
-        : null
-      const tabId = session?.tabId ?? message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
-      let conversationId = message.conversationId || this.sessions.get(message.dramaId, message.site)?.conversationId || null
-      if (tabId && this.chromeApi?.tabs?.sendMessage) {
-        const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
-        if (identity?.value?.conversationId) conversationId = identity.value.conversationId
-      }
-      if (message.dramaId !== undefined && message.site && conversationId) {
-        const session = this.sessions.get(message.dramaId, message.site)
-        if (!session?.conversationId || session.conversationId !== conversationId) {
-          if (session?.conversationId) {
-            await this.sessions.pause(message.dramaId, message.site, 'conversation identity mismatch')
-            throw new Error('conversation identity mismatch; rebind is required')
+    if (action === 'send') {
+      // A fresh send for this attempt supersedes any cancel mark left by an
+      // earlier failed lifecycle (the workbench reuses ready_to_send attempts
+      // when requeueing).
+      if (message.attemptId) this.cancelledSends.delete(message.attemptId);
+      return this.queueFor(message.sessionKey || `${message.dramaId}:${message.site}`, async () => {
+        // The workbench can fail the task while this chain is still queued or
+        // waiting on the provider button; stand down instead of submitting a
+        // prompt nobody is waiting for anymore.
+        const ensureLive = () => { if (this.isSendCancelled(message.attemptId)) throw new Error('SEND_CANCELLED'); };
+        try {
+          ensureLive();
+          const session = message.dramaId !== undefined && message.site === 'chatgpt'
+            ? await this.ensureProviderSession(message, sender)
+            : null
+          ensureLive();
+          const tabId = session?.tabId ?? message.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;
+          let conversationId = message.conversationId || this.sessions.get(message.dramaId, message.site)?.conversationId || null
+          if (tabId && this.chromeApi?.tabs?.sendMessage) {
+            const identity = await this.chromeApi.tabs.sendMessage(tabId, { action: 'identity' }).catch(() => null)
+            if (identity?.value?.conversationId) conversationId = identity.value.conversationId
           }
-          await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: 'url' })
-          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
-        } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
-      }
-      if (tabId) {
-        const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
-        if (!ready) throw new Error('provider composer is not ready');
-        await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
-      }
-      if (tabId) {
-        // Binding the observer can overlap ChatGPT's own turn transition. Check
-        // the live button once more immediately before the click.
-        const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
-        if (!ready) throw new Error('provider composer is not ready');
-        await this.sendToProviderTab(tabId, { action: 'submit' });
-      }
-      if (!conversationId) {
-        const identity = await this.waitForConversationIdentity(tabId)
-        if (identity?.conversationId) {
-          conversationId = identity.conversationId
-          await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: identity.confidence || 'url' })
-          await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
+          if (message.dramaId !== undefined && message.site && conversationId) {
+            const session = this.sessions.get(message.dramaId, message.site)
+            if (!session?.conversationId || session.conversationId !== conversationId) {
+              if (session?.conversationId) {
+                await this.sessions.pause(message.dramaId, message.site, 'conversation identity mismatch')
+                throw new Error('conversation identity mismatch; rebind is required')
+              }
+              await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: 'url' })
+              await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
+            } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
+          }
+          ensureLive();
+          if (tabId) {
+            const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
+            ensureLive();
+            if (!ready) throw new Error('provider composer is not ready');
+            await this.sendToProviderTab(tabId, { action: 'beginAttempt', attempt: { ...message.payload, attemptId: message.attemptId, conversationId } });
+          }
+          if (tabId) {
+            // Binding the observer can overlap ChatGPT's own turn transition. Check
+            // the live button once more immediately before the click.
+            const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
+            ensureLive();
+            if (!ready) throw new Error('provider composer is not ready');
+            await this.sendToProviderTab(tabId, { action: 'submit' });
+          }
+          if (!conversationId) {
+            const identity = await this.waitForConversationIdentity(tabId)
+            if (identity?.conversationId) {
+              conversationId = identity.conversationId
+              await this.sessions.attach(message.dramaId, message.site, { conversationId, tabId, confidence: identity.confidence || 'url' })
+              await this.api(`external-generation/dramas/${message.dramaId}/session/attach`, { method: 'POST', body: { site: message.site, conversationId, tabId }, idempotencyKey: makeEventId() })
+            }
+          }
+          ensureLive();
+          return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
+        } finally {
+          this.cancelledSends.delete(message.attemptId);
         }
-      }
-      return { ok: true, event: await this.emit('ATTEMPT_EVENT', { attemptId: message.attemptId, conversationId, eventType: 'SUBMITTED', payload: message.payload || {} }, message.sequence, message.id) };
-    });
+      });
+    }
+    if (action === 'cancelAttemptSend') {
+      if (message?.attemptId) this.cancelledSends.set(message.attemptId, Date.now());
+      return { ok: true, cancelled: Boolean(message?.attemptId) };
+    }
     if (action === 'recoverAttempt') {
       const session = await this.ensureProviderSession(message, sender);
       const tabId = message.tabId ?? session?.tabId ?? this.sessions.get(message.dramaId, message.site)?.tabId ?? sender.tab?.id;

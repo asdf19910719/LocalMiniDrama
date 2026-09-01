@@ -112,6 +112,66 @@ test('accepts a pre-claimed result so a probe claim is still driven', async () =
   assert.deepEqual(events.map((e) => e.type), ['claimed', 'submitted', 'needs_review', 'terminal'])
 })
 
+test('cancels the pending background send after failing a task', async () => {
+  const order = []
+  const task = { id: 't3', status: 'preparing' }
+  const { driver, events } = makeDriver({
+    claimNext: async () => ({ claimed: true, task }),
+    prepareSend: async () => ({ task, attempt: { id: 'a3' }, already_submitted: false }),
+    sendAttempt: async () => { throw new Error('浏览器插件未响应，请确认插件已安装并启用') },
+    failTask: async () => { order.push('failTask') },
+    cancelSend: async (attemptId) => { order.push(`cancel:${attemptId}`) },
+    getTask: async () => ({ id: 't3', status: 'failed' }),
+  })
+  await driver.tick()
+  driver.stop()
+  // 取消必须发生在任务已判失败之后,且带上后台正在等待的 attemptId
+  assert.deepEqual(order, ['failTask', 'cancel:a3'])
+  assert.ok(events.some((e) => e.type === 'failed'))
+})
+
+test('cancelSend failures never mask the task failure', async () => {
+  const failed = []
+  const task = { id: 't4', status: 'preparing' }
+  const { driver, events } = makeDriver({
+    claimNext: async () => ({ claimed: true, task }),
+    prepareSend: async () => ({ task, attempt: { id: 'a4' }, already_submitted: false }),
+    sendAttempt: async () => { throw new Error('boom') },
+    failTask: async (id, message) => { failed.push(message) },
+    cancelSend: async () => { throw new Error('cancel channel down') },
+    getTask: async () => ({ id: 't4', status: 'failed' }),
+  })
+  await driver.tick()
+  driver.stop()
+  assert.deepEqual(failed, ['boom'])
+  assert.ok(events.some((e) => e.type === 'failed'))
+})
+
+test('skips cancellation when no attempt reached the bridge', async () => {
+  let cancels = 0
+  const task = { id: 't5', status: 'preparing' }
+  const { driver } = makeDriver({
+    claimNext: async () => ({ claimed: true, task }),
+    beforeSend: async () => { throw new Error('environment down') },
+    cancelSend: async () => { cancels += 1 },
+    failTask: async () => {},
+    getTask: async () => ({ id: 't5', status: 'failed' }),
+  })
+  await driver.tick()
+  driver.stop()
+  assert.equal(cancels, 0)
+})
+
+test('store wires the send timeout raise and background cancellation', () => {
+  const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
+  // 发送桥接的等待窗口必须覆盖后台最长 ~4 分钟的按钮等待,避免任务被提前判死
+  assert.match(source, /SEND_BRIDGE_TIMEOUT_MS = 300000/)
+  assert.match(source, /action: 'send'[\s\S]*?SEND_BRIDGE_TIMEOUT_MS/)
+  // 手动发送与队列驱动都要能撤下后台仍在等待的发送链
+  assert.match(source, /cancelAttemptSend/)
+  assert.match(source, /cancelSend: \(attemptId\)/)
+})
+
 test('store notifies queue completion on drained terminal events', () => {
   const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
   // terminal 事件必须被处理并触发"队列完成"通知

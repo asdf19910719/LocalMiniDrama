@@ -7,7 +7,7 @@ export function isTransientSendError(error) {
 const TERMINAL = new Set(['needs_review', 'completed', 'failed', 'cancelled'])
 
 export function createQueueDriver({
-  claimNext, getTask, prepareSend, sendAttempt, acknowledge, failTask, beforeSend, deferTask,
+  claimNext, getTask, prepareSend, sendAttempt, acknowledge, failTask, beforeSend, deferTask, cancelSend,
   onEvent = () => {},
   intervalMs = 5000,
   retryLimit = 2,
@@ -56,6 +56,8 @@ export function createQueueDriver({
     } catch (error) {
       const message = error?.message || '发送失败'
       await failTask(task.id, message).catch(() => {})
+      // 后台可能仍在排队或等待发送按钮;通知它撤下该 attempt,避免任务判失败后提示词才被点出。
+      if (attemptId && cancelSend) await cancelSend(attemptId).catch(() => {})
       onEvent({ type: 'failed', taskId: task.id, message })
       return
     }

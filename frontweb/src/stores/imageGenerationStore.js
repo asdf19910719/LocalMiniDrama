@@ -27,6 +27,9 @@ function parseReferenceManifest(value) {
 // Shared by the drawer's manual send and the queue driver's automatic send:
 // bridges one prepared attempt into the ChatGPT page (prepare + send).
 const BRIDGE_TIMEOUT_MS = 60000
+// 后台发送链最长会等 ~4 分钟让 ChatGPT 发送按钮从"生成中"恢复;工作台必须等得比它久,
+// 否则任务被提前判失败,而提示词稍后仍会被点出(孤儿发送)。
+const SEND_BRIDGE_TIMEOUT_MS = 300000
 async function sendChatGPTAttempt(prepared) {
   const job = prepared.external_job
   await sendImageGenerationBridgeMessage({
@@ -38,7 +41,12 @@ async function sendChatGPTAttempt(prepared) {
   await sendImageGenerationBridgeMessage({
     action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
     attemptId: prepared.attempt.id, conversationId: job.conversation_id, payload: prepared.attempt,
-  }, BRIDGE_TIMEOUT_MS)
+  }, SEND_BRIDGE_TIMEOUT_MS)
+}
+
+function cancelChatGPTAttemptSend(attemptId) {
+  if (!attemptId) return Promise.resolve()
+  return sendImageGenerationBridgeMessage({ action: 'cancelAttemptSend', attemptId }).catch(() => {})
 }
 
 export const useImageGenerationStore = defineStore('imageGeneration', () => {
@@ -151,8 +159,9 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     if (!task?.id) throw new Error('图片生成任务不存在')
     loading.value = true
     errorMessage.value = ''
+    let prepared = null
     try {
-      const prepared = await imageGenerationTaskAPI.prepareSend(task.id)
+      prepared = await imageGenerationTaskAPI.prepareSend(task.id)
       currentTask.value = normalizeImageGenerationTask({ ...prepared.task, external_job: prepared.external_job })
       const prepareAction = resolveChatGPTPrepareAction(prepared)
       if (prepareAction === 'recover') return await recoverCapture(currentTask.value)
@@ -165,6 +174,8 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     } catch (error) {
       const message = error?.message || '发送到 ChatGPT 失败，请检查浏览器插件和登录状态'
       errorMessage.value = message
+      // 手动发送失败同样撤下后台仍在等待的发送链,避免提示词稍后被提交
+      void cancelChatGPTAttemptSend(prepared?.attempt?.id)
       if (currentTask.value?.id === task.id) {
         currentTask.value = { ...currentTask.value, error_code: 'chatgpt_bridge_error', error_message: message }
       }
@@ -287,6 +298,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       acknowledge: (id, attemptId) => imageGenerationTaskAPI.acknowledge(id, attemptId),
       failTask: (id, message) => imageGenerationTaskAPI.failTask(id, message),
       deferTask: (id) => imageGenerationTaskAPI.deferTask(id),
+      cancelSend: (attemptId) => cancelChatGPTAttemptSend(attemptId),
       beforeSend: (task) => checkEnvironment({ dramaId: task.drama_id, channel: task.generation_channel, targetType: task.target_type, targetId: task.target_id }, { force: true }),
       onEvent: notifyQueueEvent,
     })

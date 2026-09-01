@@ -501,6 +501,51 @@ test('recoverAttempt routes recovery to the bound provider tab', async () => {
   ])
 })
 
+test('cancelAttemptSend aborts a queued send before any provider action', async () => {
+  const messages = []
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (tabId, message) => {
+        messages.push([tabId, message])
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  controller.emit = async () => ({ id: 'event-1' })
+  let release
+  // 只让第一次按钮等待阻塞(模拟生成中按钮不可点);后续调用立即放行
+  controller.waitForProviderReady = () => {
+    if (release) return true
+    return new Promise((resolve) => { release = resolve })
+  }
+
+  const sendPromise = controller.handle({
+    action: 'send', dramaId: 3, site: 'chatgpt', jobId: 'job-1', attemptId: 'attempt-9', payload: {},
+  })
+  // 等发送链走到按钮等待这一步(期间它占用后台串行队列,模拟桥接超时时任务已被判失败的场景)
+  for (let i = 0; i < 200 && !release; i += 1) await new Promise((resolve) => setTimeout(resolve, 5))
+  assert.ok(release, 'send chain should reach the submit-button wait')
+
+  await controller.handle({ action: 'cancelAttemptSend', attemptId: 'attempt-9' })
+  release(true)
+  await assert.rejects(sendPromise, /SEND_CANCELLED/)
+  assert.equal(messages.some(([, message]) => message.action === 'beginAttempt'), false)
+  assert.equal(messages.some(([, message]) => message.action === 'submit'), false)
+  // 链结束后取消登记必须清除,同一 attempt 的重试才不会被误伤
+  assert.equal(controller.cancelledSends.has('attempt-9'), false)
+})
+
+test('expired cancel requests no longer block a retry of the same attempt', async () => {
+  const controller = new BackgroundController({ chromeApi: {}, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  controller.cancelledSends.set('attempt-old', Date.now() - 16 * 60 * 1000)
+  assert.equal(controller.isSendCancelled('attempt-old'), false)
+  controller.cancelledSends.set('attempt-new', Date.now())
+  assert.equal(controller.isSendCancelled('attempt-new'), true)
+})
+
 test('adapter error outbox events preserve diagnostic payloads', async () => {
   const requests = []
   const controller = new BackgroundController({
