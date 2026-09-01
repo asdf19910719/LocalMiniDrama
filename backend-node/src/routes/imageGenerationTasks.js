@@ -6,6 +6,7 @@ const queue = require('../services/imageGenerationQueueService');
 const orchestrator = require('../services/imageGenerationOrchestrator');
 const { createExternalJob, getExternalJob, createGenerationAttempt } = require('../services/externalGenerationService');
 const settingsService = require('../services/settingsService');
+const selection = require('../services/imageGenerationResultSelection');
 const { checkImageGenerationEnvironment } = require('../services/imageGenerationEnvironmentService');
 
 module.exports = (db, log = console) => {
@@ -187,24 +188,17 @@ module.exports = (db, log = console) => {
     return tasks.transitionTask(db, task.id, 'submitted');
   })()));
 
-  router.post('/image-generation-tasks/:taskId/select-result', (req, res) => handle(res, () => db.transaction(() => {
+  router.post('/image-generation-tasks/:taskId/select-result', (req, res) => handle(res, () => {
     const task = tasks.getTask(db, req.params.taskId);
-    if (!task) throw new Error('Image generation task not found');
     const result = db.prepare(`SELECT result.*, job.image_generation_task_id
       FROM external_generation_results result
       JOIN external_generation_attempts attempt ON attempt.id=result.attempt_id
       JOIN external_generation_jobs job ON job.id=attempt.job_id
       WHERE result.id=?`).get(req.body?.resultId);
-    if (!result || result.image_generation_task_id !== task.id) throw new Error('External result does not belong to this image generation task');
-    const target = targets.bindResult(db, task, result.image_generation_id);
-    db.prepare(`UPDATE external_generation_results SET selected=0, updated_at=? WHERE attempt_id IN
-      (SELECT id FROM external_generation_attempts WHERE job_id=?)`).run(new Date().toISOString(), task.external_job_id);
-    db.prepare("UPDATE external_generation_results SET selected=1, status='bound', updated_at=? WHERE id=?")
-      .run(new Date().toISOString(), result.id);
-    const completed = tasks.transitionTask(db, task.id, 'completed', { imageGenerationId: result.image_generation_id });
-    if (task.batch_id) queue.refreshBatch(db, task.batch_id);
-    return { task: completed, target, result: { ...result, selected: 1, status: 'bound' } };
-  })()));
+    return selection.selectTaskResult(db, task, result);
+  }));
+
+  router.post('/dramas/:dramaId/image-generation-tasks/review/batch-select-first', (req, res) => handle(res, () => selection.batchSelectFirstResults(db, req.params.dramaId)));
 
   return router;
 };
