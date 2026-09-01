@@ -2,6 +2,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
+const settingsService = require('./settingsService');
+const targets = require('./imageGenerationTargetService');
+const tasksService = require('./imageGenerationTaskService');
 
 function safeResultId(value) {
   if (value === undefined || value === null || value === '') return crypto.randomUUID();
@@ -23,6 +26,29 @@ function markUnifiedTaskNeedsReview(db, attemptId) {
     WHERE id=? AND status IN ('preparing','submitted','generating')`)
     .run(new Date().toISOString(), linked.task_id);
   return result.changes > 0;
+}
+
+function autoSelectEnabled(db) {
+  return settingsService.getGlobalSetting(db, 'chatgpt_web_auto_select', true) !== false;
+}
+
+// 首张候选自动挂载定稿;后续候选只追加,不抢占主图;不可归属(开关关/目标缺失/
+// 任务已终态)回退 needs_review 手动流。
+function finalizeImportedResult(db, { attempt, resultId, imageGenerationId }) {
+  const taskId = attempt.image_generation_task_id;
+  if (!taskId) return;
+  const task = db.prepare('SELECT * FROM image_generation_tasks WHERE id=?').get(taskId);
+  if (!task || !['preparing', 'submitted', 'generating', 'needs_review'].includes(task.status)) return;
+  const prior = db.prepare(`SELECT COUNT(*) AS n FROM external_generation_results r
+    JOIN external_generation_attempts a ON a.id = r.attempt_id
+    WHERE a.job_id = ? AND r.id != ? AND r.status IN ('imported','bound')`).get(attempt.job_id, resultId).n;
+  if (!autoSelectEnabled(db) || prior > 0) { markUnifiedTaskNeedsReview(db, attempt.id); return; }
+  try { targets.resolveTarget(db, task); } catch (_) { markUnifiedTaskNeedsReview(db, attempt.id); return; }
+  if (task.status === 'preparing') tasksService.transitionTask(db, task.id, 'submitted');
+  targets.bindResult(db, task, imageGenerationId);
+  db.prepare("UPDATE external_generation_results SET selected=1, status='bound', updated_at=? WHERE id=?")
+    .run(new Date().toISOString(), resultId);
+  tasksService.transitionTask(db, task.id, 'completed', { imageGenerationId });
 }
 
 async function importExternalResult(db, input) {
@@ -74,7 +100,7 @@ async function importExternalResult(db, input) {
       VALUES (?, ?, 'image', 'external-web', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(attempt.drama_id, path.basename(localPath), input.sourceUrl || null, localPath, input.bytes.length, input.sourceMime || `image/${meta.format}`, meta.width, meta.height, ig.lastInsertRowid, now, now);
     db.prepare(`INSERT INTO external_generation_results (id, attempt_id, result_set_id, provider_result_id, result_index, candidate_index, selected, source_url, source_mime, source_width, source_height, download_hash, image_generation_id, asset_id, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'imported', ?, ?)`).run(resultId, input.attemptId, input.resultSetId || null, input.providerResultId || null, resultIndex, resultIndex, input.sourceUrl || null, input.sourceMime || `image/${meta.format}`, meta.width, meta.height, hash, ig.lastInsertRowid, asset.lastInsertRowid, now, now);
-    markUnifiedTaskNeedsReview(db, input.attemptId);
+    finalizeImportedResult(db, { attempt, resultId, imageGenerationId: ig.lastInsertRowid });
     if (String(attempt.status || '').toLowerCase() === 'needs_review') {
       db.prepare("UPDATE external_generation_attempts SET status='submitted', updated_at=? WHERE id=?").run(now, attempt.id);
     }
