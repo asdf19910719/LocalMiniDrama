@@ -5483,8 +5483,8 @@ function parseExtraImages(item) {
 // 将 local_path 转成可访问的 URL
 function localPathToUrl(p) {
   if (!p) return ''
-  if (p.startsWith('http')) return p
-  return '/static/' + p.replace(/^\//, '')
+  // 统一走共享媒体工具:绝对历史路径(外部抓取结果)映射到鉴权内容接口,避免空白缩略图
+  return resolveAssetImageUrl(p)
 }
 
 // 查找角色/道具/场景在 store 中的当前对象
