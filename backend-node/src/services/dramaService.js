@@ -421,6 +421,7 @@ function rowToCharacter(r) {
     seedance2_voice_asset: parseJsonColumn(r.seedance2_voice_asset),
     created_at: r.created_at,
     updated_at: r.updated_at,
+    image_updated_at: r.image_updated_at || null,
   };
 }
 
@@ -442,6 +443,7 @@ function rowToScene(r) {
     error_msg: r.error_msg,
     created_at: r.created_at,
     updated_at: r.updated_at,
+    image_updated_at: r.image_updated_at || null,
   };
 }
 
@@ -461,6 +463,7 @@ function rowToProp(r) {
     error_msg: r.error_msg,
     created_at: r.created_at,
     updated_at: r.updated_at,
+    image_updated_at: r.image_updated_at || null,
   };
 }
 

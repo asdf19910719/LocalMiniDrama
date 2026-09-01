@@ -580,6 +580,7 @@
                       <div v-else class="cover-placeholder">暂无图</div>
                       <div v-if="dragOverResourceKey === 'char-' + char.id" class="asset-cover-drop-hint">松开上传</div>
                     </div>
+                    <ImageUpdatedAt :value="char.image_updated_at" />
                     <!-- 额外参考图条 -->
                     <div v-if="parseExtraImages(char).length" class="extra-images-strip">
                       <div v-for="ep in parseExtraImages(char)" :key="ep" class="extra-thumb" :title="'点击设为主图（悬停左上角可放大预览）'">
@@ -675,6 +676,7 @@
                       <div v-else class="cover-placeholder">暂无图</div>
                       <div v-if="dragOverResourceKey === 'prop-' + prop.id" class="asset-cover-drop-hint">松开上传</div>
                     </div>
+                    <ImageUpdatedAt :value="prop.image_updated_at" />
                     <div v-if="parseExtraImages(prop).length" class="extra-images-strip">
                       <div v-for="ep in parseExtraImages(prop)" :key="ep" class="extra-thumb" title="点击设为主图（悬停左上角可放大预览）">
                         <img :src="localPathToUrl(ep)" alt="" @click="onSetPrimaryImage('prop', prop, ep)" />
@@ -773,6 +775,7 @@
                       <div v-else class="cover-placeholder">暂无图</div>
                       <div v-if="dragOverResourceKey === 'scene-' + scene.id" class="asset-cover-drop-hint">松开上传</div>
                     </div>
+                    <ImageUpdatedAt :value="scene.image_updated_at" />
                     <div v-if="parseExtraImages(scene).length" class="extra-images-strip">
                       <div v-for="ep in parseExtraImages(scene)" :key="ep" class="extra-thumb" title="点击设为主图（悬停左上角可放大预览）">
                         <img :src="localPathToUrl(ep)" alt="" @click="onSetPrimaryImage('scene', scene, ep)" />
