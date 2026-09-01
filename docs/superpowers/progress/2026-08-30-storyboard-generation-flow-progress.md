@@ -43,6 +43,8 @@ Plan: `docs/superpowers/plans/2026-08-30-storyboard-generation-flow.md`
 
 - 2026-09-01: Answered "cards still show the 11:xx batch": the DB always carried the fresh 13:06-13:28 stamps, but the workbench page renders a mount-time snapshot of the asset lists and both dev servers had gone down, so a refresh could not even reload the app. Restarted the backend/frontend dev servers (Node 22.22.3) and wired automatic asset refresh (`703e98d`): the store now bumps `generationSettledTick` on completed/needs_review/failed queue events and FilmCreate watches it with a 1.5s debounce to re-run loadDrama. Live verification: a fresh prop generation (img 109) completed and the prop card's 图更新于 moved 13:07 -> 13:51 with no manual reload, while the other cards stayed untouched. Frontend 115/115, production build ok.
 
+- 2026-09-01: Fixed blank candidate thumbnails under asset cards: `extra_images` history stores absolute Windows paths, but FilmCreate's `localPathToUrl` naively prefixed `/static/`, producing dead URLs. The helper now delegates to the shared `mediaUrl.assetImageUrl`, which maps external-web history paths to the authenticated content endpoint. Live check: 10/10 extra-strip thumbs render (naturalWidth > 0) and the prop card shows its two historical candidates. Frontend 117/117, production build ok.
+
 ## Simulation Boundary
 
 - Image generation and ChatGPT web capture require external provider credentials/browser login. The latest live verification used the logged-in dedicated profile and completed three real ChatGPT image tasks; automated tests continue to cover task creation, target-scoped manifests, assistant/attempt identity, and result import states.
