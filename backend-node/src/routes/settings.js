@@ -68,8 +68,9 @@ function getImageGenerationSettings(db) {
     const enabled = settingsService.getGlobalSetting(db, 'chatgpt_web_enabled', true) !== false;
     const executable = settingsService.getGlobalSetting(db, 'chatgpt_web_executable', '');
     const profile = settingsService.getGlobalSetting(db, 'chatgpt_web_profile', '');
+    const auto_select = settingsService.getGlobalSetting(db, 'chatgpt_web_auto_select', true) !== false;
     response.success(res, {
-      chatgpt_web: { enabled, executable, profile },
+      chatgpt_web: { enabled, executable, profile, auto_select },
       channels: { api: true, chatgpt_web: enabled },
     });
   };
@@ -82,6 +83,7 @@ function updateImageGenerationSettings(db) {
     if (chatgpt.enabled !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_enabled', chatgpt.enabled === true);
     if (chatgpt.executable !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_executable', String(chatgpt.executable || '').trim());
     if (chatgpt.profile !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_profile', String(chatgpt.profile || '').trim());
+    if (chatgpt.auto_select !== undefined) settingsService.setGlobalSetting(db, 'chatgpt_web_auto_select', chatgpt.auto_select === true);
     return getImageGenerationSettings(db)(req, res);
   };
 }
