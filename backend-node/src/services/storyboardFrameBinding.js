@@ -19,9 +19,9 @@ function bindStoryboardFrameImage(db, storyboardId, frameType, imageGenId, image
   const isLast = ft === 'last';
   if (isLast) {
     db.prepare(
-      `UPDATE storyboards SET last_frame_image_url = ?, last_frame_local_path = ?, last_frame_image_id = ?, updated_at = ?
+      `UPDATE storyboards SET last_frame_image_url = ?, last_frame_local_path = ?, last_frame_image_id = ?, image_updated_at = ?, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`
-    ).run(url, lp, igId, now, sid);
+    ).run(url, lp, igId, now, now, sid);
     try { require('../logger').info?.('[绑定] 尾帧图片已正确绑定到 storyboards.last_frame_*（不会污染主图或历史）', { storyboard_id: sid, image_gen_id: igId }); } catch (_) {}
     return;
   }
@@ -29,16 +29,16 @@ function bindStoryboardFrameImage(db, storyboardId, frameType, imageGenId, image
   // result must leave an existing first-frame selection untouched.
   if (ft == null) {
     db.prepare(
-      `UPDATE storyboards SET image_url = ?, local_path = ?, updated_at = ?
+      `UPDATE storyboards SET image_url = ?, local_path = ?, image_updated_at = ?, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`
-    ).run(url, lp, now, sid);
+    ).run(url, lp, now, now, sid);
     return;
   }
   // 首帧：写入主图/首帧字段
   db.prepare(
-    `UPDATE storyboards SET image_url = ?, local_path = ?, first_frame_image_id = ?, updated_at = ?
+    `UPDATE storyboards SET image_url = ?, local_path = ?, first_frame_image_id = ?, image_updated_at = ?, updated_at = ?
      WHERE id = ? AND deleted_at IS NULL`
-  ).run(url, lp, igId, now, sid);
+  ).run(url, lp, igId, now, now, sid);
 }
 
 module.exports = { bindStoryboardFrameImage };

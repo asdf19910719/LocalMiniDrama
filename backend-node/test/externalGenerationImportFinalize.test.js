@@ -14,7 +14,7 @@ const TASK_SCHEMA = `CREATE TABLE IF NOT EXISTS image_generation_tasks (
   created_at TEXT, updated_at TEXT, completed_at TEXT);
   CREATE TABLE IF NOT EXISTS characters (
     id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, deleted_at TEXT,
-    image_url TEXT, local_path TEXT, extra_images TEXT, updated_at TEXT);
+    image_url TEXT, local_path TEXT, extra_images TEXT, updated_at TEXT, image_updated_at TEXT);
   CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);`;
 
 async function pngBytes(color) {

@@ -126,8 +126,9 @@ function buildGenerationInput(db, task) {
 function bindAsset(db, table, targetId, image) {
   const current = db.prepare(`SELECT image_url, local_path, extra_images FROM ${table} WHERE id=?`).get(targetId);
   const history = appendHistory(current);
-  db.prepare(`UPDATE ${table} SET image_url=?, local_path=?, extra_images=?, updated_at=? WHERE id=?`)
-    .run(image.image_url, image.local_path, history, new Date().toISOString(), targetId);
+  const now = new Date().toISOString();
+  db.prepare(`UPDATE ${table} SET image_url=?, local_path=?, extra_images=?, image_updated_at=?, updated_at=? WHERE id=?`)
+    .run(image.image_url, image.local_path, history, now, now, targetId);
   return db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(targetId);
 }
 

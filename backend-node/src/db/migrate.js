@@ -132,6 +132,7 @@ function ensureAllColumns(database) {
 
   // --- storyboards ---
   ensureColumns(database, 'storyboards', [
+    { name: 'image_updated_at', type: 'TEXT' },
     { name: 'episode_id',        type: 'INTEGER DEFAULT 0' },
     { name: 'scene_id',          type: 'INTEGER' },
     { name: 'storyboard_number', type: 'INTEGER DEFAULT 0' },
@@ -185,6 +186,7 @@ function ensureAllColumns(database) {
 
   // --- characters ---
   ensureColumns(database, 'characters', [
+    { name: 'image_updated_at', type: 'TEXT' },
     { name: 'drama_id',          type: 'INTEGER DEFAULT 0' },
     { name: 'name',              type: 'TEXT NOT NULL DEFAULT \'\'' },
     { name: 'role',              type: 'TEXT' },
@@ -214,6 +216,7 @@ function ensureAllColumns(database) {
 
   // --- scenes ---
   ensureColumns(database, 'scenes', [
+    { name: 'image_updated_at', type: 'TEXT' },
     { name: 'drama_id',         type: 'INTEGER DEFAULT 0' },
     { name: 'episode_id',       type: 'INTEGER' },
     { name: 'location',         type: 'TEXT' },
@@ -235,6 +238,7 @@ function ensureAllColumns(database) {
 
   // --- props ---
   ensureColumns(database, 'props', [
+    { name: 'image_updated_at', type: 'TEXT' },
     { name: 'drama_id',    type: 'INTEGER DEFAULT 0' },
     { name: 'episode_id',  type: 'INTEGER' },
     { name: 'name',        type: 'TEXT NOT NULL DEFAULT \'\'' },

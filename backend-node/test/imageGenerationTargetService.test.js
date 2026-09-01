@@ -9,19 +9,19 @@ describe('image generation target adapters and binding', () => {
   beforeEach(() => {
     db = new Database(':memory:');
     db.exec(`
-      CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, description TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
-      CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER, location TEXT, time TEXT, prompt TEXT, polished_prompt TEXT, polished_prompt_single TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, status TEXT, deleted_at TEXT, updated_at TEXT);
-      CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, description TEXT, prompt TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT);
+      CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, description TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
+      CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER, location TEXT, time TEXT, prompt TEXT, polished_prompt TEXT, polished_prompt_single TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, status TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
+      CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, description TEXT, prompt TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
       CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER);
-      CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, scene_id INTEGER, title TEXT, description TEXT, image_prompt TEXT, polished_prompt TEXT, image_url TEXT, local_path TEXT, first_frame_image_id INTEGER, last_frame_image_id INTEGER, last_frame_image_url TEXT, last_frame_local_path TEXT, deleted_at TEXT, updated_at TEXT);
+      CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, scene_id INTEGER, title TEXT, description TEXT, image_prompt TEXT, polished_prompt TEXT, image_url TEXT, local_path TEXT, first_frame_image_id INTEGER, last_frame_image_id INTEGER, last_frame_image_url TEXT, last_frame_local_path TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
       CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
       CREATE TABLE frame_prompts (id INTEGER PRIMARY KEY, storyboard_id INTEGER, frame_type TEXT, prompt TEXT, description TEXT, layout TEXT, created_at TEXT, updated_at TEXT);
     `);
-    db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL)").run();
-    db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL)").run();
-    db.prepare("INSERT INTO props VALUES (3,7,'钥匙','青铜古钥匙','道具提示','道具润色','/prop-ref.png','/old-prop.png','old-prop.png',NULL,NULL,NULL)").run();
+    db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL,NULL)").run();
+    db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL,NULL)").run();
+    db.prepare("INSERT INTO props VALUES (3,7,'钥匙','青铜古钥匙','道具提示','道具润色','/prop-ref.png','/old-prop.png','old-prop.png',NULL,NULL,NULL,NULL)").run();
     db.prepare('INSERT INTO episodes VALUES (10,7)').run();
-    db.prepare("INSERT INTO storyboards VALUES (4,10,2,'镜头','人物转身','普通提示','分镜润色','/old-main.png','old-main.png',40,41,'/old-last.png','old-last.png',NULL,NULL)").run();
+    db.prepare("INSERT INTO storyboards VALUES (4,10,2,'镜头','人物转身','普通提示','分镜润色','/old-main.png','old-main.png',40,41,'/old-last.png','old-last.png',NULL,NULL,NULL)").run();
     for (const row of [
       [50, null, 7, null, 1], [51, null, 7, 2, null], [52, null, 7, null, null],
       [53, 4, 7, null, null], [54, 4, 7, null, null], [55, 4, 7, null, null],
@@ -96,4 +96,12 @@ describe('image generation target adapters and binding', () => {
   it('rejects binding an image or target from another drama', () => {
     assert.throws(() => targets.bindResult(db, { drama_id: 8, target_type: 'character', target_id: 1 }, 50), /drama/i);
   });
+
+  it('records image_updated_at on asset and storyboard rows when binding', () => {
+    targets.bindResult(db, { drama_id: 7, target_type: 'character', target_id: 1 }, 50);
+    targets.bindResult(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }, 53);
+    assert.ok(db.prepare('SELECT image_updated_at FROM characters WHERE id=1').get().image_updated_at);
+    assert.ok(db.prepare('SELECT image_updated_at FROM storyboards WHERE id=4').get().image_updated_at);
+  });
+
 });
