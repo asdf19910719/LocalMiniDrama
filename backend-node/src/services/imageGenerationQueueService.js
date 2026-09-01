@@ -81,6 +81,7 @@ function cancelTask(db, taskId) {
 }
 
 const PREPARING_STALE_MS = 10 * 60 * 1000;
+const PREPARING_ORPHAN_MS = 60 * 1000;
 
 function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
   return db.transaction(() => {
@@ -96,6 +97,20 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
         AND external_job_id IN (
           SELECT job_id FROM external_generation_attempts WHERE status='needs_review'
         )`).run(timestamp.toISOString());
+    // A preparing claim with no send attempt means the driving page died
+    // between claiming and prepare-send (e.g. workbench reload). Requeue it
+    // quickly instead of blocking the serial queue for the full stale window;
+    // genuinely stale tasks still fall through to the failure path below.
+    const hasAttempts = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='external_generation_attempts'").get();
+    if (hasAttempts) {
+      const requeueBefore = new Date(timestamp.getTime() - PREPARING_ORPHAN_MS).toISOString();
+      const orphans = db.prepare(`SELECT t.id FROM image_generation_tasks t
+        WHERE t.generation_channel='chatgpt_web' AND t.status='preparing'
+          AND t.updated_at < ? AND t.updated_at >= ?
+          AND NOT EXISTS (SELECT 1 FROM external_generation_attempts a WHERE a.job_id = t.external_job_id)
+        ORDER BY t.updated_at`).all(requeueBefore, staleBefore);
+      for (const o of orphans) tasks.transitionTask(db, o.id, 'queued');
+    }
     const stale = db.prepare(`SELECT * FROM image_generation_tasks
       WHERE generation_channel='chatgpt_web' AND status='preparing' AND updated_at < ?
       ORDER BY updated_at LIMIT 1`).get(staleBefore);

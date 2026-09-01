@@ -89,4 +89,17 @@ describe('external generation service', () => {
     assert.equal(cleared.error_message, null);
     assert.equal(cleared.error_code, null);
   });
+
+  it('does not stamp adapter errors onto an already completed task', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'late-error', imageGenerationTaskId: 'task-done' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status, error_code, error_message) VALUES ('task-done', 'completed', NULL, NULL)").run();
+    const attempt = createGenerationAttempt(db, job.id);
+    // 重复抓取的迟到错误:任务已完成,不应被拉回也不应残留错误提示
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'evt-late-1', eventType: 'ADAPTER_ERROR', payload: { code: 'RESULT_CAPTURE_FAILED', message: 'Result index already contains different image bytes' } });
+    const row = db.prepare("SELECT status, error_code, error_message FROM image_generation_tasks WHERE id='task-done'").get();
+    assert.equal(row.status, 'completed');
+    assert.equal(row.error_code, null);
+    assert.equal(row.error_message, null);
+  });
 });

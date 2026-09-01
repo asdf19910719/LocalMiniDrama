@@ -218,10 +218,10 @@ function recordAttemptEvent(db, attemptId, event = {}) {
         if (eventType === 'ADAPTER_ERROR') {
           const errorCode = String(value(payload, 'code', 'error_code', '') || 'ADAPTER_ERROR').slice(0, 120);
           const errorMessage = String(value(payload, 'message', 'error_message', '') || '生成过程出现错误，请重试或恢复捕获').slice(0, 500);
-          db.prepare(`UPDATE image_generation_tasks SET status=CASE
-              WHEN status IN ('preparing', 'submitted', 'generating') THEN 'needs_review'
-              ELSE status END,
-            error_code=?, error_message=?, updated_at=? WHERE id=?`)
+          // 只影响进行中的任务:迟到错误(如重复抓取被拒)不得污染已完成的任务
+          db.prepare(`UPDATE image_generation_tasks SET status='needs_review',
+              error_code=?, error_message=?, updated_at=? WHERE id=?
+              AND status IN ('preparing', 'submitted', 'generating')`)
             .run(errorCode, errorMessage, timestamp, linked.task_id);
         } else {
           db.prepare('UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?')

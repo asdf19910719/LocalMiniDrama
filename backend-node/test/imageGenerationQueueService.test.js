@@ -99,6 +99,37 @@ it('fails stale preparing tasks and keeps fresh ones active', () => {
   db.close();
 });
 
+it('requeues an orphaned preparing claim that never created a send attempt', () => {
+  const db = setup();
+  const stuck = taskService.createTask(db, { dramaId: 7, targetType: 'scene', targetId: 4, generationChannel: 'chatgpt_web', promptSnapshot: 'x', status: 'preparing' });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-orphan', stuck.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-orphan', stuck.id, 7);
+  // 领取后驱动页面死亡:prepare-send 没来得及创建任何发送尝试
+  db.prepare("UPDATE image_generation_tasks SET updated_at='2026-08-28T00:10:00.000Z' WHERE id=?").run(stuck.id);
+  const result = queue.claimNextChatgptTask(db, { now: () => new Date('2026-08-28T00:12:00.000Z') });
+  // 退回队列并立即重新认领,不再干等 10 分钟过期
+  assert.equal(result.claimed, true);
+  assert.equal(result.task.id, stuck.id);
+  assert.equal(taskService.getTask(db, stuck.id).status, 'preparing');
+  assert.equal(taskService.getTask(db, stuck.id).error_code, null);
+  db.close();
+});
+
+it('keeps a preparing task with a pending send attempt active', () => {
+  const db = setup();
+  const task = taskService.createTask(db, { dramaId: 7, targetType: 'scene', targetId: 5, generationChannel: 'chatgpt_web', promptSnapshot: 'y', status: 'preparing' });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-pending', task.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-pending', task.id, 7);
+  db.prepare('INSERT INTO external_generation_attempts (id, job_id, status, updated_at) VALUES (?, ?, ?, ?)').run('attempt-pending', 'job-pending', 'ready_to_send', new Date().toISOString());
+  db.prepare("UPDATE image_generation_tasks SET updated_at='2026-08-28T00:10:00.000Z' WHERE id=?").run(task.id);
+  const result = queue.claimNextChatgptTask(db, { now: () => new Date('2026-08-28T00:12:00.000Z') });
+  // 已有发送尝试的后台链可能仍在推进:保持活跃,交给 10 分钟过期路径
+  assert.equal(result.claimed, false);
+  assert.equal(result.active_task_id, task.id);
+  assert.equal(taskService.getTask(db, task.id).status, 'preparing');
+  db.close();
+});
+
 it('reconciles a submitted task whose external attempt already needs review', () => {
   const db = setup();
   const task = taskService.createTask(db, { dramaId: 7, targetType: 'scene', targetId: 10, generationChannel: 'chatgpt_web', promptSnapshot: 'stale', status: 'submitted' });
