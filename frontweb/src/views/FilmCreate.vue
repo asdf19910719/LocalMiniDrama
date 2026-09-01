@@ -1288,6 +1288,7 @@
                             alt=""
                             @click="openImagePreview(imageUrl(sb.composed_image || sb.image_url))"
                           />
+                                                  <ImageUpdatedAt :value="sb.image_updated_at" />
                         </template>
                         <template v-else>
                           <span class="sb-fl-empty">动作前静止</span>
@@ -1381,6 +1382,7 @@
                       alt=""
                       @click="openImagePreview(imageUrl(sb.composed_image || sb.image_url))"
                     />
+                                      <ImageUpdatedAt :value="sb.image_updated_at" />
                   </template>
                   <template v-else-if="sb.error_msg || sb.errorMsg">
                     <div class="sb-image-error" :title="sb.error_msg || sb.errorMsg">{{ sb.error_msg || sb.errorMsg }}</div>
@@ -1998,6 +2000,7 @@
               </div>
               <div class="library-item-info">
                 <div class="library-item-name">{{ item.name || '未命名' }}</div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || '').slice(0, 60) }}{{ (item.description || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isCharAddToEpisodeLoading('library', item.id)" :disabled="!currentEpisodeId" @click="onAddCharFromLibrary(item)">加入本集</el-button>
@@ -2036,6 +2039,7 @@
                   {{ item.name || '未命名' }}
                   <el-tag v-if="item.role" size="small" type="info" style="margin-left: 6px">{{ charRoleLabel(item.role) }}</el-tag>
                 </div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || item.appearance || '').slice(0, 60) }}{{ (item.description || item.appearance || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isCharAddToEpisodeLoading('drama', item.id)" :disabled="!currentEpisodeId" @click="onAddDramaCharToEpisode(item)">加入本集</el-button>
@@ -2099,6 +2103,7 @@
               </div>
               <div class="library-item-info">
                 <div class="library-item-name">{{ item.name || '未命名' }}</div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || item.prompt || '').slice(0, 60) }}{{ (item.description || item.prompt || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isPropAddToEpisodeLoading('library', item.id)" :disabled="!currentEpisodeId" @click="onAddPropFromLibrary(item)">加入本集</el-button>
@@ -2125,6 +2130,7 @@
               </div>
               <div class="library-item-info">
                 <div class="library-item-name">{{ item.name || '未命名' }}</div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || item.prompt || '').slice(0, 60) }}{{ (item.description || item.prompt || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isPropAddToEpisodeLoading('drama', item.id)" :disabled="!currentEpisodeId" @click="onAddDramaPropToEpisode(item)">加入本集</el-button>
@@ -2179,6 +2185,7 @@
               </div>
               <div class="library-item-info">
                 <div class="library-item-name">{{ item.location || item.time || '未命名' }}</div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || item.prompt || '').slice(0, 60) }}{{ (item.description || item.prompt || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isSceneAddToEpisodeLoading('library', item.id)" :disabled="!currentEpisodeId" @click="onAddSceneFromLibrary(item)">加入本集</el-button>
@@ -2205,6 +2212,7 @@
               </div>
               <div class="library-item-info">
                 <div class="library-item-name">{{ item.location || '未命名' }}<span v-if="item.time" class="library-item-sub"> · {{ item.time }}</span></div>
+                <ImageUpdatedAt :value="item.image_updated_at" />
                 <div class="library-item-desc">{{ (item.description || item.prompt || '').slice(0, 60) }}{{ (item.description || item.prompt || '').length > 60 ? '…' : '' }}</div>
                 <div class="library-item-actions">
                   <el-button size="small" type="primary" :loading="isSceneAddToEpisodeLoading('drama', item.id)" :disabled="!currentEpisodeId" @click="onAddDramaSceneToEpisode(item)">加入本集</el-button>
@@ -2690,6 +2698,7 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
 import {
   generationStyleOptions,
