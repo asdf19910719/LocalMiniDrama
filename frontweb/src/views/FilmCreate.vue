@@ -2743,10 +2743,21 @@ const {
   requeueTask: requeueImageGenerationTask,
   selectResult: selectImageGenerationResult,
   close: closeImageGenerationDrawer,
+  generationSettledTick: imageGenerationSettledTick,
 } = useImageGeneration()
 
 // ── Composable: Navigation ─────────────────────────────
 const { navCollapsed, storyboardMenuExpanded, toggleNav, scrollToTop, scrollToAnchor } = useNavigation()
+
+// 生成任务落定后自动刷新剧集资产(角色/道具/场景卡片的图片与更新时间)
+let settledRefreshTimer = null
+watch(imageGenerationSettledTick, () => {
+  if (settledRefreshTimer) clearTimeout(settledRefreshTimer)
+  settledRefreshTimer = setTimeout(() => {
+    settledRefreshTimer = null
+    loadDrama().catch(() => {})
+  }, 1500)
+})
 
 function goList() {
   router.push('/')

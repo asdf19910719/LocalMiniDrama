@@ -60,6 +60,8 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   const errorMessage = ref('')
   const environment = ref(null)
   const autoSelect = ref(true)
+  // 生成任务落定(完成/待选/失败)时递增,驱动页面刷新资产列表
+  const generationSettledTick = ref(0)
   let taskPollTimer = null
   let environmentCheckVersion = 0
 
@@ -238,6 +240,7 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
 
   function notifyQueueEvent(event) {
     if (!event.taskId || event.type === 'driver_error' || event.type === 'retrying') return
+    if (event.type === 'completed' || event.type === 'needs_review' || event.type === 'failed') generationSettledTick.value += 1
     const key = `${event.taskId}:${event.type}`
     if (notifiedEvents.has(key)) return
     notifiedEvents.add(key)
@@ -354,5 +357,5 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     }
   }
 
-  return { dramaId, defaultChannel, summary, environment, autoSelect, loadAutoSelect, setAutoSelect, batchSelectFirst, checkEnvironment, clearEnvironmentCache: clearImageGenerationEnvironmentCache, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
+  return { dramaId, defaultChannel, summary, environment, autoSelect, generationSettledTick, loadAutoSelect, setAutoSelect, batchSelectFirst, checkEnvironment, clearEnvironmentCache: clearImageGenerationEnvironmentCache, currentTask, drawerVisible, loading, errorMessage, loadSummary, loadDefault, setDefaultChannel, openTask, refreshTask, sendToChatGPT, recoverCapture, selectResult, closeDrawer, startQueueDriver, stopQueueDriver, openTaskById, requeueTask }
 })
