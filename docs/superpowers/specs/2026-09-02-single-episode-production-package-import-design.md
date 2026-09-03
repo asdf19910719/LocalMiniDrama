@@ -3,6 +3,10 @@
 日期：2026-09-02  
 状态：已确认设计，待实施计划
 
+修订记录：
+
+- 2026-09-03：依据代码评审修订。澄清人物双实体（`characters` 与 `character_libraries`）的消歧；补充 `characters.stages` 存量字段的处置；补充结构化分镜字段到现有列的映射（`action`/`dialogue`/`shot_type`/`movement`/`layout_description`/`angle_*`）；明确 `summary` 映射到 `episodes.description`；新增统一参考图解析器的查询 API；补充 ZIP 项目导出/导入扩展；补充存量万能提示词 `@图片N` 漂移的警告规则；补充 `field_overrides` 死代码修复、视频抽屉配置键控、集号生成规则。
+
 ## 1. 背景
 
 LocalMiniDrama 已具备以下独立能力：
@@ -94,6 +98,14 @@ LocalMiniDrama 已具备以下独立能力：
 - 参考图缺失时，不得为了迁就 `@图片N` 而静默跳过槽位并重排剩余引用。
 - 草稿中若存在 `@图片N`，导入预览按“逻辑资产槽位”校验编号，而不是要求图片此时已经生成；缺图只在后续 H3 编译和视频生成阶段成为阻塞错误。
 
+### 4.5 人物实体消歧
+
+代码库中存在两套“人物”概念，本设计只作用于其中一套：
+
+- **`characters`（剧目级演员表，`drama_id` 作用域）**：人物状态（`character_variants`）和分镜状态关联（`storyboard_character_variants`）只挂在这套实体上。制作包导入创建、复用和匹配的“人物”均指它。
+- **`character_libraries`（全局角色库）**：不在本设计范围内。现有 `storyboard_characters` 关联表（指向角色库）及其四视图参考（`four_view_image_url`）保持现状不动；统一参考图解析器不纳入角色库来源，角色库四视图只继续参与既有分镜图片生成链路。
+- `storyboards.characters` JSON（指向演员表）按 6.2 的约定继续作为兼容投影存在，由统一同步服务维护。
+
 ## 5. 标准 JSON 制作包
 
 ### 5.1 顶层结构
@@ -130,9 +142,9 @@ LocalMiniDrama 已具备以下独立能力：
 - `source_key`：必填，文件内稳定标识。
 - `episode_number`：必填，正整数。
 - `title`：必填。
-- `summary`：必填，写入剧集简介。
-- `script`：可选，完整剧本文本。
-- `duration_target_seconds`：可选。
+- `summary`：必填，写入剧集简介。现有 `episodes` 表没有 `summary` 列，简介落点是 `episodes.description`。
+- `script`：可选，完整剧本文本，写入 `episodes.script_content`。
+- `duration_target_seconds`：可选，写入 `episodes.duration`。
 - `notes`：可选。
 
 如果 `script` 缺失，导入器根据分镜顺序，以确定性模板拼接场景、动作、对白、旁白和声音，生成可读的 `script_content`。这个过程不调用 AI。
@@ -215,6 +227,31 @@ LocalMiniDrama 已具备以下独立能力：
 
 上游应提供完整动作过程，而不只是静态画面描述。对白保留原语言，不能把对白混进动作字段。
 
+### 5.6.1 分镜字段到现有列的映射
+
+`storyboards` 表已具备大部分结构化列（`action`、`dialogue`、`shot_type`、`movement`、`angle`、`angle_h`、`angle_v`、`angle_s`、`layout_description`、`narration`、`duration`、`title`、`description`、`image_prompt`），导入映射如下，不新建含义重复的列：
+
+| 协议字段 | 落点 | 说明 |
+| --- | --- | --- |
+| `title` | `storyboards.title` | 原样 |
+| `description` | `storyboards.description` | 原样 |
+| `duration_seconds` | `storyboards.duration` | 数值 |
+| `action` | `storyboards.action` | 存在 `start`/`progression`/`end` 时渲染为确定性多行纯文本（“开始：…\n推进：…\n结束：…”），单段时原样 |
+| `dialogue` | `storyboards.dialogue` | 结构化数组渲染为确定性纯文本（“角色名（表演提示）：台词”逐行），同时保留原始结构于 `episode_imports.normalized_json` 供审计 |
+| `shot_type` | `storyboards.shot_type` | 原样 |
+| `camera_angle` | `storyboards.angle` | 原文本；不强行拆 `angle_h/angle_v/angle_s`（保留既有结构化三元组语义不动） |
+| `camera_movement` | `storyboards.movement` | 原样 |
+| `composition` | `storyboards.layout_description` | 画面布局与站位语义一致 |
+| `narration` | `storyboards.narration` | 原样 |
+| `image_prompt` | `storyboards.image_prompt` | 原样 |
+| `audio_description` | `storyboards.audio_description` | 新增列，JSON 文本 |
+| `transition` | `storyboards.transition` | 新增列，JSON 文本 |
+| `scene_ref` | `storyboards.scene_id` | 经 `scenes.source_key` 解析后写入 |
+| `character_refs` | `storyboard_character_variants`（权威）+ `storyboards.characters` JSON（投影） | 见 6.2 |
+| `prop_refs` | `storyboard_props` | 经 `props.source_key` 解析后写入 |
+
+`action` 和 `dialogue` 渲染为纯文本而不是 JSON，是因为现有消费方（万能提示词 bundle、TTS、前端分镜编辑器）都按纯文本读取这两个列（例如 `universalSegmentPromptBundle.js` 直接对 `action` 截断拼接）；JSON 会把原始结构泄进提示词。确定性渲染保证同一份制作包重复导入得到完全相同的文本。
+
 ## 6. 数据模型
 
 ### 6.1 新增 `character_variants`
@@ -241,6 +278,12 @@ LocalMiniDrama 已具备以下独立能力：
 - `(character_id, source_key)` 唯一。
 - 同一人物最多一个 `is_default = 1`。
 - 删除人物时级联删除状态；已被分镜使用的状态不得在普通编辑流程中直接删除。
+
+**存量 `characters.stages` 字段的处置**：迁移 17 已给 `characters` 表加了 `stages` JSON TEXT 列（“不同集不同外貌”设想），但当前是只写不读的死字段（后端唯一写点在 `characterLibraryService.updateCharacter`，全库无消费方；前端仅有一个手写 JSON 的 textarea）。本设计用 `character_variants` 表取代它：
+
+- 迁移阶段将 `stages` 标记为废弃：停止一切读写，前端移除角色编辑弹窗中的 stages JSON textarea。
+- 对存量非空 `stages`，导入默认状态创建流程时尝试解析，把可读的外观描述并入 default 状态的 `description` 备注；解析失败则原样保留列值不阻塞迁移。
+- 不把 `stages` 内容自动升级为正式状态实体，避免引入无法验证的自动决策。
 
 ### 6.2 新增 `storyboard_character_variants`
 
@@ -272,6 +315,8 @@ LocalMiniDrama 已具备以下独立能力：
 - `storyboards.transition`
 
 `universal_segment_text`、`video_prompt` 等已有字段继续沿用，不创建含义重复的新提示词字段。
+
+分镜其余结构化字段不再加列：`action`、`dialogue`、`shot_type`、`movement`、`angle`、`layout_description`、`narration`、`duration` 等列均已存在，按 5.6.1 的映射写入。场景字段映射为：`name` → `scenes.location`、`state` → `scenes.state`（新增列）、`image_prompt` → `scenes.prompt`、`description` → 拼接进 `scenes.prompt`（格式“{description}。{image_prompt}”，`description` 为空时只写 `image_prompt`），不新增 `scenes.description` 列；`negative_prompt` → `scenes.negative_prompt`（既有列）。道具 `image_prompt` → `props.prompt`、`negative_prompt` → `props.negative_prompt`（既有列）；人物状态 `image_prompt` 存于 `character_variants.image_prompt`，不动 `characters.polished_prompt`（人物本体生图提示词继续由现有润色链路维护）。
 
 `audio_description`、`transition`、`reference_snapshot`、`generation_params`、`validation_errors` 等结构化值在 SQLite 中按项目现有约定保存为 JSON 文本，由数据访问层统一序列化和反序列化，页面组件不直接解析数据库原始字符串。
 
@@ -341,13 +386,19 @@ H3 草稿按“分镜 + 视频配置”保存：
 
 分镜区域生成万能提示词和视频抽屉生成 H3，都调用同一解析器。
 
+**解析器查询 API**：`GET /api/storyboards/:id/reference-slots?video_config_id=...`，返回该分镜解析后的逻辑槽位列表（编号、资产类型、业务名称、资产 ID、状态 ID、图片地址与可用性、图片版本信息、超限提示）。前端分镜区域的参考图缩略行、万能提示词生成预览和视频抽屉的一致性检查都消费这个接口的结果展示，不再各自维护排序逻辑；后端内部调用同一服务函数。
+
+**范围边界**：本解析器只服务万能提示词生成、H3 编译和视频候选提交三条链路。既有分镜图片生成链路（`imageService` 的参考图组装，含首帧锚位、四宫格降级、角色库四视图、文本补扫和 kling/其它协议的 1–4 张上限）保持现状不动，不在本设计范围；后续如需统一，作为独立设计另行处理。
+
 ## 8. 导入交互
 
 ### 8.1 入口
 
-在剧集管理页面新增独立入口“导入单集制作包”，与现有 TXT 批量导入和项目 ZIP 导入并列但不混用。
+在剧集管理页面（DramaDetail，即“剧集管理”路由页）新增独立入口“导入单集制作包”，与现有 TXT 批量导入和项目 ZIP 导入并列但不混用。项目 ZIP 导入入口在项目列表页，三者互不影响。
 
 只接受 `.json`。文件读取后先进入预览，不直接写数据库。
+
+“创建新剧集”指在当前剧（drama）下新建一集：`episode_number` 取该剧现有最大集号 + 1，与手动“新增一集”的行为一致；协议里的 `episode.episode_number` 仅用于展示和校验提示，不直接决定落库集号，避免与现有集号冲突。“填充空白剧集”时按目标集已有集号落库。
 
 ### 8.2 三步预览
 
@@ -449,6 +500,8 @@ H3 草稿按“分镜 + 视频配置”保存：
 
 ## 11. H3 视频抽屉
 
+H3 草稿按“分镜 + 视频配置”键控（见 6.5），因此抽屉必须在会话中持有明确的 `video_config_id`。现状是抽屉只加载“默认视频配置”，用户不在抽屉里选择配置；实施时抽屉需在顶部展示当前生效的配置标识（名称/ID），默认配置变化时视为来源变化触发失效检查，但不要求本阶段开放多配置切换。
+
 ### 11.1 提示词生成按钮
 
 当前“预览 H3 提示词”调整为明确的“生成 H3 提示词”。该按钮：
@@ -539,6 +592,7 @@ H3 Ref2VA 结果必须包含：
 - 未提供万能提示词草稿。
 - 名称相似但 `source_key` 不同的现有资产。
 - 上游声明的参考图上限与系统当前上限不一致。
+- **存量万能提示词编号漂移**：统一解析器上线后，逻辑槽位固定编号、缺图不再重排；此前按“仅有图资产连续编号”生成的存量 `universal_segment_text`，其 `@图片N` 可能与当前槽位错位。视频抽屉的一致性检查发现“提示词引用编号与当前槽位语义不符”时显示明确警告（“提示词中的 @图片N 与当前参考图顺序可能不一致，建议重新生成万能提示词”），只警告不阻塞——由用户决定重新生成或忽略。
 
 ### 12.3 阻塞视频生成的错误
 
@@ -559,9 +613,12 @@ H3 Ref2VA 结果必须包含：
 - 既有分镜的人物关联映射到默认状态。
 - 旧字段继续可读写，直到所有调用点完成迁移；统一同步服务避免数据漂移。
 - 当前 TXT 导入、项目 ZIP 导入、经典分镜模式和非 H3 视频配置保持可用。
+- **项目 ZIP 导出/导入同步扩展**：`dramaExportService`/`dramaImportService` 需要搬运 `character_variants`、`storyboard_character_variants`、各表 `source_key`、`scenes.state`、`storyboards.audio_description/transition`，否则 ZIP 往返会静默丢失新数据。ZIP 导出的分镜资产关联继续用下标记录，导入端映射到新表。
+- **修复 `field_overrides` 死代码**：前端生成/润色万能提示词时随请求发送未保存的字段编辑（`field_overrides`），后端从未消费，实际使用的是库内旧值。统一解析器改造波及此处，一并处理：后端要么消费覆盖字段，要么前端停止发送并在生成前提示未保存修改，二选一，不允许继续维持“看起来生效”的现状。
 - 当前全能提示词区域仍是万能提示词的唯一生成和编辑入口。
 - 视频抽屉不复制一套万能提示词生成按钮。
-- 当前前端最多收集 10 张、H3 适配器最多接受 9 张的不一致，统一修正为共享规则中的 9 张，并取消静默截断。
+- 当前前端最多收集 10 张、H3 适配器最多接受 9 张的不一致，统一修正为共享规则中的 9 张，并取消静默截断；同时为 `VIDEO_REFERENCE_COUNT_INVALID` 补充前端友好文案（现走兜底文案）。
+- 前端新增逻辑按现有 composables 模式落点（`frontweb/src/composables/filmCreate/`）：导入向导和人物状态卡片各自拆出组件/组合函数，不继续向已约 1.1 万行的 FilmCreate.vue 内联。
 
 ## 14. 测试策略
 
@@ -573,10 +630,12 @@ H3 Ref2VA 结果必须包含：
 - 空白剧集判定。
 - 资产匹配和冲突决策。
 - 参考图稳定排序、缺图、去重和 9 张上限。
+- 分镜字段映射（5.6.1）：结构化 `action`/`dialogue` 的确定性文本渲染，同一输入重复导入产出逐字节相同。
 - 万能提示词 `@图片N` 校验。
 - H3 六段结构和 `<Subject N>` 校验。
 - 来源指纹和最终文本哈希。
 - H3 人工编辑、自动保存和失效判定。
+- `characters.stages` 废弃迁移：非空可解析、非空不可解析、空值三种存量形态。
 
 ### 14.2 后端集成测试
 
@@ -586,6 +645,8 @@ H3 Ref2VA 结果必须包含：
 - 非空剧集拒绝导入。
 - 事务中途失败后完全回滚。
 - 复用资产时不覆盖现有内容。
+- ZIP 导出后导入，人物状态、状态关联和各表 `source_key` 无损往返。
+- 参考槽位查询接口与导入、万能提示词生成、H3 编译三处的槽位结果一致。
 - 候选生成使用保存后的最终 H3 文本。
 - 候选生成不再次调用 H3 编译器。
 - 提交前输入变化时拒绝旧草稿。
@@ -602,6 +663,8 @@ H3 Ref2VA 结果必须包含：
 - H3 配置下未生成或已失效时禁用候选按钮。
 - H3 编辑触发自动保存并显示人工修改状态。
 - 关闭重开后恢复相同配置的 H3 草稿。
+- 抽屉展示当前配置标识；默认配置变化触发失效检查。
+- `@图片N` 与当前槽位不一致时显示警告且不阻塞。
 - 非 H3 配置保持现有流程。
 
 ### 14.4 人工验收
@@ -628,13 +691,16 @@ H3 Ref2VA 结果必须包含：
 - 人物状态及分镜状态关联。
 - 预览、冲突处理、原子导入和审计。
 - 导入后每集页面的关联展示和手动资产生产。
+- 存量 `characters.stages` 废弃与前端 textarea 移除。
+- 项目 ZIP 导出/导入对新表和新增列的同步扩展。
 
 ### 第二阶段：统一参考解析和 H3 门禁
 
-- 共享参考图解析器。
-- 分镜万能提示词与状态引用适配。
-- H3 草稿持久化、可编辑、失效检测。
+- 共享参考图解析器及其查询 API（`GET /storyboards/:id/reference-slots`）。
+- 分镜万能提示词与状态引用适配，含 `field_overrides` 死代码处理和 9 张上限/截断行为统一。
+- H3 草稿持久化、可编辑、失效检测；抽屉展示当前 `video_config_id`。
 - 候选接口改为消费已确认的 H3 草稿。
+- 存量万能提示词 `@图片N` 漂移的抽屉警告。
 
 ### 后续可选阶段：旧文档转换器
 
