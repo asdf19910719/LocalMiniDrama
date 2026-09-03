@@ -3181,7 +3181,12 @@ const {
   showVariantEditor, variantEditorForm, variantEditorSaving,
   openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault,
   sbVariantLinksSaving, getSbVariantId, ensureSbVariantsLoaded, onSbVariantChange,
-} = useCharacterVariants({ characterAPI, storyboardsAPI, getSbCharacterIds })
+} = useCharacterVariants({
+  characterAPI,
+  storyboardsAPI,
+  getSbCharacterIds,
+  getCharacterName: (id) => (characters.value ?? []).find((c) => Number(c.id) === Number(id))?.name || ''
+})
 
 async function onGenerateCharacters() {
   trackFilmCreateAction('generate_characters_click')

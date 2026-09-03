@@ -25,14 +25,23 @@ export function buildVariantLinks(selections, sortStart = 1) {
  * @param {object} deps.characterAPI - 人物 API（listVariants/createVariant/updateVariant/deleteVariant/generateVariantImage）
  * @param {object} deps.storyboardsAPI - 分镜 API（updateVariantLinks）
  * @param {Function} deps.getSbCharacterIds - (sbId) => number[] 当前分镜已勾选角色 id 列表
+ * @param {Function} [deps.getCharacterName] - (characterId) => string 角色名称（缺失提示用）
+ * @param {object} [deps.notify] - 消息通知对象（默认 ElMessage；测试注入桩）
  */
 export function useCharacterVariants(deps) {
-  const { characterAPI, storyboardsAPI, getSbCharacterIds } = deps || {}
+  const {
+    characterAPI,
+    storyboardsAPI,
+    getSbCharacterIds,
+    getCharacterName,
+    notify = ElMessage
+  } = deps || {}
 
   // ── 状态数据（懒加载缓存） ─────────────────────────────
   /** characterId -> variant[]，进入角色卡状态折叠区或分镜勾选时按需加载 */
   const variantsByCharacterId = ref(new Map())
-  const variantsLoadingIds = ref(new Set())
+  /** characterId -> Promise<variant[]|null> 在途加载共享 promise（并发调用等待同一次请求） */
+  const variantsLoadingPromises = new Map()
   /** 正在生成图片的状态 id（非 null 时禁用全部状态生图按钮，防并发重复生图） */
   const generatingVariantId = ref(null)
   const variantDefaultSettingId = ref(null)
@@ -54,32 +63,35 @@ export function useCharacterVariants(deps) {
 
   // ── 加载 ──────────────────────────────────────────────
   /**
-   * 加载角色状态列表（懒加载，重复调用直接命中缓存跳过）
+   * 加载角色状态列表（懒加载，重复调用直接命中缓存跳过；在途请求共享同一 promise）
    * @param {number|string} characterId
    * @param {{ force?: boolean }} [options] force=true 强制刷新（增删改后用）
-   * @returns {Promise<Array>} 状态列表（失败返回 []）
+   * @returns {Promise<Array|null>} 成功返回状态列表（可能为空数组=该角色暂无状态），失败返回 null
    */
-  async function loadVariants(characterId, options = {}) {
+  function loadVariants(characterId, options = {}) {
     const key = Number(characterId)
-    if (!Number.isFinite(key)) return []
+    if (!Number.isFinite(key)) return Promise.resolve([])
     if (!options.force && variantsByCharacterId.value.has(key)) {
-      return variantsByCharacterId.value.get(key) || []
+      return Promise.resolve(variantsByCharacterId.value.get(key) || [])
     }
-    if (variantsLoadingIds.value.has(key)) {
-      return variantsByCharacterId.value.get(key) || []
+    if (variantsLoadingPromises.has(key)) {
+      return variantsLoadingPromises.get(key)
     }
-    variantsLoadingIds.value.add(key)
-    try {
-      const res = await characterAPI.listVariants(key)
-      const arr = Array.isArray(res) ? res : []
-      variantsByCharacterId.value.set(key, arr)
-      return arr
-    } catch (e) {
-      ElMessage.error(e?.message || '加载人物状态失败')
-      return []
-    } finally {
-      variantsLoadingIds.value.delete(key)
-    }
+    const pending = (async () => {
+      try {
+        const res = await characterAPI.listVariants(key)
+        const arr = Array.isArray(res) ? res : []
+        variantsByCharacterId.value.set(key, arr)
+        return arr
+      } catch (e) {
+        notify.error(e?.message || '加载人物状态失败')
+        return null
+      } finally {
+        variantsLoadingPromises.delete(key)
+      }
+    })()
+    variantsLoadingPromises.set(key, pending)
+    return pending
   }
 
   /** 模板读取某角色的状态列表（未加载时返回空数组，不触发请求） */
@@ -152,10 +164,10 @@ export function useCharacterVariants(deps) {
         await characterAPI.createVariant(characterId, payload)
       }
       await loadVariants(characterId, { force: true })
-      ElMessage.success(form.id ? '状态已保存' : '状态已新增')
+      notify.success(form.id ? '状态已保存' : '状态已新增')
       showVariantEditor.value = false
     } catch (e) {
-      ElMessage.error(e?.message || '保存失败')
+      notify.error(e?.message || '保存失败')
     } finally {
       variantEditorSaving.value = false
     }
@@ -179,13 +191,13 @@ export function useCharacterVariants(deps) {
       if (Number.isFinite(Number(v.character_id))) {
         await loadVariants(v.character_id, { force: true })
       }
-      ElMessage.success('状态已删除')
+      notify.success('状态已删除')
     } catch (e) {
       if (e?.response?.status === 409 || e?.response?.data?.error?.code === 'VARIANT_IN_USE') {
-        ElMessage.warning('该状态已被分镜使用，请先解除关联')
+        notify.warning('该状态已被分镜使用，请先解除关联')
         return
       }
-      ElMessage.error(e?.message || '删除失败')
+      notify.error(e?.message || '删除失败')
     }
   }
 
@@ -200,9 +212,9 @@ export function useCharacterVariants(deps) {
       if (Number.isFinite(Number(characterId))) {
         await loadVariants(characterId, { force: true })
       }
-      ElMessage.success('状态图片已生成')
+      notify.success('状态图片已生成')
     } catch (e) {
-      ElMessage.error(e?.message || '生成失败')
+      notify.error(e?.message || '生成失败')
     } finally {
       generatingVariantId.value = null
     }
@@ -218,9 +230,9 @@ export function useCharacterVariants(deps) {
       if (Number.isFinite(Number(v.character_id))) {
         await loadVariants(v.character_id, { force: true })
       }
-      ElMessage.success('已设为默认状态')
+      notify.success('已设为默认状态')
     } catch (e) {
-      ElMessage.error(e?.message || '设置失败')
+      notify.error(e?.message || '设置失败')
     } finally {
       variantDefaultSettingId.value = null
     }
@@ -252,19 +264,33 @@ export function useCharacterVariants(deps) {
     await saveSbVariantLinks(sbId)
   }
 
-  /** 收集当前分镜全部已勾选角色的状态选择并 PUT 保存 */
+  /**
+   * 收集当前分镜全部已勾选角色的状态选择并 PUT 保存。
+   * 后端 syncStoryboardVariantLinks 为事务内全删全插并覆写 storyboards.characters 投影：
+   * links payload 漏掉任何已勾选角色都会静默删除其关联，因此保存前必须
+   * 1) 等待全部已勾选角色的状态列表就绪（在途加载共享同一 promise）；
+   * 2) 任一角色加载失败或没有任何可用状态（无法解析出 variant_id）时中止保存，不提交残缺 links。
+   */
   async function saveSbVariantLinks(sbId) {
-    const ids = getSbCharacterIds?.(sbId) || []
-    const selections = []
-    for (const cid of ids) {
-      const vid = getSbVariantId(sbId, cid)
-      if (vid != null) selections.push({ character_id: cid, variant_id: vid })
+    const ids = (getSbCharacterIds?.(sbId) || []).map(Number).filter((n) => Number.isFinite(n))
+    const loaded = await Promise.all(ids.map((id) => loadVariants(id, { force: false })))
+    if (loaded.some((r) => r === null)) {
+      notify.error('人物状态加载失败，已取消保存，请稍后重试')
+      return
     }
+    const missingNames = ids
+      .filter((cid) => getSbVariantId(sbId, cid) == null)
+      .map((cid) => getCharacterName?.(cid) || `#${cid}`)
+    if (missingNames.length) {
+      notify.error(`「${missingNames.join('、')}」暂无人物状态，已取消保存，请先在角色卡中为其创建状态`)
+      return
+    }
+    const selections = ids.map((cid) => ({ character_id: cid, variant_id: getSbVariantId(sbId, cid) }))
     sbVariantLinksSaving.value = true
     try {
       await storyboardsAPI.updateVariantLinks(sbId, buildVariantLinks(selections))
     } catch (e) {
-      ElMessage.error(e?.message || '保存人物状态关联失败')
+      notify.error(e?.message || '保存人物状态关联失败')
     } finally {
       sbVariantLinksSaving.value = false
     }
