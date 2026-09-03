@@ -6405,7 +6405,7 @@ function getSbUniversalOmniRefSlots(sb) {
   return out
 }
 
-/** 全能模式：场景/角色/物品 → 绝对 URL 列表（不含经典分镜中间主图；供可灵 Omni / 火山多图参考，上限由后端统一校验（1-9，H3）） */
+/** 仅 legacy:本地"缺图跳过"口径,与后端槽位(缺图占位不重排)不一致;仅作粗筛与槽位接口失败兜底,提交一律走 collectSlotReferenceAbsoluteUrls */
 function collectSbOmniReferenceAbsoluteUrls(sb) {
   if (!sb?.id) return []
   const urls = []
@@ -6425,6 +6425,25 @@ function collectSbOmniReferenceAbsoluteUrls(sb) {
     if (hasAssetImage(p)) pushAbs(assetImageUrl(p))
   }
   return urls
+}
+
+/**
+ * 槽位口径参考图(Task 14 收口 / Task 17):按 GET /storyboards/:id/reference-slots 解析,
+ * 仅取 image_available=true 的槽位 image_url(顺序=槽位序,缺图占位不重排、不去重),
+ * 与 H3 编译/草稿的 reference_snapshot 编号语义保持一致;接口失败时回退 legacy 本地收集。
+ */
+async function collectSlotReferenceAbsoluteUrls(sbId) {
+  if (!sbId) return []
+  try {
+    const res = await storyboardsAPI.getReferenceSlots(sbId)
+    const slots = Array.isArray(res?.slots) ? res.slots : []
+    return slots
+      .filter((slot) => slot?.image_available && slot?.image_url)
+      .map((slot) => toAbsoluteImageUrl(resolveAssetImageUrl(slot.image_url)))
+      .filter(Boolean)
+  } catch {
+    return collectSbOmniReferenceAbsoluteUrls({ id: sbId })
+  }
 }
 
 /** 非 Seedance2 全能降级：仅场景参考图（若有） */
@@ -6830,7 +6849,7 @@ async function onGenerateSbVideo(sb) {
       h3DirectorMode = compatibility.mode === 'h3_director'
     }
   }
-  const omniRefs = universalOmniApi ? collectSbOmniReferenceAbsoluteUrls(sb) : []
+  const omniRefs = universalOmniApi ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
   const sceneOnlyRefs = universal && !universalOmniApi ? collectSbSceneOnlyReferenceAbsoluteUrls(sb) : []
   const hasClassicFrame = !!getSbFirstFrameUrl(sb)
   let hasAnyImage = false
@@ -7274,7 +7293,7 @@ async function startBatchVideoGeneration() {
       if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
-        return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
+        return collectSbOmniReferenceAbsoluteUrls(sb).length > 0 // 仅 legacy 粗筛,提交前按槽位口径复核
       }
       return !!getSbFirstFrameUrl(sb)
     })
@@ -7295,7 +7314,7 @@ async function startBatchVideoGeneration() {
         if (batchVideoStopping.value) break
         const sb = todo[videoQueueIdx++]
         const universal = isSbUniversalMode(sb.id)
-        const omniRefs = universal ? collectSbOmniReferenceAbsoluteUrls(sb) : []
+        const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
         if (!universal && !getSbFirstFrameUrl(sb)) {
           videoDoneCount++
           batchVideoProgress.value = { ...batchVideoProgress.value, current: videoDoneCount }
@@ -8017,7 +8036,7 @@ async function runOneClickPipeline(textOnly = false) {
         if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
         if (isSbUniversalMode(sb.id)) {
           if (!sbCanSubmitVideo(sb)) return false
-          return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
+          return collectSbOmniReferenceAbsoluteUrls(sb).length > 0 // 仅 legacy 粗筛,提交前按槽位口径复核
         }
         return !!getSbFirstFrameUrl(sb)
       })
@@ -8030,7 +8049,7 @@ async function runOneClickPipeline(textOnly = false) {
           const stepName = '分镜视频 #' + (sb.storyboard_number ?? sb.id)
           const ok = await pipelineWithRetry(stepName, async () => {
             const universal = isSbUniversalMode(sb.id)
-            const omniRefs = universal ? collectSbOmniReferenceAbsoluteUrls(sb) : []
+            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
             const firstFrameUrl = await getMainImageUrlForVideo(sb)
             const absoluteUrl = universal ? (omniRefs[0] || '') : toAbsoluteImageUrl(firstFrameUrl)
             const { first: vFirst, last: vLast } = sbVideoFirstLastUrls(sb, universal, null)
@@ -8357,7 +8376,7 @@ async function runRepairPipeline() {
       if (vidList.some((v) => isPlayableVideoGenerationStatus(v.status) && recordHasPlayableVideoUrl(v))) return false
       if (isSbUniversalMode(sb.id)) {
         if (!sbCanSubmitVideo(sb)) return false
-        return collectSbOmniReferenceAbsoluteUrls(sb).length > 0
+        return collectSbOmniReferenceAbsoluteUrls(sb).length > 0 // 仅 legacy 粗筛,提交前按槽位口径复核
       }
       return !!getSbFirstFrameUrl(sb)
     })
@@ -8371,7 +8390,7 @@ async function runRepairPipeline() {
           const stepName = '分镜视频 #' + (sb.storyboard_number ?? sb.id)
           const ok = await pipelineWithRetry(stepName, async () => {
             const universal = isSbUniversalMode(sb.id)
-            const omniRefs = universal ? collectSbOmniReferenceAbsoluteUrls(sb) : []
+            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
             const firstFrameUrl = await getMainImageUrlForVideo(sb)
             const absoluteUrl = universal ? (omniRefs[0] || '') : toAbsoluteImageUrl(firstFrameUrl)
             const { first: vFirst, last: vLast } = sbVideoFirstLastUrls(sb, universal, null)

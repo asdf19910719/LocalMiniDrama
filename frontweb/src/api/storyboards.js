@@ -122,6 +122,10 @@ export const storyboardsAPI = {
   insertBefore(id) {
     return request.post(`/storyboards/${id}/insert-before`, {})
   },
+  /** 统一参考图槽位解析(spec §7):→ { slots:[{index,type,image_url,image_available,...}], total, overflow, fingerprint } */
+  getReferenceSlots(id) {
+    return request.get(`/storyboards/${id}/reference-slots`)
+  },
   batchInferParams(episodeId, overwrite = false) {
     return request.post('/storyboards/batch-infer-params', { episode_id: episodeId, overwrite })
   },

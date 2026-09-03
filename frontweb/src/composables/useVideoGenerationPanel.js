@@ -1,4 +1,23 @@
 import { computed, getCurrentInstance, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import {
+  absoluteAssetUrl,
+  checkImageRefDrift,
+  collectAvailableSlotUrls,
+  deriveH3DraftUiState,
+  formatH3ValidationErrors,
+  mapFreshnessReasons,
+} from '../utils/h3DraftState.js'
+import { assetImageUrl } from '../utils/mediaUrl.js'
+
+// H3 草稿文本防抖自动保存间隔(spec §11.3,Task 17)
+const H3_DRAFT_SAVE_DEBOUNCE_MS = 800
+// 候选生成 409 门禁错误码(Task 16):命中时刷新草稿 + freshness 后再由 chip 呈现原因
+const H3_DRAFT_GATE_ERROR_CODES = new Set([
+  'H3_DRAFT_STALE',
+  'H3_DRAFT_INVALID',
+  'H3_DRAFT_HASH_MISMATCH',
+  'H3_DRAFT_CONFIG_MISMATCH',
+])
 
 const VIDEO_ACTIONS = Object.freeze([
   '刷新',
@@ -27,6 +46,17 @@ const STATUS_LABELS = Object.freeze({
 
 const ERROR_SUMMARIES = Object.freeze({
   H3_SKILL_TOOL_CALL_UNSUPPORTED: '当前文本模型不支持技能工具调用，请为 H3 提示词编译选择支持 tool calling 的模型。',
+  H3_CONFIG_REQUIRED: '当前视频配置不可用或不是 H3 工作流，无法生成 H3 提示词。',
+  UNIVERSAL_PROMPT_EMPTY: '全能模式片段描述为空，请先填写分镜的片段描述再生成 H3 提示词。',
+  MISSING_REFERENCE_IMAGE: '存在缺少参考图的槽位，请先补齐场景/角色/道具参考图。',
+  REFERENCE_COUNT_OVERFLOW: '参考图槽位超过上限（9 张），请减少关联资产后重试。',
+  H3_PROMPT_FORMAT_INVALID: 'H3 提示词结构校验未通过，请重新生成或修正文本。',
+  H3_DRAFT_REQUIRED: 'H3 配置需先生成提示词草稿，再提交候选生成。',
+  H3_DRAFT_STALE: '提示词草稿的来源已变化，请重新生成 H3 提示词。',
+  H3_DRAFT_INVALID: '提示词草稿未通过结构校验，请修正文本后再生成候选。',
+  H3_DRAFT_HASH_MISMATCH: '提示词草稿哈希校验失败，请重新生成 H3 提示词。',
+  H3_DRAFT_CONFIG_MISMATCH: '提示词草稿与当前视频配置不一致，请重新生成 H3 提示词。',
+  H3_DRAFT_STORYBOARD_MISMATCH: '提示词草稿属于其他分镜，请重新生成 H3 提示词。',
   VIDEO_CONFIG_DEFAULT_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
   VIDEO_CONFIG_DEFAULT_MULTIPLE: '检测到多个默认视频服务，请在 API 配置中仅保留一个。',
   VIDEO_CONFIG_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
@@ -228,8 +258,10 @@ export function videoStatusLabel(status) {
   return STATUS_LABELS[trimmed(status).toLowerCase()] || '状态未知'
 }
 
-export function buildVideoCandidateRequest(form = {}) {
-  const prompt = trimmed(form.prompt)
+export function buildVideoCandidateRequest(form = {}, overrides = {}) {
+  // H3 候选门禁(Task 16)要求 prompt 非空且携带 h3_prompt_draft_id;prompt 以草稿终文回传,
+  // 后端按草稿 final_compiled_prompt 覆盖并校验哈希。
+  const prompt = trimmed(overrides.prompt ?? form.prompt)
   if (!prompt) throw new Error('请先填写视频提示词')
   const candidateCount = positiveInteger(form.candidateCount ?? 1, '候选数量')
   if (candidateCount > 3) throw new Error('候选数量不能超过 3 个')
@@ -259,8 +291,14 @@ export function buildVideoCandidateRequest(form = {}) {
   for (const [key, value] of Object.entries(optional)) {
     if (value) structured[key] = value
   }
-  if (Array.isArray(form.referenceImageUrls) && form.referenceImageUrls.length) {
-    structured.referenceImageUrls = form.referenceImageUrls.map(trimmed).filter(Boolean)
+  if (overrides.h3PromptDraftId != null && String(overrides.h3PromptDraftId).trim() !== '') {
+    structured.h3PromptDraftId = overrides.h3PromptDraftId
+  }
+  const referenceImageUrls = Array.isArray(overrides.referenceImageUrls)
+    ? overrides.referenceImageUrls
+    : form.referenceImageUrls
+  if (Array.isArray(referenceImageUrls) && referenceImageUrls.length) {
+    structured.referenceImageUrls = referenceImageUrls.map(trimmed).filter(Boolean)
   }
   if (form.useVoiceReference) structured.useVoiceReference = true
 
@@ -340,8 +378,6 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const activeGroupId = ref('')
   const selectionReason = ref('')
   const error = ref(null)
-  const h3Preview = ref(null)
-  const h3Previewing = ref(false)
   const promptRestored = ref(false)
   const lastCompiledPrompt = ref('')
   const qualityReviews = ref({})
@@ -362,6 +398,20 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   let anchorVersion = 0
   const inFlightCreates = new Map()
   let pollTimer = null
+
+  // ---------- H3 提示词草稿状态(Task 17) ----------
+  const h3Draft = ref(null)
+  const h3Freshness = ref({ stale: false, reasons: [] })
+  const h3DraftText = ref('')
+  const h3Saving = ref(false)
+  const h3Compiling = ref(false)
+  const h3DraftLoading = ref(false)
+  const h3UserEdited = ref(false)
+  const h3Slots = ref([])
+  const h3SlotsLoaded = ref(false)
+  let h3SaveTimer = null
+  let h3Dirty = false
+  let h3DraftVersion = 0
 
   function requestIsCurrent(storyboardId, version, token = null, currentToken = null) {
     return version === mutationVersion
@@ -413,6 +463,180 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       || trimmed(Array.isArray(defaultConfig.value?.model) ? defaultConfig.value.model[0] : defaultConfig.value?.model)
       || '由默认配置决定'
   ))
+  const isH3Config = computed(() => {
+    const cfg = defaultConfig.value || {}
+    const provider = String(cfg.provider || '').toLowerCase()
+    const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
+    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
+  })
+  const h3UiState = computed(() => deriveH3DraftUiState({
+    draft: h3Draft.value,
+    freshness: h3Freshness.value,
+    saving: h3Saving.value,
+    structureValid: true,
+  }))
+  const h3FreshnessLabels = computed(() => mapFreshnessReasons(h3Freshness.value?.reasons))
+  const h3ValidationLines = computed(() => formatH3ValidationErrors(h3Draft.value?.validation_errors))
+  // spec §12.2:@图片N 与当前槽位语义不符时只警告不阻塞(简化口径:引用编号 > 槽位总数)
+  const h3RefDrift = computed(() => checkImageRefDrift(h3DraftText.value, h3Slots.value))
+
+  function applyH3Draft(draft, freshness, { replaceText = false } = {}) {
+    h3Draft.value = draft ?? null
+    h3Freshness.value = freshness || { stale: false, reasons: [] }
+    if (replaceText) {
+      h3DraftText.value = String(h3Draft.value?.final_compiled_prompt ?? '')
+      h3UserEdited.value = Boolean(h3Draft.value?.manually_edited)
+      h3Dirty = false
+    }
+  }
+
+  function resetH3DraftState() {
+    h3DraftVersion += 1
+    if (h3SaveTimer) {
+      clearTimeout(h3SaveTimer)
+      h3SaveTimer = null
+    }
+    h3Dirty = false
+    h3UserEdited.value = false
+    h3Draft.value = null
+    h3Freshness.value = { stale: false, reasons: [] }
+    h3DraftText.value = ''
+    h3Saving.value = false
+    h3Compiling.value = false
+    h3DraftLoading.value = false
+    h3Slots.value = []
+    h3SlotsLoaded.value = false
+  }
+
+  async function loadH3Draft() {
+    const configId = defaultConfig.value?.id
+    if (!isH3Config.value || configId == null || typeof videosAPI.getH3Draft !== 'function') return
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = ++h3DraftVersion
+    h3DraftLoading.value = true
+    try {
+      const result = await videosAPI.getH3Draft(requestStoryboardId, configId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
+    } catch (caught) {
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      applyH3Draft(null, null)
+      setError(caught)
+    } finally {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+        h3DraftLoading.value = false
+      }
+    }
+  }
+
+  /** 「生成 H3 提示词」:调用 compile 草稿接口(替代旧 POST /videos/h3-preview 预览) */
+  async function compileH3Draft() {
+    const configId = defaultConfig.value?.id
+    if (!isH3Config.value || configId == null || creating.value || h3Compiling.value) return
+    if (typeof videosAPI.compileH3Draft !== 'function') return
+    const requestStoryboardId = props.storyboardId
+    const requestVersion = ++h3DraftVersion
+    h3Compiling.value = true
+    setError(null)
+    try {
+      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
+      await loadReferenceSlots()
+    } catch (caught) {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
+    } finally {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+        h3Compiling.value = false
+      }
+    }
+  }
+
+  function scheduleH3DraftSave() {
+    if (typeof videosAPI.saveH3Draft !== 'function') return
+    if (h3SaveTimer) clearTimeout(h3SaveTimer)
+    h3SaveTimer = setTimeout(() => {
+      h3SaveTimer = null
+      saveH3DraftText()
+    }, H3_DRAFT_SAVE_DEBOUNCE_MS)
+  }
+
+  /** 文本区输入回调:与已存草稿终文不同则标记人工修改并安排防抖保存 */
+  function onH3DraftTextInput() {
+    const draft = h3Draft.value
+    if (!draft) return
+    if (h3DraftText.value === String(draft.final_compiled_prompt ?? '')) {
+      h3UserEdited.value = false
+      return
+    }
+    h3UserEdited.value = true
+    h3Dirty = true
+    scheduleH3DraftSave()
+  }
+
+  /** 立即补存(离开抽屉/切换分镜/提交候选前调用);无待存内容时为空操作 */
+  async function flushH3DraftSave() {
+    if (h3SaveTimer) {
+      clearTimeout(h3SaveTimer)
+      h3SaveTimer = null
+    }
+    if (h3Dirty && h3Draft.value) await saveH3DraftText()
+  }
+
+  async function saveH3DraftText() {
+    const draft = h3Draft.value
+    if (!draft || draft.id == null || typeof videosAPI.saveH3Draft !== 'function') return
+    // 以草稿归属分镜为准,切换分镜后的响应由版本/分镜校验丢弃,但 PUT 已按旧分镜发出
+    const requestStoryboardId = draft.storyboard_id ?? props.storyboardId
+    const requestVersion = ++h3DraftVersion
+    h3Saving.value = true
+    try {
+      const result = await videosAPI.saveH3Draft(requestStoryboardId, {
+        draft_id: draft.id,
+        final_text: h3DraftText.value,
+        manually_edited: h3UserEdited.value,
+      })
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      h3Dirty = false
+      // 保存失败/非法文本时后端返回 status='invalid',这里保留本地输入并展示 validation_errors
+      applyH3Draft(result?.draft ?? draft, result?.freshness, { replaceText: false })
+      h3UserEdited.value = Boolean((result?.draft ?? draft)?.manually_edited)
+    } catch (caught) {
+      if (requestVersion === h3DraftVersion) {
+        h3Dirty = true
+        setError(caught)
+      }
+    } finally {
+      if (requestVersion === h3DraftVersion) h3Saving.value = false
+    }
+  }
+
+  async function loadReferenceSlots() {
+    if (typeof videosAPI.getReferenceSlots !== 'function') return
+    const requestStoryboardId = props.storyboardId
+    try {
+      const result = await videosAPI.getReferenceSlots(requestStoryboardId)
+      if (String(props.storyboardId) !== String(requestStoryboardId)) return
+      h3Slots.value = Array.isArray(result?.slots) ? result.slots : []
+      h3SlotsLoaded.value = true
+    } catch (_) {
+      if (String(props.storyboardId) === String(requestStoryboardId)) {
+        h3Slots.value = []
+        h3SlotsLoaded.value = false
+      }
+    }
+  }
+
+  /** 全能模式/H3 分镜的候选请求参考图改用槽位口径(Task 14 收口) */
+  function shouldUseSlotReferences() {
+    return String(generationMode.value).startsWith('universal')
+      || isH3Config.value
+      || props.storyboard?.creation_mode === 'universal'
+  }
+
+  function slotReferenceUrls() {
+    return collectAvailableSlotUrls(h3Slots.value).map((url) => absoluteAssetUrl(assetImageUrl(url)))
+  }
 
   function setError(caught) {
     error.value = caught ? videoErrorCopy(caught) : null
@@ -571,12 +795,24 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   async function refresh() {
     setError(null)
     await Promise.all([loadDefaultConfig(), refreshHistory()])
+    // 打开/刷新后重算草稿与 freshness(GET 返回已带),并同步槽位用于 @图片N 漂移检查
+    if (isH3Config.value || shouldUseSlotReferences()) {
+      await Promise.all([loadH3Draft(), loadReferenceSlots()])
+    }
   }
 
   async function generateCandidates() {
     const requestStoryboardId = props.storyboardId
     const storyboardKey = String(requestStoryboardId)
     if (creating.value || inFlightCreates.has(storyboardKey)) return
+    // H3 门禁(Task 16):先补存待保存文本,再按 valid+未 stale+未保存中放行
+    if (isH3Config.value) {
+      await flushH3DraftSave()
+      if (!h3UiState.value.canGenerate) {
+        setError(Object.assign(new Error('请先生成有效的 H3 提示词草稿，再提交候选生成。'), { code: 'H3_DRAFT_NOT_READY' }))
+        return
+      }
+    }
     const requestVersion = mutationVersion
     const requestCreateVersion = ++createVersion
     const request = { version: requestVersion, createVersion: requestCreateVersion }
@@ -584,9 +820,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     creating.value = true
     setError(null)
     try {
+      const overrides = {}
+      if (isH3Config.value && h3Draft.value) {
+        overrides.prompt = String(h3Draft.value.final_compiled_prompt ?? '')
+        overrides.h3PromptDraftId = h3Draft.value.id
+      }
+      if (h3SlotsLoaded.value && shouldUseSlotReferences()) {
+        overrides.referenceImageUrls = slotReferenceUrls()
+      }
       const generated = await videosAPI.generateCandidates(
         requestStoryboardId,
-        buildVideoCandidateRequest(form),
+        buildVideoCandidateRequest(form, overrides),
       )
       if (requestCreateVersion !== createVersion || !requestIsCurrent(requestStoryboardId, requestVersion)) return
       const group = generated?.group
@@ -597,23 +841,15 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       syncPolling()
       await refreshHistory({ quiet: true, preserveGroup: group })
     } catch (caught) {
-      if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) setError(caught)
+      if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) {
+        setError(caught)
+        // 409 门禁语义:刷新草稿 + freshness,让 stale/invalid chip 与原因即时呈现
+        const code = String(caught?.code || caught?.response?.data?.error?.code || '').trim().toUpperCase()
+        if (H3_DRAFT_GATE_ERROR_CODES.has(code)) await loadH3Draft()
+      }
     } finally {
       if (inFlightCreates.get(storyboardKey) === request) inFlightCreates.delete(storyboardKey)
       if (requestCreateVersion === createVersion && requestIsCurrent(requestStoryboardId, requestVersion)) creating.value = false
-    }
-  }
-
-  async function previewH3Prompt() {
-    h3Previewing.value = true
-    setError(null)
-    try {
-      h3Preview.value = await videosAPI.previewH3Prompt(buildVideoCandidateRequest(form).structured)
-    } catch (caught) {
-      h3Preview.value = null
-      setError(caught)
-    } finally {
-      h3Previewing.value = false
     }
   }
 
@@ -739,6 +975,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   }
 
   function close() {
+    // 离开抽屉前立即补存待保存的草稿文本(不阻塞关闭)
+    flushH3DraftSave()
     emit?.('close')
   }
 
@@ -751,6 +989,9 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     analyzeVersion += 1
     anchorVersion += 1
     stopPolling()
+    // 切换分镜前立即补存旧分镜的草稿文本,随后清空全部草稿状态
+    flushH3DraftSave()
+    resetH3DraftState()
     creating.value = false
     analyzingCandidateId.value = ''
     creatingAnchor.value = false
@@ -793,7 +1034,13 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     syncPolling()
   })
 
-  if (getCurrentInstance()) onBeforeUnmount(stopPolling)
+  if (getCurrentInstance()) {
+    onBeforeUnmount(() => {
+      stopPolling()
+      // 抽屉 destroy-on-close 卸载前补存草稿文本
+      flushH3DraftSave()
+    })
+  }
 
   return {
     form,
@@ -805,6 +1052,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configStatus,
     providerName,
     modelName,
+    isH3Config,
     loading,
     creating,
     groups,
@@ -814,8 +1062,6 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     queueLabel,
     selectionReason,
     error,
-    h3Preview,
-    h3Previewing,
     promptRestored,
     lastCompiledPrompt,
     qualityReviews,
@@ -828,9 +1074,25 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     creatingAnchor,
     selectedArtifactId,
     sourceAnchor,
+    h3Draft,
+    h3DraftText,
+    h3Freshness,
+    h3FreshnessLabels,
+    h3ValidationLines,
+    h3RefDrift,
+    h3Saving,
+    h3Compiling,
+    h3DraftLoading,
+    h3UiState,
+    h3Slots,
     refresh,
     generateCandidates,
-    previewH3Prompt,
+    compileH3Draft,
+    loadH3Draft,
+    loadReferenceSlots,
+    onH3DraftTextInput,
+    scheduleH3DraftSave,
+    flushH3DraftSave,
     cancelCandidate,
     retryCandidate,
     analyzeCandidate,

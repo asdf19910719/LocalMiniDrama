@@ -28,6 +28,7 @@
       <template v-if="defaultConfig">
         <span>{{ providerName }}</span>
         <small>模型或工作流：{{ modelName }}</small>
+        <small>配置 ID：{{ defaultConfig.id }}</small>
         <small v-if="generationMode !== 'default'">生成模式：{{ generationModeLabel }}</small>
       </template>
       <small v-else>生成时始终由后端读取唯一默认配置，此处不可切换服务。</small>
@@ -62,10 +63,47 @@
           <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
         </div>
         <div class="h3-preview-actions">
-          <el-button size="small" :loading="h3Previewing" @click="previewH3Prompt">预览 H3 提示词</el-button>
-          <el-tag v-if="h3Preview?.promptFormat" size="small" type="success" effect="plain">{{ h3Preview.promptFormat }}</el-tag>
+          <el-button size="small" :loading="h3Compiling" :disabled="!defaultConfig" @click="compileH3Draft">生成 H3 提示词</el-button>
+          <el-tag v-if="h3DraftLoading" size="small" type="info" effect="plain">草稿读取中</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'ai'" size="small" type="success" effect="plain">AI 生成</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'edited'" size="small" effect="plain">已人工修改</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'stale'" size="small" type="warning" effect="plain">来源已变化</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'invalid'" size="small" type="danger" effect="plain">结构校验失败</el-tag>
         </div>
-        <el-input v-if="h3Preview?.compiledPrompt" :model-value="h3Preview.compiledPrompt" type="textarea" :rows="7" readonly class="h3-preview" />
+        <el-alert
+          v-if="h3UiState.chip === 'stale'"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          :title="`提示词来源已变化：${h3FreshnessLabels.join('、') || '未知原因'}，建议重新生成 H3 提示词`"
+        />
+        <el-alert
+          v-if="h3UiState.chip === 'invalid'"
+          type="error"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          title="H3 提示词结构校验失败，请修正文本后重试"
+        >
+          <div v-for="(line, index) in h3ValidationLines" :key="index" class="h3-validation-line">{{ line }}</div>
+        </el-alert>
+        <el-alert
+          v-if="h3RefDrift.drift"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          title="提示词中的 @图片N 与当前参考图顺序可能不一致，建议重新生成万能提示词"
+        />
+        <el-input
+          v-model="h3DraftText"
+          type="textarea"
+          :rows="7"
+          class="h3-preview"
+          placeholder="点击「生成 H3 提示词」编译万能提示词；可直接修改，停顿约 1 秒后自动保存"
+          @input="onH3DraftTextInput"
+        />
       </template>
       <div class="number-grid">
         <el-form-item label="宽度">
@@ -109,7 +147,7 @@
         type="primary"
         native-type="submit"
         :loading="creating"
-        :disabled="!defaultConfig || !String(form.prompt || '').trim()"
+        :disabled="!defaultConfig || (isH3Config ? !h3UiState.canGenerate : !String(form.prompt || '').trim())"
         class="generate-button"
       >
         <el-icon><Plus /></el-icon>
@@ -296,6 +334,8 @@
 import { computed } from 'vue'
 import { Close, Loading, Plus, Refresh, VideoCamera } from '@element-plus/icons-vue'
 import { videosAPI } from '@/api/videos'
+import { h3DraftAPI } from '@/api/h3Draft'
+import { storyboardsAPI } from '@/api/storyboards'
 import {
   candidateDuration,
   candidateStartTime,
@@ -317,6 +357,15 @@ const props = defineProps({
 })
 const emit = defineEmits(['selected', 'anchor-created', 'close'])
 
+// 面板把草稿/槽位接口并入 videosAPI 注入 composable,便于测试以替身替换
+const panelAPI = {
+  ...videosAPI,
+  getH3Draft: h3DraftAPI.getDraft,
+  compileH3Draft: h3DraftAPI.compileDraft,
+  saveH3Draft: h3DraftAPI.saveDraft,
+  getReferenceSlots: storyboardsAPI.getReferenceSlots,
+}
+
 const {
   form,
   generationMode,
@@ -325,6 +374,7 @@ const {
   configStatus,
   providerName,
   modelName,
+  isH3Config,
   loading,
   creating,
   groups,
@@ -334,8 +384,6 @@ const {
   queueLabel,
   selectionReason,
   error,
-  h3Preview,
-  h3Previewing,
   promptRestored,
   lastCompiledPrompt,
   qualityReviews,
@@ -348,9 +396,17 @@ const {
   creatingAnchor,
   selectedArtifactId,
   sourceAnchor,
+  h3DraftText,
+  h3UiState,
+  h3FreshnessLabels,
+  h3ValidationLines,
+  h3RefDrift,
+  h3Compiling,
+  h3DraftLoading,
   refresh,
   generateCandidates,
-  previewH3Prompt,
+  compileH3Draft,
+  onH3DraftTextInput,
   cancelCandidate,
   retryCandidate,
   analyzeCandidate,
@@ -363,7 +419,7 @@ const {
   candidateMediaId,
   videoStatusLabel,
   anchorRoleLabel,
-} = useVideoGenerationPanel(props, emit, videosAPI)
+} = useVideoGenerationPanel(props, emit, panelAPI)
 
 const storyboardLabel = computed(() => (
   props.storyboard?.storyboard_number ?? props.storyboardId
@@ -374,13 +430,6 @@ const generationModeLabel = computed(() => ({
   classic: '传统首尾帧模式',
 }[generationMode.value] || '默认模式'))
 const isUniversalStoryboard = computed(() => props.storyboard?.creation_mode === 'universal')
-
-const isH3Config = computed(() => {
-  const cfg = defaultConfig.value || {}
-  const provider = String(cfg.provider || '').toLowerCase()
-  const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
-})
 
 function setDimensions(width, height) {
   form.width = width
@@ -662,4 +711,7 @@ h2 {
 }
 .voice-ref-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .voice-ref-hint { color: #909399; }
+.h3-draft-alert { margin: -4px 0 0; }
+.h3-validation-line { font-size: 12px; line-height: 1.6; word-break: break-word; }
+
 </style>

@@ -446,3 +446,348 @@ test('builds the same numeric candidate request for either panel layout', () => 
   }
   assert.deepEqual(makeRequest('drawer'), makeRequest('sidebar'))
 })
+
+// ---------- Task 17:H3 草稿抽屉流 ----------
+
+const H3_CONFIG = {
+  id: 77,
+  is_active: true,
+  is_default: true,
+  provider: 'comfyui',
+  default_model: 'minimax_h3_director_r2v',
+}
+
+function h3ApiStub(extra = {}) {
+  return {
+    getDefaultConfig: async () => ({ ...H3_CONFIG }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+    getH3Draft: async () => ({ draft: null, freshness: { stale: false, reasons: [] } }),
+    getReferenceSlots: async () => ({ slots: [], total: 0, overflow: [] }),
+    ...extra,
+  }
+}
+
+test('detects ComfyUI H3 configs for the draft flow', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub(),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(panel.isH3Config.value, true)
+
+  const plain = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    { ...h3ApiStub(), getDefaultConfig: async () => ({ ...H3_CONFIG, provider: 'cloud' }) },
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(plain.isH3Config.value, false)
+})
+
+test('restores the existing H3 draft text and chip when the panel opens', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async (storyboardId, videoConfigId) => {
+        assert.equal(storyboardId, 1)
+        assert.equal(videoConfigId, 77)
+        return {
+          draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译好的 H3 提示词' },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.h3DraftText.value, '编译好的 H3 提示词')
+  assert.equal(panel.h3UiState.value.chip, 'ai')
+  assert.equal(panel.h3UiState.value.canGenerate, true)
+})
+
+test('compile generates the draft text through the compile endpoint', async () => {
+  const compileCalls = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 3, storyboard: { id: 3, universal_segment_text: '片段描述' } }),
+    () => {},
+    h3ApiStub({
+      compileH3Draft: async (storyboardId, videoConfigId) => {
+        compileCalls.push([storyboardId, videoConfigId])
+        return {
+          draft: { id: 12, status: 'valid', manually_edited: false, final_compiled_prompt: '新编译提示词' },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.compileH3Draft()
+  assert.deepEqual(compileCalls, [[3, 77]])
+  assert.equal(panel.h3DraftText.value, '新编译提示词')
+  assert.equal(panel.h3UiState.value.chip, 'ai')
+})
+
+test('flushes edited draft text through PUT and marks it manually edited', async () => {
+  const saves = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '原始编译词' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async (storyboardId, body) => {
+        saves.push([storyboardId, body])
+        return {
+          draft: { id: 9, status: 'valid', manually_edited: true, final_compiled_prompt: body.final_text },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '人工改过的提示词'
+  panel.onH3DraftTextInput()
+  panel.scheduleH3DraftSave()
+  await panel.flushH3DraftSave()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(saves, [[1, { draft_id: 9, final_text: '人工改过的提示词', manually_edited: true }]])
+  assert.equal(panel.h3Saving.value, false)
+  assert.equal(panel.h3UiState.value.chip, 'edited')
+})
+
+test('keeps the local draft text when the save request fails', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '原始编译词' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async () => { throw new Error('保存失败') },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '尚未保存的修改'
+  panel.onH3DraftTextInput()
+  await panel.flushH3DraftSave()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.h3DraftText.value, '尚未保存的修改')
+  assert.equal(panel.error.value?.summary, '保存失败')
+})
+
+test('shows the invalid chip with backend validation errors and blocks generation', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: {
+          id: 9,
+          status: 'invalid',
+          manually_edited: true,
+          final_compiled_prompt: '被用户改坏的结构',
+          validation_errors: { code: 'H3_PROMPT_FORMAT_INVALID', message: '缺少 INTEGRATED_MULTIMODAL_DESCRIPTION', missing: ['INTEGRATED_MULTIMODAL_DESCRIPTION'], empty: [] },
+        },
+        freshness: { stale: false, reasons: [] },
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.h3UiState.value.chip, 'invalid')
+  assert.equal(panel.h3UiState.value.canGenerate, false)
+  assert.ok(panel.h3ValidationLines.value.some((line) => line.includes('INTEGRATED_MULTIMODAL_DESCRIPTION')))
+})
+
+test('shows the stale chip with mapped freshness reasons', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译词' },
+        freshness: { stale: true, reasons: ['slots', 'params'] },
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.h3UiState.value.chip, 'stale')
+  assert.equal(panel.h3UiState.value.canGenerate, false)
+  assert.deepEqual(panel.h3FreshnessLabels.value, ['参考图已变化', '时长/画幅/音频已变化'])
+})
+
+test('submits the H3 draft id with the compiled prompt as the candidate prompt', async () => {
+  const captured = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译词全文' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      generateCandidates: async (storyboardId, body) => {
+        captured.push([storyboardId, body])
+        return {}
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.generateCandidates()
+  assert.equal(captured.length, 1)
+  assert.equal(captured[0][0], 1)
+  assert.equal(captured[0][1].structured.prompt, '编译词全文')
+  assert.equal(captured[0][1].structured.h3PromptDraftId, 9)
+})
+
+test('reloads the draft freshness when candidate generation is rejected as stale', async () => {
+  let draftCalls = 0
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => {
+        draftCalls += 1
+        return draftCalls === 1
+          ? {
+              draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译词' },
+              freshness: { stale: false, reasons: [] },
+            }
+          : {
+              draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译词' },
+              freshness: { stale: true, reasons: ['slots'] },
+            }
+      },
+      generateCandidates: async () => {
+        const error = new Error('提示词草稿的来源已变化')
+        error.code = 'H3_DRAFT_STALE'
+        error.details = { reasons: ['slots'] }
+        throw error
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(panel.h3UiState.value.canGenerate, true)
+
+  await panel.generateCandidates()
+  await new Promise((resolve) => setImmediate(resolve))
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(draftCalls, 2)
+  assert.equal(panel.h3UiState.value.chip, 'stale')
+  assert.deepEqual(panel.h3FreshnessLabels.value, ['参考图已变化'])
+})
+
+test('collects universal candidate references from available reference slots', async () => {
+  const captured = []
+  const panel = useVideoGenerationPanel(
+    reactive({
+      storyboardId: 1,
+      storyboard: { id: 1, universal_segment_text: '片段' },
+      generationContext: { mode: 'universal_omni', prompt: '片段', referenceImageUrls: ['https://stale.example.test/old.png'] },
+    }),
+    () => {},
+    {
+      ...h3ApiStub(),
+      // 非 H3 的全能多图参考(kling/volc omni)同样按槽位口径收集
+      getDefaultConfig: async () => ({ id: 5, is_active: true, is_default: true, provider: 'volces', default_model: 'doubao-seedance-2-0' }),
+      getReferenceSlots: async () => ({
+        slots: [
+          { index: 1, type: 'scene', image_available: true, image_url: 'projects/scene.png' },
+          { index: 2, type: 'character_variant', image_available: false, image_url: 'projects/missing.png' },
+          { index: 3, type: 'prop', image_available: true, image_url: '/static/props/prop.png' },
+        ],
+        total: 3,
+        overflow: [],
+      }),
+      generateCandidates: async (storyboardId, body) => {
+        captured.push(body)
+        return {}
+      },
+    },
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.generateCandidates()
+  assert.deepEqual(captured[0].structured.referenceImageUrls, ['/static/projects/scene.png', '/static/props/prop.png'])
+})
+
+test('warns when the draft text references @图片N beyond the resolved slot count', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '@图片1 与 @图片4 的互动' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      getReferenceSlots: async () => ({
+        slots: [{ index: 1, image_available: true, image_url: 'a.png' }, { index: 2, image_available: true, image_url: 'b.png' }],
+        total: 2,
+        overflow: [],
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.h3RefDrift.value.drift, true)
+  assert.deepEqual(panel.h3RefDrift.value.outOfRange, [4])
+})
+
+test('flushes a pending draft save before switching storyboards', async () => {
+  const saves = []
+  const props = reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头一' } })
+  const panel = useVideoGenerationPanel(
+    props,
+    () => {},
+    h3ApiStub({
+      getH3Draft: async (_storyboardId, videoConfigId) => ({
+        draft: { id: 9, storyboard_id: 1, status: 'valid', manually_edited: false, final_compiled_prompt: '原始编译词' },
+        freshness: { stale: false, reasons: [] },
+        videoConfigId,
+      }),
+      saveH3Draft: async (storyboardId, body) => {
+        saves.push([storyboardId, body.draft_id, body.final_text])
+        return {
+          draft: { id: 9, status: 'valid', manually_edited: true, final_compiled_prompt: body.final_text },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '切换前修改'
+  panel.onH3DraftTextInput()
+  props.storyboardId = 2
+  props.storyboard = { id: 2, video_prompt: '镜头二' }
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(saves, [[1, 9, '切换前修改']])
+})
