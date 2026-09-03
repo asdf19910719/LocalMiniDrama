@@ -10,14 +10,19 @@ const {
   validatePackageStructure,
 } = require('../src/services/episodePackageSchema');
 
-const SPECS_DIR = path.join(__dirname, '..', '..', 'docs', 'superpowers', 'specs');
+const SPECS_DIR = path.join(__dirname, '..', '..', 'docs', '单集制作包导入');
+
+const DOC_NAMES = {
+  example: '制作包示例.json',
+  schema: '制作包schema.json',
+};
 
 function loadDoc(name) {
   return JSON.parse(fs.readFileSync(path.join(SPECS_DIR, name), 'utf8'));
 }
 
 function examplePackage() {
-  return loadDoc('episode-package.example.json');
+  return loadDoc(DOC_NAMES.example);
 }
 
 // 读取 'a.b[0].c' 形式的点路径,用于断言示例覆盖全部字段
@@ -45,7 +50,7 @@ describe('episodePackageSchema', () => {
 
   it('packageJsonSchema 为 draft-07 且与 schema.json 文件同构', () => {
     assert.equal(packageJsonSchema.$schema, 'http://json-schema.org/draft-07/schema#');
-    assert.deepEqual(loadDoc('episode-package.schema.json'), packageJsonSchema);
+    assert.deepEqual(loadDoc(DOC_NAMES.schema), packageJsonSchema);
   });
 
   it('合法示例包通过结构校验', () => {

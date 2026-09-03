@@ -6,8 +6,8 @@
 
 配套材料(随本模板一并提供给上游 AI):
 
-- `episode-package.schema.json` —— 字段、类型与必填规则的唯一权威定义
-- `episode-package.example.json` —— 覆盖全部字段的合法示例
+- `制作包schema.json` —— 字段、类型与必填规则的唯一权威定义
+- `制作包示例.json` —— 覆盖全部字段的合法示例
 
 使用方式:把下方“提示词模板”整段原文发给上游 AI,并附上上述两份文件。
 
@@ -23,7 +23,7 @@
 2. 禁止 Markdown 代码围栏(``` 或 ~~~)、禁止注释、禁止尾随逗号、禁止未转义的引号和换行。
 3. 顶层字段 `schema` 固定为 `"local-mini-drama.episode-package"`,`version` 固定为 `"1.0"`,不得改动。
 4. `episode` 与 `storyboards` 必填;`characters`、`scenes`、`props` 允许为空数组,但任何被分镜引用到的资产都必须在包内定义。
-5. 字段语义、类型与必填要求一律以 `episode-package.schema.json` 为准;写法参照 `episode-package.example.json`。
+5. 字段语义、类型与必填要求一律以 `制作包schema.json` 为准;写法参照 `制作包示例.json`。
 
 ### source_key 稳定命名规则
 

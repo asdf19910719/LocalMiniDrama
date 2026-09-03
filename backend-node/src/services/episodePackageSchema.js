@@ -1,7 +1,7 @@
 /**
  * 单集制作包(local-mini-drama.episode-package v1.0)结构与类型校验
  *
- * - packageJsonSchema:与 docs/superpowers/specs/episode-package.schema.json 同构的
+ * - packageJsonSchema:与 docs/单集制作包导入/制作包schema.json 同构的
  *   JSON Schema draft-07 对象,是字段契约的权威文档(供上游 AI 与将来工具使用)。
  * - validatePackageStructure(pkg):纯结构/类型校验,规则为设计文档 §5 的最低门槛;
  *   跨字段引用、唯一性、镜号顺序等业务校验由业务校验器(episodePackageValidator)负责。
@@ -196,7 +196,7 @@ const packageJsonSchema = {
     },
     storyboards: {
       description:
-        '分镜数组(设计文档 §5.6),必填。字段语义以本 schema 与 episode-package.example.json 为准;' +
+        '分镜数组(设计文档 §5.6),必填。字段语义以本 schema 与 docs/单集制作包导入/制作包示例.json 为准;' +
         '上游应提供完整动作过程而非静态画面描述,对白保留原语言且不得混入 action。',
       type: 'array',
       items: {

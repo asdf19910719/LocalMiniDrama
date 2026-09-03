@@ -9,7 +9,7 @@ const characterRoutes = require('../src/routes/characters');
 const { sha256Text } = require('../src/services/episodePackageService');
 const { listStoryboardVariantLinks } = require('../src/services/storyboardVariantService');
 
-const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', 'superpowers', 'specs', 'episode-package.example.json');
+const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
 const EXAMPLE_RAW = fs.readFileSync(EXAMPLE_PATH, 'utf8');
 
 // 表结构:01_init.sql 裁剪 + migrations/30_episode_package_import.sql(含唯一索引)

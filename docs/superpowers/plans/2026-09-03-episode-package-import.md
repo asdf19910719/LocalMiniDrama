@@ -162,9 +162,9 @@ ALTER TABLE storyboards ADD COLUMN transition TEXT;
 
 **Files:**
 - Create: `backend-node/src/services/episodePackageSchema.js`
-- Create: `docs/superpowers/specs/episode-package.schema.json`
-- Create: `docs/superpowers/specs/episode-package.example.json`
-- Create: `docs/superpowers/specs/episode-package-upstream-prompt.md`（上游 AI 生成提示词模板，约束其输出严格符合 schema，禁止 Markdown 围栏）
+- Create: `docs/单集制作包导入/制作包schema.json`（原计划路径 `docs/superpowers/specs/episode-package*.json`，2026-09-03 迁移至中文目录）
+- Create: `docs/单集制作包导入/制作包示例.json`
+- Create: `docs/单集制作包导入/上游AI生成提示词模板.md`（上游 AI 生成提示词模板，约束其输出严格符合 schema，禁止 Markdown 围栏）
 - Test: `backend-node/test/episodePackageSchema.test.js`
 
 **Interfaces:**
@@ -427,7 +427,7 @@ CREATE INDEX IF NOT EXISTS idx_h3_draft_lookup ON storyboard_h3_prompt_drafts(st
 ### Task 18: 人工验收清单执行与收尾
 
 - [ ] 后端 `node --test test/*.test.js` 全绿；前端 `node --test test/*.test.js` 全绿；`npm run build` 成功。
-- [ ] 按 spec 14.4 用 `docs/superpowers/specs/episode-package.example.json` 走一遍手工闭环（启动 dev server，浏览器操作；无法自动化 ComfyUI 的部分验证到“候选请求 payload 组装正确”为止）。
+- [ ] 按 spec 14.4 用 `docs/单集制作包导入/制作包示例.json` 走一遍手工闭环（启动 dev server，浏览器操作；无法自动化 ComfyUI 的部分验证到“候选请求 payload 组装正确”为止）。
 - [ ] `git status` 确认只包含本计划文件；向用户报告改动清单与验证证据，提交与否由用户决定（工作区原含用户未提交改动）。
 
 ## Self-Review 记录

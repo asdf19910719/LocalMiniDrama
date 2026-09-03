@@ -12,10 +12,10 @@ const {
   validateUniversalDraftRefs,
 } = require('../src/services/episodePackageValidator');
 
-const SPECS_DIR = path.join(__dirname, '..', '..', 'docs', 'superpowers', 'specs');
+const SPECS_DIR = path.join(__dirname, '..', '..', 'docs', '单集制作包导入');
 
 function examplePackage() {
-  return JSON.parse(fs.readFileSync(path.join(SPECS_DIR, 'episode-package.example.json'), 'utf8'));
+  return JSON.parse(fs.readFileSync(path.join(SPECS_DIR, '制作包示例.json'), 'utf8'));
 }
 
 // 在合法示例上制造单一违规后运行业务校验
