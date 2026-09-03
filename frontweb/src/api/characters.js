@@ -59,5 +59,22 @@ export const characterAPI = {
   },
   sd2VoiceRefresh(characterId) {
     return request.post(`/characters/${characterId}/sd2-voice-refresh`, {})
+  },
+  // ---------- 人物状态（角色变体） ----------
+  listVariants(characterId) {
+    return request.get(`/characters/${characterId}/variants`)
+  },
+  createVariant(characterId, data) {
+    return request.post(`/characters/${characterId}/variants`, data || {})
+  },
+  updateVariant(variantId, data) {
+    return request.put(`/character-variants/${variantId}`, data || {})
+  },
+  deleteVariant(variantId) {
+    return request.delete(`/character-variants/${variantId}`)
+  },
+  /** 同步生图（后端等待生成完成，可能数十秒），显式 120s 超时防挂起 */
+  generateVariantImage(variantId, data) {
+    return request.post(`/character-variants/${variantId}/generate-image`, data || {}, { timeout: 120000 })
   }
 }

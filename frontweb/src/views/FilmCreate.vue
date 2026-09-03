@@ -542,6 +542,44 @@
                       </template>
                       <span style="font-size:10px;color:#909399">仅 Seedance 2.0 模型生效</span>
                     </div>
+                    <!-- 人物状态（variants）折叠区 -->
+                    <div class="char-variants-row">
+                      <el-button size="small" text type="primary" class="char-variants-toggle" @click="toggleVariantPanel(char)">
+                        状态<el-icon style="margin-left:2px"><ArrowDown v-if="variantPanelCharacterId !== char.id" /><ArrowUp v-else /></el-icon>
+                      </el-button>
+                    </div>
+                    <div v-if="variantPanelCharacterId === char.id" class="char-variants-panel">
+                      <div class="char-variants-toolbar">
+                        <span class="char-variants-title">人物状态</span>
+                        <el-button size="small" type="primary" plain @click="openVariantEditor(char.id)">新增状态</el-button>
+                      </div>
+                      <div v-if="!getVariantsForCharacter(char.id).length" class="char-variants-empty">暂无状态，点击「新增状态」创建</div>
+                      <div v-for="v in getVariantsForCharacter(char.id)" :key="v.id" class="char-variant-item">
+                        <div
+                          class="char-variant-thumb"
+                          :class="{ 'char-variant-thumb--clickable': v.image_url || v.local_path }"
+                          role="button"
+                          tabindex="0"
+                          @click="(v.image_url || v.local_path) && openImagePreview(assetImageUrl(v))"
+                        >
+                          <img v-if="v.image_url || v.local_path" :src="assetImageUrl(v)" alt="" />
+                          <span v-else class="char-variant-thumb-empty">暂无图</span>
+                        </div>
+                        <div class="char-variant-info">
+                          <div class="char-variant-name">
+                            <span :title="v.appearance || v.name">{{ v.name || '未命名' }}</span>
+                            <el-tag v-if="v.is_default" size="small" type="success" effect="plain">默认</el-tag>
+                          </div>
+                          <div v-if="v.appearance" class="char-variant-desc">{{ v.appearance }}</div>
+                        </div>
+                        <div class="char-variant-actions">
+                          <el-button size="small" :loading="generatingVariantId === v.id" :disabled="generatingVariantId != null && generatingVariantId !== v.id" @click="generateVariantImage(v)">生图</el-button>
+                          <el-button size="small" @click="openVariantEditor(char.id, v)">编辑</el-button>
+                          <el-button size="small" :loading="variantDefaultSettingId === v.id" :disabled="!!v.is_default" @click="setVariantDefault(v)">设默认</el-button>
+                          <el-button size="small" type="danger" text @click="removeVariant(v)">删除</el-button>
+                        </div>
+                      </div>
+                    </div>
                     <div v-if="getCharAffectedStoryboards(char.id).length" class="asset-storyboard-link">
                       <span class="asl-label">影响的分镜：</span>
                       <span
@@ -1071,6 +1109,29 @@
                     <span class="sb-select-empty">请先在「道具生成」中添加物品</span>
                   </template>
                 </el-select>
+              </div>
+              <!-- 人物状态选择：每个已勾选角色一个状态下拉（未选择时默认 = is_default 状态），变更即全量保存 links -->
+              <div v-if="getSbSelectedCharacters(sb.id).length" class="sb-script-row sb-variant-selects">
+                <div v-for="c in getSbSelectedCharacters(sb.id)" :key="'sbv' + c.id" class="sb-variant-item">
+                  <span class="sb-variant-name" :title="c.name">{{ c.name || '未命名' }}</span>
+                  <el-select
+                    :model-value="getSbVariantId(sb.id, c.id)"
+                    placeholder="默认状态"
+                    size="small"
+                    class="sb-variant-select"
+                    @update:model-value="(v) => onSbVariantChange(sb, c.id, v)"
+                  >
+                    <el-option
+                      v-for="v in getVariantsForCharacter(c.id)"
+                      :key="v.id"
+                      :label="variantOptionLabel(v)"
+                      :value="v.id"
+                    />
+                    <template v-if="!getVariantsForCharacter(c.id).length" #empty>
+                      <span class="sb-select-empty">该角色暂无状态</span>
+                    </template>
+                  </el-select>
+                </div>
               </div>
               <!-- 当前选中：场景 / 角色 / 物品缩略图 -->
               <div v-if="getSbSelectedScene(sb.id) || getSbSelectedCharacters(sb.id).length || getSbSelectedProps(sb.id).length || (characters || []).length" class="sb-selected-thumbs">
@@ -1795,25 +1856,36 @@
             <div v-else style="font-size:12px;color:#c0c4cc;padding:4px 0">暂无锚点，点击「提炼视觉锚点」自动提炼</div>
           </div>
         </el-form-item>
-        <!-- P1-3: 多阶段造型（stages） -->
-        <el-form-item v-if="editCharacterForm.id" label="多阶段造型">
-          <div style="width:100%">
-            <div style="font-size:12px;color:#909399;margin-bottom:6px">
-              不同集次的角色造型变化，格式：JSON 数组 [{"episode_range":[1,3],"appearance":"..."}]
-            </div>
-            <el-input
-              v-model="editCharacterForm.stages"
-              type="textarea"
-              :rows="4"
-              placeholder='例：[{"episode_range":[1,5],"appearance":"白衣少年"},{"episode_range":[6,10],"appearance":"黑衣武者"}]'
-              style="font-size:12px;font-family:monospace"
-            />
-          </div>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditCharacter = false">取消</el-button>
         <el-button type="primary" :loading="editCharacterSaving" :disabled="!editCharacterForm?.name?.trim()" @click="submitEditCharacter">{{ editCharacterForm?.id ? '保存' : '添加' }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 人物状态（角色变体）编辑弹窗 -->
+    <el-dialog v-model="showVariantEditor" :title="variantEditorForm?.id ? '编辑人物状态' : '新增人物状态'" width="560px" @close="closeVariantEditor">
+      <el-form v-if="variantEditorForm" label-width="90px">
+        <el-form-item label="名称" required>
+          <el-input v-model="variantEditorForm.name" placeholder="状态名称，如：白衣少年" />
+        </el-form-item>
+        <el-form-item label="外观描述">
+          <el-input v-model="variantEditorForm.appearance" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" placeholder="该状态下的外貌/服装描述" />
+        </el-form-item>
+        <el-form-item label="生图提示词">
+          <el-input v-model="variantEditorForm.image_prompt" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" placeholder="留空时生成图片会回退使用角色外貌描述" />
+        </el-form-item>
+        <el-form-item label="负向提示词">
+          <el-input v-model="variantEditorForm.negative_prompt" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="生成图片时需要避免的元素（可选）" />
+        </el-form-item>
+        <el-form-item label="默认状态">
+          <el-switch v-model="variantEditorForm.is_default" />
+          <span style="font-size:12px;color:#909399;margin-left:8px">开启后该角色在分镜中默认使用此状态</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showVariantEditor = false">取消</el-button>
+        <el-button type="primary" :loading="variantEditorSaving" :disabled="!variantEditorForm?.name?.trim()" @click="saveVariant">保存</el-button>
       </template>
     </el-dialog>
 
@@ -2716,6 +2788,7 @@ import { runGenerateStoryFromPremise } from '@/composables/useStoryGeneration'
 import { useCharacters } from '@/composables/filmCreate/useCharacters'
 import { useProps as usePropsComposable } from '@/composables/filmCreate/useProps'
 import { useScenes } from '@/composables/filmCreate/useScenes'
+import { useCharacterVariants } from '@/composables/filmCreate/useCharacterVariants'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
@@ -3099,6 +3172,16 @@ const {
   onDeleteSceneLibrary, onAddSceneToLibrary, onAddSceneToMaterialLibrary,
   onAddSceneFromLibrary, onAddDramaSceneToEpisode,
 } = useScenes({ store, dramaId, currentEpisodeId, getSelectedStyle, scriptLanguage, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage, dramaAPI })
+
+// ── Composable: Character Variants（人物状态） ──────────
+const {
+  generatingVariantId, variantDefaultSettingId,
+  loadVariants, getVariantsForCharacter, variantOptionLabel,
+  variantPanelCharacterId, toggleVariantPanel,
+  showVariantEditor, variantEditorForm, variantEditorSaving,
+  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault,
+  sbVariantLinksSaving, getSbVariantId, ensureSbVariantsLoaded, onSbVariantChange,
+} = useCharacterVariants({ characterAPI, storyboardsAPI, getSbCharacterIds })
 
 async function onGenerateCharacters() {
   trackFilmCreateAction('generate_characters_click')
@@ -4719,6 +4802,10 @@ function syncStoryboardStateFromEpisode(ep) {
   sbLayoutDescription.value = nextLayoutDescription
   sbCreationMode.value = nextCreationMode
   sbUniversalSegmentText.value = nextUniversalSegment
+  // 预加载各分镜已勾选角色的状态列表（懒加载缓存，重复调用自动跳过）
+  for (const sbId of Object.keys(nextCharIds)) {
+    if ((nextCharIds[sbId] || []).length) ensureSbVariantsLoaded(Number(sbId))
+  }
 }
 
 function onEpisodeSelect(epId) {
@@ -4891,6 +4978,8 @@ async function onStoryboardCharacterChange(sbId) {
   const ids = sbCharacterIds.value[sbId] || []
   try {
     await storyboardsAPI.update(sbId, { character_ids: ids })
+    // 新勾选的角色可能还没有加载状态列表，按需预加载（缓存命中自动跳过）
+    ensureSbVariantsLoaded(sbId)
     // 首/尾帧提示词保留（含用户手动保存版）；图生时后端会按当前勾选做 sanitize
   } catch (e) {
     console.warn('[分镜] 保存角色失败', e)
@@ -10997,5 +11086,130 @@ html.light .frame-layout-anchor {
   color: #64748b;
   margin-top: 4px;
   line-height: 1.4;
+}
+
+/* ── 人物状态（角色变体）折叠区 ─────────────────────── */
+.char-variants-row {
+  margin-top: 6px;
+}
+.char-variants-toggle {
+  padding-left: 0;
+  font-size: 12px;
+}
+.char-variants-panel {
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid var(--el-border-color-lighter, #e4e7ed);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light, #fafafa);
+}
+html.light .char-variants-panel {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+.char-variants-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.char-variants-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary, #909399);
+}
+.char-variants-empty {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder, #c0c4cc);
+  padding: 4px 0;
+}
+.char-variant-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px dashed var(--el-border-color-lighter, #e4e7ed);
+}
+.char-variant-thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter, #e4e7ed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--el-fill-color, #f0f2f5);
+}
+.char-variant-thumb--clickable {
+  cursor: pointer;
+}
+.char-variant-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.char-variant-thumb-empty {
+  font-size: 10px;
+  color: var(--el-text-color-placeholder, #c0c4cc);
+}
+.char-variant-info {
+  flex: 1;
+  min-width: 0;
+}
+.char-variant-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  min-width: 0;
+}
+.char-variant-name span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.char-variant-desc {
+  font-size: 11px;
+  color: var(--el-text-color-secondary, #909399);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.char-variant-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+.char-variant-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+/* ── 分镜人物状态下拉 ───────────────────────────────── */
+.sb-variant-selects {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.sb-variant-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+.sb-variant-name {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-variant-select {
+  width: 150px;
 }
 </style>

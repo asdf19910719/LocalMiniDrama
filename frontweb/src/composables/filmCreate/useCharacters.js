@@ -166,7 +166,6 @@ export function useCharacters(deps) {
       local_path: char.local_path || '',
       ref_image: char.ref_image || '',
       identity_anchors: char.identity_anchors || '',
-      stages: char.stages ? (typeof char.stages === 'string' ? char.stages : JSON.stringify(char.stages, null, 2)) : '',
     }
     showEditCharacter.value = true
     if (!char.polished_prompt && char.id && (char.appearance || char.description)) {
@@ -221,7 +220,6 @@ export function useCharacters(deps) {
           personality: form.personality || undefined,
           description: form.description || undefined,
           polished_prompt: form.polished_prompt || undefined,
-          stages: form.stages ? form.stages.trim() || undefined : undefined
         })
         await saveCharRefImageIfAny(form.id)
         ElMessage.success('角色已保存')

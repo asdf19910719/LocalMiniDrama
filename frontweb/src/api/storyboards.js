@@ -76,6 +76,10 @@ export const storyboardsAPI = {
   update(id, data) {
     return request.put(`/storyboards/${id}`, data)
   },
+  /** 全量保存分镜 × 人物状态关联。links: [{character_id, variant_id, reference_role, sort_order, framing_note}] */
+  updateVariantLinks(id, links) {
+    return request.put(`/storyboards/${id}/character-variant-links`, { links: links || [] })
+  },
   delete(id) {
     return request.delete(`/storyboards/${id}`)
   },
