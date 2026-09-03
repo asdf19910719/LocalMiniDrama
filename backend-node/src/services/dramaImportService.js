@@ -4,6 +4,7 @@ const path = require('path');
 const AdmZip = require('adm-zip');
 const { randomUUID } = require('crypto');
 const storageLayout = require('./storageLayout');
+const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -178,16 +179,46 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
 
   // ---- 导入角色 ----
   const charNewIds = []; // 按导出顺序保存新角色 id，用于恢复分镜 character_indices
+  const variantNewIdsByCharIdx = []; // 按导出角色顺序保存各角色的新状态 id 数组，用于恢复 character_variant_refs
   for (let i = 0; i < (data.characters || []).length; i++) {
     const c = data.characters[i];
-    if (!c.name) { charNewIds.push(null); continue; }
+    if (!c.name) { charNewIds.push(null); variantNewIdsByCharIdx.push([]); continue; }
     const localPath = saveMediaFile(storagePath, projectDir, 'characters', files, c.image_file, 'char_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'characters', files, c.extra_image_files, 'char_extra_imp');
     const info = db.prepare(
-      `INSERT INTO characters (drama_id, name, role, description, personality, appearance, voice_style, polished_prompt, local_path, extra_images, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, c.name, c.role || null, c.description || null, c.personality || null, c.appearance || null, c.voice_style || null, c.polished_prompt || null, localPath, extraImagesJson, i, now, now);
-    charNewIds.push(info.lastInsertRowid);
+      `INSERT INTO characters (drama_id, name, role, description, personality, appearance, voice_style, polished_prompt, source_key, local_path, extra_images, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(dramaId, c.name, c.role || null, c.description || null, c.personality || null, c.appearance || null, c.voice_style || null, c.polished_prompt || null, c.source_key || null, localPath, extraImagesJson, i, now, now);
+    const charId = info.lastInsertRowid;
+    charNewIds.push(charId);
+
+    // ---- 导入该人物的状态（character_variants），老版 ZIP 无 variants 字段时跳过 ----
+    const newVariantIds = [];
+    for (const v of (Array.isArray(c.variants) ? c.variants : [])) {
+      if (!v || !v.name) { newVariantIds.push(null); continue; }
+      const vLocalPath = saveMediaFile(storagePath, projectDir, 'characters', files, v.image_file, 'char_var_imp');
+      const vExtrasJson = saveExtraImages(storagePath, projectDir, 'characters', files, v.extra_image_files, 'char_var_extra_imp');
+      const vInfo = db.prepare(
+        `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, image_url, local_path, extra_images, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        charId,
+        v.source_key || null,
+        v.name,
+        v.description ?? null,
+        v.appearance ?? null,
+        v.image_prompt ?? null,
+        v.negative_prompt ?? null,
+        null, // image_url：远端 URL 不随 ZIP 迁移，与首尾帧导入一致，置空由 local_path 承载
+        vLocalPath,
+        vExtrasJson,
+        v.is_default ? 1 : 0,
+        now,
+        now
+      );
+      newVariantIds.push(vInfo.lastInsertRowid);
+    }
+    variantNewIdsByCharIdx.push(newVariantIds);
   }
 
   // ---- 导入剧集（先建好所有集，再关联角色/场景/道具） ----
@@ -229,9 +260,9 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'scenes', files, s.image_file, 'scene_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'scenes', files, s.extra_image_files, 'scene_extra_imp');
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, local_path, extra_images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, epId, s.location || '', s.time || '', s.prompt || '', s.polished_prompt || null, localPath, extraImagesJson, now, now);
+      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, source_key, state, local_path, extra_images, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(dramaId, epId, s.location || '', s.time || '', s.prompt || '', s.polished_prompt || null, s.source_key || null, s.state || null, localPath, extraImagesJson, now, now);
     sceneNewIds.push(info.lastInsertRowid);
     sceneDedupeMap.set(dedupeKey, info.lastInsertRowid);
   }
@@ -247,9 +278,9 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'props', files, p.image_file, 'prop_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'props', files, p.extra_image_files, 'prop_extra_imp');
     const pInfo = db.prepare(
-      `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, local_path, extra_images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, epId, p.name, p.type || null, p.description || null, p.prompt || null, localPath, extraImagesJson, now, now);
+      `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, source_key, local_path, extra_images, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(dramaId, epId, p.name, p.type || null, p.description || null, p.prompt || null, p.source_key || null, localPath, extraImagesJson, now, now);
     propNewIds.push(pInfo.lastInsertRowid);
   }
 
@@ -288,7 +319,8 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
         'dialogue', 'narration', 'action', 'atmosphere', 'result', 'shot_type', 'angle', 'angle_h', 'angle_v', 'angle_s',
         'movement', 'lighting_style', 'depth_of_field', 'image_prompt', 'polished_prompt', 'video_prompt', 'duration',
         'emotion', 'emotion_intensity', 'segment_index', 'segment_title', 'continuity_snapshot', 'creation_mode',
-        'universal_segment_text', 'layout_description', 'first_frame_image_id', 'last_frame_image_id',
+        'universal_segment_text', 'layout_description', 'source_key', 'audio_description', 'transition',
+        'first_frame_image_id', 'last_frame_image_id',
         'last_frame_image_url', 'last_frame_local_path', 'image_url', 'local_path', 'characters',
         'audio_local_path', 'narration_audio_local_path', 'created_at', 'updated_at'
       ];
@@ -325,6 +357,9 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
         sb.creation_mode === 'universal' ? 'universal' : 'classic',
         sb.universal_segment_text || null,
         sb.layout_description || null,
+        sb.source_key || null,
+        sb.audio_description || null,
+        sb.transition || null,
         null, // first_frame_image_id 后设
         null, // last_frame_image_id 后设
         sb.last_frame_image_url || null,
@@ -350,6 +385,34 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
       if (sbPropNewIds.length > 0) {
         const insSP = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
         for (const pid of sbPropNewIds) insSP.run(sbId, pid);
+      }
+
+      // 还原人物状态关联（新版 v1.5+ 的 character_variant_refs；老版 ZIP 无此字段时跳过）。
+      // character_index/variant_index 重映射到新库 id 后调用 syncStoryboardVariantLinks
+      // （其内部事务在导入事务内按 savepoint 嵌套执行），并同步刷新 storyboards.characters 投影。
+      if (Array.isArray(sb.character_variant_refs) && sb.character_variant_refs.length > 0) {
+        const links = [];
+        for (const ref of sb.character_variant_refs) {
+          if (!ref || typeof ref !== 'object') continue;
+          const refCharId = charNewIds[ref.character_index];
+          const refVariantId = (variantNewIdsByCharIdx[ref.character_index] || [])[ref.variant_index];
+          if (!refCharId || !refVariantId) continue;
+          links.push({
+            character_id: refCharId,
+            variant_id: refVariantId,
+            reference_role: ref.reference_role ?? null,
+            sort_order: ref.sort_order,
+            framing_note: ref.framing_note ?? null,
+          });
+        }
+        if (links.length > 0) {
+          try {
+            syncStoryboardVariantLinks(db, sbId, links);
+          } catch (e) {
+            // 个别关联数据无效时不中断整体导入，与 updateStoryboard 的“告警不抛错”策略一致
+            try { require('../logger').warn?.('[导入] 人物状态关联恢复失败，已跳过', { storyboard_id: sbId, error: e?.message }); } catch (_) {}
+          }
+        }
       }
 
       // 还原帧提示词（首尾帧/关键帧专用提示词 + layout 合同，必须恢复）

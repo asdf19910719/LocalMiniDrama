@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
 
-const EXPORT_VERSION = '1.4';  // 1.4: 完整导出分镜图片历史（含首尾帧 first/last 绑定）、frame_prompts、layout_description 等，支持导入后恢复首尾帧模式数据
+const EXPORT_VERSION = '1.5';  // 1.5: 导出人物状态（character_variants）、source_key 与分镜人物状态关联（character_variant_refs），ZIP 往返无损；1.4: 完整导出分镜图片历史（含首尾帧 first/last 绑定）、frame_prompts、layout_description 等，支持导入后恢复首尾帧模式数据
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -147,6 +147,22 @@ function exportDrama(db, cfg, log, dramaId) {
     'SELECT * FROM characters WHERE drama_id = ? AND deleted_at IS NULL ORDER BY sort_order, id'
   ).all(Number(dramaId));
 
+  // ---- 5.1 读取人物状态（character_variants），构建人物 → 状态列表 / 状态ID → 下标 映射 ----
+  const variantsByCharId = {};        // charId -> 未删除状态行（按 id 升序）
+  const variantIdToIndexByCharId = {}; // charId -> { variantId -> variants[] 下标 }
+  for (const c of characters) {
+    let rows = [];
+    try {
+      rows = db.prepare(
+        'SELECT * FROM character_variants WHERE character_id = ? AND deleted_at IS NULL ORDER BY id'
+      ).all(c.id);
+    } catch (_) { rows = []; }
+    variantsByCharId[c.id] = rows;
+    const idxMap = {};
+    rows.forEach((v, i) => { idxMap[v.id] = i; });
+    variantIdToIndexByCharId[c.id] = idxMap;
+  }
+
   // ---- 6. 读取场景 ----
   const scenes = db.prepare(
     'SELECT * FROM scenes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY id'
@@ -201,8 +217,9 @@ function exportDrama(db, cfg, log, dramaId) {
   }
 
   // ---- 8. 组装 project.json ----
-  // 收集 extra_images 需要打包的文件：{ localRelPath, zipPath }
+  // 收集 extra_images / 人物状态图需要打包的文件：{ localRelPath, zipPath }
   const extraFilesToPack = [];
+  const variantFilesToPack = [];
 
   const zipData = {
     version: EXPORT_VERSION,
@@ -253,6 +270,29 @@ function exportDrama(db, cfg, log, dramaId) {
             .map(id => propIdToIndex[id])
             .filter(idx => idx !== undefined);
 
+          // 人物状态关联：character_index/variant_index 均为导出数组下标，跨项目还原
+          const sbVariantRefs = [];
+          try {
+            const refRows = db.prepare(
+              `SELECT character_id, variant_id, reference_role, sort_order, framing_note
+               FROM storyboard_character_variants WHERE storyboard_id = ?
+               ORDER BY (sort_order IS NULL), sort_order, id`
+            ).all(sb.id);
+            for (const r of refRows) {
+              const charIdx = charIdToIndex[r.character_id];
+              if (charIdx === undefined) continue;
+              const varIdx = variantIdToIndexByCharId[r.character_id]?.[r.variant_id];
+              if (varIdx === undefined) continue;
+              sbVariantRefs.push({
+                character_index: charIdx,
+                variant_index: varIdx,
+                reference_role: r.reference_role ?? null,
+                sort_order: r.sort_order ?? null,
+                framing_note: r.framing_note ?? null,
+              });
+            }
+          } catch (_) {}
+
           return {
             storyboard_number: sb.storyboard_number,
             title: sb.title,
@@ -292,6 +332,10 @@ function exportDrama(db, cfg, log, dramaId) {
             character_indices: characterIndices,
             scene_index: sceneIndex,
             prop_indices: propIndices,
+            source_key: sb.source_key || null,
+            audio_description: sb.audio_description || null,
+            transition: sb.transition || null,
+            character_variant_refs: sbVariantRefs,
             image_file: sbImageFile,
             video_file: sbVideoFile,
             audio_file: sbAudioFile,
@@ -327,6 +371,32 @@ function exportDrama(db, cfg, log, dramaId) {
         extraFilesToPack.push({ localRelPath: relPath, zipPath });
         return zipPath;
       });
+      // 人物状态（character_variants）：主图与额外参考图均打包进 ZIP
+      const variants = (variantsByCharId[c.id] || []).map((v) => {
+        const variantImageFile = v.local_path
+          ? `media/characters/char_${c.id}_variant_${v.id}${extOf(v.local_path)}`
+          : null;
+        if (variantImageFile) {
+          variantFilesToPack.push({ localRelPath: v.local_path, zipPath: variantImageFile });
+        }
+        const variantExtras = parseExtraImages(v.extra_images);
+        const variantExtraFiles = variantExtras.map((relPath, i) => {
+          const zipPath = `media/characters/extra_char_${c.id}_variant_${v.id}_${i}${extOf(relPath)}`;
+          extraFilesToPack.push({ localRelPath: relPath, zipPath });
+          return zipPath;
+        });
+        return {
+          source_key: v.source_key || null,
+          name: v.name,
+          description: v.description ?? null,
+          appearance: v.appearance ?? null,
+          image_prompt: v.image_prompt ?? null,
+          negative_prompt: v.negative_prompt ?? null,
+          image_file: variantImageFile,
+          extra_image_files: variantExtraFiles,
+          is_default: v.is_default ? 1 : 0,
+        };
+      });
       return {
         name: c.name,
         role: c.role,
@@ -335,8 +405,10 @@ function exportDrama(db, cfg, log, dramaId) {
         appearance: c.appearance,
         voice_style: c.voice_style,
         polished_prompt: c.polished_prompt || null,
+        source_key: c.source_key || null,
         image_file: c.local_path ? `media/characters/char_${c.id}${extOf(c.local_path)}` : null,
         extra_image_files: extraFiles,
+        variants,
       };
     }),
     scenes: dedupedScenes.map(s => {
@@ -352,6 +424,8 @@ function exportDrama(db, cfg, log, dramaId) {
         time: s.time,
         prompt: s.prompt,
         polished_prompt: s.polished_prompt || null,
+        source_key: s.source_key || null,
+        state: s.state || null,
         episode_index: epIdx >= 0 ? epIdx : null,
         image_file: s.local_path ? `media/scenes/scene_${s.id}${extOf(s.local_path)}` : null,
         extra_image_files: extraFiles,
@@ -370,6 +444,7 @@ function exportDrama(db, cfg, log, dramaId) {
         type: p.type,
         description: p.description,
         prompt: p.prompt,
+        source_key: p.source_key || null,
         episode_index: epIdx >= 0 ? epIdx : null,
         image_file: p.local_path ? `media/props/prop_${p.id}${extOf(p.local_path)}` : null,
         extra_image_files: extraFiles,
@@ -420,6 +495,13 @@ function exportDrama(db, cfg, log, dramaId) {
       const buf = safeReadFile(abs);
       if (buf) zip.addFile(`media/characters/char_${c.id}${extOf(c.local_path)}`, buf);
     }
+  }
+
+  // 人物状态主图（character_variants）
+  for (const { localRelPath, zipPath } of variantFilesToPack) {
+    const abs = localPathToAbs(storagePath, localRelPath);
+    const buf = safeReadFile(abs);
+    if (buf) zip.addFile(zipPath, buf);
   }
 
   // 场景主图
