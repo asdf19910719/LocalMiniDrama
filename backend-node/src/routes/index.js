@@ -386,6 +386,8 @@ function setupRouter(cfg, db, log) {
   r.get('/storyboards/episode/:episode_id/generate', storyboards.episodeStoryboardsGenerate);
   r.post('/storyboards', storyboards.create);
   r.post('/storyboards/:id/insert-before', storyboards.insertBefore);
+  // 统一参考图槽位(spec §7);须在 GET /storyboards/:id 之前注册
+  r.get('/storyboards/:id/reference-slots', storyboards.referenceSlots);
   r.get('/storyboards/:id', storyboards.getOne);
   r.put('/storyboards/:id', storyboards.update);
   r.delete('/storyboards/:id', storyboards.delete);

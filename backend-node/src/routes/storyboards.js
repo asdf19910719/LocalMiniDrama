@@ -9,6 +9,7 @@ const promptI18n = require('../services/promptI18n');
 const angleService = require('../services/angleService');
 const { buildUniversalSegmentUserPromptBundle } = require('../services/universalSegmentPromptBundle');
 const { normalizeUniversalSegmentShotDurations } = require('../services/universalSegmentDurationNormalize');
+const referenceSlotService = require('../services/referenceSlotService');
 
 /** 润色接口：邻镜结构化摘要（含全能片段与其它提示词字段） */
 function formatNeighborShotPolishContext(row) {
@@ -1107,6 +1108,24 @@ function routes(db, log) {
         response.success(res, { total: rows.length, updated });
       } catch (err) {
         log.error('storyboards batchInferParams', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+
+    // 统一参考图槽位解析(spec §7):前端参考图缩略行、万能提示词预览与视频抽屉一致性检查共用本接口。
+    // query.video_config_id 预留:当前解析只依赖分镜关联资产,不随视频配置变化,暂忽略。
+    referenceSlots: (req, res) => {
+      try {
+        const { slots, total, overflow } = referenceSlotService.resolveStoryboardSlots(db, req.params.id);
+        response.success(res, {
+          slots,
+          total,
+          overflow,
+          fingerprint: referenceSlotService.slotsFingerprint(slots),
+        });
+      } catch (err) {
+        if (err.code === 'STORYBOARD_NOT_FOUND') return response.notFound(res, '分镜不存在');
+        log.error('storyboards referenceSlots', { error: err.message });
         response.internalError(res, err.message);
       }
     },
