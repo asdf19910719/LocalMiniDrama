@@ -79,10 +79,14 @@
           <div class="section-title">分集列表</div>
           <span class="section-count">共 {{ episodes.length }} 集</span>
           <EpisodeBatchImportDialog ref="episodeBatchImportDialogRef" :start-episode-number="nextEpisodeNumber" style="margin-left: auto" @import="onBatchImportEpisodes" />
+          <el-button size="small" @click="packageImportVisible = true">
+            <el-icon><Upload /></el-icon>导入制作包
+          </el-button>
           <el-button size="small" type="primary" :loading="addingEpisode" @click="onAddEpisode">
             <el-icon><Plus /></el-icon>新增一集
           </el-button>
         </div>
+        <EpisodePackageImportDialog v-model="packageImportVisible" :drama-id="dramaId" @imported="onPackageImported" />
         <div v-if="episodes.length === 0" class="empty-tip">暂无分集，点击「新增一集」开始创作</div>
         <div v-else class="episode-grid">
           <div
@@ -548,8 +552,9 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
-import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid } from '@element-plus/icons-vue'
+import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid, Upload } from '@element-plus/icons-vue'
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
+import EpisodePackageImportDialog from '@/components/EpisodePackageImportDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import { useTheme } from '@/composables/useTheme'
 import { dramaAPI } from '@/api/drama'
@@ -1032,6 +1037,13 @@ async function onBatchImportEpisodes(importedEpisodes) {
 
 const addingEpisode = ref(false)
 const deletingEpisodeId = ref(null)
+
+// ---------- 单集制作包导入 ----------
+const packageImportVisible = ref(false)
+function onPackageImported() {
+  // 导入成功(新建或填充空白集)后刷新分集列表
+  loadDrama()
+}
 
 async function onDeleteEpisode(ep) {
   const label = `第 ${ep.episode_number ?? '?'} 集「${ep.title || '未命名'}」`
