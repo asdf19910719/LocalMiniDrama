@@ -9077,8 +9077,6 @@ html.light .nav-sub-item:hover { color: #1e1b4b; background: rgba(99,102,241,0.0
 }
 html.light .card {
   background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(16px) saturate(1.3);
-  -webkit-backdrop-filter: blur(16px) saturate(1.3);
   border-color: rgba(139, 92, 246, 0.08);
   box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 4px 20px rgba(99, 102, 241, 0.05);
 }
