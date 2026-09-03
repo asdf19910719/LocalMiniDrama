@@ -321,7 +321,7 @@ function updateCharacter(db, log, characterId, req) {
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
   if (req.local_path != null) { updates.push('local_path = ?'); params.push(req.local_path); }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
-  if (req.stages != null) { updates.push('stages = ?'); params.push(typeof req.stages === 'string' ? req.stages : JSON.stringify(req.stages)); }
+  // stages 已废弃(人物造型改由 character_variants 承载):不再接收/写入,数据库列保留但停止读写
   if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt); }
   if (updates.length === 0) return { ok: true };
   if (req.image_url != null || req.local_path != null) {

@@ -463,10 +463,24 @@ describe('Character variant routes', () => {
     assert.equal(res.body.error.code, 'VARIANT_KEY_CONFLICT');
   });
 
-  it('returns 501 NOT_IMPLEMENTED for variant generate-image', () => {
-    const res = callHandler(characters.generateVariantImage, { params: { variantId: '1' } });
-    assert.equal(res.statusCode, 501);
+  // Task 9:generate-image 已从 501 占位替换为真实调用(异步 handler,直接 await 断言)
+  it('generate-image maps missing variant to 400 VARIANT_NOT_FOUND', async () => {
+    const res = responseCapture();
+    await characters.generateVariantImage({ params: { variantId: '999' }, body: {} }, res);
+    assert.equal(res.statusCode, 400);
     assert.equal(res.body.success, false);
-    assert.equal(res.body.error.code, 'NOT_IMPLEMENTED');
+    assert.equal(res.body.error.code, 'VARIANT_NOT_FOUND');
+  });
+
+  it('generate-image maps missing prompt to 400 VARIANT_PROMPT_MISSING', async () => {
+    const charId = insertCharacter(db); // 裁剪 schema:appearance/description 为空
+    const info = db.prepare(
+      "INSERT INTO character_variants (character_id, source_key, name, created_at, updated_at) VALUES (?, 'default', '默认', ?, ?)"
+    ).run(charId, new Date().toISOString(), new Date().toISOString());
+    const res = responseCapture();
+    await characters.generateVariantImage({ params: { variantId: String(info.lastInsertRowid) }, body: {} }, res);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.success, false);
+    assert.equal(res.body.error.code, 'VARIANT_PROMPT_MISSING');
   });
 });

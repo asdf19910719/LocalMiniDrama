@@ -1,4 +1,8 @@
-// 人物状态（角色变体）：CRUD、唯一默认维护与引用计数
+// 人物状态（角色变体）：CRUD、唯一默认维护、引用计数与生图
+const path = require('path');
+const storageLayout = require('./storageLayout');
+const { aspectRatioToSize } = require('./imageService');
+const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
 
 /** 解析行内 extra_images JSON 字符串为数组（解析失败时保留原值） */
 function parseVariantRow(row) {
@@ -150,6 +154,139 @@ function ensureDefaultVariant(db, characterId) {
   return getVariantById(db, variantId);
 }
 
+function appendPrompt(base, extra) {
+  const add = (extra || '').toString().trim();
+  if (!add) return (base || '').toString().trim();
+  const current = (base || '').toString().trim();
+  if (!current) return add;
+  const lowerCurrent = current.toLowerCase();
+  const lowerAdd = add.toLowerCase();
+  if (lowerCurrent.includes(lowerAdd)) return current;
+  return current + ', ' + add;
+}
+
+/**
+ * 变体生图：与 propImageGenerationService.generatePropImage 同通道
+ * （imageClient.callImageApi 生成 + uploadService.downloadImageToLocal 落盘）。
+ * prompt 主路径为 variant.image_prompt；为空时回退角色 appearance/description，
+ * 仍为空抛 e.code='VARIANT_PROMPT_MISSING'。
+ * options: { model, style }（与道具生图参数面一致）；deps 供测试注入 imageClient/uploadService 替身。
+ * 成功后写回 variant 行 image_url/local_path/extra_images（旧图追加），返回更新后的行。
+ */
+async function generateVariantImage(db, cfg, log, variantId, options = {}, deps = {}) {
+  const imageClient = deps.imageClient || require('./imageClient');
+  const uploadService = deps.uploadService || require('./uploadService');
+  const variant = getVariantById(db, variantId);
+  if (!variant) {
+    const e = new Error('人物状态不存在');
+    e.code = 'VARIANT_NOT_FOUND';
+    throw e;
+  }
+  // SELECT * 以兼容裁剪 schema(测试库 characters 未必有 negative_prompt 列)
+  const char = db.prepare(
+    'SELECT * FROM characters WHERE id = ? AND deleted_at IS NULL'
+  ).get(variant.character_id);
+  if (!char) {
+    const e = new Error('角色不存在');
+    e.code = 'CHARACTER_NOT_FOUND';
+    throw e;
+  }
+
+  let prompt = String(variant.image_prompt || '').trim();
+  if (!prompt) prompt = String(char.appearance || '').trim();
+  if (!prompt) prompt = String(char.description || '').trim();
+  if (!prompt) {
+    const e = new Error('该人物状态缺少图片提示词，请先填写 image_prompt');
+    e.code = 'VARIANT_PROMPT_MISSING';
+    throw e;
+  }
+
+  // 画风与尺寸：与道具生图一致（剧集画风合并 → style 追加；aspect_ratio 推导尺寸，兜底 1920x1920）
+  let effectiveCfg = cfg || {};
+  let drama = null;
+  if (char.drama_id) {
+    try {
+      drama = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(char.drama_id) || null;
+    } catch (_) { drama = null; }
+    if (drama) effectiveCfg = mergeCfgStyleWithDrama(effectiveCfg, drama);
+  }
+  const styleOverride = options.style ? String(options.style).trim() : '';
+  const baseStyle = styleOverride || (effectiveCfg?.style?.default_style_en || effectiveCfg?.style?.default_style || '');
+  let style = appendPrompt('', baseStyle);
+  if (!styleOverride) {
+    style = appendPrompt(style, effectiveCfg?.style?.default_role_style || '');
+  }
+  let imageSize = null;
+  try {
+    if (drama && drama.metadata) {
+      const meta = typeof drama.metadata === 'string' ? JSON.parse(drama.metadata) : drama.metadata;
+      if (meta && meta.aspect_ratio) imageSize = aspectRatioToSize(meta.aspect_ratio);
+    }
+  } catch (_) {}
+  if (!imageSize) imageSize = effectiveCfg?.style?.default_image_size || '1920x1920';
+
+  const fullPrompt = appendPrompt(prompt, style);
+  const model = options.model ? String(options.model).trim() || null : null;
+  const preferredProvider = !model && effectiveCfg?.ai?.default_image_provider ? effectiveCfg.ai.default_image_provider : null;
+  const userNeg = imageClient.resolveAssetUserNegativeForApi(model, variant.negative_prompt || char.negative_prompt);
+
+  let result;
+  try {
+    result = await imageClient.callImageApi(db, log, {
+      prompt: fullPrompt,
+      size: imageSize,
+      drama_id: char.drama_id,
+      model: model || undefined,
+      preferred_provider: preferredProvider || undefined,
+      user_negative_prompt: userNeg || undefined,
+    });
+  } catch (err) {
+    log.error('Variant image API failed', { variant_id: variantId, error: err.message });
+    const e = new Error('图片生成请求失败: ' + (err.message || '未知错误'));
+    e.code = 'VARIANT_IMAGE_FAILED';
+    throw e;
+  }
+  if (result && result.error) {
+    const e = new Error(String(result.error));
+    e.code = 'VARIANT_IMAGE_FAILED';
+    throw e;
+  }
+  if (!result || !result.image_url) {
+    const e = new Error('图片生成未返回地址');
+    e.code = 'VARIANT_IMAGE_FAILED';
+    throw e;
+  }
+
+  let localPath = null;
+  try {
+    const rawStorage = cfg?.storage?.local_path;
+    const storagePath = rawStorage
+      ? (path.isAbsolute(rawStorage) ? rawStorage : path.join(process.cwd(), rawStorage))
+      : path.join(process.cwd(), './data/storage');
+    const projectSubdir = storageLayout.getProjectStorageSubdir(db, char.drama_id);
+    localPath = await uploadService.downloadImageToLocal(
+      storagePath,
+      result.image_url,
+      'characters',
+      log,
+      'char_variant_' + variantId,
+      projectSubdir
+    );
+  } catch (_) {}
+
+  // 旧图追加到 extra_images（与道具生图/上传逻辑一致）
+  const oldPath = variant.local_path || variant.image_url || '';
+  let extras = Array.isArray(variant.extra_images) ? variant.extra_images.slice() : [];
+  if (oldPath && !extras.includes(oldPath)) extras.push(oldPath);
+  const updated = updateVariant(db, variantId, {
+    image_url: result.image_url,
+    local_path: localPath,
+    extra_images: extras.length ? extras : null,
+  });
+  log.info('Variant image generation completed', { variant_id: variantId, image_url: result.image_url, local_path: localPath });
+  return updated;
+}
+
 module.exports = {
   listVariants,
   createVariant,
@@ -157,4 +294,5 @@ module.exports = {
   deleteVariant,
   ensureDefaultVariant,
   variantUsageCount,
+  generateVariantImage,
 };

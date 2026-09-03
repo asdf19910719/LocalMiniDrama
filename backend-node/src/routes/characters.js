@@ -449,9 +449,21 @@ function routes(db, cfg, log, uploadService) {
         response.internalError(res, err.message);
       }
     },
-    /** 变体生图:后续任务接入前的占位 */
-    generateVariantImage: (req, res) => {
-      response.error(res, 501, 'NOT_IMPLEMENTED', '变体生图将在后续任务接入');
+    /** 变体生图：取 image_prompt（缺省回退角色外貌/描述），调图片生成并写回 variant 行 */
+    generateVariantImage: async (req, res) => {
+      try {
+        const body = req.body || {};
+        const row = await characterVariantsService.generateVariantImage(db, cfg, log, req.params.variantId, {
+          model: body.model != null ? String(body.model).trim() : undefined,
+          style: body.style != null ? String(body.style).trim() : undefined,
+        });
+        response.success(res, row);
+      } catch (err) {
+        // 与 episodePackage mapServiceError 风格一致：业务错误码（VARIANT_PROMPT_MISSING 等）→ 400
+        if (err && err.code) return response.error(res, 400, err.code, err.message);
+        log.error('characters generate-variant-image', { error: err.message });
+        response.internalError(res, err.message || '生成失败');
+      }
     },
   };
 }
