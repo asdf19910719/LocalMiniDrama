@@ -454,7 +454,7 @@ describe('episodePackageService', () => {
     const scene = db.prepare('SELECT * FROM scenes').get();
     assert.equal(scene.location, '场景甲');
     assert.equal(scene.state, '白天');
-    assert.equal(scene.prompt, '（场景描述）scene-prompt');
+    assert.equal(scene.prompt, '场景描述。scene-prompt');
     assert.equal(scene.source_key, 'scene_a');
     assert.equal(scene.drama_id, 1);
     assert.equal(scene.episode_id, result.episode_id);

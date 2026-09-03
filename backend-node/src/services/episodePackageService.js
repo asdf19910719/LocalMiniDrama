@@ -366,7 +366,8 @@ function ensureVariant(db, characterId, item) {
 
 function insertSceneRow(db, dramaId, episodeId, item) {
   const description = hasText(item.description) ? item.description : '';
-  const prompt = description ? `（${description}）${item.image_prompt}` : item.image_prompt;
+  // spec §6.3:description 非空时拼接为 "{description}。{image_prompt}",为空只写 image_prompt
+  const prompt = description ? `${description}。${item.image_prompt}` : item.image_prompt;
   const info = db
     .prepare(
       `INSERT INTO scenes (drama_id, episode_id, location, state, prompt, source_key, created_at, updated_at)
