@@ -227,6 +227,48 @@ describe('VARIANT_CHARACTER_MISMATCH', () => {
   });
 });
 
+describe('PACKAGE_REF_DUPLICATE', () => {
+  it('同一分镜内重复 (character_ref, variant_ref) 对被拦截', () => {
+    const err = findError((pkg) => {
+      pkg.storyboards[0].character_refs.push(deepClone(pkg.storyboards[0].character_refs[0]));
+    }, 'PACKAGE_REF_DUPLICATE');
+    assert.ok(err, '应报同分镜内人物状态引用重复');
+    assert.ok(err.path.includes('sb_01'), `path 应含分镜 source_key,实际 ${err.path}`);
+    assert.ok(err.path.endsWith('character_refs[1]'));
+    assert.ok(err.message.includes('char_lin_wan_default'), 'message 应说明重复项');
+    assert.equal(errorsOf((pkg) => {
+      pkg.storyboards[0].character_refs.push(deepClone(pkg.storyboards[0].character_refs[0]));
+    }).length, 1, '重复条目自身合法,不应叠加其他错误');
+  });
+
+  it('同一分镜内重复 prop_ref 被拦截', () => {
+    const err = findError((pkg) => {
+      pkg.storyboards[0].prop_refs = ['prop_hot_coffee', 'prop_hot_coffee'];
+    }, 'PACKAGE_REF_DUPLICATE');
+    assert.ok(err, '应报同分镜内道具引用重复');
+    assert.ok(err.path.includes('sb_01'), `path 应含分镜 source_key,实际 ${err.path}`);
+    assert.ok(err.path.endsWith('prop_refs[1]'));
+    assert.ok(err.message.includes('prop_hot_coffee'), 'message 应说明重复项');
+    assert.equal(errorsOf((pkg) => {
+      pkg.storyboards[0].prop_refs = ['prop_hot_coffee', 'prop_hot_coffee'];
+    }).length, 1, '重复条目自身合法,不应叠加其他错误');
+  });
+
+  it('跨分镜引用同一人物状态对仍合法', () => {
+    const errors = errorsOf((pkg) => {
+      // sb_02 新增与 sb_01 完全相同的 (character_ref, variant_ref) 对,但在 sb_02 内唯一
+      pkg.storyboards[1].character_refs.push({
+        character_ref: 'char_lin_wan',
+        variant_ref: 'char_lin_wan_default',
+        sort_order: 2,
+        reference_role: 'identity',
+      });
+      // 道具跨分镜复用由基准数据覆盖:sb_01 与 sb_02 均引用 prop_hot_coffee
+    });
+    assert.deepEqual(errors, [], '跨分镜重复同一资产是合法的,不应产生任何错误');
+  });
+});
+
 describe('PACKAGE_NUMBER_DUPLICATE', () => {
   it('镜号重复', () => {
     const err = findError((pkg) => {

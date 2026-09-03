@@ -27,3 +27,13 @@ export function universalVideoCompatibility(cfg) {
 export function canUseUniversalOmniVideoApi(cfg) {
   return universalVideoCompatibility(cfg).compatible
 }
+
+/**
+ * 参考图槽位接口失败时的回退策略:
+ * - H3 配置 → 'abort':H3 参考图必须与草稿 reference_snapshot 同源(槽位口径),
+ *   legacy 本地收集取角色主图而非状态图,静默降级会给 H3 发错参考图,必须中止提交;
+ * - 非 H3 → 'legacy_fallback':可用性优先,保留 legacy 本地收集兜底。
+ */
+export function slotReferenceFallbackPolicy(cfg) {
+  return isH3ComfyUiConfig(cfg) ? 'abort' : 'legacy_fallback'
+}

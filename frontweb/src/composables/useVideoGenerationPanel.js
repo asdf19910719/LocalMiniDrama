@@ -52,6 +52,7 @@ const ERROR_SUMMARIES = Object.freeze({
   REFERENCE_COUNT_OVERFLOW: '参考图槽位超过上限（9 张），请减少关联资产后重试。',
   H3_PROMPT_FORMAT_INVALID: 'H3 提示词结构校验未通过，请重新生成或修正文本。',
   H3_DRAFT_REQUIRED: 'H3 配置需先生成提示词草稿，再提交候选生成。',
+  H3_DRAFT_SAVE_FAILED: 'H3 提示词保存失败，请重试后再生成候选。',
   H3_DRAFT_STALE: '提示词草稿的来源已变化，请重新生成 H3 提示词。',
   H3_DRAFT_INVALID: '提示词草稿未通过结构校验，请修正文本后再生成候选。',
   H3_DRAFT_HASH_MISMATCH: '提示词草稿哈希校验失败，请重新生成 H3 提示词。',
@@ -808,6 +809,15 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     // H3 门禁(Task 16):先补存待保存文本,再按 valid+未 stale+未保存中放行
     if (isH3Config.value) {
       await flushH3DraftSave()
+      // 补存失败时本地编辑未落库:放行会提交 DB 里的旧 final_compiled_prompt。
+      // 保存错误由 saveH3DraftText 设置并保持原样展示(不清除),此处仅中止提交;
+      // 无错误可展示的边缘态(如草稿已被清空)兜底给出可读的保存失败提示。
+      if (h3Dirty) {
+        if (!error.value) {
+          setError(Object.assign(new Error('H3 提示词保存失败，请重试后再生成候选。'), { code: 'H3_DRAFT_SAVE_FAILED' }))
+        }
+        return
+      }
       if (!h3UiState.value.canGenerate) {
         setError(Object.assign(new Error('请先生成有效的 H3 提示词草稿，再提交候选生成。'), { code: 'H3_DRAFT_NOT_READY' }))
         return

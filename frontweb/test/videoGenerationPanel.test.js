@@ -567,6 +567,36 @@ test('flushes edited draft text through PUT and marks it manually edited', async
   assert.equal(panel.h3UiState.value.chip, 'edited')
 })
 
+test('rejects candidate generation when the pending draft save failed and keeps the save error', async () => {
+  const captured = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '数据库里的旧编译词' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async () => { throw new Error('保存失败') },
+      generateCandidates: async (storyboardId, body) => {
+        captured.push([storyboardId, body])
+        return {}
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '尚未保存成功的新修改'
+  panel.onH3DraftTextInput()
+  await panel.generateCandidates()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  // 本地编辑未落库时禁止用 DB 旧终文放行候选,且保存错误不得被清除
+  assert.equal(captured.length, 0)
+  assert.equal(panel.error.value?.summary, '保存失败')
+})
+
 test('keeps the local draft text when the save request fails', async () => {
   const panel = useVideoGenerationPanel(
     reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),

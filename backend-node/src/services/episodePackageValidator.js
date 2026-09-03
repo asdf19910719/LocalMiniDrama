@@ -18,7 +18,7 @@
  *   scene/prop 槽位 ref 是 source_key 字符串。
  * - path 约定:
  *   - 分镜级错误默认用下标定位,如 storyboards[0].shot_type;
- *   - PACKAGE_REF_MISSING 与 PACKAGE_SLOT_OVERFLOW 按任务约定在 path 中携带分镜
+ *   - PACKAGE_REF_MISSING、PACKAGE_REF_DUPLICATE 与 PACKAGE_SLOT_OVERFLOW 按任务约定在 path 中携带分镜
  *     source_key,如 storyboards[sb_01].scene_ref,便于跨数组定位到具体分镜
  *     (分镜无合法 source_key 时回落到下标形式)。
  */
@@ -348,6 +348,23 @@ function validateBusinessRules(pkg) {
       }
     });
 
+    // §12.1 同分镜内重复 (character_ref, variant_ref) 对:跨分镜重复同一资产合法,
+    // 但同一分镜内重复会使 storyboards_x_variants 唯一索引裸错(或静默去重导致槽位漂移)。
+    const seenVariantPairs = new Set();
+    characterRefs.forEach((ref, refIndex) => {
+      if (!isPlainObject(ref)) return;
+      const pairKey = `${textOf(ref.character_ref)}\u0000${textOf(ref.variant_ref)}`;
+      if (seenVariantPairs.has(pairKey)) {
+        errors.push({
+          code: 'PACKAGE_REF_DUPLICATE',
+          path: refPath(`character_refs[${refIndex}]`),
+          message: `分镜 ${key} 的 character_refs[${refIndex}] 重复引用人物状态 (${textOf(ref.character_ref)}, ${textOf(ref.variant_ref)}),同一分镜内重复引用会导致参考图槽位错位`,
+        });
+        return;
+      }
+      seenVariantPairs.add(pairKey);
+    });
+
     // §12.1 跨引用:prop_refs
     const propRefs = Array.isArray(storyboard.prop_refs) ? storyboard.prop_refs : [];
     propRefs.forEach((propRef, propIndex) => {
@@ -359,6 +376,21 @@ function validateBusinessRules(pkg) {
           message: `分镜 ${key} 的 prop_refs[${propIndex}] 引用的道具 "${propRef}" 不存在`,
         });
       }
+    });
+
+    // §12.1 同分镜内重复 prop_ref(同上,跨分镜重复同一道具仍合法)
+    const seenPropRefs = new Set();
+    propRefs.forEach((propRef, propIndex) => {
+      if (!hasText(propRef)) return;
+      if (seenPropRefs.has(propRef)) {
+        errors.push({
+          code: 'PACKAGE_REF_DUPLICATE',
+          path: refPath(`prop_refs[${propIndex}]`),
+          message: `分镜 ${key} 的 prop_refs[${propIndex}] 重复引用道具 "${propRef}",同一分镜内重复引用会导致参考图槽位错位`,
+        });
+        return;
+      }
+      seenPropRefs.add(propRef);
     });
 
     // §12.2 可选声音/转场/万能提示词草稿缺失
