@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const response = require('../response');
 const characterLibraryService = require('../services/characterLibraryService');
+const characterVariantsService = require('../services/characterVariantsService');
 const storageLayout = require('../services/storageLayout');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
 
@@ -398,6 +399,59 @@ function routes(db, cfg, log, uploadService) {
         log.error('characters sd2-voice-refresh', { error: err.message });
         response.internalError(res, err.message);
       }
+    },
+    // ---------- 人物状态（角色变体） ----------
+    listVariants: (req, res) => {
+      try {
+        response.success(res, characterVariantsService.listVariants(db, req.params.characterId));
+      } catch (err) {
+        log.error('characters list-variants', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+    createVariant: (req, res) => {
+      const body = req.body || {};
+      if (!body.name || !String(body.name).trim()) return response.badRequest(res, 'name 必填');
+      try {
+        const row = characterVariantsService.createVariant(db, { ...body, character_id: req.params.characterId });
+        response.created(res, row);
+      } catch (err) {
+        if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          return response.error(res, 409, 'VARIANT_KEY_CONFLICT', '该人物下已存在同 source_key 的状态');
+        }
+        if (err && err.code) return response.error(res, 400, err.code, err.message);
+        log.error('characters create-variant', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+    updateVariant: (req, res) => {
+      try {
+        const row = characterVariantsService.updateVariant(db, req.params.variantId, req.body || {});
+        if (!row) return response.notFound(res, '人物状态不存在');
+        response.success(res, row);
+      } catch (err) {
+        if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          return response.error(res, 409, 'VARIANT_KEY_CONFLICT', '该人物下已存在同 source_key 的状态');
+        }
+        if (err && err.code) return response.error(res, 400, err.code, err.message);
+        log.error('characters update-variant', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+    deleteVariant: (req, res) => {
+      try {
+        const out = characterVariantsService.deleteVariant(db, req.params.variantId);
+        if (!out) return response.notFound(res, '人物状态不存在');
+        response.success(res, out);
+      } catch (err) {
+        if (err && err.code === 'VARIANT_IN_USE') return response.error(res, 409, err.code, err.message);
+        log.error('characters delete-variant', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+    /** 变体生图:后续任务接入前的占位 */
+    generateVariantImage: (req, res) => {
+      response.error(res, 501, 'NOT_IMPLEMENTED', '变体生图将在后续任务接入');
     },
   };
 }

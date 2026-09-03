@@ -26,6 +26,7 @@ const directorRoutes = require('./director');
 const externalGenerationRoutes = require('./externalGeneration');
 const imageGenerationTaskRoutes = require('./imageGenerationTasks');
 const episodeGenerationProgressRoutes = require('./episodeGenerationProgress');
+const episodePackageRoutes = require('./episodePackage');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
@@ -47,6 +48,7 @@ function setupRouter(cfg, db, log) {
   const prop = propRoutes(db, log, cfg);
   const stub = stubRoutes(db, cfg, log);
   const sceneModelMap = sceneModelMapRoutes(db, log);
+  const episodePackage = episodePackageRoutes(db, cfg, log);
   
   const uploadService = require('../services/uploadService');
   const charLibrary = characterLibraryRoutes(db, cfg, log);
@@ -140,6 +142,8 @@ function setupRouter(cfg, db, log) {
   const externalGeneration = externalGenerationRoutes(db, cfg, log);
   r.use(externalGeneration);
   r.use(imageGenerationTaskRoutes(db, log));
+  // 单集制作包导入:精确路径,必须先于各 '/:id' 形参路由注册
+  r.use(episodePackage);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -271,6 +275,12 @@ function setupRouter(cfg, db, log) {
   r.post('/characters/:id/sd2-voice-refresh', characters.sd2VoiceRefresh);
   r.post('/characters/:id/extract-from-image', characters.extractFromImage);
   r.post('/characters/:id/extract-anchors', characters.extractAnchors);
+  // ---------- character variants（人物状态） ----------
+  r.get('/characters/:characterId/variants', characters.listVariants);
+  r.post('/characters/:characterId/variants', characters.createVariant);
+  r.put('/character-variants/:variantId', characters.updateVariant);
+  r.delete('/character-variants/:variantId', characters.deleteVariant);
+  r.post('/character-variants/:variantId/generate-image', characters.generateVariantImage);
 
   // ---------- props ----------
   r.get('/props/:id', prop.getPropById);
