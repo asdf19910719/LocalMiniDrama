@@ -36,6 +36,7 @@ function createDb() {
       title TEXT,
       description TEXT,
       duration REAL,
+      location TEXT,
       dialogue TEXT,
       action TEXT,
       image_prompt TEXT,

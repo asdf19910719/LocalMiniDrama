@@ -104,6 +104,7 @@ function createDb() {
       title TEXT,
       description TEXT,
       duration REAL,
+      location TEXT,
       dialogue TEXT,
       action TEXT,
       atmosphere TEXT,
@@ -428,9 +429,11 @@ describe('episodePackageService', () => {
     assert.equal(ep.episode_number, 1);
     assert.equal(ep.title, '测试集');
     assert.equal(ep.description, '测试梗概');
-    const expectedScript = generateScriptFromStoryboards(pkg.storyboards);
+    const expectedScript = generateScriptFromStoryboards(
+      pkg.storyboards.map((sb) => ({ ...sb, scene_name: '场景甲' }))
+    );
     assert.equal(ep.script_content, expectedScript);
-    assert.ok(ep.script_content.includes('【镜1·scene_a】镜一'));
+    assert.ok(ep.script_content.includes('【镜1·场景甲】镜一'));
 
     // characters
     const char = db.prepare('SELECT * FROM characters').get();
@@ -474,6 +477,7 @@ describe('episodePackageService', () => {
     const sb1 = sbs[0];
     assert.equal(sb1.episode_id, result.episode_id);
     assert.equal(sb1.scene_id, scene.id);
+    assert.equal(sb1.location, '场景甲');
     assert.equal(sb1.storyboard_number, 1);
     assert.equal(sb1.title, '镜一');
     assert.equal(sb1.description, '第一镜');
@@ -536,6 +540,23 @@ describe('episodePackageService', () => {
     assert.deepEqual(JSON.parse(imp.generator_metadata), pkg.generator);
   });
 
+  // 用例 1b:场景 description 自带句末标点时,prompt 不出现双句号
+  it('1b. 场景 description 以句号结尾时 prompt 拼接不产生双句号', () => {
+    const pkg = buildMinimalPackage();
+    pkg.scenes[0].description = '场景描述。';
+    const rawText = JSON.stringify(pkg);
+    importEpisodePackage(db, {
+      rawText,
+      sourceSha256: shaOf(rawText),
+      dramaId: 1,
+      filename: 'test.json',
+      decisions: CREATE_ALL_DECISIONS,
+    });
+    const scene = db.prepare('SELECT prompt FROM scenes').get();
+    assert.equal(scene.prompt, '场景描述。scene-prompt');
+    assert.ok(!scene.prompt.includes('。。'));
+  });
+
   // 用例 2:填充空白集,集号不变
   it('2. 填充空白集:成功且集号不变', () => {
     const targetId = insertEpisode(db, { episode_number: 5, title: '待填充' });
@@ -555,7 +576,10 @@ describe('episodePackageService', () => {
     assert.equal(eps[0].episode_number, 5);
     assert.equal(eps[0].title, '测试集');
     assert.equal(eps[0].description, '测试梗概');
-    assert.equal(eps[0].script_content, generateScriptFromStoryboards(pkg.storyboards));
+    assert.equal(
+      eps[0].script_content,
+      generateScriptFromStoryboards(pkg.storyboards.map((sb) => ({ ...sb, scene_name: '场景甲' })))
+    );
     const sbs = db.prepare('SELECT * FROM storyboards').all();
     assert.equal(sbs.length, 2);
     assert.ok(sbs.every((s) => s.episode_id === targetId));

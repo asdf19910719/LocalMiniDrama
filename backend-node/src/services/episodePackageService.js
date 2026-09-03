@@ -366,8 +366,11 @@ function ensureVariant(db, characterId, item) {
 
 function insertSceneRow(db, dramaId, episodeId, item) {
   const description = hasText(item.description) ? item.description : '';
-  // spec §6.3:description 非空时拼接为 "{description}。{image_prompt}",为空只写 image_prompt
-  const prompt = description ? `${description}。${item.image_prompt}` : item.image_prompt;
+  // spec §6.3:description 非空时拼接为 "{description}。{image_prompt}",为空只写 image_prompt;
+  // description 已带句末标点时不重复加,避免"…。。"双句号进生图提示词
+  const endsWithPunctuation = /[。.!?！？~]$/.test(description);
+  const separator = description && !endsWithPunctuation ? '。' : '';
+  const prompt = description ? `${description}${separator}${item.image_prompt}` : item.image_prompt;
   const info = db
     .prepare(
       `INSERT INTO scenes (drama_id, episode_id, location, state, prompt, source_key, created_at, updated_at)
@@ -440,9 +443,19 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
     // 3. 剧集:填充空白集(集号不变)或新建集(episode_number = max+1)
     let episodeId;
     const episode = pkg.episode || {};
+    // 确定性剧本用场景显示名(而非 source_key):按包内 scenes 把 scene_name 注入分镜
+    const sceneNameBySourceKey = new Map(
+      (Array.isArray(pkg.scenes) ? pkg.scenes : [])
+        .filter((s) => s && typeof s === 'object')
+        .map((s) => [s.source_key, hasText(s.name) ? s.name : null])
+    );
+    const storyboardsForScript = (Array.isArray(pkg.storyboards) ? pkg.storyboards : []).map((sb) => ({
+      ...sb,
+      scene_name: (sb && sceneNameBySourceKey.get(sb.scene_ref)) || null,
+    }));
     const scriptContent = hasText(episode.script)
       ? episode.script
-      : generateScriptFromStoryboards(pkg.storyboards);
+      : generateScriptFromStoryboards(storyboardsForScript);
     if (episodeRow) {
       db.prepare(
         'UPDATE episodes SET title = ?, description = ?, script_content = ?, updated_at = ? WHERE id = ?'
@@ -520,47 +533,54 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
 
     // 7. 分镜(§5.6.1 映射)+ 8. 关联 + 9. 兼容字段同步
     const storyboards = Array.isArray(pkg.storyboards) ? pkg.storyboards : [];
+    // 场景显示名写入 storyboards.location(供确定性剧本与页面展示使用,避免出现 source_key)
+    const sceneNameByKey = new Map();
+    for (const [key, sceneId] of sceneIdByKey) {
+      const sceneRow = db.prepare('SELECT location FROM scenes WHERE id = ?').get(sceneId);
+      sceneNameByKey.set(key, sceneRow ? sceneRow.location : null);
+    }
     for (const storyboard of storyboards) {
-      const sceneId = sceneIdByKey.get(storyboard.scene_ref);
-      if (!sceneId) {
-        throwCode('PACKAGE_INVALID', `分镜 ${storyboard.source_key} 的 scene_ref "${storyboard.scene_ref}" 无法解析为场景`);
-      }
-      const sbId = Number(
-        db.prepare(
-          `INSERT INTO storyboards (
-             episode_id, scene_id, storyboard_number, title, description, duration,
-             dialogue, action, image_prompt, narration, layout_description,
-             universal_segment_text, shot_type, angle, movement,
-             creation_mode, status, source_key, audio_description, transition,
-             created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'universal', 'draft', ?, ?, ?, ?, ?)`
-        ).run(
-          episodeId,
-          sceneId,
-          storyboard.storyboard_number ?? 0,
-          storyboard.title ?? null,
-          storyboard.description ?? null,
-          storyboard.duration_seconds ?? null,
-          renderDialogue(storyboard.dialogue),
-          renderAction(storyboard.action),
-          storyboard.image_prompt ?? null,
-          storyboard.narration ?? null,
-          storyboard.composition ?? null,
-          storyboard.universal_segment_text ?? null,
-          storyboard.shot_type ?? null,
-          storyboard.camera_angle ?? null,
-          storyboard.camera_movement ?? null,
-          storyboard.source_key ?? null,
-          storyboard.audio_description !== undefined && storyboard.audio_description !== null
-            ? JSON.stringify(storyboard.audio_description)
-            : null,
-          storyboard.transition !== undefined && storyboard.transition !== null
-            ? JSON.stringify(storyboard.transition)
-            : null,
-          NOW(),
-          NOW()
-        ).lastInsertRowid
-      );
+        const sceneId = sceneIdByKey.get(storyboard.scene_ref);
+        if (!sceneId) {
+          throwCode('PACKAGE_INVALID', `分镜 ${storyboard.source_key} 的 scene_ref "${storyboard.scene_ref}" 无法解析为场景`);
+        }
+        const sbId = Number(
+          db.prepare(
+            `INSERT INTO storyboards (
+               episode_id, scene_id, storyboard_number, title, description, duration, location,
+               dialogue, action, image_prompt, narration, layout_description,
+               universal_segment_text, shot_type, angle, movement,
+               creation_mode, status, source_key, audio_description, transition,
+               created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'universal', 'draft', ?, ?, ?, ?, ?)`
+          ).run(
+            episodeId,
+            sceneId,
+            storyboard.storyboard_number ?? 0,
+            storyboard.title ?? null,
+            storyboard.description ?? null,
+            storyboard.duration_seconds ?? null,
+            sceneNameByKey.get(storyboard.scene_ref) ?? null,
+            renderDialogue(storyboard.dialogue),
+            renderAction(storyboard.action),
+            storyboard.image_prompt ?? null,
+            storyboard.narration ?? null,
+            storyboard.composition ?? null,
+            storyboard.universal_segment_text ?? null,
+            storyboard.shot_type ?? null,
+            storyboard.camera_angle ?? null,
+            storyboard.camera_movement ?? null,
+            storyboard.source_key ?? null,
+            storyboard.audio_description !== undefined && storyboard.audio_description !== null
+              ? JSON.stringify(storyboard.audio_description)
+              : null,
+            storyboard.transition !== undefined && storyboard.transition !== null
+              ? JSON.stringify(storyboard.transition)
+              : null,
+            NOW(),
+            NOW()
+          ).lastInsertRowid
+        );
       stats.storyboards_created += 1;
 
       // storyboard_props(经 props.source_key 解析,按参考图顺序)
