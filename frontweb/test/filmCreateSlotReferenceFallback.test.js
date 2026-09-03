@@ -52,3 +52,14 @@ test('every slot reference call site aborts its submission when the collector re
   assert.match(filmSource, /参考图槽位加载失败，已跳过/)
   assert.match(filmSource, /throw new Error\('参考图槽位加载失败'\)/)
 })
+
+test('batch and pipeline call sites silence the per-shot toast; single-shot keeps it', () => {
+  // 函数签名接受 { silent = false },abort 分支的弹窗被静默(仅 console.warn + 返回 null)
+  assert.match(collectBody, /\{ silent = false \} = \{\}/)
+  assert.match(collectBody, /if \(!silent\) ElMessage\.error\('参考图槽位加载失败/)
+  // 批量 worker + 两条流水线传 silent: true,失败由调用点记入 batchVideoErrors / 流水线失败列表
+  const silentSites = filmSource.match(/collectSlotReferenceAbsoluteUrls\(sb\.id, \{ silent: true \}\)/g) || []
+  assert.equal(silentSites.length, 3, `批量/流水线应有 3 处 silent 调用,实际 ${silentSites.length}`)
+  // 单镜生成路径保持弹窗(不传 silent)
+  assert.match(filmSource, /await collectSlotReferenceAbsoluteUrls\(sb\.id\)/)
+})

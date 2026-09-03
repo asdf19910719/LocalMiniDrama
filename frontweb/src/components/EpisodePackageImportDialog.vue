@@ -56,16 +56,24 @@
             <el-radio value="fill">填充空白剧集</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="targetMode === 'fill'" label="空白集 ID">
-          <el-input-number
+        <el-form-item v-if="targetMode === 'fill'" label="空白剧集">
+          <el-select
             v-model="targetEpisodeId"
-            :min="1"
-            :precision="0"
-            controls-position="right"
-            placeholder="空白集 ID"
+            filterable
+            :loading="blankEpisodesLoading"
+            :disabled="previewing"
+            placeholder="选择要填充的空白剧集"
+            style="width: 100%"
             @change="onTargetChange"
-          />
-          <span class="pkg-tip pkg-tip--inline">输入分集列表中的集 ID,仅空白剧集可被填充</span>
+          >
+            <el-option
+              v-for="ep in blankEpisodes"
+              :key="ep.id"
+              :label="blankEpisodeLabel(ep)"
+              :value="ep.id"
+            />
+          </el-select>
+          <span class="pkg-tip pkg-tip--inline">仅空白剧集可被填充;列表为空说明当前剧没有空白集</span>
         </el-form-item>
       </el-form>
 
@@ -254,17 +262,48 @@ const targetStatusClass = computed(() => {
 const targetStatusText = computed(() => {
   const status = targetStatus.value?.status
   if (status === 'blank') return '目标集为空白剧集,可以填充'
-  if (status === 'not_found') return '未找到该集 ID,请确认后重新输入'
+  if (status === 'not_found') return '目标剧集不存在或已删除,请重新选择'
   if (status === 'non_blank') {
     const reasons = (targetStatus.value?.reasons || []).map((r) => REASON_LABELS[r] || r).join('、')
     return `目标集不是空白剧集(${reasons || '原因未知'}),不可填充`
   }
-  if (status === 'new_episode') return targetMode.value === 'fill' ? '请输入空白集 ID 后重新预览' : ''
+  if (status === 'new_episode') return targetMode.value === 'fill' ? '请选择空白剧集后重新预览' : ''
   return ''
 })
 
 watch(visible, (val) => {
   if (val) resetState()
+})
+
+// ---------- 空白剧集下拉(懒加载) ----------
+const blankEpisodes = ref([])
+const blankEpisodesLoading = ref(false)
+let blankEpisodesLoadedForDrama = null
+
+function blankEpisodeLabel(ep) {
+  const numberText = ep?.episode_number != null ? `第${ep.episode_number}集` : `集 ${ep?.id ?? ''}`
+  const title = String(ep?.title || '').trim()
+  return title ? `${numberText}·${title} (ID:${ep.id})` : `${numberText} (ID:${ep.id})`
+}
+
+/** 进入填充模式时才拉取空白剧集列表(每剧只拉一次,失败可重试) */
+async function loadBlankEpisodes() {
+  if (props.dramaId == null) return
+  if (blankEpisodesLoadedForDrama === String(props.dramaId)) return
+  blankEpisodesLoading.value = true
+  try {
+    const data = await episodePackageAPI.listBlankEpisodes(props.dramaId)
+    blankEpisodes.value = Array.isArray(data) ? data : []
+    blankEpisodesLoadedForDrama = String(props.dramaId)
+  } catch (e) {
+    ElMessage.error(e.message || '空白剧集列表加载失败')
+  } finally {
+    blankEpisodesLoading.value = false
+  }
+}
+
+watch(targetMode, (mode) => {
+  if (mode === 'fill') loadBlankEpisodes()
 })
 
 function resetState() {
@@ -281,6 +320,9 @@ function resetState() {
   stats.value = {}
   targetMode.value = 'create'
   targetEpisodeId.value = null
+  blankEpisodes.value = []
+  blankEpisodesLoading.value = false
+  blankEpisodesLoadedForDrama = null
   importing.value = false
   warningsAcked.value = false
   choices.characters = {}

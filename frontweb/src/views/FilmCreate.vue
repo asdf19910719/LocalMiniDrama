@@ -6433,8 +6433,10 @@ function collectSbOmniReferenceAbsoluteUrls(sb) {
  * 与 H3 编译/草稿的 reference_snapshot 编号语义保持一致。
  * 接口失败时:H3 配置直接中止提交(返回 null,由调用方放弃本次提交,提示重试),
  * 避免静默降级到 legacy 本地收集(角色主图≠状态图)给 H3 发错参考图;非 H3 保留 legacy 兜底。
+ * options.silent:批量/流水线路径传 true——H3 槽位接口失败时不再按镜弹 ElMessage(会刷屏),
+ * 仅 console.warn 并返回 null,由调用点把失败记入 batchVideoErrors/流水线失败列表;单镜路径保持弹窗。
  */
-async function collectSlotReferenceAbsoluteUrls(sbId) {
+async function collectSlotReferenceAbsoluteUrls(sbId, { silent = false } = {}) {
   if (!sbId) return []
   try {
     const res = await storyboardsAPI.getReferenceSlots(sbId)
@@ -6446,7 +6448,8 @@ async function collectSlotReferenceAbsoluteUrls(sbId) {
   } catch (error) {
     console.warn('[FilmCreate] 参考图槽位接口加载失败', sbId, error)
     if (slotReferenceFallbackPolicy(await getActiveVideoAiConfig()) === 'abort') {
-      ElMessage.error('参考图槽位加载失败，请重试')
+      // silent:批量/流水线逐镜弹窗会刷屏,失败由调用点按现有机制记账
+      if (!silent) ElMessage.error('参考图槽位加载失败，请重试')
       return null
     }
     return collectSbOmniReferenceAbsoluteUrls({ id: sbId })
@@ -7322,9 +7325,9 @@ async function startBatchVideoGeneration() {
         if (batchVideoStopping.value) break
         const sb = todo[videoQueueIdx++]
         const universal = isSbUniversalMode(sb.id)
-        const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
+        const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id, { silent: true }) : []
         if (omniRefs === null) {
-          // H3:槽位接口失败已提示,记失败并跳过该分镜,不降级 legacy 参考图
+          // H3:silent 模式不逐镜弹窗,失败已记入 batchVideoErrors,跳过该分镜,不降级 legacy 参考图
           batchVideoErrors.value.push(`#${sb.storyboard_number ?? sb.id}: 参考图槽位加载失败，已跳过`)
           batchVideoProgress.value = { ...batchVideoProgress.value, failed: batchVideoProgress.value.failed + 1 }
           if (contiguity) prevVideoItem = null
@@ -8066,8 +8069,8 @@ async function runOneClickPipeline(textOnly = false) {
           const stepName = '分镜视频 #' + (sb.storyboard_number ?? sb.id)
           const ok = await pipelineWithRetry(stepName, async () => {
             const universal = isSbUniversalMode(sb.id)
-            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
-            if (omniRefs === null) throw new Error('参考图槽位加载失败') // H3:已提示,中止本镜提交并按流水线失败记账
+            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id, { silent: true }) : []
+            if (omniRefs === null) throw new Error('参考图槽位加载失败') // H3:silent 不弹窗,中止本镜提交并按流水线失败记账
             const firstFrameUrl = await getMainImageUrlForVideo(sb)
             const absoluteUrl = universal ? (omniRefs[0] || '') : toAbsoluteImageUrl(firstFrameUrl)
             const { first: vFirst, last: vLast } = sbVideoFirstLastUrls(sb, universal, null)
@@ -8408,8 +8411,8 @@ async function runRepairPipeline() {
           const stepName = '分镜视频 #' + (sb.storyboard_number ?? sb.id)
           const ok = await pipelineWithRetry(stepName, async () => {
             const universal = isSbUniversalMode(sb.id)
-            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id) : []
-            if (omniRefs === null) throw new Error('参考图槽位加载失败') // H3:已提示,中止本镜提交并按流水线失败记账
+            const omniRefs = universal ? await collectSlotReferenceAbsoluteUrls(sb.id, { silent: true }) : []
+            if (omniRefs === null) throw new Error('参考图槽位加载失败') // H3:silent 不弹窗,中止本镜提交并按流水线失败记账
             const firstFrameUrl = await getMainImageUrlForVideo(sb)
             const absoluteUrl = universal ? (omniRefs[0] || '') : toAbsoluteImageUrl(firstFrameUrl)
             const { first: vFirst, last: vLast } = sbVideoFirstLastUrls(sb, universal, null)

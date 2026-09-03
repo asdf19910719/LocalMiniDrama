@@ -46,3 +46,10 @@ test('optional voice reference flows into the H3 candidate request', () => {
   assert.match(panel, /角色音色参考/)
   assert.match(panel, /v-model="form\.useVoiceReference"/)
 })
+
+test('H3 configs lock the duration input because the draft decides the duration', () => {
+  const panel = fs.readFileSync(path.join(root, 'src/components/video/VideoGenerationPanel.vue'), 'utf8')
+  assert.match(panel, /:disabled="isH3Config"/)
+  assert.match(panel, /由 H3 草稿决定/)
+  assert.match(panel, /v-model="form\.duration"/)
+})

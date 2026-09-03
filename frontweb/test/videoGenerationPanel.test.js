@@ -534,6 +534,77 @@ test('compile generates the draft text through the compile endpoint', async () =
   assert.equal(panel.h3UiState.value.chip, 'ai')
 })
 
+test('flushes a pending draft edit before compiling so the new draft cannot overwrite it', async () => {
+  const order = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '原始编译词' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async (storyboardId, body) => {
+        order.push(['save', body.final_text])
+        return {
+          draft: { id: 9, status: 'valid', manually_edited: true, final_compiled_prompt: body.final_text },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+      compileH3Draft: async () => {
+        order.push(['compile'])
+        return {
+          draft: { id: 12, status: 'valid', manually_edited: false, final_compiled_prompt: '重新编译的提示词' },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '未保存的人工修改'
+  panel.onH3DraftTextInput()
+  await panel.compileH3Draft()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(order, [['save', '未保存的人工修改'], ['compile']])
+  assert.equal(panel.h3DraftText.value, '重新编译的提示词')
+})
+
+test('aborts compiling when the pending draft save fails and keeps the local text', async () => {
+  const compileCalls = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '数据库里的旧编译词' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async () => { throw new Error('保存失败') },
+      compileH3Draft: async () => {
+        compileCalls.push('compile')
+        return {
+          draft: { id: 12, status: 'valid', manually_edited: false, final_compiled_prompt: '新草稿' },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '尚未保存的修改'
+  panel.onH3DraftTextInput()
+  await panel.compileH3Draft()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(compileCalls, [], '保存失败时不得发起编译')
+  assert.equal(panel.h3DraftText.value, '尚未保存的修改', '本地未保存文本不得被新草稿覆盖')
+  assert.equal(panel.error.value?.summary, '保存失败')
+})
+
 test('flushes edited draft text through PUT and marks it manually edited', async () => {
   const saves = []
   const panel = useVideoGenerationPanel(

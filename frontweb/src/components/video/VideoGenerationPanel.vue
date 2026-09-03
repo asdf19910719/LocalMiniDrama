@@ -113,7 +113,21 @@
           <el-input-number v-model="form.height" :min="32" :step="32" :controls="true" controls-position="right" />
         </el-form-item>
         <el-form-item label="时长（秒）">
-          <el-input-number v-model="form.duration" :min="1" :max="60" :step="0.5" controls-position="right" />
+          <el-tooltip
+            content="H3 模式下时长由 H3 提示词草稿（按分镜行时长编译）决定，手动修改会与草稿不一致"
+            :disabled="!isH3Config"
+            placement="top"
+          >
+            <el-input-number
+              v-model="form.duration"
+              :min="1"
+              :max="60"
+              :step="0.5"
+              controls-position="right"
+              :disabled="isH3Config"
+            />
+          </el-tooltip>
+          <small v-if="isH3Config" class="duration-hint">由 H3 草稿决定</small>
         </el-form-item>
         <el-form-item label="帧率">
           <el-input-number v-model="form.frameRate" :min="1" :max="120" :step="1" controls-position="right" />
@@ -711,6 +725,7 @@ h2 {
 }
 .voice-ref-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .voice-ref-hint { color: #909399; }
+.duration-hint { display: block; margin-top: 2px; color: #909399; font-size: 12px; }
 .h3-draft-alert { margin: -4px 0 0; }
 .h3-validation-line { font-size: 12px; line-height: 1.6; word-break: break-word; }
 

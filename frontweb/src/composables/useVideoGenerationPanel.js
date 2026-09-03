@@ -535,6 +535,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     const configId = defaultConfig.value?.id
     if (!isH3Config.value || configId == null || creating.value || h3Compiling.value) return
     if (typeof videosAPI.compileH3Draft !== 'function') return
+    // 编译前先补存本地未保存文本:编译结果会 replaceText,不补存会静默覆盖未落库的编辑。
+    // 补存失败则中止编译(与 generateCandidates 的门禁同款模式),错误保留展示。
+    if (h3Dirty && h3Draft.value) {
+      await flushH3DraftSave()
+      if (h3Dirty) {
+        if (!error.value) {
+          setError(Object.assign(new Error('H3 提示词保存失败，请重试后再编译。'), { code: 'H3_DRAFT_SAVE_FAILED' }))
+        }
+        return
+      }
+    }
     const requestStoryboardId = props.storyboardId
     const requestVersion = ++h3DraftVersion
     h3Compiling.value = true
