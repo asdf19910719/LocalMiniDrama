@@ -1,5 +1,7 @@
 // 分镜：create, update, delete；帧提示词 get/save
 
+const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
+
 /**
  * 将分镜勾选的角色（dramas.characters 表 id）同步到 storyboard_characters（角色库 id），
  * 便于帧提示词与图生参考图与 UI 一致；按角色名匹配本剧或全局角色库。
@@ -18,6 +20,20 @@ function parseDramaCharacterIds(charactersValue) {
       return arr
         .map((x) => Number(typeof x === 'object' && x != null ? x.id : x))
         .filter((n) => Number.isFinite(n));
+    } catch (_) {
+      return [];
+    }
+  }
+  return [];
+}
+
+/** 解析分镜人物状态关联：数组原样返回，JSON 字符串解析为数组，其余视为空数组 */
+function parseVariantLinks(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const arr = JSON.parse(value);
+      return Array.isArray(arr) ? arr : [];
     } catch (_) {
       return [];
     }
@@ -107,7 +123,7 @@ function updateStoryboard(db, log, id, req) {
       params.push(val);
     }
   }
-  if (updates.length === 0 && req.prop_ids === undefined) return getStoryboardById(db, id);
+  if (updates.length === 0 && req.prop_ids === undefined && req.character_variant_links === undefined) return getStoryboardById(db, id);
   if (updates.length > 0) {
     params.push(new Date().toISOString(), id);
     db.prepare('UPDATE storyboards SET ' + updates.join(', ') + ', updated_at = ? WHERE id = ?').run(...params);
@@ -119,6 +135,14 @@ function updateStoryboard(db, log, id, req) {
       syncStoryboardCharacterLinks(db, id, parsedDramaCharIdsForSync);
     } catch (e) {
       log.warn('syncStoryboardCharacterLinks failed', { id, message: e.message });
+    }
+  }
+  // 人物状态关联：存在时全删全插 storyboard_character_variants，并同步 characters 投影为 ID 数组
+  if (req.character_variant_links !== undefined) {
+    try {
+      syncStoryboardVariantLinks(db, id, parseVariantLinks(req.character_variant_links));
+    } catch (e) {
+      log.warn('syncStoryboardVariantLinks failed', { id, message: e.message, code: e.code });
     }
   }
   // 道具关联：写入 storyboard_props 表
