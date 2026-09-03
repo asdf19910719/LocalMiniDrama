@@ -16,6 +16,24 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+// H3 草稿门禁错误码:候选接口需把 409 语义(stale/invalid/hash/config)与 code、details
+// 原样映射给前端,而不是笼统 400(Task 16 交接④;H3_DRAFT_REQUIRED 等其余走 400)。
+const H3_DRAFT_GATE_CODES = new Set([
+  'H3_DRAFT_REQUIRED',
+  'DRAFT_NOT_FOUND',
+  'H3_DRAFT_STORYBOARD_MISMATCH',
+  'H3_DRAFT_CONFIG_MISMATCH',
+  'H3_DRAFT_STALE',
+  'H3_DRAFT_INVALID',
+  'H3_DRAFT_HASH_MISMATCH',
+]);
+
+function sendH3DraftGateError(res, error) {
+  if (!error || !H3_DRAFT_GATE_CODES.has(error.code)) return false;
+  response.error(res, Number(error.status) || 400, error.code, error.message, error.details);
+  return true;
+}
+
 function legacyPromptText(prompt) {
   if (typeof prompt === 'string') return prompt.trim();
   if (!isPlainObject(prompt)) return '';
@@ -152,6 +170,10 @@ function generationInput(body, { db, shot, groupId, structured, inputs, storageR
     ...(structured && structured.useVoiceReference ? { reference_audios: resolveVoiceReferenceAudios(db, Number(shot.id), storageRoot) } : {}),
     ...(source.workflowId || source.workflow_id ? { workflow_id: source.workflowId ?? source.workflow_id } : {}),
     ...(source.generationMode || source.generation_mode ? { generation_mode: source.generationMode ?? source.generation_mode } : {}),
+    // H3 草稿门禁(spec §11.4):候选接口只提交草稿 id,由 unified 服务重算指纹后消费草稿文本。
+    ...(source.h3PromptDraftId || source.h3_prompt_draft_id
+      ? { h3_prompt_draft_id: source.h3PromptDraftId ?? source.h3_prompt_draft_id }
+      : {}),
     style: source.style,
   };
 }
@@ -349,6 +371,7 @@ function routes(db, log, {
         response.accepted(res, { ...batch, cacheHit: false, resource: null });
       } catch (error) {
         log.error('director candidate generation create', { error: error.message });
+        if (sendH3DraftGateError(res, error)) return;
         response.badRequest(res, error.message);
       }
     },

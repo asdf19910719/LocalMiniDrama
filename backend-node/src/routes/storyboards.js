@@ -10,6 +10,27 @@ const angleService = require('../services/angleService');
 const { buildUniversalSegmentUserPromptBundle } = require('../services/universalSegmentPromptBundle');
 const { normalizeUniversalSegmentShotDurations } = require('../services/universalSegmentDurationNormalize');
 const referenceSlotService = require('../services/referenceSlotService');
+const { createH3PromptDraftService } = require('../services/h3PromptDraftService');
+const { isH3VideoConfig } = require('../services/unifiedVideoGenerationService');
+
+function parseJsonObjectOrNull(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** 草稿行序列化:validation_errors 解析为对象透传给前端(GET/PUT/compile 共用)。 */
+function serializeH3Draft(draft) {
+  if (!draft) return null;
+  if (draft.validation_errors == null) return draft;
+  const parsed = parseJsonObjectOrNull(draft.validation_errors);
+  return parsed ? { ...draft, validation_errors: parsed } : draft;
+}
 
 /** 润色接口：邻镜结构化摘要（含全能片段与其它提示词字段） */
 function formatNeighborShotPolishContext(row) {
@@ -246,7 +267,21 @@ function normalizeUniversalSegmentAtImageSpacing(text) {
   );
 }
 
-function routes(db, log) {
+function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined } = {}) {
+  // H3 提示词草稿服务(Task 16):workflowRegistry 由 routes/index.js 注入,
+  // 与 unifiedVideoGenerationService 收到的是同一 loadRegistry 实例(交接①),
+  // 保证草稿快照/指纹与候选生成的解析形状一致。
+  // h3DraftCompileFn 仅供测试注入编译替身;缺省走真实 h3PromptCompiler(懒构造,无 AI 依赖)。
+  const h3Drafts = createH3PromptDraftService({
+    workflowRegistry,
+    ...(typeof h3DraftCompileFn === 'function' ? { compileFn: h3DraftCompileFn } : {}),
+  });
+  const storyboardExists = (storyboardId) => {
+    const sid = Number(storyboardId);
+    if (!Number.isFinite(sid)) return false;
+    return Boolean(db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(sid));
+  };
+
   return {
     create: (req, res) => {
       try {
@@ -1139,6 +1174,94 @@ function routes(db, log) {
       } catch (err) {
         if (err.code === 'STORYBOARD_NOT_FOUND') return response.notFound(res, '分镜不存在');
         log.error('storyboards referenceSlots', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+
+    // ---------- H3 提示词草稿(spec §11.1-§11.3) ----------
+    // GET /storyboards/:id/h3-prompt-draft?video_config_id=... → { draft, freshness }
+    h3PromptDraftGet: (req, res) => {
+      try {
+        if (!storyboardExists(req.params.id)) return response.notFound(res, '分镜不存在');
+        const videoConfigId = req.query.video_config_id;
+        if (videoConfigId == null || String(videoConfigId).trim() === '') {
+          return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法定位 H3 提示词草稿');
+        }
+        const draft = h3Drafts.getLatestDraft(db, req.params.id, String(videoConfigId));
+        const freshness = draft ? h3Drafts.evaluateDraftFreshness(db, draft) : { stale: false, reasons: [] };
+        response.success(res, { draft: serializeH3Draft(draft), freshness });
+      } catch (err) {
+        log.error('storyboards h3 draft get', { error: err.message });
+        response.internalError(res, err.message);
+      }
+    },
+
+    // POST /storyboards/:id/h3-prompt-draft/compile body { video_config_id } → { draft, freshness }
+    h3PromptDraftCompile: async (req, res) => {
+      try {
+        if (!storyboardExists(req.params.id)) return response.notFound(res, '分镜不存在');
+        const body = req.body || {};
+        if (body.video_config_id == null || String(body.video_config_id).trim() === '') {
+          return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法编译 H3 提示词');
+        }
+        // 非 H3 配置入口把关(交接③):旧配置不产 H3 草稿,直接 400。
+        const runtime = h3Drafts.resolveVideoRuntime(db, body.video_config_id);
+        if (!isH3VideoConfig(runtime)) {
+          return response.error(res, 400, 'H3_CONFIG_REQUIRED', '当前视频配置不是 H3 工作流,无需生成 H3 提示词草稿');
+        }
+        const draft = await h3Drafts.compileDraft(db, {}, log, {
+          storyboardId: Number(req.params.id),
+          videoConfigId: body.video_config_id,
+        });
+        // 编译刚落行、源未变,freshness 恒为 false/空。
+        response.success(res, { draft: serializeH3Draft(draft), freshness: { stale: false, reasons: [] } });
+      } catch (err) {
+        log.error('storyboards h3 draft compile', { code: err.code, error: err.message });
+        const statusByCode = {
+          STORYBOARD_NOT_FOUND: 404,
+          VIDEO_CONFIG_NOT_FOUND: 400,
+          UNIVERSAL_PROMPT_EMPTY: 400,
+          MISSING_REFERENCE_IMAGE: 400,
+          REFERENCE_COUNT_INVALID: 400,
+          REFERENCE_COUNT_OVERFLOW: 400,
+          H3_PROMPT_FORMAT_INVALID: 400,
+          WORKFLOW_NOT_FOUND: 400,
+          WORKFLOW_INVALID: 400,
+          WORKFLOW_EXPERIMENTAL_REQUIRED: 400,
+        };
+        if (err.code && statusByCode[err.code] != null) {
+          return response.error(res, statusByCode[err.code], err.code, err.message, err.details);
+        }
+        response.internalError(res, err.message);
+      }
+    },
+
+    // PUT /storyboards/:id/h3-prompt-draft body { draft_id, final_text, manually_edited } → { draft, freshness }
+    h3PromptDraftSave: async (req, res) => {
+      try {
+        if (!storyboardExists(req.params.id)) return response.notFound(res, '分镜不存在');
+        const body = req.body || {};
+        if (body.draft_id == null) {
+          return response.error(res, 404, 'DRAFT_NOT_FOUND', '缺少 draft_id');
+        }
+        const existing = h3Drafts.getDraftById(db, body.draft_id);
+        if (!existing || Number(existing.storyboard_id) !== Number(req.params.id)) {
+          return response.error(res, 404, 'DRAFT_NOT_FOUND', 'H3 提示词草稿不存在');
+        }
+        if (typeof body.final_text !== 'string') {
+          return response.badRequest(res, 'final_text 必须为文本');
+        }
+        const draft = h3Drafts.saveDraftText(db, {
+          draftId: body.draft_id,
+          finalText: body.final_text,
+          manuallyEdited: body.manually_edited,
+        });
+        // 保存后重算失效状态(文本保存不改变源指纹,仅透传当前源漂移)。
+        const freshness = h3Drafts.evaluateDraftFreshness(db, draft);
+        response.success(res, { draft: serializeH3Draft(draft), freshness });
+      } catch (err) {
+        log.error('storyboards h3 draft save', { code: err.code, error: err.message });
+        if (err.code === 'DRAFT_NOT_FOUND') return response.error(res, 404, 'DRAFT_NOT_FOUND', err.message);
         response.internalError(res, err.message);
       }
     },

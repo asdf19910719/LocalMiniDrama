@@ -12,6 +12,7 @@ const { resolveStoryboardSlots, slotsFingerprint } = require('./referenceSlotSer
 const { COMPILER_VERSION, validateH3Prompt, createH3PromptCompiler } = require('./h3PromptCompiler');
 const { resolveVideoProtocol } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
+const { validateH3Dimensions } = require('../director/directorGenerationPolicy');
 const { selectWorkflow } = require('../director/workflowRegistry');
 
 // H3 参考图上限(方舟侧 1-9 张),与 unifiedVideoGenerationService 的统一校验一致。
@@ -127,13 +128,20 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
 
   /**
    * 给定配置 id 解析 H3 运行时:{ config, model, provider, protocol, settings,
-   * workflow, configSnapshot, workflowSha }。与 createVideoGeneration 的解析路径同形状:
-   * 工作流按 settings.workflow_id(无则 model)在注册表中选取;注册表缺省时不选工作流。
+   * workflow, configSnapshot, workflowSha }。语义与 createVideoGeneration 的解析路径对齐
+   * (消除双实现,Task 16 交接②):
+   * - 配置行要求 service_type='video'、未删除且激活(与 resolveDefaultVideoConfig 同口径);
+   * - 工作流按显式 workflowId(opts.workflowId,来自 input.workflow_id)或 model 选取,
+   *   不再读取 settings.workflow_id 前缀(unified 的 requestedWorkflowId = explicit || model);
+   * - 注册表缺省时不选工作流,快照 workflowSha256 为 null。
    */
-  function resolveVideoRuntime(db, videoConfigId) {
+  function resolveVideoRuntime(db, videoConfigId, { workflowId = null } = {}) {
     const numericId = finiteNumber(videoConfigId);
     const raw = numericId != null
-      ? db.prepare('SELECT * FROM ai_service_configs WHERE id = ? AND deleted_at IS NULL').get(numericId)
+      ? db.prepare(
+        `SELECT * FROM ai_service_configs
+         WHERE id = ? AND service_type = 'video' AND deleted_at IS NULL AND (is_active = 1 OR is_active IS NULL)`
+      ).get(numericId)
       : null;
     if (!raw) {
       throw draftError('VIDEO_CONFIG_NOT_FOUND', '视频配置不存在或已删除', { videoConfigId: videoConfigId ?? null });
@@ -147,7 +155,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     const protocol = resolveVideoProtocol(config, model);
     const settings = parseJsonObject(raw.settings) || {};
     let workflow = null;
-    const requestedWorkflowId = String(settings.workflow_id ?? '').trim() || model;
+    const requestedWorkflowId = String(workflowId ?? '').trim() || model;
     if (workflowRegistry && requestedWorkflowId) {
       // 与 createVideoGeneration 相同:selectWorkflow 错误(WORKFLOW_NOT_FOUND 等)原样抛出。
       workflow = selectWorkflow(workflowRegistry, requestedWorkflowId, { allowExperimental: false });
@@ -164,13 +172,31 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     return { config, model, provider, protocol, settings, workflow, configSnapshot, workflowSha };
   }
 
-  // 生成参数(指纹与 generation_params 的 params 维度):时长取分镜,分辨率/音频取配置 settings。
-  function deriveGenerationParams(storyboard, runtime) {
+  // 生成参数(指纹与 generation_params 的 params 维度)。与 createVideoGeneration 的
+  // plan 路径同语义(交接②):时长 = 显式 input.duration 回退分镜行(>0 否则 5);
+  // 宽高 = 显式 input 回退配置 settings(缺省 864/480);workflow 带 adapter 时
+  // 宽高按 validateH3Dimensions 归一(即 plan.common 的归一结果,unified 中
+  // planCommon.width/height 才是落库值)。草稿编译/失效评估不传 input 覆盖项,
+  // 此时与"无 input 的候选生成"逐值一致。
+  function deriveGenerationParams(storyboard, runtime, { inputDuration = null, inputWidth = null, inputHeight = null } = {}) {
     const settings = runtime?.settings || {};
+    const settingsWidth = settings.width != null && Number.isFinite(Number(settings.width)) ? Number(settings.width) : DEFAULT_WIDTH;
+    const settingsHeight = settings.height != null && Number.isFinite(Number(settings.height)) ? Number(settings.height) : DEFAULT_HEIGHT;
+    // 注意 finiteNumber(null) === 0(Number(null) 为 0),先判 nullish 再取数。
+    const durationOverride = inputDuration == null ? null : finiteNumber(inputDuration);
+    const widthOverride = inputWidth == null ? null : finiteNumber(inputWidth);
+    const heightOverride = inputHeight == null ? null : finiteNumber(inputHeight);
+    let width = widthOverride ?? settingsWidth;
+    let height = heightOverride ?? settingsHeight;
+    if (runtime?.workflow?.adapter) {
+      const normalized = validateH3Dimensions({ width, height });
+      width = normalized.width;
+      height = normalized.height;
+    }
     return {
-      durationSeconds: durationSecondsOf(storyboard),
-      width: settings.width != null && Number.isFinite(Number(settings.width)) ? Number(settings.width) : DEFAULT_WIDTH,
-      height: settings.height != null && Number.isFinite(Number(settings.height)) ? Number(settings.height) : DEFAULT_HEIGHT,
+      durationSeconds: durationOverride != null && durationOverride > 0 ? durationOverride : durationSecondsOf(storyboard),
+      width,
+      height,
       audioEnabled: settings.audio_enabled != null ? Boolean(settings.audio_enabled) : DEFAULT_AUDIO_ENABLED,
     };
   }
@@ -420,6 +446,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
   return {
     resolveVideoRuntime,
     getLatestDraft,
+    getDraftById: getDraftRow,
     compileDraft,
     saveDraftText,
     evaluateDraftFreshness,
@@ -439,6 +466,7 @@ module.exports = {
   createH3PromptDraftService,
   compileDraft: (db, cfg, log, options) => sharedService().compileDraft(db, cfg, log, options),
   getLatestDraft: (db, storyboardId, videoConfigId) => sharedService().getLatestDraft(db, storyboardId, videoConfigId),
+  getDraftById: (db, draftId) => sharedService().getDraftById(db, draftId),
   saveDraftText: (db, options) => sharedService().saveDraftText(db, options),
   evaluateDraftFreshness: (db, draft) => sharedService().evaluateDraftFreshness(db, draft),
   resolveVideoRuntime: (db, videoConfigId) => sharedService().resolveVideoRuntime(db, videoConfigId),

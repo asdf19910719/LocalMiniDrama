@@ -57,7 +57,6 @@ function setupRouter(cfg, db, log) {
   const characters = characterRoutes(db, cfg, log, uploadService);
   const uploadHandlers = uploadModule.routes(cfg, log, db);
   const scenes = sceneRoutes(db, log, cfg);
-  const storyboards = storyboardRoutes(db, log);
   const tailFrameLink = tailFrameLinkRoutes(db, cfg, log);
   const images = imageRoutes(db, cfg, log);
   const episodeGenerationProgress = episodeGenerationProgressRoutes(db, log);
@@ -66,6 +65,9 @@ function setupRouter(cfg, db, log) {
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
+  // H3 提示词草稿路由与 unified 服务共用同一注册表实例(Task 16 交接①),
+  // 保证草稿快照/指纹与候选生成的解析形状一致,否则门禁恒判 stale。
+  const storyboards = storyboardRoutes(db, log, { workflowRegistry: directorRegistry });
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
   const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
@@ -388,6 +390,10 @@ function setupRouter(cfg, db, log) {
   r.post('/storyboards/:id/insert-before', storyboards.insertBefore);
   // 统一参考图槽位(spec §7);须在 GET /storyboards/:id 之前注册
   r.get('/storyboards/:id/reference-slots', storyboards.referenceSlots);
+  // H3 提示词草稿(spec §11);须在 GET/PUT /storyboards/:id 之前注册
+  r.get('/storyboards/:id/h3-prompt-draft', storyboards.h3PromptDraftGet);
+  r.post('/storyboards/:id/h3-prompt-draft/compile', storyboards.h3PromptDraftCompile);
+  r.put('/storyboards/:id/h3-prompt-draft', storyboards.h3PromptDraftSave);
   r.get('/storyboards/:id', storyboards.getOne);
   r.put('/storyboards/:id', storyboards.update);
   r.delete('/storyboards/:id', storyboards.delete);

@@ -1,4 +1,5 @@
 const path = require('node:path');
+const crypto = require('node:crypto');
 const taskService = require('./taskService');
 const videoClient = require('./videoClient');
 const videoService = require('./videoService');
@@ -6,6 +7,7 @@ const candidateService = require('../director/candidateGroupService');
 const { resolveDefaultVideoConfig } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 const { createH3PromptCompiler } = require('./h3PromptCompiler');
+const { createH3PromptDraftService } = require('./h3PromptDraftService');
 const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
 const { selectWorkflow, readWorkflowTemplate } = require('../director/workflowRegistry');
 
@@ -113,6 +115,20 @@ function appendStyle(prompt, style) {
   return base ? `${base}. Style: ${cleanStyle}` : `Style: ${cleanStyle}`;
 }
 
+// H3 配置判定(comfyui + H3 模型命名,或 minimax_h3 协议)。
+// 模块级导出:草稿 compile 路由入口用同一判定把关非 H3 配置(Task 16 交接③)。
+function isH3VideoConfig(resolved) {
+  const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
+  const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
+  const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+    || protocol === 'minimax_h3';
+}
+
+function sha256Hex(text) {
+  return crypto.createHash('sha256').update(String(text ?? '')).digest('hex');
+}
+
 function createUnifiedVideoGenerationService({
   db,
   log,
@@ -125,6 +141,7 @@ function createUnifiedVideoGenerationService({
   prepareVideoOutput = videoService.prepareSuccessfulVideoOutput,
   importVideoArtifact = videoService.importSuccessfulVideoArtifact,
   h3PromptCompiler = createH3PromptCompiler(),
+  h3PromptDraftService = null,
   workflowRegistry = null,
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
@@ -133,13 +150,9 @@ function createUnifiedVideoGenerationService({
 
   const activeOperations = new Set();
 
-  function isH3VideoConfig(resolved) {
-    const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
-    const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
-    const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimaxh3') || model.includes('minimax-h3'))
-      || protocol === 'minimax_h3';
-  }
+  // H3 草稿门禁依赖:按 id 取草稿 + 失效评估(不编译,无 AI 依赖)。
+  // workflowRegistry 与本服务收到的是同一实例,保证草稿快照/指纹与生成解析同形状。
+  const h3Drafts = h3PromptDraftService || createH3PromptDraftService({ workflowRegistry });
 
   function tableHasColumn(table, column) {
     try { return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column); } catch (_) { return false; }
@@ -574,6 +587,78 @@ function inputFor(row) {
     }
   }
 
+  /**
+   * H3 候选生成草稿门禁(spec §11.4):候选接口不得调用 H3 技能、不得重新编译,
+   * 只消费草稿——重算指纹、读取 final_compiled_prompt、验证哈希后原样提交。
+   * 错误语义:H3_DRAFT_REQUIRED / DRAFT_NOT_FOUND / H3_DRAFT_STORYBOARD_MISMATCH → 400;
+   * H3_DRAFT_CONFIG_MISMATCH / H3_DRAFT_STALE / H3_DRAFT_INVALID / H3_DRAFT_HASH_MISMATCH → 409。
+   */
+  function requireH3PromptDraft(input, resolved, storyboardId) {
+    const draftId = input.h3_prompt_draft_id ?? input.h3PromptDraftId;
+    if (draftId == null || String(draftId).trim() === '') {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_REQUIRED',
+        'H3 配置需先生成提示词草稿,再提交候选生成',
+        400,
+      );
+    }
+    const draft = h3Drafts.getDraftById(db, draftId);
+    if (!draft) {
+      throw new VideoLifecycleError('DRAFT_NOT_FOUND', 'H3 提示词草稿不存在,请重新生成', 400, { draftId });
+    }
+    if (Number.isFinite(storyboardId) && Number(draft.storyboard_id) !== Number(storyboardId)) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_STORYBOARD_MISMATCH',
+        '提示词草稿属于其他分镜,请重新生成',
+        400,
+        { draftId, storyboardId },
+      );
+    }
+    if (String(draft.video_config_id ?? '') !== String(resolved.config.id)) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_CONFIG_MISMATCH',
+        '提示词草稿与当前视频配置不一致,请重新生成 H3 提示词',
+        409,
+        { draft_video_config_id: draft.video_config_id ?? null, video_config_id: resolved.config.id },
+      );
+    }
+    const freshness = h3Drafts.evaluateDraftFreshness(db, draft);
+    if (freshness.stale) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_STALE',
+        '提示词草稿的来源已变化,请重新生成 H3 提示词',
+        409,
+        { reasons: freshness.reasons },
+      );
+    }
+    if (draft.status !== 'valid') {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_INVALID',
+        '提示词草稿未通过结构校验,请修正文本后再生成',
+        409,
+        { validation_errors: parseJsonObject(draft.validation_errors) },
+      );
+    }
+    if (String(draft.compiled_prompt_hash ?? '') !== sha256Hex(draft.final_compiled_prompt)) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_HASH_MISMATCH',
+        '提示词草稿哈希校验失败,请重新生成 H3 提示词',
+        409,
+      );
+    }
+    // 沿用草稿的 prompt_format / skill 列写 video_generations(现有列继续写)。
+    return {
+      prompt: String(draft.final_compiled_prompt ?? ''),
+      compiled: {
+        sourcePrompt: draft.source_prompt ?? null,
+        compiledPrompt: draft.final_compiled_prompt,
+        promptFormat: draft.prompt_format ?? null,
+        compilerVersion: draft.skill_version ?? null,
+        skillProvenance: parseJsonObject(draft.skill_provenance),
+      },
+    };
+  }
+
   async function createVideoGeneration(input = {}) {
     const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
     const explicitWorkflowId = input.workflow_id || input.workflowId;
@@ -612,12 +697,10 @@ function inputFor(row) {
     let prompt = sourcePrompt;
     let compiled = null;
     if (isH3VideoConfig(resolved)) {
-      compiled = await h3PromptCompiler.compile(db, log, {
-        ...input,
-        prompt: sourcePrompt,
-        durationSeconds: duration || 5,
-      });
-      prompt = compiled.compiledPrompt;
+      // H3 分支不再内部编译:消费草稿(spec §11.4)。非 H3 配置完全走旧路径(忽略 h3_prompt_draft_id)。
+      const gate = requireH3PromptDraft(input, resolved, storyboardId);
+      prompt = gate.prompt;
+      compiled = gate.compiled;
     }
     let planResult = null;
     if (workflow?.adapter) {
@@ -874,4 +957,5 @@ module.exports = {
   createUnifiedVideoGenerationService,
   normalizeProviderStatus,
   structuredError,
+  isH3VideoConfig,
 };

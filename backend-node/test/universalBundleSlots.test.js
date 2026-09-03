@@ -459,6 +459,30 @@ function buildTestService(db, overrides = {}) {
   });
 }
 
+// H3 候选生成消费草稿(spec §11.4):测试注入替身草稿服务,绕开编译直接满足门禁。
+function stubH3DraftService(db) {
+  const finalPrompt = 'compiled prompt';
+  const configId = db.prepare(
+    "SELECT id FROM ai_service_configs WHERE service_type = 'video' AND is_default = 1"
+  ).get().id;
+  return {
+    getDraftById: (_db, id) => ({
+      id: Number(id),
+      storyboard_id: null,
+      video_config_id: String(configId),
+      source_prompt: 'raw',
+      final_compiled_prompt: finalPrompt,
+      compiled_prompt_hash: require('node:crypto').createHash('sha256').update(finalPrompt).digest('hex'),
+      prompt_format: 'Ref2VA',
+      skill_version: 'test-v1',
+      skill_provenance: null,
+      status: 'valid',
+      validation_errors: null,
+    }),
+    evaluateDraftFreshness: () => ({ stale: false, reasons: [] }),
+  };
+}
+
 describe('unified video generation: reference count limit unification', () => {
   it('H3 config with plan build rejects more than 9 refs with VIDEO_REFERENCE_COUNT_INVALID', async () => {
     const db = createServiceDb();
@@ -473,7 +497,7 @@ describe('unified video generation: reference count limit unification', () => {
       capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false },
     };
     const service = buildTestService(db, {
-      h3PromptCompiler: { async compile() { return { compiledPrompt: 'compiled prompt', sourcePrompt: 'raw', compilerVersion: 'test-v1' }; } },
+      h3PromptDraftService: stubH3DraftService(db),
       workflowRegistry: { workflows: [workflow] },
     });
 
@@ -481,6 +505,7 @@ describe('unified video generation: reference count limit unification', () => {
       service.createVideoGeneration({
         prompt: 'a woman walks',
         duration: 5,
+        h3_prompt_draft_id: 1,
         reference_image_urls: Array.from({ length: 10 }, (_, i) => `/static/ref${i}.png`),
       }),
       (e) => e.code === 'VIDEO_REFERENCE_COUNT_INVALID' && /1-9/.test(e.message)
@@ -501,13 +526,14 @@ describe('unified video generation: reference count limit unification', () => {
       capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false },
     };
     const service = buildTestService(db, {
-      h3PromptCompiler: { async compile() { return { compiledPrompt: 'compiled prompt', sourcePrompt: 'raw', compilerVersion: 'test-v1' }; } },
+      h3PromptDraftService: stubH3DraftService(db),
       workflowRegistry: { workflows: [workflow] },
     });
 
     const created = await service.createVideoGeneration({
       prompt: 'a woman walks',
       duration: 5,
+      h3_prompt_draft_id: 1,
       reference_image_urls: Array.from({ length: 9 }, (_, i) => `/static/ref${i}.png`),
     });
     const row = db.prepare('SELECT reference_image_urls FROM video_generations WHERE id = ?').get(created.id);

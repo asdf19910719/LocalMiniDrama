@@ -259,35 +259,46 @@ describe('unified video generation lifecycle', () => {
     db.close();
   });
 
-  it('persists and exposes H3 skill provenance on generated rows', async () => {
+  it('persists and exposes H3 skill provenance from the consumed draft on generated rows', async () => {
     const db = createTestDb();
-    seedDefaultConfig(db, {
+    const configId = seedDefaultConfig(db, {
       provider: 'comfyui',
       model: JSON.stringify(['h3-continuity-v1']),
       default_model: 'h3-continuity-v1',
     });
     const validPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
-    const compiler = createH3PromptCompiler({
-      skillAgent: { async run() {
-        return {
-          prompt: validPrompt,
-          provenance: {
-            skillName: 'h3-prompt-writing',
-            skillSha256: 'a'.repeat(64),
-            skillResources: ['SKILL.md', 'references/base-en.txt'],
-            toolCallId: 'call-persist',
-          },
-        };
-      } },
-    });
+    // H3 候选生成消费草稿(spec §11.4):不再内部编译,provenance/prompt 均取自草稿列。
+    const draft = {
+      id: 11,
+      storyboard_id: null,
+      video_config_id: String(configId),
+      source_prompt: 'a woman walks',
+      final_compiled_prompt: validPrompt,
+      compiled_prompt_hash: require('node:crypto').createHash('sha256').update(validPrompt).digest('hex'),
+      prompt_format: 'T2VA',
+      skill_version: 'h3-skill-agent-v1',
+      skill_provenance: JSON.stringify({
+        skillName: 'h3-prompt-writing',
+        skillSha256: 'a'.repeat(64),
+        skillResources: ['SKILL.md', 'references/base-en.txt'],
+        toolCallId: 'call-persist',
+      }),
+      status: 'valid',
+      validation_errors: null,
+    };
+    const stubDraftService = {
+      getDraftById: (_db, id) => (Number(id) === draft.id ? draft : null),
+      evaluateDraftFreshness: () => ({ stale: false, reasons: [] }),
+    };
     const provider = { async submit() { return { status: 'queued', providerTaskId: 'h3-task' }; } };
     const harness = createHarness();
     harness.registry = { has(name) { return name === 'comfyui'; }, get(name) { assert.equal(name, 'comfyui'); return provider; } };
-    const service = buildService(db, harness, { h3PromptCompiler: compiler });
-    const created = await service.createVideoGeneration({ prompt: 'a woman walks', duration: 5 });
-    const row = db.prepare('SELECT h3_skill_name, h3_skill_sha256, h3_skill_provenance FROM video_generations WHERE id = ?').get(created.id);
+    const service = buildService(db, harness, { h3PromptDraftService: stubDraftService });
+    const created = await service.createVideoGeneration({ prompt: 'a woman walks', duration: 5, h3_prompt_draft_id: draft.id });
+    const row = db.prepare('SELECT h3_skill_name, h3_skill_sha256, h3_skill_provenance, prompt FROM video_generations WHERE id = ?').get(created.id);
     assert.equal(row.h3_skill_name, 'h3-prompt-writing');
     assert.equal(row.h3_skill_sha256, 'a'.repeat(64));
+    assert.equal(row.prompt, validPrompt);
     assert.deepEqual(service.getVideoGeneration(created.id).skillProvenance.skillResources, ['SKILL.md', 'references/base-en.txt']);
     db.close();
   });
