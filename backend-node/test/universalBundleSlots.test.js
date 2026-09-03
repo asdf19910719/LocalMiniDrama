@@ -50,6 +50,7 @@ function createBundleDb() {
       drama_id INTEGER NOT NULL,
       name TEXT NOT NULL DEFAULT '',
       image_url TEXT, local_path TEXT,
+      extra_images TEXT, polished_prompt TEXT,
       updated_at TEXT, deleted_at TEXT
     );
     CREATE TABLE character_libraries (
@@ -66,8 +67,13 @@ function createBundleDb() {
       character_id INTEGER NOT NULL,
       source_key TEXT,
       name TEXT NOT NULL,
+      description TEXT,
+      appearance TEXT,
+      image_prompt TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
+      extra_images TEXT,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
@@ -103,15 +109,17 @@ function createBundleDb() {
 function insertStoryboard(db, overrides = {}) {
   const info = db.prepare(
     `INSERT INTO storyboards (
-       episode_id, storyboard_number, scene_id, title, action, location, duration, characters,
+       episode_id, storyboard_number, scene_id, title, action, location, time, result, duration, characters,
        updated_at, deleted_at
-     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     overrides.storyboard_number ?? 1,
     overrides.scene_id ?? null,
     overrides.title ?? '旧标题',
     overrides.action ?? '旧动作',
     overrides.location ?? null,
+    overrides.time ?? null,
+    overrides.result ?? null,
     overrides.duration ?? null,
     overrides.characters ?? null,
     T0,
@@ -134,8 +142,18 @@ function insertScene(db, overrides = {}) {
   return Number(info.lastInsertRowid);
 }
 
-function insertCharacter(db, name) {
-  const info = db.prepare('INSERT INTO characters (drama_id, name, updated_at) VALUES (1, ?, ?)').run(name, T0);
+function insertCharacter(db, name, overrides = {}) {
+  const info = db.prepare(
+    'INSERT INTO characters (drama_id, name, image_url, local_path, polished_prompt, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    1,
+    name,
+    overrides.image_url ?? null,
+    overrides.local_path ?? null,
+    overrides.polished_prompt ?? null,
+    T0,
+    overrides.deleted_at ?? null
+  );
   return Number(info.lastInsertRowid);
 }
 
@@ -230,6 +248,31 @@ describe('buildUniversalSegmentUserPromptBundle: reference slots from resolveSto
     assert.equal(blocked.ok, false);
     assert.equal(blocked.code, 'bad_request');
   });
+
+  it('legacy storyboard (characters JSON only, no variant links) gets character slots aligned with JSON order', () => {
+    const zhangId = insertCharacter(db, '张三', { local_path: '/static/zhang.png', polished_prompt: 'zhang prompt' });
+    const liId = insertCharacter(db, '李四'); // 无图角色,占位不跳过
+    const sceneId = insertScene(db, { location: '客厅', local_path: '/static/scene.png' });
+    const propId = insertProp(db, '手枪', { local_path: '/static/prop.png' });
+    const sbId = insertStoryboard(db, {
+      scene_id: sceneId,
+      action: '她走进客厅',
+      characters: JSON.stringify([{ id: zhangId, name: '张三' }, { id: liId, name: '李四' }]),
+    });
+    linkProp(db, sbId, propId);
+
+    const built = buildUniversalSegmentUserPromptBundle(db, sbId, {}, {});
+
+    assert.equal(built.ok, true);
+    const prompt = built.userPrompt;
+    // 编号与前端 JSON 序提交的参考图对齐:场景=1,张三=2,李四=3(缺图占位),道具=4
+    assert.match(prompt, /@图片1 = 场景「客厅」/);
+    assert.match(prompt, /@图片2 = 角色「张三·默认」/);
+    assert.doesNotMatch(prompt, /@图片2[^\n]*缺参考图/); // 有图(懒加载复用角色主图)
+    assert.match(prompt, /@图片3 = 角色「李四·默认」[^\n]*缺参考图/);
+    assert.match(prompt, /@图片4 = 道具「手枪」/);
+    assert.match(prompt, /「张三·默认」→ @图片2/);
+  });
 });
 
 describe('buildUniversalSegmentUserPromptBundle: field_overrides', () => {
@@ -266,6 +309,7 @@ describe('buildUniversalSegmentUserPromptBundle: field_overrides', () => {
   it('ignores invalid shapes (string/null) and non-whitelisted keys', () => {
     const sceneId = insertScene(db, { location: '客厅', local_path: '/static/scene.png' });
     const sbId = insertStoryboard(db, { scene_id: sceneId, action: '旧动作', location: '客厅' });
+    db.prepare('UPDATE storyboards SET polished_prompt = ? WHERE id = ?').run('旧润色', sbId);
 
     for (const bad of ['oops', null]) {
       const built = buildUniversalSegmentUserPromptBundle(db, sbId, { field_overrides: bad }, {});
@@ -273,16 +317,40 @@ describe('buildUniversalSegmentUserPromptBundle: field_overrides', () => {
       assert.match(built.userPrompt, /^ACTION: 旧动作$/m);
     }
 
-    // location 不在白名单,即使传了也不覆盖
+    // location/time/result 在白名单内(I-2)可覆盖;polished_prompt 不在白名单,即使传了也不覆盖
     const built = buildUniversalSegmentUserPromptBundle(
       db,
       sbId,
-      { field_overrides: { location: '黑屋', action: '  ' } },
+      { field_overrides: { location: '新地点', polished_prompt: '越权覆盖', action: '  ' } },
       {}
     );
     assert.equal(built.ok, true);
-    assert.match(built.userPrompt, /^LOCATION: 客厅$/m);
+    assert.match(built.userPrompt, /^LOCATION: 新地点$/m);
     assert.match(built.userPrompt, /^ACTION: 旧动作$/m); // 空白串不覆盖
+    assert.match(built.userPrompt, /^POLISHED_IMAGE_PROMPT: 旧润色$/m); // 白名单外忽略
+  });
+
+  it('overrides LOCATION/TIME/RESULT chunks (I-2: whitelist includes location/time/result)', () => {
+    const sceneId = insertScene(db, { location: '客厅', local_path: '/static/scene.png' });
+    const sbId = insertStoryboard(db, {
+      scene_id: sceneId,
+      location: '旧地点',
+      time: '旧时间',
+      result: '旧结果',
+    });
+
+    const built = buildUniversalSegmentUserPromptBundle(
+      db,
+      sbId,
+      { field_overrides: { location: '新地点', time: '新时间', result: '新结果' } },
+      {}
+    );
+
+    assert.equal(built.ok, true);
+    assert.match(built.userPrompt, /^LOCATION: 新地点$/m);
+    assert.match(built.userPrompt, /^TIME: 新时间$/m);
+    assert.match(built.userPrompt, /^RESULT: 新结果$/m);
+    assert.doesNotMatch(built.userPrompt, /旧地点|旧时间|旧结果/);
   });
 
   it('duration override applies only with a valid number; body.duration still wins', () => {

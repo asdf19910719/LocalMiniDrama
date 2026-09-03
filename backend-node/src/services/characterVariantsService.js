@@ -123,32 +123,83 @@ function variantUsageCount(db, variantId) {
   return db.prepare('SELECT COUNT(*) AS c FROM storyboard_character_variants WHERE variant_id = ?').get(Number(variantId)).c;
 }
 
-/** 确保人物有一个默认状态：已有 is_default=1 直接返回；否则从 characters 表复制 description/appearance 创建 */
+/**
+ * spec §13：从 characters 行提取 default 状态的复制字段。
+ * image_prompt 优先 characters.polished_prompt，为空回退 appearance+description 拼接。
+ */
+function defaultVariantCopyFromCharacter(char) {
+  const text = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);
+  const imagePrompt = text(char?.polished_prompt)
+    || [text(char?.appearance), text(char?.description)].filter(Boolean).join(', ')
+    || null;
+  return {
+    description: char?.description ?? null,
+    appearance: char?.appearance ?? null,
+    image_url: text(char?.image_url),
+    local_path: text(char?.local_path),
+    extra_images: char?.extra_images != null && String(char.extra_images).trim() !== '' ? char.extra_images : null,
+    image_prompt: imagePrompt,
+  };
+}
+
+/** 空值判定：null / 空白串视为空（复活分支只对空字段补齐，不覆盖用户改过的值） */
+function isBlank(value) {
+  return value == null || String(value).trim() === '';
+}
+
+/** 确保人物有一个默认状态：已有 is_default=1 直接返回；否则从 characters 表复制 description/appearance 创建。
+ *  spec §13：default 状态复用现有人物图片（image_url/local_path/extra_images）与提示词字段
+ *  （polished_prompt 优先，回退 appearance+description）；复活已删行时仅填空字段，不覆盖用户改过的值。 */
 function ensureDefaultVariant(db, characterId) {
   const cid = Number(characterId);
   const existing = db.prepare(
     'SELECT * FROM character_variants WHERE character_id = ? AND is_default = 1 AND deleted_at IS NULL ORDER BY id LIMIT 1'
   ).get(cid);
   if (existing) return parseVariantRow(existing);
-  const char = db.prepare('SELECT description, appearance FROM characters WHERE id = ?').get(cid);
+  // SELECT * 以兼容裁剪 schema(测试库 characters 未必有 image/extra/polished 列)
+  const char = db.prepare('SELECT * FROM characters WHERE id = ?').get(cid);
+  const copy = defaultVariantCopyFromCharacter(char);
   const now = new Date().toISOString();
   // 复用同 source_key='default' 的已删行，避免触发 (character_id, source_key) 唯一索引冲突
   const reused = db.prepare(
-    "SELECT id FROM character_variants WHERE character_id = ? AND source_key = 'default' ORDER BY id LIMIT 1"
+    "SELECT * FROM character_variants WHERE character_id = ? AND source_key = 'default' ORDER BY id LIMIT 1"
   ).get(cid);
   let variantId;
   if (reused) {
     db.prepare('UPDATE character_variants SET is_default = 0 WHERE character_id = ? AND id != ?').run(cid, reused.id);
+    const fillIfBlank = (current, incoming) => (isBlank(current) ? incoming : current);
     db.prepare(
-      "UPDATE character_variants SET name = '默认', description = ?, appearance = ?, is_default = 1, deleted_at = NULL, updated_at = ? WHERE id = ?"
-    ).run(char?.description ?? null, char?.appearance ?? null, now, reused.id);
+      `UPDATE character_variants SET
+         name = '默认', description = ?, appearance = ?,
+         image_url = ?, local_path = ?, extra_images = ?, image_prompt = ?,
+         is_default = 1, deleted_at = NULL, updated_at = ? WHERE id = ?`
+    ).run(
+      char?.description ?? null,
+      char?.appearance ?? null,
+      fillIfBlank(reused.image_url, copy.image_url),
+      fillIfBlank(reused.local_path, copy.local_path),
+      fillIfBlank(reused.extra_images, copy.extra_images),
+      fillIfBlank(reused.image_prompt, copy.image_prompt),
+      now,
+      reused.id
+    );
     variantId = reused.id;
   } else {
     db.prepare('UPDATE character_variants SET is_default = 0 WHERE character_id = ?').run(cid);
     const info = db.prepare(
-      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, is_default, created_at, updated_at)
-       VALUES (?, 'default', '默认', ?, ?, 1, ?, ?)`
-    ).run(cid, char?.description ?? null, char?.appearance ?? null, now, now);
+      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, image_url, local_path, extra_images, is_default, created_at, updated_at)
+       VALUES (?, 'default', '默认', ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).run(
+      cid,
+      copy.description,
+      copy.appearance,
+      copy.image_prompt,
+      copy.image_url,
+      copy.local_path,
+      copy.extra_images,
+      now,
+      now
+    );
     variantId = Number(info.lastInsertRowid);
   }
   return getVariantById(db, variantId);

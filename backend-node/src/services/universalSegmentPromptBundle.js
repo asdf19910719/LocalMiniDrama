@@ -10,7 +10,7 @@ const { resolveStoryboardSlots } = require('./referenceSlotService');
 
 /** field_overrides 白名单：字符串键（trim 后非空才覆盖）+ duration（数字有效才覆盖） */
 const FIELD_OVERRIDE_STRING_KEYS = [
-  'title', 'description', 'action', 'dialogue', 'narration',
+  'title', 'description', 'location', 'time', 'action', 'dialogue', 'narration', 'result',
   'shot_type', 'angle', 'movement', 'layout_description', 'atmosphere', 'image_prompt',
 ];
 
@@ -249,7 +249,7 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     resolvedSlots = [];
   }
   const charDisplayNameCache = new Map();
-  const characterDisplayNameFor = (assetId, variantName) => {
+  const characterDisplayNameFor = (assetId) => {
     const key = Number(assetId);
     if (!charDisplayNameCache.has(key)) {
       let name = '';
@@ -259,14 +259,19 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
       } catch (_) {}
       charDisplayNameCache.set(key, name);
     }
-    const cname = charDisplayNameCache.get(key);
-    return cname && variantName ? `${cname}·${variantName}` : cname || variantName;
+    return charDisplayNameCache.get(key);
   };
   const slots = resolvedSlots.map((rs) => {
     const kind = SLOT_KIND_BY_TYPE[rs.type] || '参考';
     const variantName = String(rs.name || '').trim();
     let summary = variantName;
-    if (rs.type === 'character_variant') summary = characterDisplayNameFor(rs.asset_id, variantName);
+    if (rs.type === 'character_variant') {
+      const cname = characterDisplayNameFor(rs.asset_id);
+      // 槽名已是「角色名·状态名」(存量 JSON 懒加载合成槽)时不再重复拼接
+      summary = cname && variantName.startsWith(`${cname}·`)
+        ? variantName
+        : (cname && variantName ? `${cname}·${variantName}` : (cname || variantName));
+    }
     summary = String(summary || '').trim() || kind;
     return { num: rs.index, tag: `@图片${rs.index}`, kind, summary, missing: !rs.image_available };
   });

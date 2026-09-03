@@ -14,6 +14,7 @@ function createDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       episode_id INTEGER NOT NULL,
       scene_id INTEGER,
+      characters TEXT,
       updated_at TEXT,
       deleted_at TEXT
     );
@@ -31,6 +32,12 @@ function createDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,
       name TEXT NOT NULL DEFAULT '',
+      description TEXT,
+      appearance TEXT,
+      image_url TEXT,
+      local_path TEXT,
+      extra_images TEXT,
+      polished_prompt TEXT,
       updated_at TEXT,
       deleted_at TEXT
     );
@@ -39,8 +46,13 @@ function createDb() {
       character_id INTEGER NOT NULL,
       source_key TEXT,
       name TEXT NOT NULL,
+      description TEXT,
+      appearance TEXT,
+      image_prompt TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
+      extra_images TEXT,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
@@ -78,10 +90,10 @@ function createDb() {
 
 const T0 = '2026-01-01T00:00:00.000Z';
 
-function insertStoryboard(db, { scene_id = null, deleted_at = null } = {}) {
+function insertStoryboard(db, { scene_id = null, characters = null, deleted_at = null } = {}) {
   const info = db.prepare(
-    'INSERT INTO storyboards (episode_id, scene_id, updated_at, deleted_at) VALUES (1, ?, ?, ?)'
-  ).run(scene_id, T0, deleted_at);
+    'INSERT INTO storyboards (episode_id, scene_id, characters, updated_at, deleted_at) VALUES (1, ?, ?, ?, ?)'
+  ).run(scene_id, characters, T0, deleted_at);
   return Number(info.lastInsertRowid);
 }
 
@@ -100,10 +112,18 @@ function insertScene(db, overrides = {}) {
   return Number(info.lastInsertRowid);
 }
 
-function insertCharacter(db, name) {
+function insertCharacter(db, name, overrides = {}) {
   const info = db.prepare(
-    'INSERT INTO characters (drama_id, name, updated_at) VALUES (?, ?, ?)'
-  ).run(1, name, T0);
+    'INSERT INTO characters (drama_id, name, image_url, local_path, polished_prompt, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    1,
+    name,
+    overrides.image_url ?? null,
+    overrides.local_path ?? null,
+    overrides.polished_prompt ?? null,
+    T0,
+    overrides.deleted_at ?? null
+  );
   return Number(info.lastInsertRowid);
 }
 
@@ -332,6 +352,79 @@ describe('resolveStoryboardSlots', () => {
     const sbId = insertStoryboard(db, { scene_id: sceneId });
     const { slots } = referenceSlotService.resolveStoryboardSlots(db, sbId);
     assert.equal(slots[0].name, '客厅');
+  });
+
+  // --- spec §13:旧版 sb.characters JSON 绑定的存量分镜 → 懒加载 default 状态合成人物槽 ---
+
+  it('legacy storyboard (no variant links) synthesizes character slots from sb.characters JSON order', () => {
+    const zhangId = insertCharacter(db, '张三', { local_path: '/static/zhang.png', polished_prompt: 'zhang prompt' });
+    const liId = insertCharacter(db, '李四', { image_url: 'http://x/li.png' });
+    // 插入顺序与 JSON 序相反,验证槽位按 JSON 序
+    const sbId = insertStoryboard(db, {
+      characters: JSON.stringify([{ id: zhangId, name: '张三' }, { id: liId, name: '李四' }]),
+    });
+
+    const { slots, total } = referenceSlotService.resolveStoryboardSlots(db, sbId);
+
+    assert.equal(total, 2);
+    assert.deepEqual(slots.map((s) => s.type), ['character_variant', 'character_variant']);
+    assert.equal(slots[0].name, '张三·默认');
+    assert.equal(slots[0].asset_id, zhangId);
+    assert.equal(slots[0].image_url, '/static/zhang.png');
+    assert.equal(slots[0].image_available, true);
+    assert.equal(slots[1].name, '李四·默认');
+    assert.equal(slots[1].image_url, 'http://x/li.png');
+    // 懒加载:default 状态确实落库
+    const defaults = db.prepare('SELECT character_id, is_default, deleted_at FROM character_variants').all();
+    assert.equal(defaults.length, 2);
+    assert.ok(defaults.every((r) => r.is_default === 1 && r.deleted_at === null));
+    // 只读合成:不写 storyboard_character_variants 关联
+    const links = db.prepare('SELECT COUNT(*) AS c FROM storyboard_character_variants').get().c;
+    assert.equal(links, 0);
+  });
+
+  it('legacy fallback skips soft-deleted characters; imageless ones keep placeholder slots', () => {
+    const aliveWithImage = insertCharacter(db, '张三', { local_path: '/static/zhang.png' });
+    const imageless = insertCharacter(db, '李四');
+    const dead = insertCharacter(db, '王五', { local_path: '/static/wang.png', deleted_at: T0 });
+    const sbId = insertStoryboard(db, {
+      characters: JSON.stringify([{ id: aliveWithImage }, { id: imageless }, { id: dead }]),
+    });
+
+    const { slots, total } = referenceSlotService.resolveStoryboardSlots(db, sbId);
+
+    assert.equal(total, 2);
+    assert.equal(slots[0].name, '张三·默认');
+    assert.equal(slots[0].image_available, true);
+    assert.equal(slots[1].name, '李四·默认');
+    assert.equal(slots[1].image_available, false); // 无图仍占位
+    assert.equal(slots[1].image_url, null);
+  });
+
+  it('supports plain id arrays in sb.characters JSON', () => {
+    const c1 = insertCharacter(db, '张三', { local_path: '/static/zhang.png' });
+    const sbId = insertStoryboard(db, { characters: JSON.stringify([c1]) });
+    const { slots } = referenceSlotService.resolveStoryboardSlots(db, sbId);
+    assert.equal(slots.length, 1);
+    assert.equal(slots[0].name, '张三·默认');
+  });
+
+  it('formal variant links win: legacy JSON characters are ignored, no extra defaults created', () => {
+    const linked = insertCharacter(db, '张三');
+    const jsonOnly = insertCharacter(db, '李四', { local_path: '/static/li.png' });
+    const v1 = insertVariant(db, linked, '常态', { local_path: '/static/v1.png' });
+    const sbId = insertStoryboard(db, {
+      characters: JSON.stringify([{ id: jsonOnly }]),
+    });
+    linkVariant(db, sbId, linked, v1, { sort_order: 1 });
+
+    const { slots, total } = referenceSlotService.resolveStoryboardSlots(db, sbId);
+
+    assert.equal(total, 1);
+    assert.equal(slots[0].variant_id, v1);
+    assert.equal(slots[0].name, '常态');
+    const defaults = db.prepare('SELECT COUNT(*) AS c FROM character_variants WHERE character_id = ?').get(jsonOnly).c;
+    assert.equal(defaults, 0); // 未为 JSON-only 角色懒加载
   });
 
   it('throws STORYBOARD_NOT_FOUND for missing or soft-deleted storyboard', () => {

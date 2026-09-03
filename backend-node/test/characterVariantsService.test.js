@@ -22,6 +22,10 @@ function createDb() {
       name TEXT NOT NULL DEFAULT '',
       description TEXT,
       appearance TEXT,
+      image_url TEXT,
+      local_path TEXT,
+      extra_images TEXT,
+      polished_prompt TEXT,
       deleted_at TEXT
     );
     CREATE TABLE character_variants (
@@ -58,12 +62,16 @@ function createDb() {
 
 function insertCharacter(db, overrides = {}) {
   const info = db.prepare(
-    'INSERT INTO characters (drama_id, name, description, appearance) VALUES (?, ?, ?, ?)'
+    'INSERT INTO characters (drama_id, name, description, appearance, image_url, local_path, extra_images, polished_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     overrides.drama_id ?? 1,
     overrides.name ?? '张三',
     overrides.description ?? '冷静的私家侦探',
-    overrides.appearance ?? '穿灰色风衣的高个子男人'
+    overrides.appearance ?? '穿灰色风衣的高个子男人',
+    overrides.image_url ?? null,
+    overrides.local_path ?? null,
+    overrides.extra_images ?? null,
+    overrides.polished_prompt ?? null
   );
   return Number(info.lastInsertRowid);
 }
@@ -307,6 +315,65 @@ describe('characterVariantsService', () => {
       assert.equal(again.name, '默认');
       assert.equal(again.deleted_at, null);
       assert.equal(listVariants(db, characterId).length, 1);
+    });
+
+    // --- spec §13:default 状态复用现有人物图片与提示词字段 ---
+
+    it('copies image_url/local_path/extra_images and polished_prompt -> image_prompt on create', () => {
+      const cid = insertCharacter(db, {
+        name: '李四',
+        image_url: 'http://x/li.png',
+        local_path: '/static/li.png',
+        extra_images: '["/static/li2.png"]',
+        polished_prompt: 'masterpiece, grey coat detective',
+      });
+      const row = ensureDefaultVariant(db, cid);
+      assert.equal(row.image_url, 'http://x/li.png');
+      assert.equal(row.local_path, '/static/li.png');
+      assert.deepEqual(row.extra_images, ['/static/li2.png']); // parseVariantRow 将 JSON 解析为数组
+      assert.equal(row.image_prompt, 'masterpiece, grey coat detective');
+    });
+
+    it('falls back to appearance+description concat for image_prompt when polished_prompt empty', () => {
+      const row = ensureDefaultVariant(db, characterId);
+      assert.equal(row.image_prompt, '穿灰色风衣的高个子男人, 冷静的私家侦探');
+
+      const sparse = insertCharacter(db, { name: '王五', appearance: '', description: '只有描述' });
+      const row2 = ensureDefaultVariant(db, sparse);
+      assert.equal(row2.image_prompt, '只有描述');
+
+      const blank = insertCharacter(db, { name: '赵六', appearance: '', description: '' });
+      const row3 = ensureDefaultVariant(db, blank);
+      assert.equal(row3.image_prompt, null);
+    });
+
+    it('revive fills only empty fields and never overwrites user-modified values', () => {
+      const cid = insertCharacter(db, {
+        name: '钱七',
+        image_url: 'http://x/qian.png',
+        local_path: '/static/qian-main.png',
+        polished_prompt: 'polished prompt text',
+      });
+      const first = ensureDefaultVariant(db, cid);
+      // 用户在删除前改过 local_path 与 image_prompt
+      updateVariant(db, first.id, { local_path: '/static/user-changed.png', image_prompt: 'user custom prompt' });
+      deleteVariant(db, first.id);
+
+      const again = ensureDefaultVariant(db, cid);
+      assert.equal(again.id, first.id);
+      assert.equal(again.local_path, '/static/user-changed.png'); // 用户值保留
+      assert.equal(again.image_prompt, 'user custom prompt'); // 用户值保留
+      assert.equal(again.image_url, 'http://x/qian.png'); // 空字段补齐
+    });
+
+    it('returns an existing default untouched (no image copy over user values)', () => {
+      const cid = insertCharacter(db, { name: '孙八', local_path: '/static/sun.png' });
+      const created = ensureDefaultVariant(db, cid);
+      updateVariant(db, created.id, { image_prompt: '用户手改的提示词', local_path: null });
+      const again = ensureDefaultVariant(db, cid);
+      assert.equal(again.id, created.id);
+      assert.equal(again.image_prompt, '用户手改的提示词');
+      assert.equal(again.local_path, null); // 已有默认不回填角色主图
     });
   });
 });
