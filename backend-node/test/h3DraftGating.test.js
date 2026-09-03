@@ -392,6 +392,66 @@ describe('h3 draft gating for candidate generation', () => {
     assert.equal(compileStub.calls.length, 1);
   });
 
+  it('rejects a candidate whose request duration differs from the compiled draft duration with 409 H3_DRAFT_STALE', async () => {
+    insertH3Config(db, { id: 7 });
+    const sceneId = insertScene(db);
+    const sbId = insertStoryboard(db, { sceneId, duration: 5 });
+    insertVariantLink(db, { storyboardId: sbId });
+    const draft = await draftService.compileDraft(db, {}, nullLog, { storyboardId: sbId, videoConfigId: '7' });
+    assert.equal(JSON.parse(draft.generation_params).durationSeconds, 5);
+
+    const service = buildService(db, harness);
+    await assert.rejects(
+      service.createVideoGeneration({ prompt: 'a woman walks', storyboard_id: sbId, duration: 8, h3_prompt_draft_id: draft.id }),
+      (e) => {
+        assert.equal(e.code, 'H3_DRAFT_STALE');
+        assert.equal(e.status, 409);
+        assert.equal(e.details?.draft_duration, 5);
+        assert.equal(e.details?.request_duration, 8);
+        assert.match(e.message, /候选时长\(8秒\)与草稿编译时长\(5秒\)不一致/);
+        return true;
+      }
+    );
+    assert.equal(compileStub.calls.length, 1, '候选生成不得重新编译');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM video_generations').get().n, 0);
+    assert.equal(harness.jobs.length, 0);
+  });
+
+  it('lets a candidate through when the request duration matches the draft duration', async () => {
+    insertH3Config(db, { id: 7 });
+    const sceneId = insertScene(db);
+    const sbId = insertStoryboard(db, { sceneId, duration: 5 });
+    insertVariantLink(db, { storyboardId: sbId });
+    const draft = await draftService.compileDraft(db, {}, nullLog, { storyboardId: sbId, videoConfigId: '7' });
+
+    const service = buildService(db, harness);
+    const created = await service.createVideoGeneration({
+      prompt: 'a woman walks',
+      storyboard_id: sbId,
+      duration: 5,
+      h3_prompt_draft_id: draft.id,
+    });
+    assert.equal(created.status, 'waiting');
+    const row = db.prepare('SELECT duration FROM video_generations WHERE id = ?').get(created.id);
+    assert.equal(Number(row.duration), 5);
+  });
+
+  it('does not block H3 candidates when input.duration is omitted (storyboard duration applies)', async () => {
+    insertH3Config(db, { id: 7 });
+    const sceneId = insertScene(db);
+    const sbId = insertStoryboard(db, { sceneId, duration: 5 });
+    insertVariantLink(db, { storyboardId: sbId });
+    const draft = await draftService.compileDraft(db, {}, nullLog, { storyboardId: sbId, videoConfigId: '7' });
+
+    const service = buildService(db, harness);
+    const created = await service.createVideoGeneration({
+      prompt: 'a woman walks',
+      storyboard_id: sbId,
+      h3_prompt_draft_id: draft.id,
+    });
+    assert.equal(created.status, 'waiting');
+  });
+
   it('rejects a draft from another storyboard with H3_DRAFT_STORYBOARD_MISMATCH', async () => {
     insertH3Config(db, { id: 7 });
     const sceneId = insertScene(db);

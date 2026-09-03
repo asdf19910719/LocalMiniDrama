@@ -622,6 +622,23 @@ function inputFor(row) {
         { draft_video_config_id: draft.video_config_id ?? null, video_config_id: resolved.config.id },
       );
     }
+    // 时长一致性门禁:草稿按分镜行时长编译并固化在 generation_params.durationSeconds,
+    // 候选请求的时长若被面板改动(1-60),提交的视频会与提示词节奏矛盾 → 409。
+    // request duration 取值口径与 createVideoGeneration 一致(input.duration,可能由
+    // director 路由从 structured.durationSeconds 映射而来);缺省时走分镜行时长,与草稿一致,不拦。
+    const draftParams = parseJsonObject(draft.generation_params);
+    const draftDuration = Number(draftParams?.durationSeconds);
+    const requestDuration = Number(input.duration);
+    if (Number.isFinite(draftDuration) && draftDuration > 0
+      && Number.isFinite(requestDuration) && requestDuration > 0
+      && Math.abs(draftDuration - requestDuration) > 1e-6) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_STALE',
+        `候选时长(${requestDuration}秒)与草稿编译时长(${draftDuration}秒)不一致,请重新生成 H3 提示词或改回时长`,
+        409,
+        { draft_duration: draftDuration, request_duration: requestDuration },
+      );
+    }
     const freshness = h3Drafts.evaluateDraftFreshness(db, draft);
     if (freshness.stale) {
       throw new VideoLifecycleError(

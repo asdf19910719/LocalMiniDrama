@@ -294,30 +294,47 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     }
 
     const now = new Date().toISOString();
-    const info = db.prepare(
-      `INSERT INTO storyboard_h3_prompt_drafts (
-         storyboard_id, video_config_id, source_prompt, source_fingerprint,
-         ai_compiled_prompt, final_compiled_prompt, compiled_prompt_hash,
-         prompt_format, skill_version, skill_provenance,
-         reference_snapshot, generation_params, manually_edited, status,
-         validation_errors, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'valid', NULL, ?, ?)`
-    ).run(
-      storyboard.id,
-      videoConfigId == null ? String(runtime.config.id) : String(videoConfigId),
-      sourcePrompt,
-      fingerprint,
-      String(compiled?.compiledPrompt ?? ''),
-      finalPrompt,
-      sha256Hex(finalPrompt),
-      compiled?.promptFormat || null,
-      compiled?.compilerVersion || skillVersion,
-      compiled?.skillProvenance == null ? null : JSON.stringify(compiled.skillProvenance),
-      JSON.stringify({ slots }),
-      JSON.stringify({ ...params, videoConfigSnapshot: runtime.configSnapshot, workflowSha: runtime.workflowSha }),
-      now,
-      now,
-    );
+    const configIdValue = videoConfigId == null ? String(runtime.config.id) : String(videoConfigId);
+    // INSERT 与"只保留最新 10 条"的清理包在事务里:每次编译都 INSERT 新行,
+    // 不清理则表持续增长;按 (storyboard_id, video_config_id) 保留最新 10 条
+    // (updated_at DESC, id DESC),更旧的删除。
+    const info = db.transaction(() => {
+      const insertInfo = db.prepare(
+        `INSERT INTO storyboard_h3_prompt_drafts (
+           storyboard_id, video_config_id, source_prompt, source_fingerprint,
+           ai_compiled_prompt, final_compiled_prompt, compiled_prompt_hash,
+           prompt_format, skill_version, skill_provenance,
+           reference_snapshot, generation_params, manually_edited, status,
+           validation_errors, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'valid', NULL, ?, ?)`
+      ).run(
+        storyboard.id,
+        configIdValue,
+        sourcePrompt,
+        fingerprint,
+        String(compiled?.compiledPrompt ?? ''),
+        finalPrompt,
+        sha256Hex(finalPrompt),
+        compiled?.promptFormat || null,
+        compiled?.compilerVersion || skillVersion,
+        compiled?.skillProvenance == null ? null : JSON.stringify(compiled.skillProvenance),
+        JSON.stringify({ slots }),
+        JSON.stringify({ ...params, videoConfigSnapshot: runtime.configSnapshot, workflowSha: runtime.workflowSha }),
+        now,
+        now,
+      );
+      db.prepare(
+        `DELETE FROM storyboard_h3_prompt_drafts
+         WHERE storyboard_id = ? AND video_config_id IS ?
+           AND id NOT IN (
+             SELECT id FROM storyboard_h3_prompt_drafts
+             WHERE storyboard_id = ? AND video_config_id IS ?
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 10
+           )`
+      ).run(storyboard.id, configIdValue, storyboard.id, configIdValue);
+      return insertInfo;
+    })();
     return getDraftRow(db, info.lastInsertRowid);
   }
 

@@ -393,6 +393,33 @@ describe('compileDraft', () => {
     assert.equal(getLatestDraft(db, sbId, '7').id, draft.id);
   });
 
+  it('keeps only the latest 10 drafts per (storyboard, video config) after repeated compiles', async () => {
+    const sceneId = insertScene(db, {});
+    const sbId = insertStoryboard(db, { scene_id: sceneId });
+    insertVariantLink(db, { storyboardId: sbId });
+    insertVideoConfig(db, { id: 7 });
+    insertVideoConfig(db, { id: 8 });
+    const { compileFn } = makeStubCompile();
+    const service = makeService({ compileFn });
+
+    let last = null;
+    for (let i = 0; i < 12; i += 1) {
+      last = await service.compileDraft(db, {}, nullLog, { storyboardId: sbId, videoConfigId: '7' });
+    }
+    const otherConfigDraft = await service.compileDraft(db, {}, nullLog, { storyboardId: sbId, videoConfigId: '8' });
+
+    const rows = db.prepare(
+      'SELECT id FROM storyboard_h3_prompt_drafts WHERE storyboard_id = ? AND video_config_id = ? ORDER BY id'
+    ).all(sbId, '7');
+    assert.equal(rows.length, 10, '同一 (分镜, 配置) 只保留最新 10 条');
+    assert.equal(rows[0].id, 3, '最旧的两条草稿应被清理');
+    assert.equal(rows[rows.length - 1].id, last.id, '最新一次编译的草稿必须保留');
+    assert.equal(getLatestDraft(db, sbId, '7').id, last.id);
+    // 清理只作用于同一 (storyboard_id, video_config_id),别的配置不受影响
+    assert.equal(db.prepare('SELECT COUNT(*) AS c FROM storyboard_h3_prompt_drafts WHERE video_config_id = ?').get('8').c, 1);
+    assert.equal(otherConfigDraft.video_config_id, '8');
+  });
+
   it('falls back to video_prompt when universal_segment_text is empty', async () => {
     const sceneId = insertScene(db, {});
     const sbId = insertStoryboard(db, { scene_id: sceneId, universal_segment_text: '', video_prompt: '经典模式提示词' });

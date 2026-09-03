@@ -177,6 +177,23 @@ function insertCharacter(db, overrides = {}) {
   return Number(info.lastInsertRowid);
 }
 
+function insertEpisode(db, overrides = {}) {
+  const info = db.prepare(
+    `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    overrides.drama_id ?? 1,
+    overrides.episode_number ?? 1,
+    overrides.title ?? '',
+    overrides.script_content ?? null,
+    overrides.description ?? null,
+    new Date().toISOString(),
+    new Date().toISOString(),
+    overrides.deleted_at ?? null
+  );
+  return Number(info.lastInsertRowid);
+}
+
 describe('Episode package routes', () => {
   let db;
   let routes;
@@ -223,6 +240,74 @@ describe('Episode package routes', () => {
       assert.equal(res.statusCode, 400);
       assert.equal(res.body.success, false);
       assert.equal(res.body.error.code, 'BAD_REQUEST');
+    });
+
+    it('returns 400 when drama_id is missing', () => {
+      const res = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: EXAMPLE_RAW },
+      });
+
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error.message, 'drama_id 必填');
+    });
+
+    it('returns 400 when the target episode belongs to another drama', () => {
+      const otherEpisodeId = insertEpisode(db, { drama_id: 2, episode_number: 1 });
+
+      const res = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: EXAMPLE_RAW, drama_id: 1, target_episode_id: otherEpisodeId },
+      });
+
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error.message, '目标剧集不属于当前剧');
+    });
+
+    it('returns 200 when the target episode belongs to the given drama', () => {
+      const episodeId = insertEpisode(db, { drama_id: 1, episode_number: 3, title: '空白第三集' });
+
+      const res = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: EXAMPLE_RAW, drama_id: 1, target_episode_id: episodeId },
+      });
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body.data.target_status, { status: 'blank', reasons: [] });
+    });
+  });
+
+  describe('GET /dramas/:dramaId/blank-episodes', () => {
+    it('lists only blank episodes of the drama, ordered by episode_number, excluding other dramas and soft-deleted rows', () => {
+      const blankFirst = insertEpisode(db, { drama_id: 1, episode_number: 2, title: '第二集' });
+      const blankSecond = insertEpisode(db, { drama_id: 1, episode_number: 1, title: '第一集' });
+      insertEpisode(db, { drama_id: 1, episode_number: 3, title: '已有剧本', script_content: '剧本内容' });
+      insertEpisode(db, { drama_id: 2, episode_number: 9, title: '别剧空白集' });
+      insertEpisode(db, { drama_id: 1, episode_number: 4, title: '已删除', deleted_at: new Date().toISOString() });
+      const withStoryboard = insertEpisode(db, { drama_id: 1, episode_number: 5, title: '已有分镜' });
+      db.prepare('INSERT INTO storyboards (episode_id, storyboard_number, created_at, updated_at) VALUES (?, 1, ?, ?)')
+        .run(withStoryboard, new Date().toISOString(), new Date().toISOString());
+
+      const res = callRoute(routes, { method: 'GET', url: '/dramas/1/blank-episodes' });
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.success, true);
+      assert.deepEqual(res.body.data, [
+        { id: blankSecond, episode_number: 1, title: '第一集' },
+        { id: blankFirst, episode_number: 2, title: '第二集' },
+      ]);
+    });
+
+    it('returns an empty list when the drama has no blank episodes', () => {
+      insertEpisode(db, { drama_id: 1, episode_number: 1, title: '非空白', script_content: 'x' });
+
+      const res = callRoute(routes, { method: 'GET', url: '/dramas/1/blank-episodes' });
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body.data, []);
     });
   });
 
@@ -275,6 +360,7 @@ describe('Episode package routes', () => {
         body: {
           raw_json_text: EXAMPLE_RAW,
           source_sha256: sha256Text(EXAMPLE_RAW),
+          drama_id: 1,
           target_episode_id: Number(info.lastInsertRowid),
         },
       });
@@ -282,6 +368,39 @@ describe('Episode package routes', () => {
       assert.equal(res.statusCode, 409);
       assert.equal(res.body.success, false);
       assert.equal(res.body.error.code, 'TARGET_NOT_BLANK');
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM storyboards').get().c, 0);
+    });
+
+    it('returns 400 when drama_id is missing', () => {
+      const res = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package',
+        body: {
+          raw_json_text: EXAMPLE_RAW,
+          source_sha256: sha256Text(EXAMPLE_RAW),
+        },
+      });
+
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error.message, 'drama_id 必填');
+    });
+
+    it('returns 400 when the target episode belongs to another drama', () => {
+      const otherEpisodeId = insertEpisode(db, { drama_id: 2, episode_number: 1 });
+
+      const res = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package',
+        body: {
+          raw_json_text: EXAMPLE_RAW,
+          source_sha256: sha256Text(EXAMPLE_RAW),
+          drama_id: 1,
+          target_episode_id: otherEpisodeId,
+        },
+      });
+
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error.message, '目标剧集不属于当前剧');
       assert.equal(db.prepare('SELECT COUNT(*) AS c FROM storyboards').get().c, 0);
     });
 
