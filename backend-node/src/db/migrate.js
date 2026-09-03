@@ -178,6 +178,9 @@ function ensureAllColumns(database) {
     { name: 'last_frame_image_id',  type: 'INTEGER' },
     { name: 'last_frame_image_url', type: 'TEXT' },
     { name: 'last_frame_local_path', type: 'TEXT' },
+    { name: 'source_key',        type: 'TEXT' },               // 单集制作包导入:包内分镜来源 key
+    { name: 'audio_description', type: 'TEXT' },               // 画面声音描述(环境音/音效等)
+    { name: 'transition',        type: 'TEXT' },               // 转场方式(切/溶/淡入淡出等)
     { name: 'status',            type: 'TEXT DEFAULT \'draft\'' },
     { name: 'created_at',        type: 'TEXT' },
     { name: 'updated_at',        type: 'TEXT' },
@@ -209,6 +212,7 @@ function ensureAllColumns(database) {
     { name: 'seedance2_asset', type: 'TEXT' },   // JSON: 即梦/Seedance2 素材库认证 hub_asset_id / asset_url 等
     { name: 'seedance2_voice_asset', type: 'TEXT' }, // JSON: Seedance 2.0 音色参考音频（仅 SD2 模型有效）
     { name: 'negative_prompt', type: 'TEXT' },
+    { name: 'source_key',        type: 'TEXT' },   // 单集制作包导入:包内角色来源 key
     { name: 'created_at',        type: 'TEXT' },
     { name: 'updated_at',        type: 'TEXT' },
     { name: 'deleted_at',        type: 'TEXT' },
@@ -230,6 +234,8 @@ function ensureAllColumns(database) {
     { name: 'negative_prompt',  type: 'TEXT' },
     { name: 'storyboard_count', type: 'INTEGER DEFAULT 0' },
     { name: 'error_msg',        type: 'TEXT' },
+    { name: 'source_key',       type: 'TEXT' },     // 单集制作包导入:包内场景来源 key
+    { name: 'state',            type: 'TEXT' },     // 场景状态(如 day/night)
     { name: 'status',           type: 'TEXT DEFAULT \'draft\'' },
     { name: 'created_at',       type: 'TEXT' },
     { name: 'updated_at',       type: 'TEXT' },
@@ -250,6 +256,7 @@ function ensureAllColumns(database) {
     { name: 'extra_images', type: 'TEXT' },
     { name: 'ref_image',    type: 'TEXT' },  // 用户上传的参考图（本地相对路径或 URL）
     { name: 'negative_prompt', type: 'TEXT' },
+    { name: 'source_key',   type: 'TEXT' },         // 单集制作包导入:包内道具来源 key
     { name: 'error_msg',    type: 'TEXT' },
     { name: 'created_at',   type: 'TEXT' },
     { name: 'updated_at',   type: 'TEXT' },
@@ -590,6 +597,57 @@ function ensureAllColumns(database) {
   ensureColumns(database, 'external_generation_jobs', [
     { name: 'image_generation_task_id', type: 'TEXT' },
   ]);
+
+  // --- 单集制作包导入:角色变体表 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS character_variants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character_id INTEGER NOT NULL,
+      source_key TEXT,
+      name TEXT NOT NULL,
+      description TEXT,
+      appearance TEXT,
+      image_prompt TEXT,
+      negative_prompt TEXT,
+      image_url TEXT,
+      local_path TEXT,
+      extra_images TEXT,
+      is_default INTEGER DEFAULT 0,
+      created_at TEXT,
+      updated_at TEXT,
+      deleted_at TEXT
+    )`);
+  } catch (_) {}
+
+  // --- 单集制作包导入:分镜-角色变体关联表 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS storyboard_character_variants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storyboard_id INTEGER NOT NULL,
+      character_id INTEGER NOT NULL,
+      variant_id INTEGER NOT NULL,
+      reference_role TEXT,
+      sort_order INTEGER,
+      framing_note TEXT
+    )`);
+  } catch (_) {}
+
+  // --- 单集制作包导入:导入记录表 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS episode_imports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id INTEGER NOT NULL,
+      schema_name TEXT,
+      schema_version TEXT,
+      source_filename TEXT,
+      source_sha256 TEXT,
+      raw_json TEXT,
+      normalized_json TEXT,
+      match_decisions TEXT,
+      generator_metadata TEXT,
+      imported_at TEXT
+    )`);
+  } catch (_) {}
 }
 
 /** 对已打开的 database 执行迁移与兜底补列（供 app 启动时调用） */
