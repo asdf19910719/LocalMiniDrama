@@ -4,6 +4,7 @@ function text(value) {
 
 const CHATGPT_TARGET_LABELS = {
   character: '角色设定图',
+  character_variant: '角色状态设定图',
   scene: '场景参考图',
   prop: '道具参考图',
   storyboard_main: '分镜主图',

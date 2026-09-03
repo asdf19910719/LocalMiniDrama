@@ -10,6 +10,7 @@ describe('image generation target adapters and binding', () => {
     db = new Database(':memory:');
     db.exec(`
       CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, description TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
+      CREATE TABLE character_variants (id INTEGER PRIMARY KEY, character_id INTEGER, source_key TEXT, name TEXT, description TEXT, appearance TEXT, image_prompt TEXT, negative_prompt TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, is_default INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT);
       CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER, location TEXT, time TEXT, prompt TEXT, polished_prompt TEXT, polished_prompt_single TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, status TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
       CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, description TEXT, prompt TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
       CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER);
@@ -95,6 +96,28 @@ describe('image generation target adapters and binding', () => {
 
   it('rejects binding an image or target from another drama', () => {
     assert.throws(() => targets.bindResult(db, { drama_id: 8, target_type: 'character', target_id: 1 }, 50), /drama/i);
+  });
+
+  it('builds variant prompts from image_prompt and binds results back to the variant row', () => {
+    db.prepare(`INSERT INTO character_variants
+      (id, character_id, source_key, name, description, appearance, image_prompt, image_url, local_path, extra_images, is_default, updated_at, deleted_at)
+      VALUES (1, 1, 'char_lin_default', '默认状态', '日常造型', '黑发束起', '状态生图提示词', '/old-variant.png', 'old-variant.png', NULL, 1, NULL, NULL)`).run();
+
+    const generation = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 });
+    assert.equal(generation.prompt, '状态生图提示词');
+    assert.deepEqual(generation.references, []);
+
+    db.prepare('UPDATE character_variants SET image_prompt=NULL WHERE id=1').run();
+    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, '黑发束起');
+
+    targets.bindResult(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }, 50);
+    const variant = db.prepare('SELECT * FROM character_variants WHERE id=1').get();
+    assert.equal(variant.image_url, '/new-50.png');
+    assert.equal(variant.local_path, 'new-50.png');
+    assert.match(variant.extra_images, /old-variant\.png/);
+    assert.ok(variant.updated_at);
+
+    assert.throws(() => targets.bindResult(db, { drama_id: 8, target_type: 'character_variant', target_id: 1 }, 50), /drama/i);
   });
 
   it('records image_updated_at on asset and storyboard rows when binding', () => {

@@ -37,8 +37,16 @@ function resolveTarget(db, task) {
   if (!Number.isInteger(dramaId) || dramaId <= 0 || !Number.isInteger(targetId) || targetId <= 0) {
     throw new Error('Invalid image generation target identity');
   }
-  if (!['character', 'scene', 'prop', 'storyboard_main', 'storyboard_first', 'storyboard_last'].includes(targetType)) {
+  if (!['character', 'character_variant', 'scene', 'prop', 'storyboard_main', 'storyboard_first', 'storyboard_last'].includes(targetType)) {
     throw new Error(`Unsupported image generation target type: ${targetType}`);
+  }
+  if (targetType === 'character_variant') {
+    const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name FROM character_variants cv
+      JOIN characters c ON c.id = cv.character_id WHERE cv.id=? AND cv.deleted_at IS NULL`).get(targetId);
+    if (!row) throw new Error(`Image generation ${targetType} target not found`);
+    if (Number(row.drama_id) !== dramaId) throw new Error('Image generation target belongs to another drama');
+    const displayName = row.character_name ? `${row.character_name}·${row.name}` : row.name;
+    return { ...row, target_type: targetType, target_name: displayName || `状态 ${targetId}` };
   }
   if (TABLES[targetType]) {
     const config = TABLES[targetType];
@@ -93,6 +101,8 @@ function buildGenerationInput(db, task) {
   let frameType = null;
   if (target.target_type === 'character') {
     prompt = target.polished_prompt || target.appearance || target.description || target.name || '';
+  } else if (target.target_type === 'character_variant') {
+    prompt = target.image_prompt || target.appearance || target.description || target.name || '';
   } else if (target.target_type === 'scene') {
     prompt = target.polished_prompt_single || target.polished_prompt || target.prompt || target.location || '';
   } else if (target.target_type === 'prop') {
@@ -140,6 +150,14 @@ function bindResult(db, task, imageGenerationId) {
   if (Number(image.drama_id) !== dramaId) throw new Error('Image generation result belongs to another drama');
   return db.transaction(() => {
     const timestamp = new Date().toISOString();
+    if (targetType === 'character_variant') {
+      // character_variants 无 image_updated_at 列,历史仍记入 extra_images
+      const current = db.prepare('SELECT image_url, local_path, extra_images FROM character_variants WHERE id=?').get(targetId);
+      const history = appendHistory(current);
+      db.prepare('UPDATE character_variants SET image_url=?, local_path=?, extra_images=?, updated_at=? WHERE id=?')
+        .run(image.image_url, image.local_path, history, timestamp, targetId);
+      return db.prepare('SELECT * FROM character_variants WHERE id=?').get(targetId);
+    }
     if (targetType === 'character') {
       db.prepare('UPDATE image_generations SET character_id=?, updated_at=? WHERE id=?').run(targetId, timestamp, image.id);
       return bindAsset(db, 'characters', targetId, image);

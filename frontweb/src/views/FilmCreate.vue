@@ -573,7 +573,7 @@
                           <div v-if="v.appearance" class="char-variant-desc">{{ v.appearance }}</div>
                         </div>
                         <div class="char-variant-actions">
-                          <el-button size="small" :loading="generatingVariantId === v.id" :disabled="generatingVariantId != null && generatingVariantId !== v.id" @click="generateVariantImage(v)">生图</el-button>
+                          <el-button size="small" :loading="generatingVariantId === v.id" :disabled="generatingVariantId != null && generatingVariantId !== v.id" @click="onGenerateVariantImage(v)">生图</el-button>
                           <el-button size="small" @click="openVariantEditor(char.id, v)">编辑</el-button>
                           <el-button size="small" :loading="variantDefaultSettingId === v.id" :disabled="!!v.is_default" @click="setVariantDefault(v)">设默认</el-button>
                           <el-button size="small" type="danger" text @click="removeVariant(v)">删除</el-button>
@@ -2979,6 +2979,16 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
   } catch (error) {
     ElMessage.error(error?.message || '图片生成任务创建失败')
   }
+}
+
+// 人物状态生图与其它资产一致:按当前生图通道分发(chatgpt_web 走网页生图任务,否则走同步接口)
+function onGenerateVariantImage(variant) {
+  return generateUnifiedImage(
+    imageGenerationDefaultChannel.value,
+    'character_variant',
+    variant,
+    () => generateVariantImage(variant)
+  )
 }
 
 async function onSelectImageChannel(channel) {

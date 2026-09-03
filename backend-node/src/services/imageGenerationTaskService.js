@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const CHANNELS = new Set(['api', 'chatgpt_web']);
 const TARGET_TYPES = new Set([
   'character',
+  'character_variant',
   'scene',
   'prop',
   'storyboard_main',
