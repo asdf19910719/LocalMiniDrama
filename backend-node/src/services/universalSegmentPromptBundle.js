@@ -2,10 +2,37 @@
  * 全能片段（Omni / Seedance 多图参考）用户消息构建：供「生成」与「润色」共用。
  * @param {import('better-sqlite3').Database} db
  * @param {number} sbId
- * @param {object} reqBody 可选 duration、force_without_reference_images（为 true 时不校验场景/角色/道具是否已上图，仍构建提示词）
- * @param {{ universalSegmentOverride?: string | undefined }} opts 若传入则覆盖库中的 universal 写入 CURRENT_UNIVERSAL_SEGMENT
+ * @param {object} reqBody 可选 duration、force_without_reference_images（为 true 时不校验场景/角色/道具是否已上图，仍构建提示词）、field_overrides（分镜字段覆盖，见 sanitizeFieldOverrides）
+ * @param {{ universalSegmentOverride?: string | undefined, fieldOverrides?: object | undefined }} opts 若传入 universalSegmentOverride 则覆盖库中的 universal 写入 CURRENT_UNIVERSAL_SEGMENT；fieldOverrides 显式覆盖 reqBody.field_overrides
  * @returns {{ ok:true, userPrompt:string, durationLabel:string, durationSec:number, sbId:number, episodeId:number, storyboardNumber:number } | { ok:false, code:'not_found'|'bad_request', message:string }}
  */
+const { resolveStoryboardSlots } = require('./referenceSlotService');
+
+/** field_overrides 白名单：字符串键（trim 后非空才覆盖）+ duration（数字有效才覆盖） */
+const FIELD_OVERRIDE_STRING_KEYS = [
+  'title', 'description', 'action', 'dialogue', 'narration',
+  'shot_type', 'angle', 'movement', 'layout_description', 'atmosphere', 'image_prompt',
+];
+
+/**
+ * 规整 field_overrides：非法形状（非纯对象/数组/null）返回 null（整体忽略）；
+ * 白名单字符串键取 trim 后非空值；duration 仅接受有限正数。
+ */
+function sanitizeFieldOverrides(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  for (const key of FIELD_OVERRIDE_STRING_KEYS) {
+    const v = value[key];
+    if (typeof v !== 'string') continue;
+    const t = v.trim();
+    if (t) out[key] = t;
+  }
+  if (value.duration != null && value.duration !== '') {
+    const n = Number(value.duration);
+    if (Number.isFinite(n) && n > 0) out.duration = n;
+  }
+  return out;
+}
 function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
   const bodyIn = reqBody && typeof reqBody === 'object' ? reqBody : {};
   const forceWithoutReferenceImages = !!bodyIn.force_without_reference_images;
@@ -15,10 +42,20 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
       action, dialogue, narration, result, atmosphere,
       image_prompt, polished_prompt, video_prompt, universal_segment_text,
       shot_type, angle, angle_h, angle_v, angle_s, movement, lighting_style, depth_of_field,
+      layout_description,
       characters, local_path, duration, segment_index, segment_title
      FROM storyboards WHERE id = ? AND deleted_at IS NULL`
   ).get(sbId);
   if (!sb) return { ok: false, code: 'not_found', message: '分镜不存在' };
+
+  // field_overrides：路由层显式传入优先，否则回落 req.body.field_overrides；
+  // 仅白名单字段、trim 后非空（duration 数字有效）才覆盖 DB 读出的分镜字段。
+  const overrides = sanitizeFieldOverrides(
+    opts.fieldOverrides !== undefined ? opts.fieldOverrides : bodyIn.field_overrides
+  );
+  if (overrides) {
+    for (const [key, value] of Object.entries(overrides)) sb[key] = value;
+  }
 
   let dramaId = null;
   let dramaRow = null;
@@ -70,6 +107,7 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     chunk('MOVEMENT', sb.movement),
     chunk('LIGHTING', sb.lighting_style),
     chunk('DEPTH_OF_FIELD', sb.depth_of_field),
+    chunk('LAYOUT_DESCRIPTION', sb.layout_description),
     chunk('CURRENT_UNIVERSAL_SEGMENT', universalForLine),
   ].filter(Boolean);
 
@@ -201,34 +239,39 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     }
   }
 
-  const slots = [];
-  const pushSlot = (kind, summary) => {
-    const num = slots.length + 1;
-    const brief = String(summary || '').trim() || kind;
-    slots.push({ num, tag: `@图片${num}`, kind, summary: brief });
-  };
-  if (sceneRow && hasMediaRef(sceneRow)) {
-    pushSlot('场景', String(sceneRow.location || '').trim() || '场景环境');
+  // 参考图槽位统一走 referenceSlotService（场景 → 人物状态 → 道具）：
+  // 编号 = slot.index；缺图槽（image_available=false，含软删状态）保留占位，不跳过、不重排。
+  const SLOT_KIND_BY_TYPE = { scene: '场景', character_variant: '角色', prop: '道具' };
+  let resolvedSlots = [];
+  try {
+    resolvedSlots = resolveStoryboardSlots(db, sbId, { maxSlots: 9 }).slots || [];
+  } catch (_) {
+    resolvedSlots = [];
   }
-  for (const ent of charOrderEntries) {
-    let row = null;
-    if (ent.key.startsWith('drama:')) {
-      row = db
-        .prepare('SELECT name, local_path, image_url FROM characters WHERE id = ? AND deleted_at IS NULL')
-        .get(Number(ent.key.slice(6)));
-    } else if (ent.key.startsWith('lib:')) {
-      row = db
-        .prepare('SELECT name, local_path, image_url FROM character_libraries WHERE id = ? AND deleted_at IS NULL')
-        .get(Number(ent.key.slice(4)));
+  const charDisplayNameCache = new Map();
+  const characterDisplayNameFor = (assetId, variantName) => {
+    const key = Number(assetId);
+    if (!charDisplayNameCache.has(key)) {
+      let name = '';
+      try {
+        const row = db.prepare('SELECT name FROM characters WHERE id = ? AND deleted_at IS NULL').get(key);
+        name = (row?.name || '').trim();
+      } catch (_) {}
+      charDisplayNameCache.set(key, name);
     }
-    if (!hasMediaRef(row)) continue;
-    const cn = String(row.name || ent.nameHint || '角色').trim();
-    pushSlot('角色', cn);
-  }
-  for (const pr of propRows) {
-    if (!hasMediaRef(pr)) continue;
-    pushSlot('道具', String(pr.name || '道具').trim());
-  }
+    const cname = charDisplayNameCache.get(key);
+    return cname && variantName ? `${cname}·${variantName}` : cname || variantName;
+  };
+  const slots = resolvedSlots.map((rs) => {
+    const kind = SLOT_KIND_BY_TYPE[rs.type] || '参考';
+    const variantName = String(rs.name || '').trim();
+    let summary = variantName;
+    if (rs.type === 'character_variant') summary = characterDisplayNameFor(rs.asset_id, variantName);
+    summary = String(summary || '').trim() || kind;
+    return { num: rs.index, tag: `@图片${rs.index}`, kind, summary, missing: !rs.image_available };
+  });
+  const availableSlotCount = slots.filter((s) => !s.missing).length;
+  const missingSlotCount = slots.length - availableSlotCount;
 
   const charSlots = slots.filter((s) => s.kind === '角色');
   const sceneFirst = slots.length > 0 && slots[0].kind === '场景';
@@ -238,11 +281,14 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
           sceneFirst
             ? 'CHARACTER_IMAGE_BINDING（@图片1 仅为场景/环境；人物从 @图片2 起依次对应下列姓名，勿把人绑在 @图片1）:'
             : 'CHARACTER_IMAGE_BINDING（首张参考图非场景，以 IMAGE_SLOT_MAP 为准；人物与下列 @图片N 一一对应）:',
-          ...charSlots.map((s) =>
-            sceneFirst
+          ...charSlots.map((s) => {
+            if (s.missing) {
+              return `「${s.summary}」→ ${s.tag}（缺参考图占位；补图前禁止将外貌绑定到 ${s.tag}）`;
+            }
+            return sceneFirst
               ? `「${s.summary}」→ ${s.tag}（外貌/动作绑定 ${s.tag} ，示例：${s.tag} 的侧脸；禁止「@图片1 中的${s.summary}」）`
-              : `「${s.summary}」→ ${s.tag}（外貌/动作绑定 ${s.tag} ，示例：${s.tag} 的侧脸）`
-          ),
+              : `「${s.summary}」→ ${s.tag}（外貌/动作绑定 ${s.tag} ，示例：${s.tag} 的侧脸）`;
+          }),
         ].join('\n')
       : slots.length === 0 && forceWithoutReferenceImages
         ? [
@@ -254,7 +300,8 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
             'CHARACTER_IMAGE_BINDING: 当前无「角色」参考槽位；若出现人物且 @图片1 为场景，勿将人物外貌写在 @图片1。',
           ].join('\n');
 
-  if (slots.length === 0 && !forceWithoutReferenceImages) {
+  // 校验口径与旧语义一致：至少要有一个真正有图的槽位（缺图占位槽不算），强制无图模式除外。
+  if (availableSlotCount === 0 && !forceWithoutReferenceImages) {
     return {
       ok: false,
       code: 'bad_request',
@@ -273,13 +320,19 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
       '当前尚未上传参考图；以剧本与分镜字段书写整段内的运镜与时间轴；若写 @图片N 仅为后续补图预留占位，勿将具体人脸绑定到尚未确定序号的图片；勿编造与剧本矛盾的情节。';
   } else {
     imageSlotMapBlock = [
-      'IMAGE_SLOT_MAP（全能模式提交视频时参考图顺序；正文仅可使用下列占位符，与 API 一致）:',
-      ...slots.map((s) => `${s.tag} = ${s.kind}「${s.summary}」`),
+      'IMAGE_SLOT_MAP（全能模式提交视频时参考图顺序；正文仅可使用下列占位符，与 API 一致；标注「缺参考图」的槽位为占位，补图后编号不变）:',
+      ...slots.map((s) =>
+        s.missing
+          ? `${s.tag} = ${s.kind}「${s.summary}」（缺参考图，仅占位）`
+          : `${s.tag} = ${s.kind}「${s.summary}」`
+      ),
     ].join('\n');
     line3Required =
-      slots[0].kind === '场景'
+      slots[0].kind === '场景' && !slots[0].missing
         ? '环境、光影与陈设定性参考 @图片1。若 @图片1 为宫格或多画面拼图，禁止成片复刻其分格或并列布局，仅提取统一的室内空间与光线语义；须单镜头完整连续画面。'
-        : '本片段以首张参考图 @图片1 作为画面锚点展开。';
+        : slots[0].missing
+          ? '首张参考图槽位（@图片1）暂缺图，当前为占位；以剧本与分镜字段书写画面、运镜与时间轴，出片前须补齐参考图并保持 @图片N 与上传顺序一致。'
+          : '本片段以首张参考图 @图片1 作为画面锚点展开。';
   }
 
   const charCount = charNamesOrdered.length;
@@ -327,10 +380,11 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
           '- 禁止用 @场景、@姓名、@林薇、@道具名 等形式指代参考图；需要指图时一律 @图片N。',
           '- 若 @图片1 为「场景」：只写环境/光影/陈设；人物外貌与动作按 CHARACTER_IMAGE_BINDING 从 @图片2 起。若首张参考图即角色，则以 MAP 为准。',
           '- 场景参考若为四宫格/九宫格等拼图：见 SCENE_REFERENCE_LAYOUT；成片须单镜头连续画面，禁止模仿拼图布局。',
+          '- 标注「缺参考图」的槽位当前无图：仅作顺序占位，禁止描写该槽画面内容；补图后编号不变。',
         ]),
     '- 每个 @图片N 与后随的中/英文字之间保留一个半角空格（后处理也会修正，但模型应直接写对）。',
     '- ORDERED_CHARACTER_NAMES 仅供理解剧情，不得当作图占位符。',
-    `有图参考槽位数: ${slots.length}；绑定角色数(含无图): ${charCount}；绑定道具数(含无图): ${propCount}`,
+    `有图参考槽位数: ${availableSlotCount}${missingSlotCount > 0 ? `（另有缺图占位槽 ${missingSlotCount} 个）` : ''}；绑定角色数(含无图): ${charCount}；绑定道具数(含无图): ${propCount}`,
   ].join('\n');
 
   const assetLine = `ORDERED_CHARACTER_NAMES（仅剧情理解）: ${charNames || 'none'}\nORDERED_PROP_NAMES: ${propNames.join(', ') || 'none'}`;
@@ -339,7 +393,7 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     return { ok: false, code: 'bad_request', message: '分镜中暂无可用信息，请先填写动作、对白、视频提示词或绑定场景/角色等' };
   }
 
-  const hasSceneSlot = slots.some((s) => s.kind === '场景');
+  const hasSceneSlot = slots.some((s) => s.kind === '场景' && !s.missing);
   const sceneLayoutBlock = hasSceneSlot
     ? [
         'SCENE_REFERENCE_LAYOUT（场景参考图可能是多宫格/多视角拼图，仅作内容与空间参考，成片禁止模仿拼图）:',
@@ -480,4 +534,4 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
   };
 }
 
-module.exports = { buildUniversalSegmentUserPromptBundle };
+module.exports = { buildUniversalSegmentUserPromptBundle, sanitizeFieldOverrides };

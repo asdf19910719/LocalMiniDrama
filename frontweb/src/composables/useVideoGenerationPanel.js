@@ -40,6 +40,7 @@ const ERROR_SUMMARIES = Object.freeze({
   VIDEO_MODEL_NOT_ALLOWED: '所选模型不属于当前默认视频服务，请检查 API 配置。',
   VIDEO_OUT_OF_MEMORY: '视频服务显存不足，请降低尺寸或候选数量。',
   VIDEO_QUERY_TIMEOUT: '查询视频任务超时，可稍后刷新或重试。',
+  VIDEO_REFERENCE_COUNT_INVALID: '参考图数量超出上限（1-9 张），请移除部分参考图后重试。',
   VIDEO_CANCELLED: '视频生成已取消。',
   VIDEO_NOT_CANCELLABLE: '当前任务状态不能取消。',
   VIDEO_NOT_RETRYABLE: '仅失败或中断的任务可以重试。',

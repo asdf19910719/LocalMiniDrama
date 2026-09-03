@@ -6405,7 +6405,7 @@ function getSbUniversalOmniRefSlots(sb) {
   return out
 }
 
-/** 全能模式：场景/角色/物品 → 绝对 URL 列表（不含经典分镜中间主图；供可灵 Omni / 火山多图参考，最多 10，方舟侧最多取 9 张） */
+/** 全能模式：场景/角色/物品 → 绝对 URL 列表（不含经典分镜中间主图；供可灵 Omni / 火山多图参考，上限由后端统一校验（1-9，H3）） */
 function collectSbOmniReferenceAbsoluteUrls(sb) {
   if (!sb?.id) return []
   const urls = []
@@ -6424,7 +6424,7 @@ function collectSbOmniReferenceAbsoluteUrls(sb) {
   for (const p of getSbSelectedProps(sb.id)) {
     if (hasAssetImage(p)) pushAbs(assetImageUrl(p))
   }
-  return urls.slice(0, 10)
+  return urls
 }
 
 /** 非 Seedance2 全能降级：仅场景参考图（若有） */

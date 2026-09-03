@@ -94,11 +94,12 @@ function structuredError(error, stage, fallbackCode = 'VIDEO_PROVIDER_ERROR', ex
 }
 
 function referenceImages(value) {
-  if (Array.isArray(value)) return value.slice(0, 10);
+  // 不再截断：上限由 H3(plan 构建)统一校验；非 H3 配置保持不设新上限。
+  if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.slice(0, 10) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch (_) {
     return [];
   }
@@ -620,6 +621,12 @@ function inputFor(row) {
     }
     let planResult = null;
     if (workflow?.adapter) {
+      // H3 参考图上限统一在这里校验（方舟侧最多取 9 张）：>9 直接报错，而不是静默截断。
+      if (isH3VideoConfig(resolved) && refs.length > 9) {
+        const error = new Error('参考图数量超出上限（1-9 张），请移除部分参考图后重试');
+        error.code = 'VIDEO_REFERENCE_COUNT_INVALID';
+        throw error;
+      }
       planResult = buildVideoGenerationPlan({
         prompt,
         negativePrompt: input.negativePrompt ?? input.negative_prompt,

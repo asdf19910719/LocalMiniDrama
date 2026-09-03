@@ -40,6 +40,14 @@ function clipClassicCtx(s, maxLen) {
 }
 
 /**
+ * 万能提示词 field_overrides 透传：只透传纯对象，异常形状（字符串/数组/null 等）一律忽略。
+ */
+function universalFieldOverridesOf(body) {
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? body.field_overrides : undefined;
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : undefined;
+}
+
+/**
  * 从「场景：…。配乐：…」式拼装文案中拆出带标签的分句，供润色时强制保留信息点（配乐/音效/情绪强度/画幅/完整镜头英文等）。
  */
 function extractRetentionClausesFromVideoPrompts(draft, composed) {
@@ -555,7 +563,9 @@ function routes(db, log) {
     generateUniversalSegmentPrompt: async (req, res) => {
       try {
         const sbId = Number(req.params.id);
-        const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {});
+        const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {
+          fieldOverrides: universalFieldOverridesOf(req.body),
+        });
         if (!built.ok) {
           if (built.code === 'not_found') return response.notFound(res, built.message);
           return response.badRequest(res, built.message);
@@ -592,7 +602,9 @@ function routes(db, log) {
     /** 全能模式：与 generateUniversalSegmentPrompt 相同逻辑，NDJSON 流式（delta + done） */
     generateUniversalSegmentStream: async (req, res) => {
       const sbId = Number(req.params.id);
-      const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {});
+      const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {
+        fieldOverrides: universalFieldOverridesOf(req.body),
+      });
       if (!built.ok) {
         if (built.code === 'not_found') return response.notFound(res, built.message);
         return response.badRequest(res, built.message);
@@ -665,6 +677,7 @@ function routes(db, log) {
       }
       const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {
         universalSegmentOverride: draftRaw,
+        fieldOverrides: universalFieldOverridesOf(req.body),
       });
       if (!built.ok) {
         if (built.code === 'not_found') return response.notFound(res, built.message);
