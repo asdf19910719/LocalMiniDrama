@@ -648,6 +648,31 @@ function ensureAllColumns(database) {
       imported_at TEXT
     )`);
   } catch (_) {}
+
+  // --- 单集制作包导入:H3 提示词草稿表 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS storyboard_h3_prompt_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storyboard_id INTEGER NOT NULL,
+      video_config_id TEXT,
+      source_prompt TEXT,
+      source_fingerprint TEXT,
+      ai_compiled_prompt TEXT,
+      final_compiled_prompt TEXT,
+      compiled_prompt_hash TEXT,
+      prompt_format TEXT,
+      skill_version TEXT,
+      skill_provenance TEXT,
+      reference_snapshot TEXT,
+      generation_params TEXT,
+      manually_edited INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'valid',
+      validation_errors TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    )`);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_h3_draft_lookup ON storyboard_h3_prompt_drafts(storyboard_id, video_config_id, updated_at DESC)');
+  } catch (_) {}
 }
 
 /** 对已打开的 database 执行迁移与兜底补列（供 app 启动时调用） */
