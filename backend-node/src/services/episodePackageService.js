@@ -487,6 +487,14 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       }
     }
 
+    // 4b. 集-人物关联:制作页角色区按 episode_characters 读取,导入的人物必须挂到本集
+    for (const [, characterId] of characterIdByKey) {
+      db.prepare('INSERT OR IGNORE INTO episode_characters (episode_id, character_id) VALUES (?, ?)').run(
+        episodeId,
+        characterId
+      );
+    }
+
     // 5. 人物状态:create-if-absent((character_id, source_key) 已存在则复用)
     const variantIdByRef = new Map(); // `${character_key}/${variant_key}` → id
     for (const character of Array.isArray(pkg.characters) ? pkg.characters : []) {

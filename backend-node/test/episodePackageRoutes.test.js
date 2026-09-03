@@ -72,6 +72,11 @@ function createDb() {
       updated_at TEXT,
       deleted_at TEXT
     );
+    CREATE TABLE episode_characters (
+      episode_id INTEGER NOT NULL,
+      character_id INTEGER NOT NULL,
+      PRIMARY KEY (episode_id, character_id)
+    );
     CREATE TABLE scenes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,

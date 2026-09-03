@@ -62,6 +62,11 @@ function createDb() {
       updated_at TEXT,
       deleted_at TEXT
     );
+    CREATE TABLE episode_characters (
+      episode_id INTEGER NOT NULL,
+      character_id INTEGER NOT NULL,
+      PRIMARY KEY (episode_id, character_id)
+    );
     CREATE TABLE scenes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,
@@ -452,6 +457,12 @@ describe('episodePackageService', () => {
     assert.equal(variant.image_prompt, 'variant-prompt');
     assert.equal(variant.negative_prompt, 'np');
     assert.equal(variant.is_default, 1);
+
+    // 集-人物关联:制作页角色区按 episode_characters 读取
+    const ecLinks = db.prepare('SELECT * FROM episode_characters').all();
+    assert.equal(ecLinks.length, 1);
+    assert.equal(ecLinks[0].episode_id, result.episode_id);
+    assert.equal(ecLinks[0].character_id, char.id);
 
     // scenes:name→location、state→state、prompt 拼接 description 前缀
     const scene = db.prepare('SELECT * FROM scenes').get();
