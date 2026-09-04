@@ -416,6 +416,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   let h3SaveTimer = null
   let h3Dirty = false
   let h3DraftVersion = 0
+  let appliedWorkflowId = ''
 
   function requestIsCurrent(storyboardId, version, token = null, currentToken = null) {
     return version === mutationVersion
@@ -737,19 +738,43 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   function applyWorkflowDefaults(workflow) {
     if (!workflow) return
+    const settings = parseObject(defaultConfig.value?.settings)
+    const overrides = parseObject(settings.workflow_overrides?.[workflow.id])
+    const legacy = trimmed(defaultConfig.value?.default_model) === trimmed(workflow.id) ? settings : {}
     const defaults = workflow.execution?.defaults || {}
-    form.width = positiveDefault(defaults.width, form.width)
-    form.height = positiveDefault(defaults.height, form.height)
-    form.duration = positiveDefault(defaults.durationSeconds, form.duration)
-    form.frameRate = positiveDefault(defaults.frameRate, form.frameRate)
-    form.seed = nonNegativeDefault(defaults.seed, form.seed)
+    const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '')
+    form.width = positiveDefault(firstDefined(overrides.width, legacy.width, defaults.width), form.width)
+    form.height = positiveDefault(firstDefined(overrides.height, legacy.height, defaults.height), form.height)
+    form.duration = positiveDefault(firstDefined(
+      overrides.durationSeconds,
+      overrides.duration,
+      legacy.durationSeconds,
+      legacy.duration,
+      defaults.durationSeconds,
+    ), form.duration)
+    form.frameRate = positiveDefault(firstDefined(
+      overrides.frameRate,
+      overrides.frame_rate,
+      legacy.frameRate,
+      legacy.frame_rate,
+      defaults.frameRate,
+    ), form.frameRate)
+    form.seed = nonNegativeDefault(firstDefined(overrides.seed, legacy.seed, defaults.seed), form.seed)
     const mode = workflow.capabilities?.modes?.[0]
     if (mode) form.generationMode = mode
     if (workflow.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
   }
 
   async function onWorkflowChange(workflowId) {
-    form.workflowId = trimmed(workflowId)
+    const nextWorkflowId = trimmed(workflowId)
+    const previousWorkflowId = appliedWorkflowId || form.workflowId
+    if (nextWorkflowId === previousWorkflowId) return
+    // el-select 会先更新 v-model；保存旧草稿期间临时恢复已应用的工作流，失败时保持原选择和编辑内容。
+    form.workflowId = previousWorkflowId
+    await flushH3DraftSave()
+    if (h3Dirty) return
+    form.workflowId = nextWorkflowId
+    appliedWorkflowId = nextWorkflowId
     resetH3DraftState()
     applyWorkflowDefaults(currentWorkflow.value)
     setError(null)
@@ -783,10 +808,12 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
           || workflows.find((item) => item.selectable)
           || null
         form.workflowId = workflow?.id || ''
+        appliedWorkflowId = form.workflowId
         applyWorkflowDefaults(workflow)
       } else {
         capabilities.value = null
         form.workflowId = ''
+        appliedWorkflowId = ''
       }
     } catch (caught) {
       defaultConfig.value = null

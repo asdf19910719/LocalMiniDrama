@@ -542,6 +542,14 @@ test('switching workflows applies execution defaults and sends the selected work
     reactive({ storyboardId: 2, storyboard: { id: 2, video_prompt: '自由文本镜头' } }),
     () => {},
     h3ApiStub({
+      getDefaultConfig: async () => ({
+        ...H3_CONFIG,
+        settings: JSON.stringify({
+          workflow_overrides: {
+            [FREE_TEXT_WORKFLOW.id]: { width: 1024, height: 576, frame_rate: 20, seed: 8 },
+          },
+        }),
+      }),
       generateCandidates: async (storyboardId, body) => {
         generated.push([storyboardId, body])
         return {}
@@ -554,14 +562,94 @@ test('switching workflows applies execution defaults and sends the selected work
   await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
 
   assert.equal(panel.isH3Config.value, false)
-  assert.equal(panel.form.width, 864)
-  assert.equal(panel.form.height, 480)
-  assert.equal(panel.form.frameRate, 16)
+  assert.equal(panel.form.width, 1024)
+  assert.equal(panel.form.height, 576)
+  assert.equal(panel.form.frameRate, 20)
+  assert.equal(panel.form.seed, 8)
   assert.equal(panel.form.generationMode, 'image_to_video')
   assert.equal(panel.workflowDimensionRules.value.multipleOf, 16)
 
   await panel.generateCandidates()
   assert.equal(generated[0][1].structured.workflowId, FREE_TEXT_WORKFLOW.id)
+})
+
+test('uses legacy channel parameter overrides only for the configured default workflow', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 2, storyboard: { id: 2, video_prompt: '默认镜头' } }),
+    () => {},
+    h3ApiStub({
+      getDefaultConfig: async () => ({
+        ...H3_CONFIG,
+        settings: JSON.stringify({ width: 1280, height: 704, frame_rate: 30, seed: 6 }),
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.form.width, 1280)
+  assert.equal(panel.form.height, 704)
+  assert.equal(panel.form.frameRate, 30)
+  assert.equal(panel.form.seed, 6)
+
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+  assert.equal(panel.form.width, 864)
+  assert.equal(panel.form.height, 480)
+  assert.equal(panel.form.frameRate, 16)
+})
+
+test('flushes an edited H3 draft before clearing it during a workflow switch', async () => {
+  const saves = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 4, storyboard: { id: 4, video_prompt: '切换镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 44, storyboard_id: 4, status: 'valid', final_compiled_prompt: '原草稿' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async (_storyboardId, body) => {
+        saves.push(body.final_text)
+        return {
+          draft: { id: 44, storyboard_id: 4, status: 'valid', final_compiled_prompt: body.final_text, manually_edited: true },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '切换前编辑'
+  panel.onH3DraftTextInput()
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+
+  assert.deepEqual(saves, ['切换前编辑'])
+  assert.equal(panel.h3Draft.value, null)
+})
+
+test('keeps the current workflow and draft when saving before a switch fails', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 4, storyboard: { id: 4, video_prompt: '切换失败镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 45, workflow_id: H3_WORKFLOW.id, storyboard_id: 4, status: 'valid', final_compiled_prompt: '原草稿' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async () => { throw new Error('保存失败') },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '不能丢失的编辑'
+  panel.onH3DraftTextInput()
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+
+  assert.equal(panel.form.workflowId, H3_WORKFLOW.id)
+  assert.equal(panel.h3DraftText.value, '不能丢失的编辑')
+  assert.equal(panel.error.value?.summary, '保存失败')
 })
 
 test('ignores an H3 draft response that arrives after switching workflows', async () => {
