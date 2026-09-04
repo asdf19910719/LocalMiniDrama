@@ -1,20 +1,9 @@
 import { storeToRefs } from 'pinia'
 import { useImageGenerationStore } from '@/stores/imageGenerationStore'
+import { createImageGenerationFacade } from './imageGenerationFacade'
 
 export function useImageGeneration() {
   const store = useImageGenerationStore()
   const state = storeToRefs(store)
-  return {
-    ...state,
-    loadSummary: store.loadSummary,
-    loadDefault: store.loadDefault,
-    setDefaultChannel: store.setDefaultChannel,
-    open: store.openTask,
-    refresh: store.refreshTask,
-    sendToChatGPT: store.sendToChatGPT,
-    recoverCapture: store.recoverCapture,
-    requeueTask: store.requeueTask,
-    selectResult: store.selectResult,
-    close: store.closeDrawer,
-  }
+  return createImageGenerationFacade(store, state)
 }

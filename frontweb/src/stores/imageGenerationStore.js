@@ -6,7 +6,7 @@ import { aiAPI } from '@/api/ai'
 import { sendImageGenerationBridgeMessage } from '@/utils/imageGenerationBridge'
 import { buildChatGPTImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { createQueueDriver } from '@/utils/imageGenerationQueueDriver'
-import { runImageGenerationEnvironmentCheck, clearImageGenerationEnvironmentCache } from '@/utils/imageGenerationEnvironment'
+import { runImageGenerationEnvironmentCheck, clearImageGenerationEnvironmentCache, normalizeImageGenerationChannel } from '@/utils/imageGenerationEnvironment'
 import {
   normalizeImageGenerationTask,
   resolveChatGPTPrepareAction,
@@ -108,12 +108,14 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   }
   async function setDefaultChannel(channel) {
     if (dramaId.value == null) throw new Error('剧集未加载')
-    defaultChannel.value = await imageGenerationTaskAPI.setDefault(dramaId.value, channel)
+    const requestedChannel = normalizeImageGenerationChannel(channel)
+    const result = await imageGenerationTaskAPI.setDefault(dramaId.value, requestedChannel)
+    defaultChannel.value = normalizeImageGenerationChannel(result, requestedChannel)
     return defaultChannel.value
   }
   async function loadDefault(id) {
     const result = await imageGenerationTaskAPI.getDefault(id)
-    defaultChannel.value = result?.channel || 'api'
+    defaultChannel.value = normalizeImageGenerationChannel(result)
     await checkEnvironment({ dramaId: id, channel: defaultChannel.value }, { force: true })
     return defaultChannel.value
   }

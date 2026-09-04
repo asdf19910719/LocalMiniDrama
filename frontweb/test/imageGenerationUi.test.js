@@ -11,7 +11,7 @@ test('shared image generation controls expose concise channel copy and one summa
   const button = read('src/components/imageGeneration/ImageGenerateSplitButton.vue')
   const drawer = read('src/components/imageGeneration/ImageGenerationDrawer.vue')
   const queue = read('src/components/imageGeneration/ImageGenerationQueue.vue')
-  const composable = read('src/composables/useImageGeneration.js')
+  const composable = read('src/composables/useImageGeneration.js') + read('src/composables/imageGenerationFacade.js')
   const bridge = read('src/utils/imageGenerationBridge.js')
   const setting = read('src/components/imageGeneration/ImageGenerationChannelSetting.vue')
   const store = read('src/stores/imageGenerationStore.js')
