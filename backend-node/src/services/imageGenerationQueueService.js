@@ -80,8 +80,43 @@ function cancelTask(db, taskId) {
   return skipTask(db, taskId);
 }
 
+function beginResultRecovery(db, taskId) {
+  return db.transaction(() => {
+    const task = tasks.getTask(db, taskId);
+    if (!task || task.generation_channel !== 'chatgpt_web') throw new Error('ChatGPT image generation task not found');
+    const timedOut = task.status === 'needs_review' && task.error_code === 'result_timeout';
+    if (!['submitted', 'generating'].includes(task.status) && !timedOut) {
+      throw new Error('Only an active or timed-out ChatGPT image task can resume result capture');
+    }
+    const active = db.prepare(`SELECT id FROM image_generation_tasks
+      WHERE generation_channel='chatgpt_web' AND status IN ('preparing','submitted','generating')
+        AND id<>? LIMIT 1`).get(String(taskId));
+    if (active) throw new Error('已有其他 ChatGPT 生图任务正在执行，请等待完成后再恢复此结果');
+    const attempt = task.external_job_id ? db.prepare(`SELECT assistant_message_id
+      FROM external_generation_attempts WHERE job_id=? ORDER BY rowid DESC LIMIT 1`)
+      .get(task.external_job_id) : null;
+    if (!attempt?.assistant_message_id) {
+      throw new Error('缺少已绑定的 ChatGPT 回复标识，无法安全恢复；请重新生成此图片');
+    }
+    if (!timedOut) return task;
+    return tasks.transitionTask(db, task.id, 'generating');
+  })();
+}
+
+function releaseResultRecovery(db, taskId, message = '恢复结果捕获失败') {
+  const task = tasks.getTask(db, taskId);
+  if (!task || task.generation_channel !== 'chatgpt_web' || task.status !== 'generating') {
+    throw new Error('ChatGPT image result recovery is not active');
+  }
+  return tasks.transitionTask(db, task.id, 'needs_review', {
+    errorCode: 'result_timeout',
+    errorMessage: String(message || '恢复结果捕获失败').slice(0, 500),
+  });
+}
+
 const PREPARING_STALE_MS = 10 * 60 * 1000;
 const PREPARING_ORPHAN_MS = 60 * 1000;
+const RESULT_STALE_MS = 15 * 60 * 1000;
 
 function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
   return db.transaction(() => {
@@ -97,6 +132,22 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
         AND external_job_id IN (
           SELECT job_id FROM external_generation_attempts WHERE status='needs_review'
         )`).run(timestamp.toISOString());
+    // A submitted/generating task can outlive the browser page that was
+    // responsible for capturing its result. Do not let such an abandoned
+    // task hold the global single-flight lock forever. Fifteen minutes
+    // matches the UI polling timeout and is intentionally much longer than
+    // the normal ChatGPT image-generation window.
+    const resultStaleBefore = new Date(timestamp.getTime() - RESULT_STALE_MS).toISOString();
+    const staleResults = db.prepare(`SELECT id FROM image_generation_tasks
+      WHERE generation_channel='chatgpt_web' AND status IN ('submitted','generating')
+        AND updated_at < ?
+      ORDER BY updated_at`).all(resultStaleBefore);
+    for (const staleResult of staleResults) {
+      tasks.transitionTask(db, staleResult.id, 'needs_review', {
+        errorCode: 'result_timeout',
+        errorMessage: '生成结果等待超时，已释放队列，请恢复结果捕获',
+      });
+    }
     // A preparing claim with no send attempt means the driving page died
     // between claiming and prepare-send (e.g. workbench reload). Requeue it
     // quickly instead of blocking the serial queue for the full stale window;
@@ -131,4 +182,7 @@ function claimNextChatgptTask(db, { now = () => new Date() } = {}) {
   })();
 }
 
-module.exports = { runNext, pauseBatch, resumeBatch, skipTask, retryTask, deferTask, cancelTask, refreshBatch, claimNextChatgptTask };
+module.exports = {
+  runNext, pauseBatch, resumeBatch, skipTask, retryTask, deferTask, cancelTask,
+  beginResultRecovery, releaseResultRecovery, refreshBatch, claimNextChatgptTask,
+};

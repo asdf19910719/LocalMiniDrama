@@ -194,15 +194,20 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     if (!task?.id) throw new Error('图片生成任务不存在')
     loading.value = true
     errorMessage.value = ''
+    let recoveryReserved = false
     try {
-      const detailed = task.external_job
-        ? normalizeImageGenerationTask(task)
-        : normalizeImageGenerationTask(await imageGenerationTaskAPI.get(task.id))
+      // Always refresh before recovery. The drawer may still hold a submitted
+      // snapshot after the backend timed it out and advanced another task;
+      // using that stale snapshot would bypass the recovery ownership check.
+      const detailed = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(task.id))
       const job = detailed?.external_job
       const attempt = (job?.attempts || []).filter((item) => ['submitted', 'generating'].includes(item?.status)).at(-1)
         || (job?.attempts || []).at(-1)
       if (!job?.id || !attempt?.id) throw new Error('找不到可恢复的 ChatGPT 生成记录')
-      currentTask.value = { ...detailed, error_code: null, error_message: null }
+      const timedOut = detailed.status === 'needs_review' && detailed.error_code === 'result_timeout'
+      const reserved = await imageGenerationTaskAPI.beginResultRecovery(detailed.id)
+      recoveryReserved = timedOut
+      currentTask.value = normalizeImageGenerationTask({ ...detailed, ...reserved })
       // `attempt` comes from the reactive store tree; post only the plain
       // fields the extension reads so window.postMessage never sees a proxy.
       await sendImageGenerationBridgeMessage({
@@ -220,6 +225,12 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       return currentTask.value
     } catch (error) {
       const message = error?.message || '恢复结果捕获失败，请检查 ChatGPT 页面和浏览器插件'
+      if (recoveryReserved) {
+        try {
+          const released = await imageGenerationTaskAPI.releaseResultRecovery(task.id, message)
+          currentTask.value = normalizeImageGenerationTask({ ...(currentTask.value || {}), ...released })
+        } catch (_) {}
+      }
       errorMessage.value = message
       if (currentTask.value?.id === task.id) currentTask.value = { ...currentTask.value, error_message: message }
       throw error

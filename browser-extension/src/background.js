@@ -373,7 +373,13 @@ export class BackgroundController {
       if (!tabId) throw new Error('provider tab is unavailable');
       const conversationId = session?.conversationId || message.conversationId || null;
       if (message.conversationId && conversationId && message.conversationId !== conversationId) throw new Error('conversation identity mismatch');
-      await this.sendToProviderTab(tabId, { action: 'recoverAttempt', attempt: { ...(message.attempt || {}), attemptId: message.attemptId || message.attempt?.attemptId, conversationId } });
+      const attempt = message.attempt || {};
+      await this.sendToProviderTab(tabId, { action: 'recoverAttempt', attempt: {
+        ...attempt,
+        attemptId: message.attemptId || attempt.attemptId || attempt.id,
+        conversationId,
+        assistantMessageId: attempt.assistantMessageId || attempt.assistant_message_id || null,
+      } });
       return { ok: true, conversationId, tabId };
     }
     if (action === 'capturedResult') {
@@ -381,6 +387,29 @@ export class BackgroundController {
       const result = await this.workbench.importImage(payload);
       await this.emit('RESULT_IMPORTED', { attemptId: payload.attemptId, resultSetId: payload.resultSetId, resultIndex: payload.resultIndex, result });
       return { ok: true, result };
+    }
+    if (action === 'attemptGenerating') {
+      const payload = message.payload || {};
+      if (!payload.attemptId) throw new Error('attemptId is required');
+      const event = await this.emit('ATTEMPT_EVENT', {
+        attemptId: payload.attemptId,
+        conversationId: payload.conversationId || null,
+        eventType: 'GENERATING',
+        payload: { assistantMessageId: payload.assistantMessageId || null },
+      });
+      return { ok: true, event };
+    }
+    if (action === 'attemptBound') {
+      const payload = message.payload || {};
+      if (!payload.attemptId) throw new Error('attemptId is required');
+      if (!payload.assistantMessageId) throw new Error('assistantMessageId is required');
+      const event = await this.emit('ATTEMPT_EVENT', {
+        attemptId: payload.attemptId,
+        conversationId: payload.conversationId || null,
+        eventType: 'ASSISTANT_BOUND',
+        payload: { assistantMessageId: payload.assistantMessageId },
+      });
+      return { ok: true, event };
     }
     if (action === 'adapterError') {
       const payload = message.payload || {};

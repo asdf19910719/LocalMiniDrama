@@ -186,6 +186,29 @@ test('emits completed when the watched task auto-finalizes', async () => {
   assert.deepEqual(events.map((e) => e.type), ['claimed', 'submitted', 'completed', 'terminal'])
 })
 
+test('releases its watch when an active result is stale so the next tick can reconcile the queue', async () => {
+  const task = { id: 'stale-result', status: 'preparing' }
+  let claims = 0
+  let polls = 0
+  const stale = { id: task.id, status: 'submitted', updated_at: '2026-08-28T00:00:00.000Z' }
+  const { driver, events } = makeDriver({
+    now: () => Date.parse('2026-08-28T00:16:00.001Z'),
+    claimNext: async () => ({ claimed: ++claims === 1, task }),
+    prepareSend: async () => ({ task, attempt: { id: 'stale-attempt' }, already_submitted: false }),
+    acknowledge: async () => stale,
+    getTask: async () => (++polls === 1 ? stale : { ...stale, status: 'cancelled' }),
+  })
+
+  await driver.tick()
+  assert.equal(polls, 1)
+  assert.equal(driver.isDriving(), false)
+  assert.ok(events.some((event) => event.type === 'stale'))
+
+  await driver.tick()
+  assert.equal(claims, 2)
+  driver.stop()
+})
+
 test('store notifies queue completion on drained terminal events', () => {
   const source = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
   // terminal 事件必须被处理并触发"队列完成"通知

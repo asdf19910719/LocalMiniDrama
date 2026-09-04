@@ -72,7 +72,7 @@ export class ChatGPTAdapter {
     const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])].filter((node) => !isUserTurn(node));
     const target = requested
       ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }))
-      : nodes.filter((node) => messageIdentity(node)).at(-1);
+      : null;
     const assistantMessageId = messageIdentity(target)?.messageId;
     if (!target || !assistantMessageId) {
       const error = Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' });
@@ -99,6 +99,14 @@ export class ChatGPTAdapter {
     if (!root) { onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); return () => {}; }
     let activeStop = null;
     let activeAssistantId = null;
+    let generatingReported = false;
+    const forwardResult = (result) => {
+      if (result?.status === 'GENERATING') {
+        if (generatingReported) return;
+        generatingReported = true;
+      }
+      return onResult(result);
+    };
     const discover = () => {
       const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
         .filter((node) => !preExisting.has(node) && !isUserTurn(node))
@@ -111,7 +119,7 @@ export class ChatGPTAdapter {
       activeAssistantId = selected.id;
       activeStop = this.observeAttempt(
         { ...identity, assistantMessageId: selected.id },
-        onResult,
+        forwardResult,
         (error) => {
           // ChatGPT can replace a streaming turn or promote its temporary
           // turn id. Let the root observer bind the replacement instead of
@@ -138,13 +146,24 @@ export class ChatGPTAdapter {
     if (this.capturePaused) { const stopped = () => {}; stopped.stop = stopped; return stopped; }
     const root = this.findAssistant(identity); if (!root) { this.capturePaused = true; onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); const stopped = () => {}; stopped.stop = stopped; return stopped; }
     let observer = null;
+    let pollTimer = null;
+    let generatingReported = false;
     let stopped = false;
     const halt = (error, report = true) => {
       if (stopped) return;
       stopped = true;
       this.capturePaused = true;
+      if (pollTimer !== null) clearTimeout(pollTimer);
+      pollTimer = null;
       observer?.disconnect();
       if (report) onError(error);
+    };
+    const schedulePoll = () => {
+      if (stopped || this.capturePaused || pollTimer !== null) return;
+      pollTimer = setTimeout(() => {
+        pollTimer = null;
+        emit();
+      }, 500);
     };
     const emit = () => {
       if (stopped || this.capturePaused) return;
@@ -152,7 +171,15 @@ export class ChatGPTAdapter {
         const result = extractResultSet(root, identity);
         if (result.status === 'UNBOUND_RESULT' || result.status === 'NEEDS_REVIEW') {
           halt(Object.assign(new Error(result.status), { code: result.status }));
+        } else if (result.status === 'GENERATING') {
+          if (!generatingReported) {
+            generatingReported = true;
+            Promise.resolve(onResult(result)).catch(() => halt(null, false));
+          }
+          schedulePoll();
         } else {
+          if (pollTimer !== null) clearTimeout(pollTimer);
+          pollTimer = null;
           const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
           if (fresh.length) {
             Promise.resolve(onResult({ ...result, results: fresh }))
@@ -167,7 +194,13 @@ export class ChatGPTAdapter {
       observer = new MutationObserver(emit);
       observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
     }
-    const stop = () => { if (stopped) return; stopped = true; observer?.disconnect(); };
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (pollTimer !== null) clearTimeout(pollTimer);
+      pollTimer = null;
+      observer?.disconnect();
+    };
     stop.stop = stop; stop.root = root; return stop;
   }
   resumeCapture() { this.capturePaused = false; this.seenResultFingerprints.clear(); }

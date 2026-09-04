@@ -46,7 +46,8 @@
     const seenSources = /* @__PURE__ */ new Set();
     const results = [...node.querySelectorAll?.("img") || []].map((img) => {
       const sourceUrl = img.currentSrc || img.src || img.getAttribute?.("src");
-      if (!sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
+      const pendingLoad = img.complete === false || typeof img.naturalWidth === "number" && img.naturalWidth <= 0;
+      if (pendingLoad || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
       seenSources.add(sourceUrl);
       const resultIndex = seenSources.size - 1;
       return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };
@@ -147,7 +148,7 @@
       this.seenResultFingerprints.clear();
       const requested = identity?.assistantMessageId || identity?.messageId;
       const nodes = [...this.document?.querySelectorAll(selectors.assistant) || []].filter((node) => !isUserTurn(node));
-      const target = requested ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested })) : nodes.filter((node) => messageIdentity(node)).at(-1);
+      const target = requested ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested })) : null;
       const assistantMessageId = messageIdentity(target)?.messageId;
       if (!target || !assistantMessageId) {
         const error = Object.assign(new Error("UNBOUND_RESULT"), { code: "UNBOUND_RESULT" });
@@ -175,6 +176,14 @@
       }
       let activeStop = null;
       let activeAssistantId = null;
+      let generatingReported = false;
+      const forwardResult = (result) => {
+        if (result?.status === "GENERATING") {
+          if (generatingReported) return;
+          generatingReported = true;
+        }
+        return onResult(result);
+      };
       const discover = () => {
         const candidates = [...root.querySelectorAll?.(selectors.assistant) || []].filter((node) => !preExisting.has(node) && !isUserTurn(node)).map((node) => ({ node, id: messageIdentity(node)?.messageId })).filter((entry) => entry.id && (!known.has(entry.id) || entry.id === activeAssistantId && entry.node !== activeStop?.root));
         if (!candidates.length) return;
@@ -184,7 +193,7 @@
         activeAssistantId = selected.id;
         activeStop = this.observeAttempt(
           { ...identity, assistantMessageId: selected.id },
-          onResult,
+          forwardResult,
           (error) => {
             if (error?.code === "UNBOUND_RESULT") {
               this.resumeCapture();
@@ -230,13 +239,24 @@
         return stopped2;
       }
       let observer = null;
+      let pollTimer = null;
+      let generatingReported = false;
       let stopped = false;
       const halt = (error, report = true) => {
         if (stopped) return;
         stopped = true;
         this.capturePaused = true;
+        if (pollTimer !== null) clearTimeout(pollTimer);
+        pollTimer = null;
         observer?.disconnect();
         if (report) onError(error);
+      };
+      const schedulePoll = () => {
+        if (stopped || this.capturePaused || pollTimer !== null) return;
+        pollTimer = setTimeout(() => {
+          pollTimer = null;
+          emit();
+        }, 500);
       };
       const emit = () => {
         if (stopped || this.capturePaused) return;
@@ -244,7 +264,15 @@
           const result = extractResultSet(root, identity);
           if (result.status === "UNBOUND_RESULT" || result.status === "NEEDS_REVIEW") {
             halt(Object.assign(new Error(result.status), { code: result.status }));
+          } else if (result.status === "GENERATING") {
+            if (!generatingReported) {
+              generatingReported = true;
+              Promise.resolve(onResult(result)).catch(() => halt(null, false));
+            }
+            schedulePoll();
           } else {
+            if (pollTimer !== null) clearTimeout(pollTimer);
+            pollTimer = null;
             const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
             if (fresh.length) {
               Promise.resolve(onResult({ ...result, results: fresh })).then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint))).catch(() => halt(null, false));
@@ -262,6 +290,8 @@
       const stop = () => {
         if (stopped) return;
         stopped = true;
+        if (pollTimer !== null) clearTimeout(pollTimer);
+        pollTimer = null;
         observer?.disconnect();
       };
       stop.stop = stop;
@@ -297,6 +327,27 @@
   // src/sites/chatgpt/contentRuntime.js
   async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
     try {
+      if (resultSet.status === "GENERATING") {
+        try {
+          await chromeApi.runtime.sendMessage({
+            action: "attemptGenerating",
+            payload: {
+              attemptId: attempt.attemptId,
+              conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+              assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null
+            }
+          });
+        } catch (_) {
+        }
+        return;
+      }
+      const assistantMessageId = resultSet.assistantMessageId || attempt.assistantMessageId || null;
+      const conversationId = attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null;
+      const bound = await chromeApi.runtime.sendMessage({
+        action: "attemptBound",
+        payload: { attemptId: attempt.attemptId, conversationId, assistantMessageId }
+      });
+      if (!bound?.ok) throw new Error(bound?.error || "ATTEMPT_IDENTITY_NOT_ACKNOWLEDGED");
       for (const result of resultSet.results || []) {
         const original = await adapter.fetchOriginal(result);
         const response = await chromeApi.runtime.sendMessage({
@@ -305,8 +356,8 @@
             ...result,
             attemptId: attempt.attemptId,
             resultSetId: resultSet.resultSetId,
-            conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
-            assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+            conversationId,
+            assistantMessageId,
             sourceMime: original.mime,
             bytes: original.bytes
           }

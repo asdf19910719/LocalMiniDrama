@@ -12,6 +12,8 @@ export function createQueueDriver({
   intervalMs = 5000,
   retryLimit = 2,
   retryDelayMs = 5000,
+  activeResultStaleMs = 15 * 60 * 1000,
+  now = () => Date.now(),
   delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   // Live from construction so tick() can be driven manually (the tests do this);
@@ -91,6 +93,20 @@ export function createQueueDriver({
         lastStatus = task.status
       }
       if (TERMINAL.has(task.status)) { onEvent({ type: 'terminal', taskId, task, status: task.status }); return }
+      const updatedAt = Date.parse(task.updated_at)
+      const currentTime = new Date(now()).getTime()
+      if (
+        ['submitted', 'generating'].includes(task.status)
+        && Number.isFinite(updatedAt)
+        && Number.isFinite(currentTime)
+        && currentTime - updatedAt > activeResultStaleMs
+      ) {
+        // Leave the long-running watch so the next periodic tick can call
+        // claim-next, whose transaction releases the stale backend lock
+        // before claiming another task.
+        onEvent({ type: 'stale', taskId, task })
+        return
+      }
       if (intervalMs > 0) await delay(intervalMs)
     }
   }

@@ -493,11 +493,17 @@ test('recoverAttempt routes recovery to the bound provider tab', async () => {
   const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
   await controller.init()
   await controller.sessions.attach(3, 'chatgpt', { conversationId: 'conversation-final', tabId: 77 })
-  const result = await controller.handle({ action: 'recoverAttempt', dramaId: 3, site: 'chatgpt', attemptId: 'attempt-1', conversationId: 'conversation-final' })
+  const result = await controller.handle({
+    action: 'recoverAttempt', dramaId: 3, site: 'chatgpt', attemptId: 'attempt-1', conversationId: 'conversation-final',
+    attempt: { id: 'attempt-1', assistant_message_id: 'assistant-old', conversation_id: 'conversation-final' },
+  })
   assert.equal(result.ok, true)
   assert.deepEqual(messages, [
     [77, { action: 'identity' }],
-    [77, { action: 'recoverAttempt', attempt: { attemptId: 'attempt-1', conversationId: 'conversation-final' } }],
+    [77, { action: 'recoverAttempt', attempt: {
+      id: 'attempt-1', assistant_message_id: 'assistant-old', conversation_id: 'conversation-final',
+      attemptId: 'attempt-1', conversationId: 'conversation-final', assistantMessageId: 'assistant-old',
+    } }],
   ])
 })
 
@@ -571,4 +577,39 @@ test('captured results normalize Chrome JSON-serialized byte objects before impo
   } })
   assert.ok(imported.bytes instanceof Uint8Array)
   assert.deepEqual([...imported.bytes], [137, 80, 78, 71])
+})
+
+test('generating observations emit a backend attempt event', async () => {
+  const controller = new BackgroundController({ chromeApi: {}, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  const emitted = []
+  controller.emit = async (...args) => { emitted.push(args); return { id: 'event-generating' } }
+
+  const response = await controller.handle({ action: 'attemptGenerating', payload: {
+    attemptId: 'attempt-generating', conversationId: 'conversation-1', assistantMessageId: 'assistant-12',
+  } })
+
+  assert.equal(response.ok, true)
+  assert.deepEqual(emitted, [[
+    'ATTEMPT_EVENT',
+    {
+      attemptId: 'attempt-generating',
+      conversationId: 'conversation-1',
+      eventType: 'GENERATING',
+      payload: { assistantMessageId: 'assistant-12' },
+    },
+  ]])
+})
+
+test('assistant identity promotions emit a bound event before import', async () => {
+  const controller = new BackgroundController({ chromeApi: {}, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  const emitted = []
+  controller.emit = async (...args) => { emitted.push(args); return { id: 'event-bound' } }
+
+  const response = await controller.handle({ action: 'attemptBound', payload: {
+    attemptId: 'attempt-promoted', conversationId: 'conversation-1', assistantMessageId: 'assistant-final',
+  } })
+
+  assert.equal(response.ok, true)
+  assert.equal(emitted[0][1].eventType, 'ASSISTANT_BOUND')
+  assert.equal(emitted[0][1].payload.assistantMessageId, 'assistant-final')
 })

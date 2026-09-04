@@ -4,7 +4,7 @@ const Database = require('better-sqlite3');
 const express = require('express');
 const fs = require('node:fs');
 const routes = require('../src/routes/imageGenerationTasks');
-const { createGenerationAttempt } = require('../src/services/externalGenerationService');
+const { createGenerationAttempt, recordAttemptEvent } = require('../src/services/externalGenerationService');
 const taskService = require('../src/services/imageGenerationTaskService');
 
 it('reports channel-specific image generation environment readiness without creating a task', async () => {
@@ -76,16 +76,22 @@ it('creates a unified task and exposes one drama summary', async () => {
     const attempt = prepared.attempt;
     const preparedAgain = (await (await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' })).json()).data;
     assert.equal(preparedAgain.attempt.id, attempt.id);
+    recordAttemptEvent(db, attempt.id, {
+      idempotencyKey: 'generating-before-acknowledge',
+      eventType: 'GENERATING',
+      payload: { assistantMessageId: 'assistant-before-ack' },
+    });
     const acknowledged = (await (await fetch(`${base}/image-generation-tasks/${created.id}/acknowledge`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ attemptId: attempt.id }),
     })).json()).data;
-    assert.equal(acknowledged.status, 'submitted');
+    assert.equal(acknowledged.status, 'generating');
+    assert.equal(db.prepare('SELECT status FROM external_generation_attempts WHERE id=?').get(attempt.id).status, 'generating');
     const submittedPrepareResponse = await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' });
     assert.equal(submittedPrepareResponse.status, 200);
     const submittedPrepare = (await submittedPrepareResponse.json()).data;
     assert.equal(submittedPrepare.already_submitted, true);
     assert.equal(submittedPrepare.attempt.id, attempt.id);
-    assert.equal(submittedPrepare.task.status, 'submitted');
+    assert.equal(submittedPrepare.task.status, 'generating');
     taskService.transitionTask(db, created.id, 'generating');
     const generatingPrepareResponse = await fetch(`${base}/image-generation-tasks/${created.id}/prepare-send`, { method: 'POST' });
     assert.equal(generatingPrepareResponse.status, 200);
