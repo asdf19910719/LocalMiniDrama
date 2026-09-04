@@ -153,13 +153,13 @@
 - 无法识别的 NULL 行返回 `{ draft: null, freshness: { stale: true, reasons: ['legacy_workflow_unknown'] } }`。
 - 跨工作流门禁抛 `H3_DRAFT_WORKFLOW_MISMATCH`。
 
-- [ ] 写迁移测试，确认旧行保留且新增索引。
-- [ ] 写绑定测试：精确匹配、SHA 匹配懒回填、换默认不误绑、未知 legacy 拒绝、每工作流保留 10 条。
-- [ ] 写门禁测试：实际工作流不一致 409；requiresPromptDraft=false 不要求草稿。
-- [ ] 运行并确认失败。
-- [ ] 实现迁移、服务查询/清理、路由透传和门禁。
-- [ ] 运行所有 H3 draft/gating 测试与生命周期测试。
-- [ ] 提交 `feat: bind H3 drafts to verified workflow identity`。
+- [x] 写迁移测试，确认旧行保留且新增索引。
+- [x] 写绑定测试：精确匹配、SHA 匹配懒回填、换默认不误绑、未知 legacy 拒绝、每工作流保留 10 条。
+- [x] 写门禁测试：实际工作流不一致 409；requiresPromptDraft=false 不要求草稿。
+- [x] 运行并确认失败。
+- [x] 实现迁移、服务查询/清理、路由透传和门禁。
+- [x] 运行所有 H3 draft/gating 测试与生命周期测试。
+- [x] 提交 `feat: bind H3 drafts to verified workflow identity`。
 
 ### Task 7: 前端工作流元数据与生成面板
 

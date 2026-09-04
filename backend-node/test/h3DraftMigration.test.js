@@ -7,6 +7,7 @@ const H3_DRAFT_COLUMNS = [
   'id',
   'storyboard_id',
   'video_config_id',
+  'workflow_id',
   'source_prompt',
   'source_fingerprint',
   'ai_compiled_prompt',
@@ -25,7 +26,7 @@ const H3_DRAFT_COLUMNS = [
 ];
 
 describe('h3 prompt draft migration', () => {
-  it('creates storyboard_h3_prompt_drafts table with all 18 columns', () => {
+  it('creates storyboard_h3_prompt_drafts table with all 19 columns', () => {
     const db = new Database(':memory:');
     runMigrationsAndEnsure(db);
     assert.ok(
@@ -37,6 +38,24 @@ describe('h3 prompt draft migration', () => {
       assert.ok(cols.includes(col), `missing column: ${col}`);
     }
     assert.strictEqual(cols.length, H3_DRAFT_COLUMNS.length);
+  });
+
+  it('preserves legacy rows and adds the workflow lookup index', () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE storyboard_h3_prompt_drafts (
+      id INTEGER PRIMARY KEY, storyboard_id INTEGER NOT NULL, video_config_id TEXT,
+      source_prompt TEXT, created_at TEXT, updated_at TEXT
+    )`);
+    db.prepare(`INSERT INTO storyboard_h3_prompt_drafts
+      (id, storyboard_id, video_config_id, source_prompt, created_at, updated_at)
+      VALUES (1, 3, '7', 'legacy', '2026-01-01', '2026-01-01')`).run();
+    runMigrationsAndEnsure(db);
+    const row = db.prepare('SELECT * FROM storyboard_h3_prompt_drafts WHERE id = 1').get();
+    assert.equal(row.source_prompt, 'legacy');
+    assert.equal(row.workflow_id, null);
+    const columns = db.prepare('PRAGMA index_info(idx_h3_draft_workflow_lookup)').all().map((item) => item.name);
+    assert.deepEqual(columns, ['storyboard_id', 'video_config_id', 'workflow_id', 'updated_at']);
+    db.close();
   });
 
   it('creates idx_h3_draft_lookup index on (storyboard_id, video_config_id, updated_at)', () => {

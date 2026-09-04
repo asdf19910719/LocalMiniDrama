@@ -655,6 +655,7 @@ function ensureAllColumns(database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       storyboard_id INTEGER NOT NULL,
       video_config_id TEXT,
+      workflow_id TEXT,
       source_prompt TEXT,
       source_fingerprint TEXT,
       ai_compiled_prompt TEXT,
@@ -672,6 +673,8 @@ function ensureAllColumns(database) {
       updated_at TEXT
     )`);
     database.exec('CREATE INDEX IF NOT EXISTS idx_h3_draft_lookup ON storyboard_h3_prompt_drafts(storyboard_id, video_config_id, updated_at DESC)');
+    ensureColumns(database, 'storyboard_h3_prompt_drafts', [{ name: 'workflow_id', type: 'TEXT' }]);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_h3_draft_workflow_lookup ON storyboard_h3_prompt_drafts(storyboard_id, video_config_id, workflow_id, updated_at DESC)');
   } catch (_) {}
 }
 

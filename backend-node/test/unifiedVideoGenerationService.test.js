@@ -242,8 +242,15 @@ describe('unified video generation lifecycle', () => {
     };
     const workflowRegistry = {
       workflows: [
-        { id: 'official', status: 'verified', execution: { promptContract: 'free_text_v1', requiresPromptDraft: false } },
-        { id: 'alternate', status: 'verified', execution: { promptContract: 'free_text_v1', requiresPromptDraft: false } },
+        ...['official', 'alternate'].map((id) => ({
+          id, status: 'verified',
+          execution: {
+            promptContract: 'free_text_v1', requiresPromptDraft: false,
+            dimensions: { minWidth: 1, maxWidth: 4096, minHeight: 1, maxHeight: 4096, multipleOf: 1 },
+            references: { min: 0, max: 3 }, vramPolicy: 'none',
+            defaults: { width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1 },
+          },
+        })),
       ],
     };
     const service = buildService(db, harness, { workflowRegistry });
@@ -342,6 +349,34 @@ describe('unified video generation lifecycle', () => {
     assert.equal(row.h3_skill_sha256, 'a'.repeat(64));
     assert.equal(row.prompt, validPrompt);
     assert.deepEqual(service.getVideoGeneration(created.id).skillProvenance.skillResources, ['SKILL.md', 'references/base-en.txt']);
+    db.close();
+  });
+
+  it('rejects an H3 draft belonging to another selected workflow', async () => {
+    const db = createTestDb();
+    const configId = seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['h3-a', 'h3-b']),
+      default_model: 'h3-a',
+    });
+    const execution = {
+      promptContract: 'h3_director_v1', requiresPromptDraft: true,
+      dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+      references: { min: 0, max: 9 }, vramPolicy: 'h3_estimate',
+      defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+    };
+    const draft = { id: 12, storyboard_id: null, video_config_id: String(configId), workflow_id: 'h3-b' };
+    const service = buildService(db, createHarness(), {
+      workflowRegistry: { workflows: [{ id: 'h3-a', status: 'verified', execution }, { id: 'h3-b', status: 'verified', execution }] },
+      h3PromptDraftService: {
+        getDraftById() { return draft; },
+        evaluateDraftFreshness() { return { stale: false, reasons: [] }; },
+      },
+    });
+    await assert.rejects(
+      () => service.createVideoGeneration({ prompt: 'x', workflow_id: 'h3-a', h3_prompt_draft_id: draft.id }),
+      (error) => error.code === 'H3_DRAFT_WORKFLOW_MISMATCH' && error.status === 409,
+    );
     db.close();
   });
 

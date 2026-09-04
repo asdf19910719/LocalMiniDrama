@@ -14,6 +14,7 @@ const { resolveVideoProtocol } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 const { validateH3Dimensions } = require('../director/directorGenerationPolicy');
 const { selectWorkflow } = require('../director/workflowRegistry');
+const { resolveWorkflowParameters } = require('../director/workflowExecutionPolicy');
 
 // H3 参考图上限(方舟侧 1-9 张),与 unifiedVideoGenerationService 的统一校验一致。
 const H3_MAX_SLOTS = 9;
@@ -118,7 +119,7 @@ function durationSecondsOf(storyboard) {
  * - deps.workflowRegistry:与 routes/index.js 传入 unifiedVideoGenerationService 的
  *   loadRegistry(...) 结果同源;缺省 null(不选工作流,快照 workflowSha256 为 null)。
  */
-function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {}) {
+function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowExperimental = false } = {}) {
   let defaultCompiler = null;
   const resolveCompileFn = () => {
     if (typeof compileFn === 'function') return compileFn;
@@ -148,17 +149,21 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     }
     const models = normalizeModelList(raw.model);
     const config = { ...raw, model: models };
-    const model = raw.default_model != null && models.includes(String(raw.default_model))
+    const defaultModel = raw.default_model != null && models.includes(String(raw.default_model))
       ? String(raw.default_model)
       : (models[0] || '');
+    const requestedWorkflowId = String(workflowId ?? '').trim() || defaultModel;
+    if (requestedWorkflowId && !models.includes(requestedWorkflowId)) {
+      throw draftError('VIDEO_WORKFLOW_NOT_ALLOWED', '工作流不在当前视频通道白名单中', { workflowId: requestedWorkflowId });
+    }
+    const model = requestedWorkflowId;
     const provider = String(raw.provider || '').toLowerCase();
     const protocol = resolveVideoProtocol(config, model);
     const settings = parseJsonObject(raw.settings) || {};
     let workflow = null;
-    const requestedWorkflowId = String(workflowId ?? '').trim() || model;
     if (workflowRegistry && requestedWorkflowId) {
       // 与 createVideoGeneration 相同:selectWorkflow 错误(WORKFLOW_NOT_FOUND 等)原样抛出。
-      workflow = selectWorkflow(workflowRegistry, requestedWorkflowId, { allowExperimental: false });
+      workflow = selectWorkflow(workflowRegistry, requestedWorkflowId, { allowExperimental });
     }
     const configSnapshot = buildVideoConfigSnapshot({
       config,
@@ -179,6 +184,19 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
   // planCommon.width/height 才是落库值)。草稿编译/失效评估不传 input 覆盖项,
   // 此时与"无 input 的候选生成"逐值一致。
   function deriveGenerationParams(storyboard, runtime, { inputDuration = null, inputWidth = null, inputHeight = null } = {}) {
+    if (runtime?.workflow) {
+      const parameters = resolveWorkflowParameters(runtime.workflow, {
+        duration: inputDuration ?? durationSecondsOf(storyboard),
+        width: inputWidth,
+        height: inputHeight,
+      }, runtime.config);
+      return {
+        durationSeconds: parameters.durationSeconds,
+        width: parameters.width,
+        height: parameters.height,
+        audioEnabled: runtime.settings.audio_enabled != null ? Boolean(runtime.settings.audio_enabled) : DEFAULT_AUDIO_ENABLED,
+      };
+    }
     const settings = runtime?.settings || {};
     const settingsWidth = settings.width != null && Number.isFinite(Number(settings.width)) ? Number(settings.width) : DEFAULT_WIDTH;
     const settingsHeight = settings.height != null && Number.isFinite(Number(settings.height)) ? Number(settings.height) : DEFAULT_HEIGHT;
@@ -201,9 +219,17 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     };
   }
 
-  function getLatestDraft(db, storyboardId, videoConfigId) {
+  function getLatestDraft(db, storyboardId, videoConfigId, workflowId = null) {
     const sid = Number(storyboardId);
     if (!Number.isFinite(sid)) return null;
+    const selectedWorkflowId = String(workflowId || '').trim();
+    if (selectedWorkflowId) {
+      return db.prepare(
+        `SELECT * FROM storyboard_h3_prompt_drafts
+         WHERE storyboard_id = ? AND video_config_id IS ? AND workflow_id = ?
+         ORDER BY updated_at DESC, id DESC LIMIT 1`
+      ).get(sid, videoConfigId == null ? null : String(videoConfigId), selectedWorkflowId) || null;
+    }
     const row = videoConfigId == null || String(videoConfigId).trim() === ''
       ? db.prepare(
         `SELECT * FROM storyboard_h3_prompt_drafts
@@ -218,6 +244,39 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     return row || null;
   }
 
+  function getLatestDraftResult(db, storyboardId, videoConfigId, workflowId) {
+    const selectedWorkflowId = String(workflowId || '').trim();
+    if (!selectedWorkflowId) {
+      return { draft: getLatestDraft(db, storyboardId, videoConfigId), freshness: { stale: false, reasons: [] } };
+    }
+    const exact = getLatestDraft(db, storyboardId, videoConfigId, selectedWorkflowId);
+    if (exact) return { draft: exact, freshness: { stale: false, reasons: [] } };
+
+    const legacy = db.prepare(
+      `SELECT * FROM storyboard_h3_prompt_drafts
+       WHERE storyboard_id = ? AND video_config_id IS ? AND workflow_id IS NULL
+       ORDER BY updated_at DESC, id DESC`
+    ).all(Number(storyboardId), videoConfigId == null ? null : String(videoConfigId));
+    const selected = workflowRegistry?.workflows?.find((item) => item.id === selectedWorkflowId);
+    const sha = String(selected?.workflowSha256 || '');
+    const shaOwners = workflowRegistry?.workflows?.filter((item) => String(item.workflowSha256 || '') === sha) || [];
+    if (sha && shaOwners.length === 1) {
+      const match = legacy.find((row) => String((parseJsonObject(row.generation_params) || {}).workflowSha || '') === sha);
+      if (match) {
+        const updated = db.prepare('UPDATE storyboard_h3_prompt_drafts SET workflow_id = ? WHERE id = ? AND workflow_id IS NULL')
+          .run(selectedWorkflowId, match.id);
+        if (updated.changes) match.workflow_id = selectedWorkflowId;
+        return { draft: match, freshness: { stale: false, reasons: [] } };
+      }
+    }
+    return {
+      draft: null,
+      freshness: legacy.length
+        ? { stale: true, reasons: ['legacy_workflow_unknown'] }
+        : { stale: false, reasons: [] },
+    };
+  }
+
   function getDraftRow(db, draftId) {
     const id = Number(draftId);
     if (!Number.isFinite(id)) return null;
@@ -230,7 +289,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
    * (缺图/0 张/超限校验)→ H3 编译(复用 h3PromptCompiler 的 bundle 与技能代理)→
    * 确定性校验 → 固化快照/参数/指纹 → INSERT。
    */
-  async function compileDraft(db, cfg, log, { storyboardId, videoConfigId } = {}) {
+  async function compileDraft(db, cfg, log, { storyboardId, videoConfigId, workflowId } = {}) {
     const compile = resolveCompileFn();
     const storyboard = storyboardRow(db, storyboardId);
     if (!storyboard) {
@@ -259,7 +318,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
       throw draftError('REFERENCE_COUNT_OVERFLOW', `参考图槽位共 ${total} 个,超出上限 ${H3_MAX_SLOTS} 张,请减少绑定后重试`, { total, maxSlots: H3_MAX_SLOTS });
     }
 
-    const runtime = resolveVideoRuntime(db, videoConfigId);
+    const runtime = resolveVideoRuntime(db, videoConfigId, { workflowId });
     const params = deriveGenerationParams(storyboard, runtime);
     const sourceSlotsFingerprint = slotsFingerprint(slots);
     const skillVersion = COMPILER_VERSION;
@@ -301,15 +360,16 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     const info = db.transaction(() => {
       const insertInfo = db.prepare(
         `INSERT INTO storyboard_h3_prompt_drafts (
-           storyboard_id, video_config_id, source_prompt, source_fingerprint,
+           storyboard_id, video_config_id, workflow_id, source_prompt, source_fingerprint,
            ai_compiled_prompt, final_compiled_prompt, compiled_prompt_hash,
            prompt_format, skill_version, skill_provenance,
            reference_snapshot, generation_params, manually_edited, status,
            validation_errors, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'valid', NULL, ?, ?)`
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'valid', NULL, ?, ?)`
       ).run(
         storyboard.id,
         configIdValue,
+        runtime.model,
         sourcePrompt,
         fingerprint,
         String(compiled?.compiledPrompt ?? ''),
@@ -325,14 +385,14 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
       );
       db.prepare(
         `DELETE FROM storyboard_h3_prompt_drafts
-         WHERE storyboard_id = ? AND video_config_id IS ?
+         WHERE storyboard_id = ? AND video_config_id IS ? AND workflow_id = ?
            AND id NOT IN (
              SELECT id FROM storyboard_h3_prompt_drafts
-             WHERE storyboard_id = ? AND video_config_id IS ?
+             WHERE storyboard_id = ? AND video_config_id IS ? AND workflow_id = ?
              ORDER BY updated_at DESC, id DESC
              LIMIT 10
            )`
-      ).run(storyboard.id, configIdValue, storyboard.id, configIdValue);
+      ).run(storyboard.id, configIdValue, runtime.model, storyboard.id, configIdValue, runtime.model);
       return insertInfo;
     })();
     return getDraftRow(db, info.lastInsertRowid);
@@ -418,7 +478,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
     const storedParams = parseJsonObject(draft.generation_params) || {};
     let runtime = null;
     try {
-      runtime = resolveVideoRuntime(db, draft.video_config_id);
+      runtime = resolveVideoRuntime(db, draft.video_config_id, { workflowId: draft.workflow_id });
     } catch (_) {
       runtime = null;
     }
@@ -463,6 +523,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null } = {})
   return {
     resolveVideoRuntime,
     getLatestDraft,
+    getLatestDraftResult,
     getDraftById: getDraftRow,
     compileDraft,
     saveDraftText,
@@ -483,8 +544,9 @@ module.exports = {
   createH3PromptDraftService,
   compileDraft: (db, cfg, log, options) => sharedService().compileDraft(db, cfg, log, options),
   getLatestDraft: (db, storyboardId, videoConfigId) => sharedService().getLatestDraft(db, storyboardId, videoConfigId),
+  getLatestDraftResult: (db, storyboardId, videoConfigId, workflowId) => sharedService().getLatestDraftResult(db, storyboardId, videoConfigId, workflowId),
   getDraftById: (db, draftId) => sharedService().getDraftById(db, draftId),
   saveDraftText: (db, options) => sharedService().saveDraftText(db, options),
   evaluateDraftFreshness: (db, draft) => sharedService().evaluateDraftFreshness(db, draft),
-  resolveVideoRuntime: (db, videoConfigId) => sharedService().resolveVideoRuntime(db, videoConfigId),
+  resolveVideoRuntime: (db, videoConfigId, options) => sharedService().resolveVideoRuntime(db, videoConfigId, options),
 };

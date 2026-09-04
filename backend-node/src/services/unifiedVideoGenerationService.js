@@ -12,6 +12,11 @@ const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
 const { readWorkflowTemplate } = require('../director/workflowRegistry');
 const { resolveRequestedWorkflow } = require('./videoWorkflowSelection');
 const { listWorkflowCatalog } = require('../director/workflowCatalog');
+const {
+  workflowRequiresDraft,
+  resolveWorkflowParameters,
+  validateWorkflowReferences,
+} = require('../director/workflowExecutionPolicy');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -158,7 +163,7 @@ function createUnifiedVideoGenerationService({
 
   // H3 草稿门禁依赖:按 id 取草稿 + 失效评估(不编译,无 AI 依赖)。
   // workflowRegistry 与本服务收到的是同一实例,保证草稿快照/指纹与生成解析同形状。
-  const h3Drafts = h3PromptDraftService || createH3PromptDraftService({ workflowRegistry });
+  const h3Drafts = h3PromptDraftService || createH3PromptDraftService({ workflowRegistry, allowExperimental });
 
   function tableHasColumn(table, column) {
     try { return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column); } catch (_) { return false; }
@@ -668,7 +673,7 @@ function inputFor(row) {
    * 错误语义:H3_DRAFT_REQUIRED / DRAFT_NOT_FOUND / H3_DRAFT_STORYBOARD_MISMATCH → 400;
    * H3_DRAFT_CONFIG_MISMATCH / H3_DRAFT_STALE / H3_DRAFT_INVALID / H3_DRAFT_HASH_MISMATCH → 409。
    */
-  function requireH3PromptDraft(input, resolved, storyboardId) {
+  function requireH3PromptDraft(input, resolved, storyboardId, workflow = null) {
     const draftId = input.h3_prompt_draft_id ?? input.h3PromptDraftId;
     if (draftId == null || String(draftId).trim() === '') {
       throw new VideoLifecycleError(
@@ -695,6 +700,14 @@ function inputFor(row) {
         '提示词草稿与当前视频配置不一致,请重新生成 H3 提示词',
         409,
         { draft_video_config_id: draft.video_config_id ?? null, video_config_id: resolved.config.id },
+      );
+    }
+    if (workflow && String(draft.workflow_id || '') !== String(workflow.id)) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_WORKFLOW_MISMATCH',
+        '提示词草稿属于其他工作流，请重新生成',
+        409,
+        { draft_workflow_id: draft.workflow_id || null, workflow_id: workflow.id },
       );
     }
     // 时长一致性门禁:草稿按分镜行时长编译并固化在 generation_params.durationSeconds,
@@ -786,20 +799,21 @@ function inputFor(row) {
     const sourcePrompt = appendStyle(input.prompt, input.style);
     let prompt = sourcePrompt;
     let compiled = null;
-    if (isH3VideoConfig(resolved)) {
+    const requiresDraft = workflow ? workflowRequiresDraft(workflow) : isH3VideoConfig(resolved);
+    if (requiresDraft) {
       // H3 分支不再内部编译:消费草稿(spec §11.4)。非 H3 配置完全走旧路径(忽略 h3_prompt_draft_id)。
-      const gate = requireH3PromptDraft(input, resolved, storyboardId);
+      const gate = requireH3PromptDraft(input, resolved, storyboardId, workflow);
       prompt = gate.prompt;
       compiled = gate.compiled;
     }
     let planResult = null;
-    if (workflow?.adapter) {
-      // H3 参考图上限统一在这里校验（方舟侧最多取 9 张）：>9 直接报错，而不是静默截断。
-      if (isH3VideoConfig(resolved) && refs.length > 9) {
-        const error = new Error('参考图数量超出上限（1-9 张），请移除部分参考图后重试');
-        error.code = 'VIDEO_REFERENCE_COUNT_INVALID';
-        throw error;
-      }
+    let resolvedParameters = null;
+    if (workflow) {
+      validateWorkflowReferences(workflow, refs);
+      resolvedParameters = resolveWorkflowParameters(workflow, { ...input, duration }, resolved.config);
+      duration = resolvedParameters.durationSeconds;
+    }
+    if (workflow?.adapter && workflow.execution?.promptContract === 'h3_director_v1') {
       planResult = buildVideoGenerationPlan({
         prompt,
         negativePrompt: input.negativePrompt ?? input.negative_prompt,
@@ -808,14 +822,14 @@ function inputFor(row) {
         generation_mode: input.generation_mode ?? input.generationMode,
         storyboard_id: storyboardId,
         continuity_enabled: false,
-        width: input.width ?? settings.width ?? 864,
-        height: input.height ?? settings.height ?? 480,
-        durationSeconds: duration || 5,
-        frameRate: input.frame_rate ?? input.frameRate ?? settings.frame_rate ?? 24,
-        seed: input.seed ?? settings.seed ?? 42,
+        width: resolvedParameters.width,
+        height: resolvedParameters.height,
+        durationSeconds: resolvedParameters.durationSeconds,
+        frameRate: resolvedParameters.frameRate,
+        seed: resolvedParameters.seed,
       }, { workflowId: workflow.id });
     }
-    const planCommon = planResult?.plan?.common || null;
+    const planCommon = planResult?.plan?.common || resolvedParameters;
     if (planCommon) {
       duration = planCommon.durationSeconds;
     }

@@ -124,6 +124,7 @@ function createDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       storyboard_id INTEGER NOT NULL,
       video_config_id TEXT,
+      workflow_id TEXT,
       source_prompt TEXT,
       source_fingerprint TEXT,
       ai_compiled_prompt TEXT,
@@ -574,7 +575,20 @@ describe('storyboard h3 draft routes', () => {
     compileStub = makeStubCompileFn();
   });
 
-  function setup({ workflowRegistry = null } = {}) {
+  function workflow(id, requiresPromptDraft) {
+    return {
+      id, status: 'verified', variant: 'test', workflowSha256: `sha256:${id}`,
+      execution: {
+        promptContract: requiresPromptDraft ? 'h3_director_v1' : 'free_text_v1',
+        requiresPromptDraft,
+        dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+        references: { min: 0, max: 9 }, vramPolicy: requiresPromptDraft ? 'h3_estimate' : 'none',
+        defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+      },
+    };
+  }
+
+  function setup({ workflowRegistry = { workflows: [workflow('minimax-h3', true), workflow('old-model', false)] } } = {}) {
     draftService = createH3PromptDraftService({ compileFn: compileStub.compileFn, workflowRegistry });
     routes = storyboardRoutes(db, nullLog, { workflowRegistry, h3DraftCompileFn: compileStub.compileFn });
   }
@@ -592,7 +606,7 @@ describe('storyboard h3 draft routes', () => {
     const sbId = seedStoryboardWithSlots();
 
     const compileRes = responseCapture();
-    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: '7' } }, compileRes);
+    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: '7', workflow_id: 'minimax-h3' } }, compileRes);
 
     assert.equal(compileRes.statusCode, 200);
     assert.equal(compileRes.body.success, true);
@@ -603,7 +617,7 @@ describe('storyboard h3 draft routes', () => {
     assert.deepEqual(compileRes.body.data.freshness, { stale: false, reasons: [] });
 
     const getRes = responseCapture();
-    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7' } }, getRes);
+    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7', workflow_id: 'minimax-h3' } }, getRes);
 
     assert.equal(getRes.statusCode, 200);
     assert.equal(getRes.body.data.draft.id, compiledDraft.id);
@@ -617,7 +631,7 @@ describe('storyboard h3 draft routes', () => {
     const sbId = seedStoryboardWithSlots();
 
     const res = responseCapture();
-    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7' } }, res);
+    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7', workflow_id: 'minimax-h3' } }, res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.draft, null);
@@ -632,7 +646,7 @@ describe('storyboard h3 draft routes', () => {
     db.prepare('UPDATE storyboards SET universal_segment_text = ? WHERE id = ?').run('新的剧情', sbId);
 
     const res = responseCapture();
-    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7' } }, res);
+    routes.h3PromptDraftGet({ params: { id: String(sbId) }, query: { video_config_id: '7', workflow_id: 'minimax-h3' } }, res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.freshness.stale, true);
@@ -660,7 +674,7 @@ describe('storyboard h3 draft routes', () => {
     const sbId = seedStoryboardWithSlots();
 
     const res = responseCapture();
-    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: String(legacyConfigId) } }, res);
+    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: String(legacyConfigId), workflow_id: 'old-model' } }, res);
 
     assert.equal(res.statusCode, 400);
     assert.equal(res.body.error.code, 'H3_CONFIG_REQUIRED');
@@ -741,7 +755,7 @@ describe('storyboard h3 draft routes', () => {
   it('routes forward the injected workflow registry into draft compilation snapshots', async () => {
     const workflowRegistry = {
       workflows: [
-        { id: 'minimax-h3', status: 'verified', variant: 'r2v', workflowSha256: 'sha256:route-registry' },
+        { ...workflow('minimax-h3', true), variant: 'r2v', workflowSha256: 'sha256:route-registry' },
       ],
     };
     setup({ workflowRegistry });
@@ -749,7 +763,7 @@ describe('storyboard h3 draft routes', () => {
     const sbId = seedStoryboardWithSlots();
 
     const res = responseCapture();
-    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: '7' } }, res);
+    await routes.h3PromptDraftCompile({ params: { id: String(sbId) }, body: { video_config_id: '7', workflow_id: 'minimax-h3' } }, res);
 
     assert.equal(res.statusCode, 200);
     const params = JSON.parse(res.body.data.draft.generation_params);

@@ -470,6 +470,7 @@ function stubH3DraftService(db) {
       id: Number(id),
       storyboard_id: null,
       video_config_id: String(configId),
+      workflow_id: 'h3-continuity-v1',
       source_prompt: 'raw',
       final_compiled_prompt: finalPrompt,
       compiled_prompt_hash: require('node:crypto').createHash('sha256').update(finalPrompt).digest('hex'),
@@ -495,6 +496,12 @@ describe('unified video generation: reference count limit unification', () => {
       id: 'h3-continuity-v1',
       adapter: 'comfyui',
       capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false },
+      execution: {
+        promptContract: 'h3_director_v1', requiresPromptDraft: true,
+        dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+        references: { min: 1, max: 9 }, vramPolicy: 'h3_estimate',
+        defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+      },
     };
     const service = buildTestService(db, {
       h3PromptDraftService: stubH3DraftService(db),
@@ -524,6 +531,12 @@ describe('unified video generation: reference count limit unification', () => {
       id: 'h3-continuity-v1',
       adapter: 'comfyui',
       capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false },
+      execution: {
+        promptContract: 'h3_director_v1', requiresPromptDraft: true,
+        dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+        references: { min: 1, max: 9 }, vramPolicy: 'h3_estimate',
+        defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+      },
     };
     const service = buildTestService(db, {
       h3PromptDraftService: stubH3DraftService(db),

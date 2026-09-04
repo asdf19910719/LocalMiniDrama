@@ -67,7 +67,10 @@ function setupRouter(cfg, db, log) {
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
   // H3 提示词草稿路由与 unified 服务共用同一注册表实例(Task 16 交接①),
   // 保证草稿快照/指纹与候选生成的解析形状一致,否则门禁恒判 stale。
-  const storyboards = storyboardRoutes(db, log, { workflowRegistry: directorRegistry });
+  const storyboards = storyboardRoutes(db, log, {
+    workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
+  });
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
   const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
