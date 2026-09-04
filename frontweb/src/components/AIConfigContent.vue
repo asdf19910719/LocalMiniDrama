@@ -1267,8 +1267,8 @@ const form = ref({
   kling_access_key: '',
   kling_secret_key: '',
   kling_secret_key_base64: false,
-  width: 1280,
-  height: 704,
+  width: 1312,
+  height: 736,
   // TTS 专属字段
   voice_id: '',
   group_id: '',
@@ -1870,8 +1870,8 @@ function resetForm() {
     kling_access_key: '',
     kling_secret_key: '',
     kling_secret_key_base64: false,
-    width: 1280,
-    height: 704,
+    width: 1312,
+    height: 736,
   }
   formRef.value?.resetFields?.()
 }
@@ -1892,8 +1892,8 @@ function openEdit(row) {
   let kling_access_key = ''
   let kling_secret_key = ''
   let kling_secret_key_base64 = false
-  let width = 1280
-  let height = 704
+  let width = 1312
+  let height = 736
   const deepseekSettings = resolveDeepSeekFormSettings(row)
   if (row.settings) {
     try {

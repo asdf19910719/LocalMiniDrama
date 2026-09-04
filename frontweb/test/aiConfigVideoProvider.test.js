@@ -14,8 +14,8 @@ test('supplies ComfyUI local defaults with a workflow selector and 32-aligned nu
     base_url: 'http://127.0.0.1:8188',
     modelText: 'h3-continuity-v1',
     default_model: 'h3-continuity-v1',
-    width: 1280,
-    height: 704,
+    width: 1312,
+    height: 736,
   })
   assert.equal(isApiKeyRequired({ service_type: 'video', provider: 'comfyui' }), false)
 })

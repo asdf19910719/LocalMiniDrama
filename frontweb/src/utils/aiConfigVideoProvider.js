@@ -14,8 +14,8 @@ export function comfyuiConfigDefaults(workflows = []) {
     base_url: COMFYUI_DEFAULT_BASE_URL,
     modelText: workflow,
     default_model: workflow,
-    width: 1280,
-    height: 704,
+    width: 1312,
+    height: 736,
   }
 }
 

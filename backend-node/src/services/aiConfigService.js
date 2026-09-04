@@ -33,8 +33,8 @@ function parseSettings(settings) {
 function normalizeComfyuiSettings(settings) {
   const parsed = parseSettings(settings);
   const dimensions = validateH3Dimensions({
-    width: parsed.width ?? 1280,
-    height: parsed.height ?? 704,
+    width: parsed.width ?? 1312,
+    height: parsed.height ?? 736,
   });
   return JSON.stringify({ ...parsed, ...dimensions });
 }

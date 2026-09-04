@@ -69,6 +69,20 @@ test('creates a ComfyUI video config with an empty key, local URL, workflow, and
   assert.deepEqual(JSON.parse(config.settings), { width: 1280, height: 704 });
 });
 
+test('defaults a new ComfyUI video config to the higher 32-aligned base resolution', () => {
+  const db = createDb();
+  const config = aiConfigService.createConfig(db, log, {
+    service_type: 'video',
+    provider: 'comfyui',
+    name: 'ComfyUI 视频',
+    model: ['minimax_h3_director_r2v'],
+    default_model: 'minimax_h3_director_r2v',
+    is_default: true,
+  });
+
+  assert.deepEqual(JSON.parse(config.settings), { width: 1312, height: 736 });
+});
+
 test('uses the shared ComfyUI provider for a read-only connection check and returns Chinese checks', async () => {
   const calls = [];
   const routes = aiConfigRoutes(createDb(), log, {}, {

@@ -56,8 +56,8 @@ test('builds a structured Director request from creator-facing fields', () => {
 
 test('uses the unified numeric video dimensions when legacy Director callers omit them', () => {
   const request = buildStructuredDirectorGenerationRequest({ promptText: '雾中灯塔' })
-  assert.equal(request.structured.width, 1280)
-  assert.equal(request.structured.height, 704)
+  assert.equal(request.structured.width, 1312)
+  assert.equal(request.structured.height, 736)
 })
 
 test('builds a validated Director generation request from panel fields', () => {

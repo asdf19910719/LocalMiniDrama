@@ -157,8 +157,8 @@ test('preserves the normal editor generation context in the unified candidate pa
     structured: {
       prompt: '未保存的全能片段提示词',
       negativePrompt: '',
-      width: 1280,
-      height: 704,
+      width: 1312,
+      height: 736,
       durationSeconds: 7,
       frameRate: 24,
       seed: 42,

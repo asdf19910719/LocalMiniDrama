@@ -270,8 +270,8 @@ export function buildVideoCandidateRequest(form = {}, overrides = {}) {
   const structured = {
     prompt,
     negativePrompt: trimmed(form.negativePrompt),
-    width: positiveInteger(form.width ?? 1280, '宽度'),
-    height: positiveInteger(form.height ?? 704, '高度'),
+    width: positiveInteger(form.width ?? 1312, '宽度'),
+    height: positiveInteger(form.height ?? 736, '高度'),
     durationSeconds: positiveNumber(form.duration ?? 5, '时长'),
     frameRate: positiveNumber(form.frameRate ?? 24, '帧率'),
     seed: nonNegativeInteger(form.seed ?? 42, '随机种子'),
@@ -349,8 +349,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const form = reactive({
     prompt: '',
     negativePrompt: '',
-    width: 1280,
-    height: 704,
+    width: 1312,
+    height: 736,
     duration: 5,
     frameRate: 24,
     seed: 42,
@@ -702,8 +702,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   function applyConfigDefaults(config) {
     const settings = parseObject(config?.settings)
-    form.width = positiveDefault(settings.width, 1280)
-    form.height = positiveDefault(settings.height, 704)
+    form.width = positiveDefault(settings.width, 1312)
+    form.height = positiveDefault(settings.height, 736)
     form.frameRate = positiveDefault(settings.frame_rate ?? settings.frameRate, 24)
     form.seed = nonNegativeDefault(settings.seed, 42)
   }
