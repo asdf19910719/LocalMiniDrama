@@ -9,8 +9,9 @@ const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 const { createH3PromptCompiler } = require('./h3PromptCompiler');
 const { createH3PromptDraftService } = require('./h3PromptDraftService');
 const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
-const { selectWorkflow, readWorkflowTemplate } = require('../director/workflowRegistry');
+const { readWorkflowTemplate } = require('../director/workflowRegistry');
 const { resolveRequestedWorkflow } = require('./videoWorkflowSelection');
+const { listWorkflowCatalog } = require('../director/workflowCatalog');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -1010,9 +1011,44 @@ function inputFor(row) {
 
   function getVideoCapabilities() {
     const resolved = resolveDefaultVideoConfig(db);
-    const workflowId = resolved.model;
-    const workflow = resolved.provider === 'comfyui' && workflowRegistry && workflowId
-      ? selectWorkflow(workflowRegistry, workflowId, { allowExperimental: false })
+    if (resolved.provider !== 'comfyui' || !workflowRegistry) {
+      return {
+        provider: resolved.provider,
+        protocol: resolved.protocol,
+        model: resolved.model,
+        workflow: null,
+        defaultWorkflowStatus: 'not_applicable',
+        workflows: [],
+        capabilities: null,
+        connection: { status: 'unknown', inferenceStarted: false },
+      };
+    }
+    const catalog = listWorkflowCatalog(workflowRegistry, { allowExperimental });
+    const byId = new Map(catalog.map((item) => [item.id, item]));
+    const configuredIds = parseModelList(resolved.config.model);
+    const workflows = configuredIds.map((id) => {
+      const item = byId.get(id);
+      if (!item) {
+        return {
+          id,
+          status: 'missing',
+          selectable: false,
+          unavailableReason: 'WORKFLOW_NOT_FOUND',
+          default: id === resolved.model,
+          variant: null,
+          family: null,
+          adapter: null,
+          adapterVersion: null,
+          workflowSha256: null,
+          execution: null,
+          capabilities: null,
+        };
+      }
+      return { ...item, default: id === resolved.model };
+    });
+    const defaultItem = workflows.find((item) => item.default) || null;
+    const workflow = defaultItem?.selectable
+      ? workflowRegistry.workflows.find((entry) => entry.id === defaultItem.id) || null
       : null;
     const capabilities = workflow?.capabilities ? { ...workflow.capabilities } : {};
     if (workflow?.adapter) {
@@ -1029,10 +1065,17 @@ function inputFor(row) {
         status: workflow.status,
         variant: workflow.variant,
         sha256: workflow.workflowSha256,
+        execution: workflow.execution || null,
       } : null,
+      defaultWorkflowStatus: workflow ? 'available' : 'unavailable',
+      workflows,
       capabilities: Object.keys(capabilities).length ? capabilities : null,
       connection: { status: 'unknown', inferenceStarted: false },
     };
+  }
+
+  function getWorkflowCatalog() {
+    return { workflows: listWorkflowCatalog(workflowRegistry, { allowExperimental }) };
   }
 
   return {
@@ -1045,6 +1088,7 @@ function inputFor(row) {
     processVideoGeneration,
     getVideoGeneration,
     getVideoCapabilities,
+    getWorkflowCatalog,
   };
 }
 

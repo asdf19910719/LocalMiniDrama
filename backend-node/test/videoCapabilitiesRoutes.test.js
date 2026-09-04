@@ -12,6 +12,20 @@ function responseCapture() {
 }
 
 describe('video capabilities route', () => {
+  it('returns the complete workflow catalog contract', () => {
+    const routes = videoRoutes({}, { error() {} }, {
+      lifecycleService: {
+        getWorkflowCatalog() {
+          return { workflows: [{ id: 'ready', selectable: true, unavailableReason: null }] };
+        },
+      },
+    });
+    const res = responseCapture();
+    routes.workflows({}, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.data.workflows[0].id, 'ready');
+  });
+
   it('returns the lifecycle capability contract without credentials', () => {
     const routes = videoRoutes({}, { error() {} }, {
       lifecycleService: {

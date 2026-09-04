@@ -360,6 +360,7 @@ function setupRouter(cfg, db, log) {
   // ---------- videos ----------
   r.get('/videos', videos.list);
   r.get('/videos/capabilities', videos.capabilities);
+  r.get('/videos/workflows', videos.workflows);
   r.post('/videos', videos.create);
   r.post('/videos/h3-preview', videos.h3Preview);
   r.post('/videos/image/:image_gen_id', videos.fromImage);

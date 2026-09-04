@@ -54,6 +54,21 @@ function routes(db, log, { providerRegistry, lifecycleService } = {}) {
       }
     },
 
+    workflows: (req, res) => {
+      try {
+        if (typeof lifecycle.getWorkflowCatalog !== 'function') {
+          const unavailable = new Error('VIDEO_WORKFLOW_CATALOG_UNAVAILABLE');
+          unavailable.code = 'VIDEO_WORKFLOW_CATALOG_UNAVAILABLE';
+          unavailable.status = 500;
+          throw unavailable;
+        }
+        response.success(res, lifecycle.getWorkflowCatalog());
+      } catch (error) {
+        log.error('videos workflows', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
     h3Preview: async (req, res) => {
       try {
         if (!lifecycle.previewH3Prompt) throw new Error('H3 prompt preview is not configured');

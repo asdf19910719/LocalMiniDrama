@@ -83,12 +83,12 @@
 - `listWorkflowCatalog(registry, { allowExperimental })` 保留 verified/configured/invalid，返回 selectable 与 unavailableReason。
 - capabilities 的 `workflows[]` 只按通道白名单映射；默认项不可用时接口仍成功。
 
-- [ ] 写目录测试覆盖三种状态与 execution 透传。
-- [ ] 写 capabilities 测试覆盖缺失默认项、configured 默认项与正常多项。
-- [ ] 运行并确认失败。
-- [ ] 实现 helper、路由和注入，不在构造列表前调用严格 select。
-- [ ] 运行两个测试文件及现有 capabilities 测试。
-- [ ] 提交 `feat: expose workflow catalog and resilient capabilities`。
+- [x] 写目录测试覆盖三种状态与 execution 透传。
+- [x] 写 capabilities 测试覆盖缺失默认项、configured 默认项与正常多项。
+- [x] 运行并确认失败。
+- [x] 实现 helper、路由和注入，不在构造列表前调用严格 select。
+- [x] 运行两个测试文件及现有 capabilities 测试。
+- [x] 提交 `feat: expose workflow catalog and resilient capabilities`。
 
 ### Task 4: ComfyUI 配置后端约束与逐项连接检查
 
