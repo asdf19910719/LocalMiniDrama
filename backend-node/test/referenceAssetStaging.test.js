@@ -75,6 +75,7 @@ describe('reference asset staging', () => {
 
   test('stages downloaded external-web images with the project director allowlist', async () => {
     const externalRoot = path.resolve('data', 'external-web');
+    fs.mkdirSync(externalRoot, { recursive: true });
     const sourceDir = fs.mkdtempSync(path.join(externalRoot, 'staging-test-'));
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ref-stage-out-'));
     const source = path.join(sourceDir, 'original.png');

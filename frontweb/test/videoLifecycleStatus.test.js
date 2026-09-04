@@ -46,6 +46,10 @@ test('restores the storyboard-bound video by local path instead of defaulting to
   }
 
   assert.equal(resolveSbVideoRecord({ id: 5, local_path: 'videos/chosen.mp4' }, videos)?.id, 11)
+  assert.deepEqual(
+    resolveSbVideoRecord({ id: 5, local_path: 'videos/older-than-page.mp4' }, videos),
+    { video_url: undefined, local_path: 'videos/older-than-page.mp4' },
+  )
 })
 
 test('labels candidate videos with chronological group and candidate numbers', () => {

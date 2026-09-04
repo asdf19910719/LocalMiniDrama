@@ -64,12 +64,18 @@ function executionTimingFromHistory(history) {
 function executionErrorFromHistory(history) {
   const failure = [...historyMessages(history)].reverse().find(([type]) => type === 'execution_error')?.[1];
   if (!failure) return null;
+  const exceptionType = String(failure.exception_type || '').trim();
+  const exceptionMessage = String(failure.exception_message || '').trim();
+  const message = exceptionType && exceptionMessage && !exceptionMessage.toLowerCase().includes(exceptionType.toLowerCase())
+    ? `${exceptionType}: ${exceptionMessage}`
+    : (exceptionMessage || exceptionType || 'ComfyUI workflow failed');
   return {
     code: 'COMFYUI_WORKFLOW_FAILED',
-    message: String(failure.exception_message || failure.exception_type || 'ComfyUI workflow failed'),
+    message,
     details: {
       nodeId: failure.node_id == null ? null : String(failure.node_id),
       nodeType: failure.node_type || null,
+      exceptionType: exceptionType || null,
     },
   };
 }

@@ -333,22 +333,46 @@ function inputFor(row) {
     if (String(row?.provider || '').trim().toLowerCase() !== 'comfyui') return false;
     const code = String(error?.code || '').trim();
     const message = String(error?.message || error || '').trim();
-    return /fault failed|out of memory|cuda(?: error| out of memory)?|inference failed|comfyui execution failed/i.test(`${code} ${message}`);
+    const details = error?.details && typeof error.details === 'object' ? JSON.stringify(error.details) : '';
+    return /fault failed|out[ _-]?of[ _-]?memory|outofmemoryerror|\boom\b|cuda(?: error| out of memory)?|inference failed|comfyui execution failed/i.test(`${code} ${message} ${details}`);
+  }
+
+  function transientRetryMarker(retryCount, retryAt) {
+    return JSON.stringify({
+      code: 'COMFYUI_TRANSIENT_RETRY_PENDING',
+      message: 'ComfyUI 瞬时失败，等待自动重新提交',
+      retryCount,
+      retryAt,
+    });
+  }
+
+  function parseTransientRetryMarker(value) {
+    const parsed = parseJsonObject(value);
+    if (parsed?.code !== 'COMFYUI_TRANSIENT_RETRY_PENDING') return null;
+    const retryCount = Number(parsed.retryCount);
+    const retryAtMs = Date.parse(parsed.retryAt);
+    if (!Number.isInteger(retryCount) || retryCount < 1) return null;
+    return {
+      retryCount,
+      retryAtMs: Number.isFinite(retryAtMs) ? retryAtMs : Date.now(),
+    };
   }
 
   function requeueTransientComfyFailure(row, error, stage) {
     const count = transientRetryCount.get(row.id) || 0;
     if (!isTransientComfyExecutionError(row, error) || count >= transientRetryLimit) return false;
-    transientRetryCount.set(row.id, count + 1);
+    const retryCount = count + 1;
+    const retryAt = new Date(Date.now() + transientRetryDelayMs).toISOString();
+    transientRetryCount.set(row.id, retryCount);
     setState(row, 'queued', 1, 'ComfyUI 执行瞬时失败（显存/内存波动），90 秒后自动重新提交', {
-      error_msg: null,
+      error_msg: transientRetryMarker(retryCount, retryAt),
       completed_at: null,
       provider_task_id: null,
     });
     log.warn('Transient ComfyUI execution failure, requeued', {
       videoGenerationId: row.id,
       stage,
-      retry: count + 1,
+      retry: retryCount,
       message: error?.message || String(error),
     });
     enqueueOperation(row.id, 'submit', transientRetryDelayMs);
@@ -964,6 +988,15 @@ function inputFor(row) {
       } else if (row.status === 'waiting') {
         updateAsyncTask(row, 'waiting', 0, '等待恢复视频生成');
         enqueueOperation(row.id, 'submit');
+      } else if (row.status === 'queued') {
+        const marker = parseTransientRetryMarker(row.error_msg);
+        if (marker && marker.retryCount <= transientRetryLimit) {
+          transientRetryCount.set(row.id, marker.retryCount);
+          updateAsyncTask(row, 'queued', 1, '正在恢复 ComfyUI 自动重试');
+          enqueueOperation(row.id, 'submit', Math.max(0, marker.retryAtMs - Date.now()));
+        } else {
+          persistFailure(row, new Error('服务重启后缺少上游任务 ID，无法恢复'), 'recover', 'interrupted', 'VIDEO_EXECUTION_INTERRUPTED');
+        }
       } else {
         persistFailure(row, new Error('服务重启后缺少上游任务 ID，无法恢复'), 'recover', 'interrupted', 'VIDEO_EXECUTION_INTERRUPTED');
       }

@@ -145,6 +145,11 @@ export function resolveSbVideoRecord(sb, videosBySbId) {
       const byPath = list.find((v) => v.local_path && (v.local_path === lp || sb.video_url.includes(v.local_path)))
       if (byPath) return byPath
     }
+    // The bound row may be older than the paginated history. Preserve the
+    // storyboard's authoritative path instead of silently showing list[0].
+    if (sb.video_url || sb.local_path) {
+      return { video_url: sb.video_url, local_path: sb.local_path }
+    }
     return list[0]
   }
   if (sb.video_url || sb.local_path) {

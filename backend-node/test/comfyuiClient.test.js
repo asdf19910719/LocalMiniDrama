@@ -245,4 +245,29 @@ describe('ComfyUI Director client', () => {
       completedAt: '2026-09-04T04:19:00.244Z',
     });
   });
+
+  it('preserves the ComfyUI exception type when the message alone does not identify OOM', async () => {
+    const client = createComfyUIClient({
+      baseUrl: 'http://oom-comfy.test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        'prompt-oom': {
+          status: {
+            status_str: 'error',
+            completed: false,
+            messages: [['execution_error', {
+              prompt_id: 'prompt-oom',
+              exception_type: 'OutOfMemoryError',
+              exception_message: 'Allocation on device failed',
+              node_type: 'RTXVideoSuperResolution',
+            }]],
+          },
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const result = await client.getPromptStatus('prompt-oom');
+
+    assert.equal(result.error.message, 'OutOfMemoryError: Allocation on device failed');
+    assert.equal(result.error.details.exceptionType, 'OutOfMemoryError');
+  });
 });

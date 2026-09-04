@@ -155,6 +155,7 @@ function replaceDefaultConfig(db) {
 
 function createHarness({ submit = [], query = [], recover = [] } = {}) {
   const jobs = [];
+  const delays = [];
   const calls = { submit: [], query: [], recover: [], cancel: [] };
   const queues = {
     submit: [...submit],
@@ -197,10 +198,12 @@ function createHarness({ submit = [], query = [], recover = [] } = {}) {
   return {
     calls,
     jobs,
+    delays,
     provider,
     registry,
-    schedule(job) {
+    schedule(job, delay = 0) {
       jobs.push(job);
+      delays.push(delay);
     },
     async runNext() {
       const job = jobs.shift();
@@ -360,12 +363,49 @@ describe('unified video generation lifecycle', () => {
     let row = service.getVideoGeneration(created.id);
     assert.equal(row.status, 'queued');
     assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, null);
-    assert.equal(row.error_msg, null);
+    assert.equal(JSON.parse(db.prepare('SELECT error_msg FROM video_generations WHERE id = ?').get(created.id).error_msg).code, 'COMFYUI_TRANSIENT_RETRY_PENDING');
 
     await harness.runNext();
     row = service.getVideoGeneration(created.id);
     assert.equal(row.status, 'running');
     assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, 'attempt-2');
+    db.close();
+  });
+
+  it('persists a pending ComfyUI retry across restart and keeps the one-retry limit', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const firstHarness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'attempt-1', progress: 0 }],
+      query: [{
+        status: 'failed', providerTaskId: 'attempt-1', progress: 100,
+        output: { error: { code: 'COMFYUI_WORKFLOW_FAILED', message: 'OOM' } },
+      }],
+    });
+    firstHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return firstHarness.provider; },
+    };
+    const firstService = buildService(db, firstHarness);
+    const created = await firstService.createVideoGeneration({ prompt: 'restart-safe retry' });
+    await firstHarness.runNext();
+    await firstHarness.runNext();
+
+    assert.equal(firstService.getVideoGeneration(created.id).status, 'queued');
+    assert.equal(firstHarness.delays.at(-1), 90000);
+
+    const restartedHarness = createHarness({ submit: [new Error('OutOfMemoryError: allocation failed')] });
+    restartedHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return restartedHarness.provider; },
+    };
+    const restartedService = buildService(db, restartedHarness);
+    await restartedService.recoverVideoGenerations();
+    await restartedHarness.runNext();
+
+    assert.equal(restartedHarness.calls.submit.length, 1);
+    assert.equal(restartedService.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(restartedHarness.jobs.length, 0);
     db.close();
   });
 
