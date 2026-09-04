@@ -1,189 +1,261 @@
-# 同通道 ComfyUI 工作流切换设计
+# 同通道 ComfyUI 工作流切换设计（修订版）
 
 日期：2026-09-04
 
-## 1. 背景
+## 1. 目标与范围
 
-项目已通过统一视频生成 Provider 架构（见 `2026-08-25-unified-video-generation-provider-design.md`）把本地 ComfyUI 接入为标准视频通道。当前一条 ComfyUI 通道同一时刻只实际使用一个工作流（官方 MiniMax H3 Director R2V）。用户需要在**同一条通道**内方便地切换不同的 ComfyUI 视频工作流，例如从官方生成工作流切换到社区"二采"（二次采样/多阶段采样，如 Zealman U06 lightX2v、latent upscaler 变体）工作流。
+一条 ComfyUI 视频通道可以声明多个经过注册表治理的工作流，用户在每次生成时选择其中一个。切换不改变默认通道，不影响已创建任务；运行、重试和恢复始终使用创建时快照。
 
-## 2. 现状分析（业务逻辑链路）
+本次同时消除原方案中四类风险：
 
-### 2.1 通道与工作流的关系
+1. 不再用 `adapter` 或工作流名称猜测 H3 行为；
+2. `configured` 工作流是否可提交与全局实验开关保持一致；
+3. 存量 NULL 草稿不再被解释为“当前默认工作流”；
+4. ComfyUI Provider 的尺寸、显存、参考图和提示词校验按工作流执行契约分派，不再无条件执行 H3 规则。
 
-- **通道** = `ai_service_configs` 表中 `service_type='video'` 且 `is_default=1` 的唯一配置行。ComfyUI 通道的字段：
-  - `provider='comfyui'`，`base_url` 指向本机 ComfyUI（默认 `http://127.0.0.1:8188`）。
-  - `model`：JSON 数组，语义上是"该通道声明的工作流 ID 列表"。
-  - `default_model`：默认工作流 ID。
-  - `settings`：width/height/frame_rate/seed/vram_budget_mb 等。
-- **工作流注册表** `configs/director-workflows.json`（`loadRegistry`）：每个工作流 = ComfyUI API 格式 JSON 文件 + 治理元数据（status `verified/configured/invalid`、workflowSha256、requiredNodes、modelFiles、customNodes、inputSchema、provenance、runtimeLock、verifiedEvidence；可选 adapter 元数据 family/adapter/variant/capabilities/inputSchemaVersion）。`selectWorkflow` 强制状态门禁（invalid 拒绝；configured 需 `allow_experimental`）。
-- **适配器** `src/director/adapters/`：把统一输入映射为具体工作流图的 prompt。注册表 entry 的 `adapter` 字段指向适配器 ID；无 adapter 的 entry 走 `buildStructuredWorkflowPrompt` 通用路径（要求图中有 `MiniMaxH3Director` 节点）。
+本次交付工作流切换基础设施，并以现有两个注册表工作流完成真实切换回归。新社区二采工作流仍需提供其 API JSON、模型和自定义节点锁定信息；若图结构不同，还需提供对应 adapter。缺少这些外部材料时不得伪造生产注册表条目。
 
-### 2.2 生成链路
+## 2. 已确认的现状与痛点
 
-```text
-前端视频面板（普通/画布共用）
-  → POST /api/videos（或 director 候选路由 → 同一服务）
-  → createVideoGeneration
-      resolveDefaultVideoConfig：唯一默认通道；input.model 必须在通道 model 列表内
-      selectWorkflow：按 requestedWorkflowId(=显式 workflow_id || model) 取注册表 entry
-      buildVideoGenerationPlan：生成 planHash
-      buildVideoConfigSnapshot：快照（workflowId/workflowSha256/variant/adapter/sage/planHash/settings，不含密钥）
-      → INSERT video_generations（状态 waiting）→ 异步 submit
-  → comfyuiVideoProvider.submit
-      workflowIdFor(context)：快照 workflowId || model || settings.workflow_id || default_model
-      readWorkflowTemplate → （有 adapter：参考图 staging → adapter.validate/buildPrompt；
-                              无 adapter：buildStructuredWorkflowPrompt）
-      → GPU 互斥租约 → POST ComfyUI /prompt → promptId
-  → 轮询 getPromptStatus → completed 时 downloadOutput + ffprobe → persistReview（候选组挂产物）
-```
+- 默认视频通道由 `ai_service_configs` 中唯一的活动 `service_type='video' AND is_default=1` 行解析。
+- `model` 已是数组，resolver 已支持请求模型属于数组成员，但显式 `workflow_id` 仍被限制为等于解析出的 model。
+- AI 配置页把 ComfyUI 工作流硬编码为 `minimax_h3_director_r2v`，生成面板也存在相同硬编码默认值。
+- capabilities 只报告默认工作流；测试连接只取 `model[0]`。
+- H3 判定在前后端重复使用名称匹配，草稿只按 `(storyboard_id, video_config_id)` 区分。
+- ComfyUI Provider 与配置保存当前无条件使用 H3 尺寸/显存规则，不能正确承载一般 adapter 工作流。
+- 当前注册脚本方案若对解析后的对象做 `JSON.stringify` 再计算 SHA，会与注册表按文件原始字节校验的口径不一致。
 
-取消/重试/恢复全部基于创建时快照，通道或工作流后续变更不影响运行中任务。
+## 3. 方案选择
 
-### 2.3 H3 专属链路（草稿门禁）
+采用方案 A：通道工作流白名单 + 注册表目录 + 请求级选择 + 工作流级草稿。
 
-- `isH3VideoConfig`（unifiedVideoGenerationService）：按**硬编码模型名**判定（`h3-continuity-v1`、`minimax_h3_director_r2v`、名字含 `minimaxh3`/`minimax-h3`，或协议 `minimax_h3`）。前端 `videoModeCompatibility.isH3ComfyUiConfig`、`useVideoGenerationPanel` 重复同一硬编码。
-- H3 配置的候选生成必须先有提示词草稿（`storyboard_h3_prompt_drafts` 表，按 `(storyboard_id, video_config_id)` 配对存取）。草稿源指纹包含 `workflowSha`；失效评估 `evaluateDraftFreshness` 重解析 runtime 时**只用通道 default_model**，不感知请求级别的工作流。
-- 草稿三个端点（`/storyboards/:id/h3-prompt-draft*`）只接收 `video_config_id`。
+- 通道 `model` 是允许集合，`default_model` 是集合内默认项。
+- 注册表是工作流定义、执行契约和治理状态的唯一来源。
+- 请求只选择通道允许且当前可提交的注册表成员。
+- 快照同时记录实际 `model` 与 `workflowId`，两者在 ComfyUI 场景必须一致。
 
-### 2.4 当前切换工作流的方式与痛点
+不采用“每个工作流一个通道”作为主路径。它技术上仍可维持唯一默认通道，但会重复维护 base URL/凭据/连接设置，而且不能满足按次选择。也不允许绕过通道白名单直接选择任意注册表条目。
 
-切换 = 手工改注册表 JSON（算 SHA-256、数节点、写治理元数据）→ 改通道 `model`/`default_model`（前端下拉硬编码只有 `minimax_h3_director_r2v` 一个选项）→ H3 草稿全部失效需重编译。痛点：
+## 4. 注册表执行契约
 
-1. 前端 ComfyUI 预设模型列表硬编码（AIConfigContent.vue），无法选择注册表中的其他工作流。
-2. 注册新工作流全靠手工，SHA/节点清单易错。
-3. 后端 `resolveDefaultVideoConfig` 其实已支持"input.model 取通道 model 列表内任意成员"，但 `createVideoGeneration` 的守卫要求显式 `workflow_id` 必须等于解析出的 model，且 `getVideoCapabilities` 只回报默认工作流——同通道"每次生成可选工作流"没有打通。
-4. H3 判定与草稿门禁绑定"配置"维度，同通道多工作流时草稿无法区分工作流（存在草稿按默认工作流编译、却按另一工作流提交的缝隙）。
-5. 测试连接只校验 `model[0]`。
-
-## 3. 目标与非目标
-
-**目标**
-
-1. 同一条 ComfyUI 通道可声明多个工作流；生成时可在面板里下拉切换（缺省用 `default_model`）。
-2. 工作流选项由注册表驱动，AI 配置页与生成面板不再硬编码。
-3. H3 判定、草稿编译、门禁、失效评估全部感知工作流维度。
-4. 新工作流（如二采）接入有辅助脚本生成注册表 entry 骨架。
-5. 保持既有治理：快照隔离、状态门禁、SHA 校验、GPU 互斥、中文错误。
-
-**非目标**
-
-1. 不做跨 Provider 切换（ComfyUI ↔ 云端），维持"唯一默认配置"规则。
-2. 不实现具体二采工作流的 adapter 本体（属于每个新工作流族的独立工作，本设计给出扩展指南）。
-3. 不改运行中任务的快照语义。
-4. 不引入注册表热重载（后端重启加载，与现状一致）。
-
-## 4. 方案选择
-
-**方案 A（采纳）：通道声明工作流集合 + 注册表驱动目录 + 每次生成可选 + 草稿按工作流绑定**
-
-通道 `model` 列表即"本通道允许的工作流白名单"，`default_model` 为默认；生成请求可带 `workflow_id`（或 `model`）选择集合内成员；快照记录实际工作流；H3 草稿加 `workflow_id` 维度。
-
-- 优点：完全符合既有架构规则（"model 只能选择默认配置自身声明的模型"），快照/重试/恢复天然正确；切换成本 = 面板下拉；通道级白名单保留审计控制。
-- 缺点：草稿表需迁移；H3 面板切换工作流后需重编译草稿（正确性要求，非缺陷）。
-
-**方案 B（不采纳）：每个工作流一条通道，切换默认通道。** 违背"唯一默认配置"规则，base_url/settings 重复维护，无法按次选择。
-
-**方案 C（不采纳）：通道不管工作流，生成时任选注册表条目。** 失去通道级白名单与"model 只能选声明模型"的治理，注册表条目会直接暴露到所有入口。
-
-## 5. 产品规则
-
-1. 通道仍是唯一默认视频配置；`provider` 不参与请求路由。
-2. ComfyUI 通道的 `model` 列表 = 允许的工作流 ID 集合（至少 1 项）；`default_model` 必须属于该集合。
-3. 生成请求可携带 `workflow_id`/`workflowId`（或 `model`）：必须属于通道 model 列表、且通过注册表状态门禁；缺省用 `default_model`。非 ComfyUI 通道维持现状（不允许显式工作流）。
-4. 运行中任务不受通道与工作流切换影响（沿用快照）。
-5. H3 草稿按 `(storyboard, video_config, workflow)` 三元组存取；工作流不匹配的草稿不能用于提交（409，`H3_DRAFT_CONFIG_MISMATCH`）。
-6. H3 判定优先取注册表元数据（entry 有 `adapter` 或 `family='h3_director'`），旧模型名匹配仅作回退兼容。
-
-## 6. API 变更
-
-### 6.1 新增 `GET /api/videos/workflows`（工作流目录）
-
-返回注册表全部可选用工作流（供 AI 配置页与面板选择器）：
+每个工作流新增必填 `execution`：
 
 ```json
-{ "workflows": [ { "id", "status", "variant", "family", "adapter", "capabilities", "experimental" } ] }
+{
+  "promptContract": "h3_director_v1",
+  "requiresPromptDraft": true,
+  "dimensions": {
+    "minWidth": 32,
+    "maxWidth": 4096,
+    "minHeight": 32,
+    "maxHeight": 4096,
+    "multipleOf": 32
+  },
+  "references": { "min": 1, "max": 9 },
+  "vramPolicy": "h3_estimate",
+  "defaults": {
+    "width": 1312,
+    "height": 736,
+    "durationSeconds": 5,
+    "frameRate": 24,
+    "seed": 42
+  }
+}
 ```
 
-`invalid` 条目不返回；`configured` 条目带 `experimental: true`。
+支持的首版契约值：
 
-### 6.2 增强 `GET /api/videos/capabilities`
+- `promptContract`: `h3_director_v1` 或 `free_text_v1`；
+- `vramPolicy`: `h3_estimate` 或 `none`；
+- `dimensions.multipleOf`: 正整数，允许普通工作流声明自己的网格；
+- `references.min/max`: 工作流自己的参考图边界。
 
-在现有 `workflow`（默认工作流）基础上新增 `workflows[]`：通道 model 列表中能通过注册表解析的每个工作流（含 id/status/variant/adapter/capabilities、`default: true/false` 与 `h3: true/false`——按注册表元数据 adapter/family 判定）。解析失败（如已删档）的成员带 `status: 'unavailable'` 原因说明。
+`adapter` 只表示“如何把统一输入绑定到工作流图”，不再参与 H3 判定。H3 草稿门禁只看 `execution.requiresPromptDraft`，H3 结构校验只看 `execution.promptContract`。
 
-### 6.3 生成请求（`POST /api/videos` 与 director 候选路由）
+现有 `minimax_h3_director_r2v` 与 `h3-continuity-v1` 都补齐显式 H3 执行契约。注册表加载时拒绝缺少或非法的 execution；测试夹具也必须声明契约，避免隐式行为重新出现。
 
-- 显式 `workflow_id` 校验规则由"必须等于 resolved.model"放宽为"必须属于通道 model 列表"（仅 ComfyUI；非 ComfyUI 保持拒绝）。
-- 快照 `workflowId/workflowSha256/variant/adapter` 记录实际选中工作流（现有 `buildVideoConfigSnapshot` 已支持，无需改结构）。
+## 5. 唯一工作流解析
 
-### 6.4 H3 草稿端点
+新增统一解析 helper，供生成、草稿、capabilities 和测试连接复用：
 
-`GET/POST /storyboards/:id/h3-prompt-draft*` 增加可选 `workflow_id`（query/body）；缺省 = 通道 default_model。返回体 draft 增加 `workflow_id`。
+```text
+resolveRequestedWorkflow({ input, resolvedConfig, registry, allowExperimental })
+  -> { selectedWorkflowId, workflow, resolved }
+```
 
-## 7. 数据迁移
+规则：
 
-- `storyboard_h3_prompt_drafts` 新增列 `workflow_id TEXT`（`ensureColumns` 自动补列）。
-- 存量行 `workflow_id IS NULL` 的语义 = "通道当时的默认工作流"：
-  - `getLatestDraft(storyboardId, configId, workflowId)` 查询优先精确匹配 `workflow_id = ?`；无结果且请求工作流 = 通道 `default_model` 时回退匹配 `workflow_id IS NULL`（兼容存量）。
-  - 门禁 `requireH3PromptDraft`：`draft.workflow_id` 为 NULL 时按通道默认工作流解释，与请求工作流不一致 → `H3_DRAFT_CONFIG_MISMATCH`。
-- 新索引 `idx_h3_draft_lookup_wf (storyboard_id, video_config_id, workflow_id, updated_at DESC)`。
+1. 收集非空 `workflow_id`、`workflowId`、`model`。
+2. ComfyUI 请求中多个字段若值不相同，返回 400 `VIDEO_WORKFLOW_CONFLICT`。
+3. 缺省使用 `default_model`。
+4. 选中值必须属于通道 `model`，否则返回 `VIDEO_WORKFLOW_NOT_ALLOWED`。
+5. 工作流必须存在且状态可提交；`configured` 仅在 `allowExperimental=true` 时可提交。
+6. 返回的 `resolved.model`、数据库 `video_generations.model`、快照 `model` 与 `workflowId` 全部写实际选中 ID。
+7. 非 ComfyUI 通道继续允许 `model` 走既有 resolver，但拒绝 `workflow_id/workflowId`。
 
-## 8. 后端实现要点
+所有入口都使用同一 helper，不再各自拼接 `explicit || model || default`。
 
-1. `unifiedVideoGenerationService.createVideoGeneration`：
-   - 守卫改为成员校验：`explicitWorkflowId ∈ config.model`（ComfyUI）；`input.model` 路径不变（resolver 已校验成员）。
-   - `isH3VideoConfig` 增加注册表感知：传入已选 workflow entry，`entry.adapter != null || entry.family === 'h3_director'` → H3；无 entry 时回退旧名匹配。导出独立 helper `isH3WorkflowEntry(workflow)`。
-   - `getVideoCapabilities` 按 6.2 增强。
-2. `h3PromptDraftService`：
-   - `compileDraft({ ..., workflowId })`：`resolveVideoRuntime` 已支持 `{ workflowId }`，落行写 `workflow_id`；按 `(storyboard, config, workflow)` 保留最新 10 条。
-   - `getLatestDraft(db, storyboardId, configId, workflowId)`：按 §7 兼容策略。
-   - `evaluateDraftFreshness`：用 `draft.workflow_id ?? 通道 default_model` 重解析 runtime（消除"按默认工作流评估、按其他工作流提交"的缝隙）。
-   - `requireH3PromptDraft`（unified）：校验草稿 workflow 与请求实际工作流一致，不一致 → `H3_DRAFT_CONFIG_MISMATCH`（409，details 带两侧 workflow）。
-3. 路由：
-   - `videos.js` 新增 `workflows` 目录端点（数据来自 `workflowRegistry`，经 lifecycle 或直接注入 registry）。
-   - `storyboards.js` 三个草稿端点透传 `workflow_id`。
-   - `aiConfig.js` ComfyUI 测试连接：body 可带 `workflow`（默认用 `default_model`）——测试连接按指定工作流校验 SHA/节点/模型/显存。
+## 6. 参数与 Provider 分派
 
-## 9. 前端实现要点
+工作流有效参数按以下优先级合并：
 
-1. **AI 配置页（AIConfigContent.vue）**：ComfyUI 通道表单从 `GET /api/videos/workflows` 拉取工作流目录；`model` 改为多选（至少 1 项），`default_model` 下拉跟随所选集合；移除硬编码预设列表（保留回退：目录接口失败时显示手工输入）。
-2. **生成面板（useVideoGenerationPanel + VideoGenerationPanel.vue）**：
-   - `capabilities.workflows.length > 1` 时显示"工作流"下拉（默认 default_model）；切换后 `form.workflowId` 更新。
-   - 提交请求带 `workflowId`（现有 `buildVideoCandidateRequest` 已透传，`generationInput` 已映射 `workflow_id`）。
-   - H3 草稿拉取/编译参数带 `workflow_id`；切换工作流即按新工作流重新取草稿（草稿不存在时提示重新编译）。
-   - H3 判定优先 `capabilities.workflow.adapter/family`（`videoModeCompatibility` 扩展可选参数，保留旧名回退）。
-3. `h3Draft.js` API 客户端：三个方法增加可选 `workflowId` 参数。
+```text
+请求显式参数
+  > settings.workflow_overrides[selectedWorkflowId]
+  > 仅当 selectedWorkflowId == default_model 时的旧版平铺 settings
+  > workflow.execution.defaults
+```
 
-## 10. 新工作流接入指南（以二采为例）
+通道级 `base_url`、显存预算和连接信息继续共享。尺寸、时长、帧率、seed 等生成参数按工作流取值并写入任务行与快照。
 
-1. 准备 ComfyUI API 格式工作流 JSON（从 ComfyUI 网页"导出（API）"或社区模板，如 Zealman U06 V5）。
-2. 运行 `node scripts/registerComfyWorkflow.js <workflow.json> --id <workflow_id> [--family h3_director] [--adapter <id>]`：
-   - 自动计算 SHA-256、提取 `class_type` 节点清单（requiredNodes/customNodes 候选）、生成 entry 骨架（status=`configured`，需补 provenance/runtimeLock/verifiedEvidence 后手工改 `verified`）。
-3. 将 entry 加入 `configs/director-workflows.json`，重启后端。
-4. AI 配置页把新工作流 ID 加入通道 model 列表（可设为默认或保留官方为默认）。
-5. 测试连接（选定工作流）→ 生成面板下拉切换 → 生成。
-6. 若工作流图不含 `MiniMaxH3Director` 节点（拆散的二采图），需实现新 adapter：`adapters/<id>.js` 导出 `{ id, version, validate, buildPrompt, describeCapabilities }` 并在 `adapters/index.js` 注册；entry `adapter` 字段指向它。现有 `h3_director_r2v` 是参照实现。
+Provider 提交和测试连接按 execution 执行：
 
-## 11. 测试与验收
+- 使用通用参数校验器校验尺寸范围和倍数；
+- 仅 `vramPolicy='h3_estimate'` 调用现有 H3 显存估算；
+- 仅 `promptContract='h3_director_v1'` 校验 H3 提示词格式；
+- 参考图数量使用 `execution.references`；
+- 有 adapter 时调用 adapter；无 adapter 只保留现有 `MiniMaxH3Director` 通用绑定路径。
 
-后端（`node --test`）：
+一个非 H3 且图中没有 `MiniMaxH3Director` 的工作流必须注册 adapter；系统应在注册或连接检查阶段给出 `WORKFLOW_ADAPTER_REQUIRED`，不能等生成后才失败。
 
-1. 工作流目录端点：返回注册表条目、过滤 invalid、configured 标 experimental。
-2. capabilities.workflows：通道多工作流清单、default 标记、失效成员标记 unavailable。
-3. 每次生成选择：`workflow_id` ∈ model 列表 → 创建成功且快照 workflowId 正确；∉ 列表 → `VIDEO_WORKFLOW_NOT_ALLOWED`；非 ComfyUI 显式工作流仍拒绝。
-4. H3 判定：adapter/family 命中；无元数据回退旧名。
-5. 草稿工作流绑定：按 workflow 编译/取草稿；跨工作流提交 → 409 `H3_DRAFT_CONFIG_MISMATCH`；NULL 存量行回退语义；freshness 按草稿工作流解析。
-6. 现有 comfyui/h3/unified 测试全部保持通过。
+## 7. API 与可用性状态
 
-前端（`node --test`）：
+### 7.1 `GET /api/videos/workflows`
 
-1. 工作流选项派生（capabilities.workflows → 下拉选项、默认值）。
-2. H3 判定 helper 的 capabilities 优先/名称回退。
-3. 草稿请求参数带 workflow_id。
-4. 现有 videoGenerationPanel/videoModeCompatibility 测试保持通过；`npm run build` 通过。
+返回配置页目录，不隐藏 invalid/configured 项，而是提供可解释状态：
 
-## 12. 风险与兼容
+```json
+{
+  "workflows": [{
+    "id": "...",
+    "status": "verified",
+    "selectable": true,
+    "unavailableReason": null,
+    "variant": "...",
+    "family": "...",
+    "adapter": "...",
+    "execution": {},
+    "capabilities": {}
+  }]
+}
+```
 
-1. **存量草稿**：NULL workflow_id 回退策略保证老数据在默认工作流下继续可用；换工作流自然要求重编译（正确性）。
-2. **注册表条目失效**（文件被移动/删除导致 `loadRegistry` 抛错）：现状即启动失败，不因本设计改变；capabilities 对单个成员解析失败只标记该成员，不拖垮整个接口。
-3. **非 H3 工作流混入 H3 通道**：门禁按工作流维度判定，二采（无 adapter、非 h3 family）不会误走 H3 草稿链路。
-4. **provider.submit 的 H3 prompt 校验**：`comfyuiVideoProvider.submit` 中 H3 校验按 `selected.id === 'h3-continuity-v1' || model 名含 h3` 触发——改为按 `selected.adapter` 存在与 `isH3WorkflowEntry` 判定，与新目录一致。
+- `verified`: selectable；
+- `configured`: 仅全局实验开关开启时 selectable，否则禁用并返回 `WORKFLOW_EXPERIMENTAL_REQUIRED`；
+- `invalid`: 禁用并返回 `WORKFLOW_INVALID`。
+
+### 7.2 `GET /api/videos/capabilities`
+
+返回当前通道每个白名单成员的状态、执行契约和能力。构造列表时不先强制解析默认项；默认项缺失、invalid 或实验禁用时，接口仍返回完整诊断：
+
+```json
+{
+  "provider": "comfyui",
+  "model": "default-id",
+  "workflow": null,
+  "defaultWorkflowStatus": "unavailable",
+  "workflows": []
+}
+```
+
+注册表本身无法加载（JSON、文件或 SHA 治理错误）仍保持启动失败；`unavailable` 指通道白名单引用了注册表中不存在的 ID，而不是掩盖注册表损坏。
+
+### 7.3 配置保存
+
+后端在 create/update 时原子校验合并后的 ComfyUI 配置：
+
+- model 去空、去重且至少一项；
+- default_model 必须属于 model；
+- 每项必须存在于注册表；
+- invalid 永远拒绝；configured 在实验开关关闭时拒绝；
+- 错误不写入数据库。
+
+前端校验仅改善体验，不能替代后端约束。
+
+### 7.4 连接检查
+
+测试连接支持明确的 `workflow`。配置页对所有已选工作流逐项检查并显示 ready/failed/experimental_disabled；保存不强制 ComfyUI 在线，但生成面板只允许选择目录上可提交的项。测试连接不得启动推理。
+
+## 8. H3 草稿绑定与存量迁移
+
+`storyboard_h3_prompt_drafts` 新增 `workflow_id TEXT`，新草稿必须写实际工作流 ID，并按 `(storyboard_id, video_config_id, workflow_id)` 保留最新 10 条。
+
+读取顺序：
+
+1. 优先精确匹配 workflow_id；
+2. 对 NULL 存量行解析 `source_fingerprint.workflowSha`；
+3. 只有 SHA 与请求工作流的 `workflowSha256` 唯一匹配时才允许复用，并懒回填 workflow_id；
+4. 缺少 SHA、SHA 不匹配或无法唯一匹配时返回无可用草稿，并报告 `legacy_workflow_unknown`，要求重编译；
+5. 永远不使用当前 default_model 推断 NULL 行的历史工作流。
+
+门禁比较实际请求工作流、草稿 workflow_id 和 workflow SHA。跨工作流返回 409 `H3_DRAFT_WORKFLOW_MISMATCH`；配置 ID 不匹配继续使用 `H3_DRAFT_CONFIG_MISMATCH`，避免一个错误码承担两种语义。
+
+`evaluateDraftFreshness` 使用草稿绑定的工作流解析 runtime。切换到 `requiresPromptDraft=false` 的工作流时，前端清除当前草稿 UI 状态且不发送 draft ID。
+
+## 9. 前端行为
+
+### AI 配置页
+
+- 从目录接口加载多选项；禁用项保留显示并解释原因；
+- 默认工作流下拉只包含已选且 selectable 的项；
+- 目录加载失败时保留现有配置值并切换为只读错误态，不用单个硬编码选项覆盖已有列表；
+- 保存前规范化选择，最终约束仍由后端保证；
+- 对每个已选工作流显示连接检查结果。
+
+### 生成面板
+
+- 工作流列表来自 capabilities；多于一项时显示下拉；
+- 初始化使用服务端 default 标记，不再硬编码官方 ID；
+- 切换时应用该工作流默认参数/覆盖、更新提示词契约、重新加载对应草稿；
+- H3 UI、时长锁定、参考图失败策略和请求构造都读取当前 workflow metadata；
+- 异步加载使用版本号，旧工作流返回结果不能覆盖新选择；
+- unavailable/invalid/实验禁用项不可提交并显示原因。
+
+## 10. 工作流分析脚本
+
+`scripts/registerComfyWorkflow.js` 是只读分析/骨架生成工具，不直接修改注册表：
+
+- 从输入文件原始字节计算 SHA-256；
+- 解析 API JSON 并提取 class_type 集合；
+- `customNodes` 表示 ComfyUI class_type，第三方包锁定位于 `runtimeLock.customNodes`，两者不混用；
+- adapter 元数据必须成组提供；只给 family 或 variant 时立即报错；
+- 输出 execution 骨架与缺失治理项诊断；
+- 输出明确标记为 draft，补齐并通过正式 registry loader 后才能加入注册表。
+
+脚本测试必须使用带空白/换行的源文件，证明输出 SHA 与 `sha256File(sourcePath)` 完全相同，并验证不完整 adapter 元数据会失败。
+
+## 11. 快照与恢复不变量
+
+任务创建时快照记录实际工作流：
+
+- `model == workflowId == selectedWorkflowId`；
+- workflow SHA、variant、adapter、execution；
+- 最终有效尺寸、时长、帧率、seed 和 planHash；
+- 不包含密钥。
+
+submit/retry/recover 只从快照恢复工作流和参数；通道白名单、默认值或注册表随后改变不重路由已有任务。若快照工作流文件/SHA 已不可用，任务明确失败而不是换用当前默认工作流。
+
+## 12. 验收标准
+
+1. 同一 ComfyUI 通道可保存多个 verified 工作流，默认项必须属于集合。
+2. 每次生成可选择非默认成员，任务行和快照均记录实际 ID。
+3. 冲突别名、列表外工作流、非 ComfyUI 显式 workflow 均返回稳定中文错误。
+4. configured 在实验开关关闭时处处禁用；开启时目录、草稿、生成和 Provider 行为一致。
+5. capabilities 在默认成员不可用时仍返回每项诊断。
+6. H3 与 free-text fixture 分别只执行自己的提示词、尺寸、显存和参考图规则。
+7. NULL 存量草稿只在 SHA 唯一匹配时复用；更换默认工作流不会导致误绑定。
+8. 前端切换工作流后 H3 UI、草稿请求、参考图策略和参数默认值同步切换，无异步串写。
+9. 注册脚本的 SHA 与原文件字节一致，生成骨架不能伪装成已验证条目。
+10. 现有两个真实注册表工作流均能通过目录、capabilities、连接检查构造和生成请求回归；实际调用 ComfyUI 的在线验收在服务可用时执行，离线时保留明确的手工验收清单。
+11. 后端 Node 22 全量测试、前端全量测试与 Vite build 全部通过。
+
+## 13. 实施顺序
+
+1. 修复并锁定干净基线；
+2. 注册表 execution 契约与统一工作流解析；
+3. 配置后端约束、目录和 capabilities；
+4. Provider 参数策略分派；
+5. 草稿迁移、SHA 归属和门禁；
+6. 前端配置页与生成面板；
+7. 安全的工作流分析脚本；
+8. 全量回归、构建和离线冒烟。
