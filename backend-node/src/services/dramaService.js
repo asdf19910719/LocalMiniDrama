@@ -3,6 +3,7 @@
 const storageLayout = require('./storageLayout');
 const { resolveStylePreset } = require('../constants/generationStylePresets');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
+const { listStoryboardVariantLinks } = require('./storyboardVariantService');
 
 /**
  * 清理 image_url：如果数据库中存储的是 base64 data URL，则返回 null。
@@ -21,6 +22,16 @@ function parseJsonColumn(value) {
     return JSON.parse(value);
   } catch (_) {
     return null;
+  }
+}
+
+function attachStoryboardVariantLinks(db, storyboards) {
+  for (const storyboard of Array.isArray(storyboards) ? storyboards : []) {
+    try {
+      storyboard.character_variant_links = listStoryboardVariantLinks(db, storyboard.id);
+    } catch (_) {
+      storyboard.character_variant_links = [];
+    }
   }
 }
 
@@ -80,6 +91,7 @@ function getDrama(db, dramaId, baseUrl) {
       ).all(ep.id)
     );
     ep.storyboards = storyboards.map((s) => rowToStoryboard(s));
+    attachStoryboardVariantLinks(db, ep.storyboards);
     // 批量加载 storyboard_props，附加到对应分镜
     try {
       const sbIds = ep.storyboards.map((s) => s.id);
@@ -202,6 +214,7 @@ function listDramas(db, query) {
         ).all(ep.id)
       );
       ep.storyboards = storyboards.map((s) => rowToStoryboard(s));
+      attachStoryboardVariantLinks(db, ep.storyboards);
       try {
         const sbIds = ep.storyboards.map((s) => s.id);
         if (sbIds.length > 0) {

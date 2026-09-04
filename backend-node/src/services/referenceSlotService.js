@@ -64,7 +64,8 @@ function sceneDisplayName(sceneRow) {
  * slot: { index(1-based), type: 'scene'|'character_variant'|'prop',
  *         asset_id(scenes/characters/props.id), variant_id(仅 character_variant),
  *         name, reference_role/framing_note(仅 character_variant),
- *         image_url(local_path 优先), image_available, image_version(资产行 updated_at) }
+ *         local_path, remote_image_url, image_url(local_path 优先),
+ *         image_available, image_version(资产行 updated_at) }
  */
 function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS } = {}) {
   const sid = Number(storyboardId);
@@ -94,6 +95,8 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
         name: sceneDisplayName(scene),
         reference_role: null,
         framing_note: null,
+        local_path: scene.local_path ?? null,
+        remote_image_url: scene.image_url ?? null,
         image_url: imageUrl,
         image_available: Boolean(imageUrl),
         image_version: scene.updated_at ?? null,
@@ -152,6 +155,8 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
       name: link.variant_name ?? null,
       reference_role: link.reference_role ?? null,
       framing_note: link.framing_note ?? null,
+      local_path: link.local_path ?? null,
+      remote_image_url: link.image_url ?? null,
       image_url: imageUrl,
       image_available: !variantDeleted && Boolean(imageUrl),
       image_version: variantMeta?.updated_at ?? null,
@@ -176,6 +181,8 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
       name: propRow.name ?? null,
       reference_role: null,
       framing_note: null,
+      local_path: propRow.local_path ?? null,
+      remote_image_url: propRow.image_url ?? null,
       image_url: imageUrl,
       image_available: Boolean(imageUrl),
       image_version: propRow.updated_at ?? null,

@@ -17,6 +17,9 @@ describe('image generation target adapters and binding', () => {
       CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, scene_id INTEGER, title TEXT, description TEXT, image_prompt TEXT, polished_prompt TEXT, image_url TEXT, local_path TEXT, first_frame_image_id INTEGER, last_frame_image_id INTEGER, last_frame_image_url TEXT, last_frame_local_path TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
       CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
       CREATE TABLE frame_prompts (id INTEGER PRIMARY KEY, storyboard_id INTEGER, frame_type TEXT, prompt TEXT, description TEXT, layout TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE storyboard_character_variants (id INTEGER PRIMARY KEY, storyboard_id INTEGER, character_id INTEGER, variant_id INTEGER, reference_role TEXT, sort_order INTEGER, framing_note TEXT);
+      CREATE TABLE storyboard_props (storyboard_id INTEGER, prop_id INTEGER);
+      CREATE TABLE external_generation_results (id TEXT PRIMARY KEY, image_generation_id INTEGER);
     `);
     db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL,NULL)").run();
     db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL,NULL)").run();
@@ -28,6 +31,7 @@ describe('image generation target adapters and binding', () => {
       [53, 4, 7, null, null], [54, 4, 7, null, null], [55, 4, 7, null, null],
     ]) db.prepare("INSERT INTO image_generations (id,storyboard_id,drama_id,scene_id,character_id,provider,prompt,image_url,local_path,status) VALUES (?,?,?,?,?,'external:chatgpt-web','p',?,?,'completed')")
       .run(...row, `/new-${row[0]}.png`, `new-${row[0]}.png`);
+    db.exec('ALTER TABLE scenes ADD COLUMN state TEXT; ALTER TABLE storyboards ADD COLUMN characters TEXT;');
   });
 
   afterEach(() => db.close());
@@ -92,6 +96,51 @@ describe('image generation target adapters and binding', () => {
     db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'last', '专业尾帧提示', '2026-01-02')").run();
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, '专业首帧提示');
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, '专业尾帧提示');
+  });
+
+  it('uses canonical scene, selected character variant, and prop references in slot order', () => {
+    db.prepare("UPDATE scenes SET image_url='/ignored-scene.png', local_path='scenes/canonical.png', state='雨夜' WHERE id=2").run();
+    db.prepare(`INSERT INTO character_variants
+      (id, character_id, source_key, name, image_url, local_path, is_default, updated_at, deleted_at)
+      VALUES (8, 1, 'lin_work', '工作状态', '/ignored-variant.png', 'variants/work.png', 0, '2026-09-05', NULL)`).run();
+    db.prepare(`INSERT INTO storyboard_character_variants
+      (storyboard_id, character_id, variant_id, reference_role, sort_order, framing_note)
+      VALUES (4, 1, 8, 'supporting', 3, '半身')`).run();
+    db.prepare('INSERT INTO storyboard_props (storyboard_id, prop_id) VALUES (4, 3)').run();
+
+    const generation = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'storyboard_main',
+      target_id: 4,
+    });
+
+    assert.deepEqual(generation.references, [
+      { role: 'scene', sourceId: 2, url: '/static/scenes/canonical.png', slotIndex: 1, assetId: 2, variantId: null, name: '雨夜街道·雨夜', referenceRole: null, framingNote: null },
+      { role: 'character_variant', sourceId: 8, url: '/static/variants/work.png', slotIndex: 2, assetId: 1, variantId: 8, name: '工作状态', referenceRole: 'supporting', framingNote: '半身' },
+      { role: 'prop', sourceId: 3, url: '/static/old-prop.png', slotIndex: 3, assetId: 3, variantId: null, name: '钥匙', referenceRole: null, framingNote: null },
+    ]);
+    assert.ok(!generation.references.some((item) => item.url === '/char-ref.png' || item.url === '/old-char.png'));
+  });
+
+  it('maps an imported absolute variant image path to its extension-fetchable content endpoint', () => {
+    const externalPath = 'E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\7\\job\\result-abc\\image.png';
+    db.prepare(`INSERT INTO character_variants
+      (id, character_id, source_key, name, image_url, local_path, is_default, updated_at, deleted_at)
+      VALUES (9, 1, 'lin_external', '外部结果状态', 'https://example.invalid/fallback.png', ?, 0, '2026-09-05', NULL)`).run(externalPath);
+    db.prepare(`INSERT INTO storyboard_character_variants
+      (storyboard_id, character_id, variant_id, reference_role, sort_order, framing_note)
+      VALUES (4, 1, 9, 'primary', 1, NULL)`).run();
+    db.prepare("INSERT INTO image_generations (id, drama_id, image_url, local_path, status) VALUES (99, 7, '/remote.png', ?, 'completed')").run(externalPath);
+    db.prepare("INSERT INTO external_generation_results (id, image_generation_id) VALUES ('result-abc', 99)").run();
+
+    const { references } = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'storyboard_first',
+      target_id: 4,
+    });
+
+    assert.equal(references[1].url, '/api/v1/external-generation/results/result-abc/content');
+    assert.equal(references[1].sourceId, 9);
   });
 
   it('rejects binding an image or target from another drama', () => {

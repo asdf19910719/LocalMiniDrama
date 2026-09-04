@@ -1159,12 +1159,12 @@
                       v-for="c in getSbSelectedCharacters(sb.id)"
                       :key="c.id"
                       class="sb-thumb-item sb-thumb-avatar"
-                      :class="{ 'sb-thumb-clickable': hasAssetImage(c) }"
-                      :title="c.name"
+                      :class="{ 'sb-thumb-clickable': hasAssetImage(getSbSelectedVariant(sb.id, c.id)) }"
+                      :title="`${c.name || '角色'} · ${getSbSelectedVariant(sb.id, c.id)?.name || '未选择状态'}`"
                       role="button"
-                      @click="hasAssetImage(c) && openImagePreview(assetImageUrl(c))"
+                      @click="hasAssetImage(getSbSelectedVariant(sb.id, c.id)) && openImagePreview(assetImageUrl(getSbSelectedVariant(sb.id, c.id)))"
                     >
-                      <img v-if="hasAssetImage(c)" :src="assetImageUrl(c)" alt="" />
+                      <img v-if="hasAssetImage(getSbSelectedVariant(sb.id, c.id))" :src="assetImageUrl(getSbSelectedVariant(sb.id, c.id))" alt="" />
                       <span v-else class="sb-thumb-placeholder">{{ (c.name || '')[0] }}</span>
                     </div>
                     <el-dropdown trigger="click" @command="(cmd) => onSbAddCharacterCommand(sb.id, cmd)">
@@ -3194,7 +3194,7 @@ const {
   variantPanelCharacterId, toggleVariantPanel,
   showVariantEditor, variantEditorForm, variantEditorSaving,
   openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault,
-  sbVariantLinksSaving, getSbVariantId, ensureSbVariantsLoaded, onSbVariantChange,
+  sbVariantLinksSaving, hydrateSbVariantLinks, getSbVariantId, getSbSelectedVariant, ensureSbVariantsLoaded, onSbVariantChange,
 } = useCharacterVariants({
   characterAPI,
   storyboardsAPI,
@@ -4826,6 +4826,7 @@ function syncStoryboardStateFromEpisode(ep) {
   sbLayoutDescription.value = nextLayoutDescription
   sbCreationMode.value = nextCreationMode
   sbUniversalSegmentText.value = nextUniversalSegment
+  hydrateSbVariantLinks(boards)
   // 预加载各分镜已勾选角色的状态列表（懒加载缓存，重复调用自动跳过）
   for (const sbId of Object.keys(nextCharIds)) {
     if ((nextCharIds[sbId] || []).length) ensureSbVariantsLoaded(Number(sbId))
@@ -6402,12 +6403,13 @@ function getSbUniversalOmniRefSlots(sb) {
     })
   }
   for (const c of getSbSelectedCharacters(sb.id)) {
-    if (hasAssetImage(c)) {
+    const variant = getSbSelectedVariant(sb.id, c.id)
+    if (hasAssetImage(variant)) {
       out.push({
         index: idx++,
         kind: 'character',
-        name: (c.name || '角色').toString(),
-        thumbUrl: assetImageUrl(c),
+        name: `${c.name || '角色'}·${variant.name || '状态'}`,
+        thumbUrl: assetImageUrl(variant),
       })
     }
   }
@@ -6438,7 +6440,8 @@ function collectSbOmniReferenceAbsoluteUrls(sb) {
   const scene = getSbSelectedScene(sb.id)
   if (scene && hasAssetImage(scene)) pushAbs(assetImageUrl(scene))
   for (const c of getSbSelectedCharacters(sb.id)) {
-    if (hasAssetImage(c)) pushAbs(assetImageUrl(c))
+    const variant = getSbSelectedVariant(sb.id, c.id)
+    if (hasAssetImage(variant)) pushAbs(assetImageUrl(variant))
   }
   for (const p of getSbSelectedProps(sb.id)) {
     if (hasAssetImage(p)) pushAbs(assetImageUrl(p))
