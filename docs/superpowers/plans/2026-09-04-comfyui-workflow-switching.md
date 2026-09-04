@@ -60,14 +60,14 @@
 - ComfyUI 的三个别名冲突抛 `VIDEO_WORKFLOW_CONFLICT`；列表外抛 `VIDEO_WORKFLOW_NOT_ALLOWED`。
 - 选择成功后 `resolved.model === selectedWorkflowId`。
 
-- [ ] 写选择 helper 测试：缺省、三个同值别名、冲突别名、列表外、configured 开关、非 ComfyUI workflow 字段拒绝。
-- [ ] 运行并确认失败。
-- [ ] 实现 helper，复用 `selectWorkflow` 与 `resolveVideoProtocol`。
-- [ ] 写生命周期测试：非默认工作流写入 row.model、snapshot.model、snapshot.workflowId；重试继续使用快照。
-- [ ] 运行并确认旧生命周期实现失败。
-- [ ] 在 create 路径使用 helper，并把 `allowExperimental` 注入统一服务。
-- [ ] 运行相关测试及 `test/unifiedVideoGenerationService.test.js`。
-- [ ] 提交 `feat: resolve one canonical workflow per video request`。
+- [x] 写选择 helper 测试：缺省、三个同值别名、冲突别名、列表外、configured 开关、非 ComfyUI workflow 字段拒绝。
+- [x] 运行并确认失败。
+- [x] 实现 helper，复用 `selectWorkflow` 与 `resolveVideoProtocol`。
+- [x] 写生命周期测试：非默认工作流写入 row.model、snapshot.model、snapshot.workflowId；重试继续使用快照。
+- [x] 运行并确认旧生命周期实现失败。
+- [x] 在 create 路径使用 helper，并把 `allowExperimental` 注入统一服务。
+- [x] 运行相关测试及 `test/unifiedVideoGenerationService.test.js`。
+- [x] 提交 `feat: resolve one canonical workflow per video request`。
 
 ### Task 3: 目录与可降级 capabilities
 

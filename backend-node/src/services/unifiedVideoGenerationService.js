@@ -10,6 +10,7 @@ const { createH3PromptCompiler } = require('./h3PromptCompiler');
 const { createH3PromptDraftService } = require('./h3PromptDraftService');
 const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
 const { selectWorkflow, readWorkflowTemplate } = require('../director/workflowRegistry');
+const { resolveRequestedWorkflow } = require('./videoWorkflowSelection');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -146,6 +147,7 @@ function createUnifiedVideoGenerationService({
   h3PromptCompiler = createH3PromptCompiler(),
   h3PromptDraftService = null,
   workflowRegistry = null,
+  allowExperimental = false,
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
   if (!log) throw new Error('Unified video generation service requires a logger');
@@ -749,17 +751,15 @@ function inputFor(row) {
   }
 
   async function createVideoGeneration(input = {}) {
-    const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
-    const explicitWorkflowId = input.workflow_id || input.workflowId;
-    if (workflowRegistry && explicitWorkflowId && String(explicitWorkflowId).trim() !== String(resolved.model).trim()) {
-      const error = new Error('VIDEO_WORKFLOW_NOT_ALLOWED');
-      error.code = 'VIDEO_WORKFLOW_NOT_ALLOWED';
-      throw error;
-    }
-    const requestedWorkflowId = explicitWorkflowId || resolved.model;
-    const workflow = workflowRegistry && requestedWorkflowId
-      ? selectWorkflow(workflowRegistry, requestedWorkflowId, { allowExperimental: false })
-      : null;
+    const baseResolved = resolveDefaultVideoConfig(db);
+    const selection = workflowRegistry
+      ? resolveRequestedWorkflow({ input, resolved: baseResolved, registry: workflowRegistry, allowExperimental })
+      : {
+        selectedWorkflowId: null,
+        workflow: null,
+        resolved: resolveDefaultVideoConfig(db, { requestedModel: input.model }),
+      };
+    const { resolved, workflow } = selection;
     const settings = resolved.config?.settings || {};
     const now = new Date().toISOString();
     const dramaId = Number(input.drama_id ?? input.dramaId) || 0;

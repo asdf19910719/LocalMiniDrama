@@ -109,6 +109,7 @@ function setupRouter(cfg, db, log) {
     log,
     providerRegistry: videoProviderRegistry,
     workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
   });
   require('../services/videoService').configureUnifiedVideoGenerationService(
     db,

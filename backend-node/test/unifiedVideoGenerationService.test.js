@@ -226,6 +226,43 @@ function buildService(db, harness, overrides = {}) {
 }
 
 describe('unified video generation lifecycle', () => {
+  it('persists the selected ComfyUI workflow consistently and keeps its snapshot on retry', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      api_protocol: '',
+      base_url: 'http://127.0.0.1:8188',
+      model: JSON.stringify(['official', 'alternate']),
+      default_model: 'official',
+    });
+    const harness = createHarness();
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const workflowRegistry = {
+      workflows: [
+        { id: 'official', status: 'verified', execution: { promptContract: 'free_text_v1', requiresPromptDraft: false } },
+        { id: 'alternate', status: 'verified', execution: { promptContract: 'free_text_v1', requiresPromptDraft: false } },
+      ],
+    };
+    const service = buildService(db, harness, { workflowRegistry });
+
+    const created = await service.createVideoGeneration({ prompt: 'alternate workflow', workflow_id: 'alternate' });
+    const row = db.prepare('SELECT * FROM video_generations WHERE id = ?').get(created.id);
+    const snapshot = JSON.parse(row.config_snapshot);
+    assert.equal(row.model, 'alternate');
+    assert.equal(snapshot.model, 'alternate');
+    assert.equal(snapshot.workflowId, 'alternate');
+
+    db.prepare("UPDATE video_generations SET status = 'failed'").run();
+    await service.retryVideoGeneration(created.id);
+    const retried = db.prepare('SELECT * FROM video_generations WHERE id = ?').get(created.id);
+    assert.equal(retried.config_snapshot, row.config_snapshot);
+    assert.equal(retried.model, 'alternate');
+    db.close();
+  });
+
   it('uses the skill-agent compiler for H3 prompt previews', async () => {
     const db = createTestDb();
     seedDefaultConfig(db, {
