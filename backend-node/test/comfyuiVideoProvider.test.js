@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { createGpuMutex } = require('../src/director/gpuMutex');
+const { registerAdapter } = require('../src/director/adapters');
 const { createComfyUIVideoProvider } = require('../src/services/videoProviders/comfyuiVideoProvider');
 const { createVideoProviderRegistry } = require('../src/services/videoProviders');
 
@@ -36,6 +37,14 @@ function createWorkflowFixture() {
       modelFiles: ['minimax-h3.safetensors'],
       runtimeLock: {
         models: [{ relativePath: 'diffusion_models/minimax-h3.safetensors' }],
+      },
+      execution: {
+        promptContract: 'h3_director_v1',
+        requiresPromptDraft: true,
+        dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+        references: { min: 0, max: 9 },
+        vramPolicy: 'h3_estimate',
+        defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
       },
     }],
   };
@@ -377,5 +386,52 @@ describe('ComfyUI video provider adapter', () => {
     const providers = createVideoProviderRegistry({ comfyui: adapter });
     assert.equal(providers.get('COMFYUI'), adapter);
     assert.throws(() => providers.get('unknown'), /VIDEO_PROVIDER_UNSUPPORTED/);
+  });
+
+  test('dispatches free-text validation from its execution contract instead of H3 rules', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const selected = fixture.registry.workflows[0];
+    selected.id = 'free-text-v1';
+    selected.adapter = 'test_free_text_v1';
+    selected.execution = {
+      promptContract: 'free_text_v1', requiresPromptDraft: false,
+      dimensions: { minWidth: 100, maxWidth: 2000, minHeight: 100, maxHeight: 2000, multipleOf: 4 },
+      references: { min: 0, max: 2 }, vramPolicy: 'none',
+      defaults: { width: 1000, height: 700, durationSeconds: 4, frameRate: 20, seed: 3 },
+    };
+    registerAdapter({
+      id: 'test_free_text_v1',
+      validate(input) { assert.equal(input.width, 1000); assert.equal(input.height, 700); },
+      buildPrompt(template, input) { return { ...template.prompt, freeText: input.prompt }; },
+      describeCapabilities() { return { modes: ['text_to_video'] }; },
+    });
+    const fake = createFakeClient();
+    const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex: createGpuMutex() });
+    await assert.doesNotReject(() => provider.submit({
+      taskId: 'free-text-task',
+      snapshot: { model: 'free-text-v1', settings: { vram_budget_mb: 1 } },
+      input: { prompt: 'plain prompt', width: 1000, height: 700 },
+    }));
+    assert.equal(fake.calls[0].inputs.durationSeconds, 4);
+  });
+
+  test('rejects a free-text workflow without an adapter during connection checks', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const selected = fixture.registry.workflows[0];
+    selected.id = 'unbound-free-text';
+    selected.adapter = null;
+    selected.execution = {
+      promptContract: 'free_text_v1', requiresPromptDraft: false,
+      dimensions: { minWidth: 1, maxWidth: 2000, minHeight: 1, maxHeight: 2000, multipleOf: 1 },
+      references: { min: 0, max: 1 }, vramPolicy: 'none',
+      defaults: { width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1 },
+    };
+    const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: createFakeClient(), gpuMutex: createGpuMutex() });
+    await assert.rejects(
+      () => provider.testConnection({ snapshot: { model: 'unbound-free-text' }, input: {} }),
+      (error) => error.code === 'WORKFLOW_ADAPTER_REQUIRED',
+    );
   });
 });

@@ -26,9 +26,13 @@ async function stageReferenceAssets(references, {
   remoteKey = '',
   copyFile = fs.copyFileSync,
   uploadImage = client?.uploadImage,
+  minReferences = 1,
+  maxReferences = 9,
 } = {}) {
   const list = Array.isArray(references) ? references : [];
-  if (list.length < 1 || list.length > 9) throw new Error('VIDEO_REFERENCE_COUNT_INVALID');
+  if (list.length < Number(minReferences) || list.length > Number(maxReferences)) {
+    throw new Error('VIDEO_REFERENCE_COUNT_INVALID');
+  }
   const staged = [];
   try {
     for (let index = 0; index < list.length; index += 1) {

@@ -127,12 +127,12 @@
 - H3 prompt/VRAM 校验只在 execution 明确要求时运行。
 - 无 adapter 的 free-text 图在连接检查返回 `WORKFLOW_ADAPTER_REQUIRED`。
 
-- [ ] 写 free-text adapter fixture 测试：非 32 倍数按自身 multipleOf 规则通过、不调用 H3 prompt/VRAM 校验、允许其声明的参考图数量。
-- [ ] 写无 adapter free-text 连接检查失败测试。
-- [ ] 运行并确认当前无条件 H3 校验导致失败。
-- [ ] 实现最小分派；reference staging 接受 workflow max 参数，不再硬编码 9。
-- [ ] 运行 provider/staging/director registry 测试。
-- [ ] 提交 `feat: dispatch ComfyUI validation by workflow contract`。
+- [x] 写 free-text adapter fixture 测试：非 32 倍数按自身 multipleOf 规则通过、不调用 H3 prompt/VRAM 校验、允许其声明的参考图数量。
+- [x] 写无 adapter free-text 连接检查失败测试。
+- [x] 运行并确认当前无条件 H3 校验导致失败。
+- [x] 实现最小分派；reference staging 接受 workflow max 参数，不再硬编码 9。
+- [x] 运行 provider/staging/director registry 测试。
+- [x] 提交 `feat: dispatch ComfyUI validation by workflow contract`。
 
 ### Task 6: H3 草稿绑定、迁移与 SHA 归属
 

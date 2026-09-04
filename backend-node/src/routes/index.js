@@ -89,6 +89,8 @@ function setupRouter(cfg, db, log) {
       referenceStager: (refs, context) => stageReferenceAssets(refs, {
         allowedRoots: directorAllowedRoots,
         inputDir: comfyInputDir,
+        minReferences: context?.referenceLimits?.min ?? 0,
+        maxReferences: context?.referenceLimits?.max ?? 9,
         remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
         client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
         remote: !comfyInputDir,

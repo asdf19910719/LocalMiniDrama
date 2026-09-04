@@ -9,10 +9,13 @@ const {
 const { getAdapter } = require('../../director/adapters');
 const { stageReferenceAssets } = require('./referenceAssetStaging');
 const {
-  validateH3Dimensions,
   validateVramBudget,
 } = require('../../director/directorGenerationPolicy');
 const { validateH3Prompt } = require('../h3PromptCompiler');
+const {
+  resolveWorkflowParameters,
+  validateWorkflowReferences,
+} = require('../../director/workflowExecutionPolicy');
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 
@@ -195,17 +198,22 @@ function createComfyUIVideoProvider({
   async function submit(context = {}) {
     const selected = select(context);
     const input = contextInput(context);
-    const dimensions = validateH3Dimensions(input);
-    const normalizedInput = { ...input, ...dimensions };
     const settings = contextSettings(context);
-    validateVramBudget(normalizedInput, {
-      totalVramMb: settings.vram_budget_mb || process.env.DIRECTOR_VRAM_MB || 16303,
-      reserveMb: settings.vram_reserve_mb || 512,
+    const parameters = resolveWorkflowParameters(selected, input, {
+      settings,
+      default_model: context?.config?.default_model || context?.snapshot?.model,
     });
+    const normalizedInput = { ...input, ...parameters };
+    if (selected.execution.vramPolicy === 'h3_estimate') {
+      validateVramBudget(normalizedInput, {
+        totalVramMb: settings.vram_budget_mb || process.env.DIRECTOR_VRAM_MB || 16303,
+        reserveMb: settings.vram_reserve_mb || 512,
+      });
+    }
     const template = readWorkflowTemplate(selected.workflowPath);
     const owner = String(context.taskId || context.videoGenerationId || `comfyui-${crypto.randomUUID()}`);
     let stagedAssets = [];
-    if ((selected.id === 'h3-continuity-v1' || String(context.model || '').toLowerCase().includes('h3'))
+    if (selected.execution.promptContract === 'h3_director_v1'
       && (context.videoGenerationId || context.promptFormat || context.input?.promptFormat)) {
       validateH3Prompt(normalizedInput.prompt, {
         durationSeconds: normalizedInput.durationSeconds || normalizedInput.duration,
@@ -219,9 +227,13 @@ function createComfyUIVideoProvider({
         const adapter = getAdapter(selected.adapter);
         stagedAssets = Array.isArray(normalizedInput.stagedAssets) ? normalizedInput.stagedAssets : [];
         const rawRefs = normalizedInput.referenceUrls || normalizedInput.reference_urls || [];
-        const refs = Array.isArray(rawRefs) ? rawRefs : (rawRefs ? [rawRefs] : []);
+        const refs = validateWorkflowReferences(selected, rawRefs);
         if (!stagedAssets.length && refs.length && typeof referenceStager === 'function') {
-          stagedAssets = await referenceStager(refs, context);
+          stagedAssets = await referenceStager(refs, {
+            ...context,
+            workflow: selected,
+            referenceLimits: selected.execution.references,
+          });
         }
         if (!stagedAssets.length && refs.some((ref) => typeof ref === 'string' && /^[A-Za-z]:[\\/]|^\//.test(ref))) {
           throw new Error('VIDEO_REFERENCE_STAGING_REQUIRED');
@@ -230,8 +242,14 @@ function createComfyUIVideoProvider({
         if (stagedAssets.length) stagedByTask.set(owner, stagedAssets);
         adapter.validate({ ...normalizedInput, stagedAssets }, template);
         prompt = adapter.buildPrompt(template, normalizedInput, stagedAssets);
-      } else {
+      } else if (selected.execution.promptContract === 'h3_director_v1') {
+        validateWorkflowReferences(selected, normalizedInput.referenceUrls || normalizedInput.reference_urls || []);
         prompt = buildStructuredWorkflowPrompt(template, normalizedInput);
+      } else {
+        const error = new Error(`工作流 ${selected.id} 缺少输入绑定 adapter`);
+        error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+        error.status = 400;
+        throw error;
       }
       handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });
       const submitted = await clientFor(context).submitWorkflow({
@@ -307,7 +325,17 @@ function createComfyUIVideoProvider({
 
   async function testConnection(context = {}) {
     const selected = select(context);
-    const dimensions = validateH3Dimensions(contextInput(context));
+    if (selected.execution.promptContract === 'free_text_v1' && !selected.adapter) {
+      const error = new Error(`工作流 ${selected.id} 缺少输入绑定 adapter`);
+      error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+      error.status = 400;
+      throw error;
+    }
+    const settings = contextSettings(context);
+    const parameters = resolveWorkflowParameters(selected, contextInput(context), {
+      settings,
+      default_model: context?.config?.default_model || context?.snapshot?.model,
+    });
     const connectionClient = clientForConnection(context);
     const actualSha256 = sha256File(selected.workflowPath);
     if (actualSha256 !== selected.workflowSha256) {
@@ -327,12 +355,17 @@ function createComfyUIVideoProvider({
     if (absentModels.length) throw new Error(`ComfyUI 缺少必需模型: ${absentModels.join(', ')}`);
 
     const totalVramMb = detectedVramMb(systemStats);
-    if (!totalVramMb) throw new Error('ComfyUI 未返回可用的 GPU 显存信息');
-    const settings = contextSettings(context);
-    const vram = validateVramBudget(dimensions, {
-      totalVramMb: Math.min(totalVramMb, Number(settings.vram_budget_mb || totalVramMb)),
-      reserveMb: Number(settings.vram_reserve_mb || 512),
-    });
+    let vram = null;
+    if (selected.execution.vramPolicy === 'h3_estimate') {
+      if (!totalVramMb) throw new Error('ComfyUI 未返回可用的 GPU 显存信息');
+      vram = {
+        ...validateVramBudget(parameters, {
+          totalVramMb: Math.min(totalVramMb, Number(settings.vram_budget_mb || totalVramMb)),
+          reserveMb: Number(settings.vram_reserve_mb || 512),
+        }),
+        totalVramMb,
+      };
+    }
 
     return normalized(null, 'completed', 100, {
       workflow: { id: selected.id, status: selected.status, sha256: actualSha256 },
@@ -340,7 +373,7 @@ function createComfyUIVideoProvider({
       queue,
       nodes: { required: requiredNodes },
       models: { required: [...selected.modelFiles], folders },
-      vram: { ...vram, totalVramMb },
+      vram,
       inferenceStarted: false,
     });
   }
