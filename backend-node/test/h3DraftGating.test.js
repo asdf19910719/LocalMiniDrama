@@ -6,7 +6,8 @@ const {
   createUnifiedVideoGenerationService,
   isH3VideoConfig,
 } = require('../src/services/unifiedVideoGenerationService');
-const { createH3PromptDraftService } = require('../src/services/h3PromptDraftService');
+const { createH3PromptDraftService, computeSourceFingerprint } = require('../src/services/h3PromptDraftService');
+const { slotsFingerprint } = require('../src/services/referenceSlotService');
 const storyboardRoutes = require('../src/routes/storyboards');
 const directorRoutes = require('../src/routes/director');
 
@@ -422,7 +423,26 @@ describe('h3 draft gating for candidate generation', () => {
       videoConfigId: '7',
       workflowId: workflow.id,
     });
-    db.prepare('UPDATE storyboard_h3_prompt_drafts SET workflow_id = NULL WHERE id = ?').run(draft.id);
+    const legacyParams = JSON.parse(draft.generation_params);
+    for (const field of [
+      'workflowSnapshotVersion', 'workflowPath', 'workflowStatus', 'workflowFamily',
+      'workflowExecution', 'workflowCapabilities', 'effectiveParameters',
+    ]) delete legacyParams.videoConfigSnapshot[field];
+    const referenceSnapshot = JSON.parse(draft.reference_snapshot);
+    const legacyFingerprint = computeSourceFingerprint({
+      sourcePrompt: draft.source_prompt,
+      slotsFingerprint: slotsFingerprint(referenceSnapshot.slots),
+      durationSeconds: legacyParams.durationSeconds,
+      width: legacyParams.width,
+      height: legacyParams.height,
+      audioEnabled: legacyParams.audioEnabled,
+      videoConfigSnapshot: legacyParams.videoConfigSnapshot,
+      workflowSha: legacyParams.workflowSha,
+      skillVersion: draft.skill_version,
+    });
+    db.prepare(`UPDATE storyboard_h3_prompt_drafts
+      SET workflow_id = NULL, generation_params = ?, source_fingerprint = ? WHERE id = ?`)
+      .run(JSON.stringify(legacyParams), legacyFingerprint, draft.id);
 
     const service = buildService(db, harness, {
       workflowRegistry,

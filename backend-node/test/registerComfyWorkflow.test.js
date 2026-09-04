@@ -41,6 +41,7 @@ describe('safe ComfyUI workflow analysis helper', () => {
       id: 'custom-director-v1',
       family: 'custom_family',
       adapter: 'custom_adapter',
+      adapterVersion: 'v1',
       variant: 'local_variant',
     });
 
@@ -49,6 +50,7 @@ describe('safe ComfyUI workflow analysis helper', () => {
     assert.deepEqual(result.entryDraft.modelFiles, ['model-a.safetensors']);
     assert.equal(result.entryDraft.draft, true);
     assert.equal(result.entryDraft.status, 'draft');
+    assert.equal(result.entryDraft.adapterVersion, 'v1');
     assert.deepEqual(result.entryDraft.execution, {
       promptContract: null,
       requiresPromptDraft: null,
@@ -80,6 +82,7 @@ describe('safe ComfyUI workflow analysis helper', () => {
       '--id', 'cli-draft',
       '--family', 'custom_family',
       '--adapter', 'custom_adapter',
+      '--adapter-version', 'v1',
       '--variant', 'local_variant',
     ], { encoding: 'utf8' });
 

@@ -253,6 +253,34 @@ describe('structured Director workflow input', () => {
 });
 
 describe('official H3 Director R2V registry and adapter', () => {
+  it('requires adapter versions and rejects versions that differ from the implementation', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aistory-adapter-version-'));
+    const sourcePath = path.resolve(__dirname, '../configs/director-workflows.json');
+    const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+    const official = source.workflows.find((entry) => entry.id === 'minimax_h3_director_r2v');
+    const entry = {
+      ...official,
+      workflowPath: path.resolve(__dirname, '../configs', official.workflowPath),
+      verifiedEvidence: path.resolve(__dirname, '../..', official.verifiedEvidence),
+    };
+    const registryPath = path.join(root, 'registry.json');
+    const { loadRegistry } = loadSut();
+    try {
+      const missing = { ...entry };
+      delete missing.adapterVersion;
+      fs.writeFileSync(registryPath, JSON.stringify({ version: 1, workflows: [missing] }));
+      assert.throws(() => loadRegistry(registryPath), /adapterVersion/);
+
+      fs.writeFileSync(registryPath, JSON.stringify({
+        version: 1,
+        workflows: [{ ...entry, adapterVersion: 'v999' }],
+      }));
+      assert.throws(() => loadRegistry(registryPath), /adapterVersion|version/i);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('loads the official Sage workflow with explicit capabilities and API format', () => {
     const { loadRegistry, selectWorkflow } = loadSut();
     const registry = loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json'));
@@ -358,7 +386,7 @@ describe('official H3 Director R2V registry and adapter', () => {
     const makeEntry = (target, requiredNodes = ['MiniMaxH3Director']) => ({
       ...base.workflows[0], id: 'minimax_h3_director_r2v', workflowPath: target,
       workflowSha256: sha256File(target), family: 'h3_director', adapter: 'h3_director_r2v',
-      variant: 'official_sage', workflowFormat: 'api', inputSchemaVersion: 1,
+      adapterVersion: 'v1', variant: 'official_sage', workflowFormat: 'api', inputSchemaVersion: 1,
       capabilities: { modes: ['single_reference'], maxReferenceImages: 9, supportsContinuity: false, supportsAudio: true, supportsSage: true },
       requiredNodes,
     });

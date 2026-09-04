@@ -244,6 +244,8 @@ describe('unified video generation lifecycle', () => {
       workflows: [
         ...['official', 'alternate'].map((id) => ({
           id, status: 'verified',
+          workflowPath: `E:/private/workflows/${id}.json`,
+          workflowSha256: `sha256:${id}`,
           execution: {
             promptContract: 'free_text_v1', requiresPromptDraft: false,
             dimensions: { minWidth: 1, maxWidth: 4096, minHeight: 1, maxHeight: 4096, multipleOf: 1 },
@@ -261,11 +263,14 @@ describe('unified video generation lifecycle', () => {
     assert.equal(row.model, 'alternate');
     assert.equal(snapshot.model, 'alternate');
     assert.equal(snapshot.workflowId, 'alternate');
+    assert.equal(snapshot.workflowPath, 'E:/private/workflows/alternate.json');
     assert.equal(snapshot.workflowSnapshotVersion, 1);
     assert.equal(snapshot.workflowExecution.promptContract, 'free_text_v1');
     assert.deepEqual(snapshot.effectiveParameters, {
       width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1,
     });
+    assert.equal(created.routing_snapshot.workflowPath, undefined);
+    assert.equal(created.config_snapshot.workflowPath, undefined);
 
     db.prepare("UPDATE video_generations SET status = 'failed'").run();
     await service.retryVideoGeneration(created.id);

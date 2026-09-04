@@ -58,10 +58,18 @@ function fallbackProgress(status) {
   return 0;
 }
 
+function publicRoutingSnapshot(value) {
+  const snapshot = parseObject(value);
+  if (!snapshot) return null;
+  const publicSnapshot = { ...snapshot };
+  delete publicSnapshot.workflowPath;
+  return publicSnapshot;
+}
+
 function rowToItem(row) {
   const status = normalizeStoredVideoStatus(row.status);
   const structuredError = readStructuredError(row.error_msg || row.task_error);
-  const routingSnapshot = parseObject(row.config_snapshot);
+  const routingSnapshot = publicRoutingSnapshot(row.config_snapshot);
   const joinedProgress = row.task_progress == null ? NaN : Number(row.task_progress);
   return {
     id: row.id,

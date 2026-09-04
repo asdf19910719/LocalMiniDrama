@@ -185,14 +185,15 @@ function validateEntryShape(entry, index) {
   if (entry.workflowFormat != null && entry.workflowFormat !== 'api') {
     throw new WorkflowRegistryError(`workflow ${entry.id} must use ComfyUI API format`);
   }
-  const hasAdapterMetadata = ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']
+  const hasAdapterMetadata = ['family', 'adapter', 'adapterVersion', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']
     .some((field) => field in entry);
   if (hasAdapterMetadata) {
-    for (const field of ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']) {
+    for (const field of ['family', 'adapter', 'adapterVersion', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']) {
       if (!(field in entry)) throw new WorkflowRegistryError(`workflow ${entry.id} missing ${field}`);
     }
-    if (!String(entry.family).trim() || !String(entry.variant).trim() || !String(entry.adapter).trim()) {
-      throw new WorkflowRegistryError(`workflow ${entry.id} family, adapter, and variant are required`);
+    if (!String(entry.family).trim() || !String(entry.variant).trim()
+      || !String(entry.adapter).trim() || !String(entry.adapterVersion).trim()) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} family, adapter, adapterVersion, and variant are required`);
     }
     if (!Number.isInteger(entry.inputSchemaVersion) || entry.inputSchemaVersion < 1) {
       throw new WorkflowRegistryError(`workflow ${entry.id} inputSchemaVersion must be a positive integer`);
@@ -212,8 +213,15 @@ function validateEntryShape(entry, index) {
   }
   if (entry.adapter != null) {
     try {
-      getAdapter(entry.adapter);
+      const adapter = getAdapter(entry.adapter);
+      if (String(entry.adapterVersion || '') !== String(adapter.version || '')) {
+        throw new WorkflowRegistryError(
+          `workflow ${entry.id} adapterVersion ${entry.adapterVersion || '(empty)'} does not match registered adapter version ${adapter.version || '(empty)'}`,
+          'ADAPTER_VERSION_MISMATCH',
+        );
+      }
     } catch (error) {
+      if (error instanceof WorkflowRegistryError) throw error;
       throw new WorkflowRegistryError(error.message, 'ADAPTER_NOT_FOUND');
     }
   }

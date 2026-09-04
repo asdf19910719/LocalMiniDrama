@@ -68,6 +68,20 @@ function normalizeModelList(value) {
   }
 }
 
+const LEGACY_VIDEO_CONFIG_SNAPSHOT_KEYS = [
+  'configId', 'provider', 'protocol', 'model', 'workflowId', 'workflowSha256',
+  'workflowVariant', 'adapter', 'adapterVersion', 'generationMode', 'sage',
+  'planHash', 'baseUrl', 'endpoint', 'queryEndpoint', 'settings',
+];
+
+function comparableConfigSnapshot(current, stored) {
+  if (!stored || Object.prototype.hasOwnProperty.call(stored, 'workflowSnapshotVersion')) return current;
+  return LEGACY_VIDEO_CONFIG_SNAPSHOT_KEYS.reduce((result, key) => {
+    result[key] = current?.[key];
+    return result;
+  }, {});
+}
+
 function finiteNumber(value, fallback = null) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -502,8 +516,9 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
         reasons.push('params');
       }
       const storedSnapshotParams = storedParams.videoConfigSnapshot ?? null;
+      const comparableCurrentSnapshot = comparableConfigSnapshot(runtime.configSnapshot, storedSnapshotParams);
       if (storedSnapshotParams == null
-        || JSON.stringify(canonicalJson(runtime.configSnapshot)) !== JSON.stringify(canonicalJson(storedSnapshotParams))
+        || JSON.stringify(canonicalJson(comparableCurrentSnapshot)) !== JSON.stringify(canonicalJson(storedSnapshotParams))
         || String(runtime.workflowSha ?? '') !== String(storedParams.workflowSha ?? '')) {
         reasons.push('config');
       }
@@ -520,7 +535,9 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
       width: runtime ? deriveGenerationParams(storyboard, runtime).width : storedParams.width,
       height: runtime ? deriveGenerationParams(storyboard, runtime).height : storedParams.height,
       audioEnabled: runtime ? deriveGenerationParams(storyboard, runtime).audioEnabled : storedParams.audioEnabled,
-      videoConfigSnapshot: runtime ? runtime.configSnapshot : storedParams.videoConfigSnapshot,
+      videoConfigSnapshot: runtime
+        ? comparableConfigSnapshot(runtime.configSnapshot, storedParams.videoConfigSnapshot)
+        : storedParams.videoConfigSnapshot,
       workflowSha: runtime ? runtime.workflowSha : storedParams.workflowSha,
       skillVersion: COMPILER_VERSION,
     });

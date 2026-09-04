@@ -34,16 +34,16 @@ function collectStrings(value, output = []) {
 }
 
 function adapterMetadata(options) {
-  const values = ['family', 'adapter', 'variant'].map((field) => String(options[field] || '').trim());
+  const values = ['family', 'adapter', 'adapterVersion', 'variant'].map((field) => String(options[field] || '').trim());
   const supplied = values.filter(Boolean).length;
   if (supplied > 0 && supplied < values.length) {
     throw analysisError(
-      'family, adapter, and variant must be supplied together',
+      'family, adapter, adapterVersion, and variant must be supplied together',
       'WORKFLOW_ADAPTER_METADATA_INCOMPLETE',
     );
   }
   return supplied === values.length
-    ? { family: values[0], adapter: values[1], variant: values[2] }
+    ? { family: values[0], adapter: values[1], adapterVersion: values[2], variant: values[3] }
     : {};
 }
 
@@ -135,6 +135,7 @@ function parseCli(argv) {
     ['--id', 'id'],
     ['--family', 'family'],
     ['--adapter', 'adapter'],
+    ['--adapter-version', 'adapterVersion'],
     ['--variant', 'variant'],
     ['--prompt-contract', 'promptContract'],
   ]);
