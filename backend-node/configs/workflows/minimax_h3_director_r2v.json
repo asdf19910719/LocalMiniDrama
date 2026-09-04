@@ -72,7 +72,7 @@
       "class_type": "CreateVideo",
       "inputs": {
         "images": [
-          "5",
+          "9",
           0
         ],
         "fps": [
@@ -107,6 +107,18 @@
         ],
         "sage_attention": "auto",
         "allow_compile": false
+      }
+    },
+    "9": {
+      "class_type": "RTXVideoSuperResolution",
+      "inputs": {
+        "images": [
+          "5",
+          0
+        ],
+        "resize_type": "scale by multiplier",
+        "resize_type.scale": 2,
+        "quality": "ULTRA"
       }
     }
   }

@@ -242,6 +242,32 @@ describe('official H3 Director R2V registry and adapter', () => {
     assert.equal(entry.capabilities.supportsAudio, true);
     assert.ok(entry.requiredNodes.includes('PathchSageAttentionKJ'));
     assert.ok(entry.requiredNodes.includes('MiniMaxH3Director'));
+    assert.ok(entry.requiredNodes.includes('RTXVideoSuperResolution'));
+  });
+
+  it('routes official Director frames through RTX 2x Ultra before video encoding', () => {
+    const { loadRegistry, selectWorkflow, readWorkflowTemplate } = loadSut();
+    const entry = selectWorkflow(
+      loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json')),
+      'minimax_h3_director_r2v',
+    );
+    const prompt = readWorkflowTemplate(entry.workflowPath).prompt;
+    const directorEntry = Object.entries(prompt)
+      .find(([, node]) => node.class_type === 'MiniMaxH3Director');
+    const upscaleEntry = Object.entries(prompt)
+      .find(([, node]) => node.class_type === 'RTXVideoSuperResolution');
+    const createVideo = Object.values(prompt)
+      .find((node) => node.class_type === 'CreateVideo');
+
+    assert.ok(directorEntry);
+    assert.ok(upscaleEntry);
+    assert.deepEqual(upscaleEntry[1].inputs.images, [directorEntry[0], 0]);
+    assert.equal(upscaleEntry[1].inputs.resize_type, 'scale by multiplier');
+    assert.equal(upscaleEntry[1].inputs['resize_type.scale'], 2);
+    assert.equal(upscaleEntry[1].inputs.quality, 'ULTRA');
+    assert.deepEqual(createVideo.inputs.images, [upscaleEntry[0], 0]);
+    assert.deepEqual(createVideo.inputs.audio, [directorEntry[0], 1]);
+    assert.deepEqual(createVideo.inputs.fps, [directorEntry[0], 2]);
   });
 
   it('builds a single-segment r2v prompt from staged references and disables continuity', () => {

@@ -5,7 +5,7 @@
       "id": "minimax_h3_director_r2v",
       "status": "verified",
       "workflowPath": "workflows/minimax_h3_director_r2v.json",
-      "workflowSha256": "sha256:c812e4b963995da6c22bba9d3e2a229da511f9c96f8a5c352b7da20d55c9f49b",
+      "workflowSha256": "sha256:c9965809a8e5b67e4cd84b5b6038fc43d71b3a2f73c5432452d1df95bc16ff0d",
       "family": "h3_director",
       "adapter": "h3_director_r2v",
       "adapterVersion": "v1",
@@ -18,7 +18,8 @@
         "MiniMaxH3Director",
         "CreateVideo",
         "SaveVideo",
-        "PathchSageAttentionKJ"
+        "PathchSageAttentionKJ",
+        "RTXVideoSuperResolution"
       ],
       "modelFiles": [
         "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
@@ -30,7 +31,8 @@
         "MiniMaxH3Director",
         "CreateVideo",
         "SaveVideo",
-        "PathchSageAttentionKJ"
+        "PathchSageAttentionKJ",
+        "RTXVideoSuperResolution"
       ],
       "capabilities": {
         "modes": [
@@ -39,7 +41,9 @@
         "maxReferenceImages": 9,
         "supportsContinuity": false,
         "supportsAudio": true,
-        "supportsSage": true
+        "supportsSage": true,
+        "supportsRtxUpscale": true,
+        "outputScale": 2
       },
       "inputSchemaVersion": 1,
       "inputSchema": {
@@ -63,7 +67,7 @@
       "provenance": {
         "provider": "MiniMax",
         "modelFamily": "MiniMax H3 Director R2V",
-        "source": "official ComfyUI API workflow with KJ Sage",
+        "source": "official ComfyUI API workflow with KJ Sage and NVIDIA RTX VSR 2x Ultra",
         "license": {
           "status": "review_required",
           "evidence": "docs/research/director-production-governance.md"
@@ -113,6 +117,15 @@
               {
                 "path": "__init__.py",
                 "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ]
+          },
+          {
+            "name": "Nvidia_RTX_Nodes_ComfyUI",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "c7e653e5700c80d253fc36830c6e508bf45aab48050154dca1bc4998ef0624bc"
               }
             ]
           }
