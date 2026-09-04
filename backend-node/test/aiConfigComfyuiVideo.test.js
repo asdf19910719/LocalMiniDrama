@@ -148,13 +148,16 @@ test('uses the shared ComfyUI provider for a read-only connection check and retu
 
   await routes.testConnection({ body: {
     service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188', api_key: '',
-    model: ['h3-continuity-v1', 'alternate'], workflow: 'alternate', settings: JSON.stringify({ width: 1280, height: 704 }),
+    model: ['h3-continuity-v1', 'alternate'], default_model: 'h3-continuity-v1', workflow: 'alternate',
+    settings: JSON.stringify({ width: 1280, height: 704, workflow_overrides: { alternate: { width: 1024, height: 576 } } }),
   } }, res);
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].model, 'alternate');
   assert.equal(calls[0].base_url, 'http://127.0.0.1:8188');
-  assert.deepEqual(calls[0].config.settings, { width: 1280, height: 704 });
+  assert.equal(calls[0].config.default_model, 'h3-continuity-v1');
+  assert.deepEqual(calls[0].config.settings, { width: 1280, height: 704, workflow_overrides: { alternate: { width: 1024, height: 576 } } });
+  assert.deepEqual(calls[0].input, {});
   assert.deepEqual(res.result.body.data, {
     ok: true,
     provider: 'comfyui',

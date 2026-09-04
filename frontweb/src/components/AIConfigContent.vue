@@ -2247,6 +2247,7 @@ async function openTest(row) {
             api_key: row.api_key,
             model: workflow,
             workflow,
+            default_model: row.default_model,
             provider: row.provider,
             endpoint: row.endpoint,
             service_type: row.service_type,

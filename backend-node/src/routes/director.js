@@ -23,6 +23,7 @@ const H3_DRAFT_GATE_CODES = new Set([
   'DRAFT_NOT_FOUND',
   'H3_DRAFT_STORYBOARD_MISMATCH',
   'H3_DRAFT_CONFIG_MISMATCH',
+  'H3_DRAFT_WORKFLOW_MISMATCH',
   'H3_DRAFT_STALE',
   'H3_DRAFT_INVALID',
   'H3_DRAFT_HASH_MISMATCH',
@@ -30,6 +31,12 @@ const H3_DRAFT_GATE_CODES = new Set([
 
 function sendH3DraftGateError(res, error) {
   if (!error || !H3_DRAFT_GATE_CODES.has(error.code)) return false;
+  response.error(res, Number(error.status) || 400, error.code, error.message, error.details);
+  return true;
+}
+
+function sendVideoLifecycleError(res, error) {
+  if (!error?.code || !/^(?:VIDEO_|WORKFLOW_)/.test(String(error.code))) return false;
   response.error(res, Number(error.status) || 400, error.code, error.message, error.details);
   return true;
 }
@@ -146,6 +153,9 @@ function generationInput(body, { db, shot, groupId, structured, inputs, storageR
   const referenceUrls = Array.isArray(collectedRefs)
     ? collectedRefs.map((ref) => resolveReferencePath(typeof ref === 'object' ? ref.imageFile : ref, storageRoot)).filter(Boolean)
     : collectedRefs;
+  const model = structured?.model ?? inputs?.model ?? body.model;
+  const workflowId = structured?.workflowId ?? inputs?.workflowId ?? body.workflowId;
+  const workflowIdSnake = structured?.workflow_id ?? inputs?.workflow_id ?? body.workflow_id;
   return {
     drama_id: Number(shot.drama_id) || 0,
     storyboard_id: Number(shot.id),
@@ -168,7 +178,9 @@ function generationInput(body, { db, shot, groupId, structured, inputs, storageR
     last_frame_url: source.lastFrameUrl ?? source.last_frame_url,
     reference_image_urls: referenceUrls,
     ...(structured && structured.useVoiceReference ? { reference_audios: resolveVoiceReferenceAudios(db, Number(shot.id), storageRoot) } : {}),
-    ...(source.workflowId || source.workflow_id ? { workflow_id: source.workflowId ?? source.workflow_id } : {}),
+    ...(model != null && String(model).trim() ? { model } : {}),
+    ...(workflowId != null && String(workflowId).trim() ? { workflowId } : {}),
+    ...(workflowIdSnake != null && String(workflowIdSnake).trim() ? { workflow_id: workflowIdSnake } : {}),
     ...(source.generationMode || source.generation_mode ? { generation_mode: source.generationMode ?? source.generation_mode } : {}),
     // H3 草稿门禁(spec §11.4):候选接口只提交草稿 id,由 unified 服务重算指纹后消费草稿文本。
     ...(source.h3PromptDraftId || source.h3_prompt_draft_id
@@ -372,6 +384,7 @@ function routes(db, log, {
       } catch (error) {
         log.error('director candidate generation create', { error: error.message });
         if (sendH3DraftGateError(res, error)) return;
+        if (sendVideoLifecycleError(res, error)) return;
         response.badRequest(res, error.message);
       }
     },

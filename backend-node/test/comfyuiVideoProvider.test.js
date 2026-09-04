@@ -111,6 +111,76 @@ function context(input = {}) {
 }
 
 describe('ComfyUI video provider adapter', () => {
+  test('submits from the immutable workflow snapshot after the live registry changes', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const frozen = structuredClone(fixture.registry.workflows[0]);
+    const fake = createFakeClient();
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry,
+      comfyClient: fake,
+      gpuMutex: createGpuMutex(),
+    });
+    fixture.registry.workflows[0] = {
+      ...fixture.registry.workflows[0],
+      status: 'invalid',
+      workflowPath: path.join(fixture.root, 'replacement.json'),
+      workflowSha256: 'sha256:replacement',
+      execution: { ...fixture.registry.workflows[0].execution, promptContract: 'free_text_v1' },
+    };
+
+    await provider.submit({
+      ...context({ width: 320, height: 320 }),
+      snapshot: {
+        model: frozen.id,
+        workflowId: frozen.id,
+        workflowSnapshotVersion: 1,
+        workflowPath: frozen.workflowPath,
+        workflowSha256: frozen.workflowSha256,
+        workflowStatus: frozen.status,
+        workflowExecution: frozen.execution,
+        adapter: frozen.adapter || null,
+        adapterVersion: frozen.adapterVersion || null,
+        effectiveParameters: { width: 1280, height: 704, durationSeconds: 5, frameRate: 24, seed: 17 },
+        settings: {},
+      },
+    });
+
+    assert.equal(fake.calls[0].registry.workflows[0].workflowPath, frozen.workflowPath);
+    assert.equal(fake.calls[0].registry.workflows[0].workflowSha256, frozen.workflowSha256);
+    assert.equal(fake.calls[0].prompt['5'].inputs.width, 1280);
+    assert.equal(fake.calls[0].prompt['5'].inputs.height, 704);
+  });
+
+  test('fails explicitly when the snapshotted workflow file no longer matches its SHA', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const frozen = structuredClone(fixture.registry.workflows[0]);
+    fs.writeFileSync(frozen.workflowPath, JSON.stringify({ prompt: { changed: { class_type: 'Other', inputs: {} } } }));
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry,
+      comfyClient: createFakeClient(),
+      gpuMutex: createGpuMutex(),
+    });
+
+    await assert.rejects(
+      () => provider.submit({
+        ...context(),
+        snapshot: {
+          model: frozen.id,
+          workflowId: frozen.id,
+          workflowSnapshotVersion: 1,
+          workflowPath: frozen.workflowPath,
+          workflowSha256: frozen.workflowSha256,
+          workflowExecution: frozen.execution,
+          adapter: null,
+          effectiveParameters: { width: 1280, height: 704, durationSeconds: 5, frameRate: 24, seed: 17 },
+        },
+      }),
+      (error) => error.code === 'VIDEO_WORKFLOW_SNAPSHOT_MISMATCH',
+    );
+  });
+
   test('submits the configured workflow with numeric H3 dimensions', async (t) => {
     const fixture = createWorkflowFixture();
     t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));

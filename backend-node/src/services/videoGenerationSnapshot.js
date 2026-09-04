@@ -59,6 +59,21 @@ function nonSensitiveBaseUrl(value) {
   }
 }
 
+function cloneJson(value) {
+  if (value == null) return null;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function snapshotParameters(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const result = {};
+  for (const key of ['width', 'height', 'durationSeconds', 'frameRate', 'seed']) {
+    const number = Number(value[key]);
+    if (Number.isFinite(number)) result[key] = number;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 function buildVideoConfigSnapshot(resolved = {}) {
   const config = resolved.config || {};
   const workflow = resolved.workflow || config.workflow || null;
@@ -72,9 +87,16 @@ function buildVideoConfigSnapshot(resolved = {}) {
     model: resolved.model ?? config.default_model ?? null,
     workflowId,
     workflowSha256,
+    workflowSnapshotVersion: workflow ? 1 : null,
+    workflowPath: workflow?.workflowPath || null,
+    workflowStatus: workflow?.status || null,
+    workflowFamily: workflow?.family || null,
     workflowVariant: resolved.workflowVariant || workflow?.variant || null,
     adapter: resolved.adapter || workflow?.adapter || null,
     adapterVersion: resolved.adapterVersion || workflow?.adapterVersion || null,
+    workflowExecution: cloneJson(workflow?.execution),
+    workflowCapabilities: cloneJson(workflow?.capabilities),
+    effectiveParameters: snapshotParameters(resolved.effectiveParameters || resolved.parameters),
     generationMode: mode === 'single_segment_r2v' ? 'single_reference' : mode,
     sage: resolved.sage || workflow?.sage || (workflow?.capabilities?.supportsSage ? {
       node: 'PathchSageAttentionKJ', attention: 'auto', allowCompile: false,

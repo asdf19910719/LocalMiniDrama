@@ -161,7 +161,7 @@ describe('Director generation routes', () => {
 
   afterEach(() => db.close());
 
-  it('uses cloud and ComfyUI defaults for unified candidates and ignores incoming routing overrides', async () => {
+  it('uses cloud and ComfyUI defaults for unified candidates and ignores incoming provider overrides', async () => {
     for (const expected of [
       { provider: 'cloud-provider', protocol: 'openai', model: 'cloud-default-model' },
       { provider: 'comfyui', protocol: 'comfyui', model: 'h3-default-workflow' },
@@ -171,9 +171,7 @@ describe('Director generation routes', () => {
       await routes.generateCandidates({
         params: { shotId: '1' },
         body: {
-          workflowId: 'incoming-workflow-must-be-ignored',
           provider: 'incoming-provider-must-be-ignored',
-          model: 'incoming-model-must-be-ignored',
           candidateCount: 2,
           structured: {
             prompt: 'A tracked shot through a rainy alley',
@@ -237,6 +235,40 @@ describe('Director generation routes', () => {
       .get(res.body.data.video_generations[0].id);
     assert.equal(generation.provider, 'cloud-provider');
     assert.equal(generation.model, 'cloud-default-model');
+  });
+
+  it('preserves conflicting workflow aliases for canonical validation and returns the stable error code', async () => {
+    const captured = [];
+    const conflictRoutes = createRoutes(db, { error() {} }, {
+      videoGenerationService: {
+        async createVideoGeneration(input) {
+          captured.push(input);
+          const error = new Error('model、workflow_id 与 workflowId 必须指向同一工作流');
+          error.code = 'VIDEO_WORKFLOW_CONFLICT';
+          error.status = 400;
+          error.details = { model: input.model, workflow_id: input.workflow_id, workflowId: input.workflowId };
+          throw error;
+        },
+        async cancelVideoGeneration() {},
+      },
+    });
+    const res = responseCapture();
+
+    await conflictRoutes.generateCandidates({
+      params: { shotId: '1' },
+      body: {
+        candidateCount: 1,
+        model: 'model-alias',
+        inputs: { workflow_id: 'snake-alias' },
+        structured: { prompt: 'conflicting aliases', workflowId: 'camel-alias' },
+      },
+    }, res);
+
+    assert.deepEqual(captured.map(({ model, workflow_id, workflowId }) => ({ model, workflow_id, workflowId })), [{
+      model: 'model-alias', workflow_id: 'snake-alias', workflowId: 'camel-alias',
+    }]);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.error.code, 'VIDEO_WORKFLOW_CONFLICT');
   });
 
   it('cancels created videos and removes the whole group when a later candidate fails', async () => {

@@ -140,8 +140,8 @@ function testConnection(log, { providerRegistry } = {}) {
         const result = await providerRegistry.get('comfyui').testConnection({
           base_url: body.base_url,
           model,
-          config: { settings },
-          input: { width: settings.width, height: settings.height },
+          config: { settings, default_model: String(body.default_model || '').trim() },
+          input: {},
         });
         return response.success(res, {
           ok: true,

@@ -261,6 +261,11 @@ describe('unified video generation lifecycle', () => {
     assert.equal(row.model, 'alternate');
     assert.equal(snapshot.model, 'alternate');
     assert.equal(snapshot.workflowId, 'alternate');
+    assert.equal(snapshot.workflowSnapshotVersion, 1);
+    assert.equal(snapshot.workflowExecution.promptContract, 'free_text_v1');
+    assert.deepEqual(snapshot.effectiveParameters, {
+      width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1,
+    });
 
     db.prepare("UPDATE video_generations SET status = 'failed'").run();
     await service.retryVideoGeneration(created.id);
@@ -274,8 +279,8 @@ describe('unified video generation lifecycle', () => {
     const db = createTestDb();
     seedDefaultConfig(db, {
       provider: 'comfyui',
-      model: JSON.stringify(['h3-continuity-v1']),
-      default_model: 'h3-continuity-v1',
+      model: JSON.stringify(['custom-director']),
+      default_model: 'custom-director',
     });
     const validPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
     const calls = [];
@@ -296,7 +301,21 @@ describe('unified video generation lifecycle', () => {
       },
     });
     const harness = createHarness();
-    const service = buildService(db, harness, { h3PromptCompiler: compiler });
+    const workflowRegistry = {
+      workflows: [{
+        id: 'custom-director',
+        status: 'verified',
+        execution: {
+          promptContract: 'h3_director_v1',
+          requiresPromptDraft: true,
+          dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+          references: { min: 0, max: 9 },
+          vramPolicy: 'h3_estimate',
+          defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 1 },
+        },
+      }],
+    };
+    const service = buildService(db, harness, { h3PromptCompiler: compiler, workflowRegistry });
 
     const result = await service.previewH3Prompt({ prompt: 'a woman walks', duration: 5 });
 
@@ -305,6 +324,37 @@ describe('unified video generation lifecycle', () => {
     assert.equal(result.compilerVersion, 'h3-skill-agent-v1');
     assert.equal(result.skillProvenance.toolCallId, 'call-preview');
     assert.equal(result.compiledPrompt, validPrompt);
+    db.close();
+  });
+
+  it('rejects H3-looking workflow names whose execution contract is free text', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['minimax-h3-lookalike']),
+      default_model: 'minimax-h3-lookalike',
+    });
+    const harness = createHarness();
+    const workflowRegistry = {
+      workflows: [{
+        id: 'minimax-h3-lookalike',
+        status: 'verified',
+        execution: {
+          promptContract: 'free_text_v1',
+          requiresPromptDraft: false,
+          dimensions: { minWidth: 1, maxWidth: 4096, minHeight: 1, maxHeight: 4096, multipleOf: 1 },
+          references: { min: 0, max: 3 },
+          vramPolicy: 'none',
+          defaults: { width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1 },
+        },
+      }],
+    };
+    const service = buildService(db, harness, { workflowRegistry });
+
+    await assert.rejects(
+      service.previewH3Prompt({ prompt: 'a woman walks' }),
+      (error) => error.code === 'H3_PREVIEW_UNSUPPORTED',
+    );
     db.close();
   });
 

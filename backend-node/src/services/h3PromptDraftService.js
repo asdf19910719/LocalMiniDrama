@@ -257,16 +257,10 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
        WHERE storyboard_id = ? AND video_config_id IS ? AND workflow_id IS NULL
        ORDER BY updated_at DESC, id DESC`
     ).all(Number(storyboardId), videoConfigId == null ? null : String(videoConfigId));
-    const selected = workflowRegistry?.workflows?.find((item) => item.id === selectedWorkflowId);
-    const sha = String(selected?.workflowSha256 || '');
-    const shaOwners = workflowRegistry?.workflows?.filter((item) => String(item.workflowSha256 || '') === sha) || [];
-    if (sha && shaOwners.length === 1) {
-      const match = legacy.find((row) => String((parseJsonObject(row.generation_params) || {}).workflowSha || '') === sha);
-      if (match) {
-        const updated = db.prepare('UPDATE storyboard_h3_prompt_drafts SET workflow_id = ? WHERE id = ? AND workflow_id IS NULL')
-          .run(selectedWorkflowId, match.id);
-        if (updated.changes) match.workflow_id = selectedWorkflowId;
-        return { draft: match, freshness: { stale: false, reasons: [] } };
+    for (const row of legacy) {
+      const bound = resolveDraftWorkflow(db, row, selectedWorkflowId);
+      if (String(bound?.workflow_id || '') === selectedWorkflowId) {
+        return { draft: bound, freshness: { stale: false, reasons: [] } };
       }
     }
     return {
@@ -281,6 +275,23 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
     const id = Number(draftId);
     if (!Number.isFinite(id)) return null;
     return db.prepare('SELECT * FROM storyboard_h3_prompt_drafts WHERE id = ?').get(id) || null;
+  }
+
+  function resolveDraftWorkflow(db, draft, workflowId) {
+    if (!draft || draft.workflow_id != null && String(draft.workflow_id).trim() !== '') return draft;
+    const selectedWorkflowId = String(workflowId || '').trim();
+    if (!selectedWorkflowId) return draft;
+    const selected = workflowRegistry?.workflows?.find((item) => item.id === selectedWorkflowId);
+    const sha = String(selected?.workflowSha256 || '');
+    const shaOwners = workflowRegistry?.workflows?.filter((item) => String(item.workflowSha256 || '') === sha) || [];
+    const storedSha = String((parseJsonObject(draft.generation_params) || {}).workflowSha || '');
+    if (!sha || shaOwners.length !== 1 || storedSha !== sha) return draft;
+
+    const updated = db.prepare(
+      'UPDATE storyboard_h3_prompt_drafts SET workflow_id = ? WHERE id = ? AND workflow_id IS NULL'
+    ).run(selectedWorkflowId, draft.id);
+    if (updated.changes) return { ...draft, workflow_id: selectedWorkflowId };
+    return getDraftRow(db, draft.id) || draft;
   }
 
   /**
@@ -525,6 +536,7 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
     getLatestDraft,
     getLatestDraftResult,
     getDraftById: getDraftRow,
+    resolveDraftWorkflow,
     compileDraft,
     saveDraftText,
     evaluateDraftFreshness,
@@ -546,6 +558,7 @@ module.exports = {
   getLatestDraft: (db, storyboardId, videoConfigId) => sharedService().getLatestDraft(db, storyboardId, videoConfigId),
   getLatestDraftResult: (db, storyboardId, videoConfigId, workflowId) => sharedService().getLatestDraftResult(db, storyboardId, videoConfigId, workflowId),
   getDraftById: (db, draftId) => sharedService().getDraftById(db, draftId),
+  resolveDraftWorkflow: (db, draft, workflowId) => sharedService().resolveDraftWorkflow(db, draft, workflowId),
   saveDraftText: (db, options) => sharedService().saveDraftText(db, options),
   evaluateDraftFreshness: (db, draft) => sharedService().evaluateDraftFreshness(db, draft),
   resolveVideoRuntime: (db, videoConfigId, options) => sharedService().resolveVideoRuntime(db, videoConfigId, options),

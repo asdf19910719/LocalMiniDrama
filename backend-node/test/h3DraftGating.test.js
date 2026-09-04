@@ -393,6 +393,55 @@ describe('h3 draft gating for candidate generation', () => {
     assert.equal(compileStub.calls.length, 1);
   });
 
+  it('lazily binds a directly submitted legacy draft when its workflow SHA uniquely matches', async () => {
+    insertH3Config(db, { id: 7 });
+    const sceneId = insertScene(db);
+    const sbId = insertStoryboard(db, { sceneId });
+    insertVariantLink(db, { storyboardId: sbId });
+    const workflow = {
+      id: 'minimax-h3',
+      status: 'verified',
+      variant: 'r2v',
+      workflowSha256: 'sha256:minimax-h3',
+      execution: {
+        promptContract: 'h3_director_v1',
+        requiresPromptDraft: true,
+        dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+        references: { min: 0, max: 9 },
+        vramPolicy: 'h3_estimate',
+        defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+      },
+    };
+    const workflowRegistry = { workflows: [workflow] };
+    const workflowDrafts = createH3PromptDraftService({
+      compileFn: compileStub.compileFn,
+      workflowRegistry,
+    });
+    const draft = await workflowDrafts.compileDraft(db, {}, nullLog, {
+      storyboardId: sbId,
+      videoConfigId: '7',
+      workflowId: workflow.id,
+    });
+    db.prepare('UPDATE storyboard_h3_prompt_drafts SET workflow_id = NULL WHERE id = ?').run(draft.id);
+
+    const service = buildService(db, harness, {
+      workflowRegistry,
+      h3PromptDraftService: workflowDrafts,
+    });
+    const created = await service.createVideoGeneration({
+      prompt: 'a woman walks',
+      storyboard_id: sbId,
+      workflow_id: workflow.id,
+      h3_prompt_draft_id: draft.id,
+    });
+
+    assert.equal(created.status, 'waiting');
+    assert.equal(
+      db.prepare('SELECT workflow_id FROM storyboard_h3_prompt_drafts WHERE id = ?').get(draft.id).workflow_id,
+      workflow.id,
+    );
+  });
+
   it('rejects a candidate whose request duration differs from the compiled draft duration with 409 H3_DRAFT_STALE', async () => {
     insertH3Config(db, { id: 7 });
     const sceneId = insertScene(db);

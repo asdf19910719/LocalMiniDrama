@@ -40,13 +40,16 @@ function contextSettings(context) {
 function contextInput(context) {
   const input = context?.input || context?.request || context || {};
   const settings = contextSettings(context);
+  const frozen = context?.snapshot?.effectiveParameters || {};
   const continuityMode = input.continuityMode ?? input.continuity_mode ?? settings.continuity_mode;
   return {
     ...input,
-    width: input.width ?? settings.width,
-    height: input.height ?? settings.height,
-    frameRate: input.frameRate ?? input.frame_rate ?? settings.frame_rate,
-    seed: input.seed ?? settings.seed,
+    width: frozen.width ?? input.width ?? settings.width,
+    height: frozen.height ?? input.height ?? settings.height,
+    durationSeconds: frozen.durationSeconds ?? input.durationSeconds ?? input.duration,
+    duration: frozen.durationSeconds ?? input.duration ?? input.durationSeconds,
+    frameRate: frozen.frameRate ?? input.frameRate ?? input.frame_rate ?? settings.frame_rate,
+    seed: frozen.seed ?? input.seed ?? settings.seed,
     continuityMode: continuityMode === false || continuityMode === 0 || continuityMode === '0' || continuityMode === '0.0'
       ? 'none' : continuityMode,
   };
@@ -132,7 +135,61 @@ function createComfyUIVideoProvider({
   const leases = new Map();
   const stagedByTask = new Map();
 
-  function select(context) {
+  function snapshotError(code, message, details = {}) {
+    const error = new Error(message || code);
+    error.code = code;
+    error.status = 409;
+    error.details = details;
+    return error;
+  }
+
+  function selectSnapshot(context) {
+    const snapshot = context?.snapshot;
+    if (Number(snapshot?.workflowSnapshotVersion) !== 1) return null;
+    const workflowId = String(snapshot.workflowId || snapshot.model || '').trim();
+    if (!workflowId || !snapshot.workflowPath || !snapshot.workflowSha256 || !snapshot.workflowExecution) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_INVALID',
+        'ComfyUI 工作流快照缺失关键执行信息，无法安全提交',
+        { workflowId: workflowId || null },
+      );
+    }
+    let actualSha256;
+    try {
+      actualSha256 = sha256File(snapshot.workflowPath);
+    } catch (error) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_UNAVAILABLE',
+        `快照中的 ComfyUI 工作流文件不可用: ${workflowId}`,
+        { workflowId, cause: error.code || error.message },
+      );
+    }
+    if (actualSha256 !== snapshot.workflowSha256) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_MISMATCH',
+        `快照中的 ComfyUI 工作流 SHA-256 已变化: ${workflowId}`,
+        { workflowId, expected: snapshot.workflowSha256, actual: actualSha256 },
+      );
+    }
+    return {
+      id: workflowId,
+      status: 'verified',
+      workflowPath: snapshot.workflowPath,
+      workflowSha256: snapshot.workflowSha256,
+      family: snapshot.workflowFamily || null,
+      variant: snapshot.workflowVariant || null,
+      adapter: snapshot.adapter || null,
+      adapterVersion: snapshot.adapterVersion || null,
+      execution: structuredClone(snapshot.workflowExecution),
+      capabilities: structuredClone(snapshot.workflowCapabilities || null),
+    };
+  }
+
+  function select(context, { useSnapshot = true } = {}) {
+    if (useSnapshot) {
+      const frozen = selectSnapshot(context);
+      if (frozen) return frozen;
+    }
     const workflowId = workflowIdFor(context);
     if (!workflowId) throw new Error('COMFYUI_WORKFLOW_ID_REQUIRED');
     return selectWorkflow(registry, workflowId, { allowExperimental });
@@ -197,6 +254,7 @@ function createComfyUIVideoProvider({
 
   async function submit(context = {}) {
     const selected = select(context);
+    const submissionRegistry = { version: context?.snapshot?.workflowSnapshotVersion || registry.version, workflows: [selected] };
     const input = contextInput(context);
     const settings = contextSettings(context);
     const parameters = resolveWorkflowParameters(selected, input, {
@@ -225,6 +283,13 @@ function createComfyUIVideoProvider({
     try {
       if (selected.adapter) {
         const adapter = getAdapter(selected.adapter);
+        if (selected.adapterVersion && String(adapter.version || '') !== String(selected.adapterVersion)) {
+          throw snapshotError(
+            'VIDEO_WORKFLOW_ADAPTER_VERSION_MISMATCH',
+            `ComfyUI 工作流 adapter 版本与快照不一致: ${selected.id}`,
+            { workflowId: selected.id, expected: selected.adapterVersion, actual: adapter.version || null },
+          );
+        }
         stagedAssets = Array.isArray(normalizedInput.stagedAssets) ? normalizedInput.stagedAssets : [];
         const rawRefs = normalizedInput.referenceUrls || normalizedInput.reference_urls || [];
         const refs = validateWorkflowReferences(selected, rawRefs);
@@ -253,7 +318,7 @@ function createComfyUIVideoProvider({
       }
       handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });
       const submitted = await clientFor(context).submitWorkflow({
-        registry,
+        registry: submissionRegistry,
         workflowId: selected.id,
         prompt,
         inputs: safeSubmitInputs(normalizedInput, stagedAssets),
@@ -324,7 +389,7 @@ function createComfyUIVideoProvider({
   }
 
   async function testConnection(context = {}) {
-    const selected = select(context);
+    const selected = select(context, { useSnapshot: false });
     if (selected.execution.promptContract === 'free_text_v1' && !selected.adapter) {
       const error = new Error(`工作流 ${selected.id} 缺少输入绑定 adapter`);
       error.code = 'WORKFLOW_ADAPTER_REQUIRED';

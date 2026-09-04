@@ -682,7 +682,7 @@ function inputFor(row) {
         400,
       );
     }
-    const draft = h3Drafts.getDraftById(db, draftId);
+    let draft = h3Drafts.getDraftById(db, draftId);
     if (!draft) {
       throw new VideoLifecycleError('DRAFT_NOT_FOUND', 'H3 提示词草稿不存在,请重新生成', 400, { draftId });
     }
@@ -701,6 +701,9 @@ function inputFor(row) {
         409,
         { draft_video_config_id: draft.video_config_id ?? null, video_config_id: resolved.config.id },
       );
+    }
+    if (workflow && !String(draft.workflow_id || '').trim() && typeof h3Drafts.resolveDraftWorkflow === 'function') {
+      draft = h3Drafts.resolveDraftWorkflow(db, draft, workflow.id);
     }
     if (workflow && String(draft.workflow_id || '') !== String(workflow.id)) {
       throw new VideoLifecycleError(
@@ -839,6 +842,7 @@ function inputFor(row) {
       workflowId: workflow?.id || resolved.model,
       generationMode: planResult?.plan.mode || input.generation_mode || 'single_reference',
       planHash: planResult?.planHash || null,
+      effectiveParameters: planCommon,
     });
     const snapshotSettings = snapshot.settings || {};
     let createdId;
@@ -907,8 +911,12 @@ function inputFor(row) {
   }
 
   async function previewH3Prompt(input = {}) {
-    const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
-    if (!isH3VideoConfig(resolved)) {
+    const baseResolved = resolveDefaultVideoConfig(db);
+    const selection = workflowRegistry
+      ? resolveRequestedWorkflow({ input, resolved: baseResolved, registry: workflowRegistry, allowExperimental })
+      : null;
+    const workflow = selection?.workflow || null;
+    if (!workflow || workflow.execution?.promptContract !== 'h3_director_v1' || !workflowRequiresDraft(workflow)) {
       throw new VideoLifecycleError('H3_PREVIEW_UNSUPPORTED', '当前视频配置不是 ComfyUI H3 工作流', 409);
     }
     return h3PromptCompiler.compile(db, log, { ...input, prompt: appendStyle(input.prompt, input.style) });
