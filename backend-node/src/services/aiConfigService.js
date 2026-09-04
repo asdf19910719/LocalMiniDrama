@@ -10,7 +10,7 @@ function normalizeApiKeyForService(serviceType, apiKey) {
   return apiKey;
 }
 const { applyDeepSeekConnectivityOptions } = require('./deepseekConfig');
-const { validateH3Dimensions } = require('../director/directorGenerationPolicy');
+const { normalizeAndValidateComfyuiWorkflowConfig } = require('./comfyuiWorkflowConfig');
 
 const COMFYUI_DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
 
@@ -32,11 +32,13 @@ function parseSettings(settings) {
 
 function normalizeComfyuiSettings(settings) {
   const parsed = parseSettings(settings);
-  const dimensions = validateH3Dimensions({
-    width: parsed.width ?? 1312,
-    height: parsed.height ?? 736,
-  });
-  return JSON.stringify({ ...parsed, ...dimensions });
+  const normalized = { ...parsed };
+  for (const key of ['width', 'height', 'frame_rate', 'seed']) {
+    if (normalized[key] != null && normalized[key] !== '' && Number.isFinite(Number(normalized[key]))) {
+      normalized[key] = Number(normalized[key]);
+    }
+  }
+  return JSON.stringify(normalized);
 }
 function modelToDb(model) {
   if (model == null) return null;
@@ -95,9 +97,14 @@ function getConfig(db, id) {
   return row ? rowToConfig(row) : null;
 }
 
-function createConfig(db, log, req) {
+function createConfig(db, log, req, options = {}) {
   const now = new Date().toISOString();
-  const model = modelToDb(req.model);
+  const comfyui = isComfyuiVideoConfig(req);
+  const normalizedWorkflow = comfyui
+    ? normalizeAndValidateComfyuiWorkflowConfig(req, options.workflowRegistry, options)
+    : null;
+  const effectiveReq = normalizedWorkflow ? { ...req, ...normalizedWorkflow } : req;
+  const model = modelToDb(effectiveReq.model);
   let endpoint = req.endpoint || '';
   let queryEndpoint = req.query_endpoint || '';
   if (!endpoint && req.provider) {
@@ -139,10 +146,9 @@ function createConfig(db, log, req) {
       }
     }
   }
-  const defaultModel = req.default_model != null ? String(req.default_model).trim() || null : null;
-  const comfyui = isComfyuiVideoConfig(req);
-  const baseUrl = comfyui ? (req.base_url || COMFYUI_DEFAULT_BASE_URL) : (req.base_url || '');
-  const settings = comfyui ? normalizeComfyuiSettings(req.settings) : (req.settings || null);
+  const defaultModel = effectiveReq.default_model != null ? String(effectiveReq.default_model).trim() || null : null;
+  const baseUrl = comfyui ? (effectiveReq.base_url || COMFYUI_DEFAULT_BASE_URL) : (effectiveReq.base_url || '');
+  const settings = comfyui ? normalizeComfyuiSettings(effectiveReq.settings) : (effectiveReq.settings || null);
   const info = db.prepare(
     `INSERT INTO ai_service_configs (service_type, provider, api_protocol, name, base_url, api_key, model, default_model, endpoint, query_endpoint, priority, is_default, is_active, settings, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
@@ -169,11 +175,15 @@ function createConfig(db, log, req) {
   return getConfig(db, newId);
 }
 
-function updateConfig(db, log, id, req) {
+function updateConfig(db, log, id, req, options = {}) {
   const existing = getConfig(db, id);
   if (!existing) return null;
   const nextProvider = req.provider != null ? req.provider : existing.provider;
   const comfyui = isComfyuiVideoConfig({ service_type: existing.service_type, provider: nextProvider });
+  const normalizedWorkflow = comfyui
+    ? normalizeAndValidateComfyuiWorkflowConfig({ ...existing, ...req }, options.workflowRegistry, options)
+    : null;
+  const effectiveReq = normalizedWorkflow ? { ...req, ...normalizedWorkflow } : req;
   const updates = [];
   const params = [];
   if (req.name != null) {
@@ -197,13 +207,13 @@ function updateConfig(db, log, id, req) {
     const st = req.service_type != null ? req.service_type : existing.service_type;
     params.push(normalizeApiKeyForService(st, req.api_key));
   }
-  if (req.model != null) {
+  if (effectiveReq.model != null && (req.model != null || normalizedWorkflow)) {
     updates.push('model = ?');
-    params.push(modelToDb(req.model));
+    params.push(modelToDb(effectiveReq.model));
   }
-  if (req.default_model !== undefined) {
+  if (effectiveReq.default_model !== undefined && (req.default_model !== undefined || normalizedWorkflow)) {
     updates.push('default_model = ?');
-    params.push(req.default_model != null ? String(req.default_model).trim() || null : null);
+    params.push(effectiveReq.default_model != null ? String(effectiveReq.default_model).trim() || null : null);
   }
   if (req.priority != null) {
     updates.push('priority = ?');

@@ -105,14 +105,14 @@
 - create/update 对 partial update 与现有行合并后校验，失败不写库。
 - test connection 使用 body.workflow，而非 model[0]。
 
-- [ ] 写纯 helper 测试覆盖空列表、重复、default 不在集合、缺失/invalid/configured 条目。
-- [ ] 运行并确认失败。
-- [ ] 实现 helper。
-- [ ] 写路由/服务测试证明 create/update 原子拒绝非法配置，连接检查选择显式 workflow。
-- [ ] 运行并确认失败。
-- [ ] 注入 registry/allowExperimental，在写库前校验；ComfyUI 平铺 settings 不再无条件执行 H3 专用尺寸校验。
-- [ ] 运行 AI 配置相关测试。
-- [ ] 提交 `feat: validate ComfyUI workflow channel configuration`。
+- [x] 写纯 helper 测试覆盖空列表、重复、default 不在集合、缺失/invalid/configured 条目。
+- [x] 运行并确认失败。
+- [x] 实现 helper。
+- [x] 写路由/服务测试证明 create/update 原子拒绝非法配置，连接检查选择显式 workflow。
+- [x] 运行并确认失败。
+- [x] 注入 registry/allowExperimental，在写库前校验；ComfyUI 平铺 settings 不再无条件执行 H3 专用尺寸校验。
+- [x] 运行 AI 配置相关测试。
+- [x] 提交 `feat: validate ComfyUI workflow channel configuration`。
 
 ### Task 5: Provider 按 execution 分派
 

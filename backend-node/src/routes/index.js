@@ -103,7 +103,11 @@ function setupRouter(cfg, db, log) {
       allowExperimental: cfg.director.allow_experimental,
     }),
   });
-  const aiConfig = aiConfigRoutes(db, log, cfg, { providerRegistry: videoProviderRegistry });
+  const aiConfig = aiConfigRoutes(db, log, cfg, {
+    providerRegistry: videoProviderRegistry,
+    workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
+  });
   const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
     db,
     log,

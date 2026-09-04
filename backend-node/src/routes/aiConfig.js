@@ -25,7 +25,7 @@ function vendorLock(cfg) {
   };
 }
 
-function create(db, log, cfg) {
+function create(db, log, cfg, options) {
   return (req, res) => {
     if (aiConfigService.getVendorLockStatus(cfg).enabled) {
       return response.badRequest(res, '当前为厂商锁定模式，不允许添加配置');
@@ -42,16 +42,16 @@ function create(db, log, cfg) {
       const config = aiConfigService.createConfig(db, log, {
         ...body,
         model: body.model ?? [],
-      });
+      }, options);
       response.created(res, config);
     } catch (err) {
       log.errorw('Create AI config failed', { error: err.message });
-      response.internalError(res, '创建失败');
+      response.error(res, Number(err.status) || 400, err.code || 'AI_CONFIG_INVALID', err.message || '创建失败');
     }
   };
 }
 
-function update(db, log, cfg) {
+function update(db, log, cfg, options) {
   return (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return response.badRequest(res, '无效的配置ID');
@@ -66,7 +66,13 @@ function update(db, log, cfg) {
       body = allowed;
     }
 
-    const config = aiConfigService.updateConfig(db, log, id, body);
+    let config;
+    try {
+      config = aiConfigService.updateConfig(db, log, id, body, options);
+    } catch (err) {
+      log.error('Update AI config failed', { error: err.message });
+      return response.error(res, Number(err.status) || 400, err.code || 'AI_CONFIG_INVALID', err.message || '更新失败');
+    }
     if (!config) return response.notFound(res, '配置不存在');
     response.success(res, config);
   };
@@ -125,7 +131,12 @@ function testConnection(log, { providerRegistry } = {}) {
       if (provider === 'comfyui') {
         if (!providerRegistry) throw new Error('ComfyUI 视频提供商未初始化');
         const settings = typeof body.settings === 'string' ? JSON.parse(body.settings || '{}') : (body.settings || {});
-        const model = Array.isArray(body.model) ? body.model[0] : body.model;
+        const model = String(body.workflow || '').trim();
+        if (!model) {
+          const error = new Error('测试 ComfyUI 连接时必须明确指定 workflow');
+          error.code = 'COMFYUI_WORKFLOW_REQUIRED';
+          throw error;
+        }
         const result = await providerRegistry.get('comfyui').testConnection({
           base_url: body.base_url,
           model,
@@ -216,8 +227,8 @@ module.exports = function aiConfigRoutes(db, log, cfg, options) {
     list: list(db),
     get: get(db),
     vendorLock: vendorLock(cfg),
-    create: create(db, log, cfg),
-    update: update(db, log, cfg),
+    create: create(db, log, cfg, options),
+    update: update(db, log, cfg, options),
     delete: remove(db, log, cfg),
     testConnection: testConnection(log, options),
     listJimeng2MaterialAssets: listJimeng2MaterialAssets(log),
