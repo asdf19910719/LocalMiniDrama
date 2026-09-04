@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateWorkflowGovernance } = require('./directorGovernance');
 const { getAdapter } = require('./adapters');
+const { validateWorkflowExecution } = require('./workflowExecutionPolicy');
 
 const REGISTRY_VERSION = 1;
 const WORKFLOW_STATUSES = new Set(['verified', 'configured', 'invalid']);
@@ -224,6 +225,7 @@ function validateEntryShape(entry, index) {
   } catch (error) {
     throw new WorkflowRegistryError(error.message);
   }
+  validateWorkflowExecution(entry.execution, entry.id);
 }
 
 function loadRegistry(registryPath, options = {}) {
@@ -303,6 +305,7 @@ function loadRegistry(registryPath, options = {}) {
       adapterVersion: entry.adapterVersion || null,
       variant: entry.variant || null,
       capabilities: entry.capabilities ? cloneJson(entry.capabilities) : null,
+      execution: validateWorkflowExecution(entry.execution, entry.id),
       inputSchemaVersion: entry.inputSchemaVersion || 1,
       provenance: cloneJson(entry.provenance),
       runtimeLock: cloneJson(entry.runtimeLock),

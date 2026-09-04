@@ -39,6 +39,17 @@ function governance() {
   };
 }
 
+function execution() {
+  return {
+    promptContract: 'h3_director_v1',
+    requiresPromptDraft: true,
+    dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+    references: { min: 1, max: 9 },
+    vramPolicy: 'h3_estimate',
+    defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+  };
+}
+
 function registryFor(workflowPath, workflowSha256) {
   return {
     version: 1,
@@ -53,6 +64,7 @@ function registryFor(workflowPath, workflowSha256) {
         customNodes: ['MiniMaxH3Director'],
         inputSchema: { prompt: 'string', seed: 'integer' },
         verifiedEvidence: path.join(path.dirname(workflowPath), 'evidence.md'),
+        execution: execution(),
         ...governance(),
       },
       {
@@ -65,6 +77,7 @@ function registryFor(workflowPath, workflowSha256) {
         customNodes: [],
         inputSchema: { prompt: 'string' },
         verifiedEvidence: null,
+        execution: execution(),
         ...governance(),
       },
       {
@@ -77,6 +90,7 @@ function registryFor(workflowPath, workflowSha256) {
         customNodes: [],
         inputSchema: { prompt: 'string' },
         verifiedEvidence: null,
+        execution: execution(),
         ...governance(),
       },
     ],
@@ -134,6 +148,20 @@ describe('Director workflow registry', () => {
       })),
     }));
     assert.throws(() => loadRegistry(registryPath), /sha256|hash/i);
+  });
+
+  it('rejects a registry entry without an explicit execution contract', () => {
+    const { loadRegistry, sha256File } = loadSut();
+    const { root, workflowPath } = writeWorkflowFixture();
+    const registryPath = path.join(root, 'registry.json');
+    const registry = registryFor(workflowPath, sha256File(workflowPath));
+    delete registry.workflows[0].execution;
+    fs.writeFileSync(registryPath, JSON.stringify({ ...registry, workflows: [registry.workflows[0]] }));
+
+    assert.throws(
+      () => loadRegistry(registryPath),
+      (error) => error.code === 'WORKFLOW_EXECUTION_INVALID',
+    );
   });
 });
 

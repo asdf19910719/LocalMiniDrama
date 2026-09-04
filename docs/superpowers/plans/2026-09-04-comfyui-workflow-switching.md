@@ -38,13 +38,13 @@
 - `resolveWorkflowParameters(workflow, input, config)` 返回 `{ width, height, durationSeconds, frameRate, seed }`。
 - `validateWorkflowReferences(workflow, references)` 按 execution.references 校验。
 
-- [ ] 写测试：H3 与 free-text execution 均可规范化；缺字段、非法 promptContract、非法范围被拒绝；adapter 存在不会自动要求草稿。
-- [ ] 运行测试并确认因模块不存在失败。
-- [ ] 实现最小策略 helper，错误对象带稳定 code。
-- [ ] 给两个真实注册表条目补 execution，并在 loader 中强制校验、返回规范化 execution。
-- [ ] 更新受影响 registry 测试夹具。
-- [ ] 运行 `npx --yes node@22 --test test/workflowExecutionPolicy.test.js test/directorWorkflowRegistry.test.js`。
-- [ ] 提交 `feat: add explicit ComfyUI workflow execution contracts`。
+- [x] 写测试：H3 与 free-text execution 均可规范化；缺字段、非法 promptContract、非法范围被拒绝；adapter 存在不会自动要求草稿。
+- [x] 运行测试并确认因模块不存在失败。
+- [x] 实现最小策略 helper，错误对象带稳定 code。
+- [x] 给两个真实注册表条目补 execution，并在 loader 中强制校验、返回规范化 execution。
+- [x] 更新受影响 registry 测试夹具。
+- [x] 运行 `npx --yes node@22 --test test/workflowExecutionPolicy.test.js test/directorWorkflowRegistry.test.js`。
+- [x] 提交 `feat: add explicit ComfyUI workflow execution contracts`。
 
 ### Task 2: 唯一工作流选择与快照一致性
 

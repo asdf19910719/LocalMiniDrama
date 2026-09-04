@@ -41,6 +41,29 @@
         "supportsAudio": true,
         "supportsSage": true
       },
+      "execution": {
+        "promptContract": "h3_director_v1",
+        "requiresPromptDraft": true,
+        "dimensions": {
+          "minWidth": 32,
+          "maxWidth": 4096,
+          "minHeight": 32,
+          "maxHeight": 4096,
+          "multipleOf": 32
+        },
+        "references": {
+          "min": 1,
+          "max": 9
+        },
+        "vramPolicy": "h3_estimate",
+        "defaults": {
+          "width": 1312,
+          "height": 736,
+          "durationSeconds": 5,
+          "frameRate": 24,
+          "seed": 42
+        }
+      },
       "inputSchemaVersion": 1,
       "inputSchema": {
         "common": [
@@ -200,6 +223,29 @@
         "segments": "array",
         "continuityEnabled": "boolean",
         "continuityOverlapFrames": "integer"
+      },
+      "execution": {
+        "promptContract": "h3_director_v1",
+        "requiresPromptDraft": true,
+        "dimensions": {
+          "minWidth": 32,
+          "maxWidth": 4096,
+          "minHeight": 32,
+          "maxHeight": 4096,
+          "multipleOf": 32
+        },
+        "references": {
+          "min": 1,
+          "max": 9
+        },
+        "vramPolicy": "h3_estimate",
+        "defaults": {
+          "width": 864,
+          "height": 480,
+          "durationSeconds": 5,
+          "frameRate": 24,
+          "seed": 42
+        }
       },
       "verifiedEvidence": "docs/research/h3-continuity-test-report.md"
     }
