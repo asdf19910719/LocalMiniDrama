@@ -25,7 +25,14 @@ export function extractResultSet(node, attempt = {}) {
     // explicitly incomplete browser image remains a generating placeholder.
     const pendingLoad = img.complete === false
       || (typeof img.naturalWidth === 'number' && img.naturalWidth <= 0);
-    if (pendingLoad || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
+    // Current ChatGPT marks completed imagegen results as lazy images. When
+    // their turn is off-screen, Chromium deliberately leaves complete=false
+    // and naturalWidth=0 forever even though the authenticated estuary URL is
+    // already downloadable. The generated-image alt text is ChatGPT's stable
+    // semantic completion marker, so it is safe to fetch that URL directly.
+    const alt = String(img.alt || img.getAttribute?.('alt') || '').trim();
+    const semanticallyComplete = /^(已生成图片|generated image)[:：]?/i.test(alt);
+    if ((pendingLoad && !semanticallyComplete) || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
     seenSources.add(sourceUrl);
     const resultIndex = seenSources.size - 1;
     return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };

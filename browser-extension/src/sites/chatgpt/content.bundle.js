@@ -47,7 +47,9 @@
     const results = [...node.querySelectorAll?.("img") || []].map((img) => {
       const sourceUrl = img.currentSrc || img.src || img.getAttribute?.("src");
       const pendingLoad = img.complete === false || typeof img.naturalWidth === "number" && img.naturalWidth <= 0;
-      if (pendingLoad || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
+      const alt = String(img.alt || img.getAttribute?.("alt") || "").trim();
+      const semanticallyComplete = /^(已生成图片|generated image)[:：]?/i.test(alt);
+      if (pendingLoad && !semanticallyComplete || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
       seenSources.add(sourceUrl);
       const resultIndex = seenSources.size - 1;
       return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };

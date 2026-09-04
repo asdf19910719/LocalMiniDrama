@@ -223,6 +223,24 @@ test('collector waits until an HTTP image node has actually loaded', () => {
   assert.deepEqual(generating.results, []);
 });
 
+test('collector accepts a semantically completed ChatGPT image even while lazy loading', () => {
+  const lazyGeneratedImage = image('https://chatgpt.com/backend-api/estuary/content?id=lazy-generated');
+  lazyGeneratedImage.complete = false;
+  lazyGeneratedImage.naturalWidth = 0;
+  lazyGeneratedImage.alt = '已生成图片：周启角色服装参考图板';
+  lazyGeneratedImage.getAttribute = (name) => (name === 'alt' ? lazyGeneratedImage.alt : null);
+  lazyGeneratedImage.closest = (selector) => (selector === '[id^="image-"]' ? { id: 'image-result-1' } : null);
+
+  const result = extractResultSet(
+    node('assistant-lazy', [lazyGeneratedImage]),
+    { attemptId: 'attempt-lazy', assistantMessageId: 'assistant-lazy', resultSetId: 'set-lazy' },
+  );
+
+  assert.equal(result.status, 'RESULT_READY');
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].sourceUrl, lazyGeneratedImage.src);
+});
+
 test('adapter reports generating once and polls until an image finishes loading', async () => {
   const previousObserver = globalThis.MutationObserver;
   const previousTimeout = globalThis.setTimeout;
