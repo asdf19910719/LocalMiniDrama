@@ -178,13 +178,13 @@
 - 草稿 API 第三参数为 workflowId。
 - 面板导出 `workflowOptions` 与 `onWorkflowChange`。
 
-- [ ] 写 helper 测试证明 adapter 不决定 H3、当前 workflow metadata 覆盖配置默认名。
-- [ ] 写面板测试覆盖默认选择、切换、草稿参数、非 H3 清理、旧请求竞态和请求 workflowId。
-- [ ] 运行并确认失败。
-- [ ] 实现 API 与 helper，删除请求构造和表单中的硬编码官方 workflow fallback。
-- [ ] 实现下拉与切换逻辑，让尺寸默认、H3 UI、时长锁定和参考图策略读取当前 metadata。
-- [ ] 运行三个测试文件。
-- [ ] 提交 `feat: switch ComfyUI workflows in video generation panel`。
+- [x] 写 helper 测试证明 adapter 不决定 H3、当前 workflow metadata 覆盖配置默认名。
+- [x] 写面板测试覆盖默认选择、切换、草稿参数、非 H3 清理、旧请求竞态和请求 workflowId。
+- [x] 运行并确认失败。
+- [x] 实现 API 与 helper，删除请求构造和表单中的硬编码官方 workflow fallback。
+- [x] 实现下拉与切换逻辑，让尺寸默认、H3 UI、时长锁定和参考图策略读取当前 metadata。
+- [x] 运行三个测试文件。
+- [x] 提交 `feat: switch ComfyUI workflows in video generation panel`。
 
 ### Task 8: AI 配置页多选与逐项健康状态
 
@@ -198,12 +198,12 @@
 - `normalizeComfyuiModelSelection` 保证 default 属于可选集合。
 - 目录失败时保留原值并禁止覆盖保存。
 
-- [ ] 写 helper 测试覆盖 verified/configured/invalid、默认纠正、未知已有值保留。
-- [ ] 运行并确认失败。
-- [ ] 实现 helper 和多选 UI；删除硬编码目录作为保存回退。
-- [ ] 实现逐项连接检查结果模型，测试按钮逐个传 workflow。
-- [ ] 运行 helper 测试和 `npm run build`。
-- [ ] 提交 `feat: manage ComfyUI workflow allowlist from registry`。
+- [x] 写 helper 测试覆盖 verified/configured/invalid、默认纠正、未知已有值保留。
+- [x] 运行并确认失败。
+- [x] 实现 helper 和多选 UI；删除硬编码目录作为保存回退。
+- [x] 实现逐项连接检查结果模型，测试按钮逐个传 workflow。
+- [x] 运行 helper 测试和 `npm run build`。
+- [x] 提交 `feat: manage ComfyUI workflow allowlist from registry`。
 
 ### Task 9: 安全工作流分析脚本
 
@@ -215,11 +215,11 @@
 - `analyzeWorkflowFile(filePath, options)` 从原始文件字节生成 `{ entryDraft, diagnostics }`。
 - CLI 只输出 JSON，不修改 registry 或复制文件。
 
-- [ ] 写测试：带格式化空白的文件 SHA 等于 `sha256File`；提取 class_type；family/adapter/variant 不完整时拒绝；输出包含 execution 草案与 diagnostics。
-- [ ] 运行并确认模块不存在失败。
-- [ ] 实现分析函数和 CLI；不写占位字符串冒充有效治理数据。
-- [ ] 运行脚本测试，并对现有官方工作流执行一次只读冒烟。
-- [ ] 提交 `feat: add safe ComfyUI workflow analysis helper`。
+- [x] 写测试：带格式化空白的文件 SHA 等于 `sha256File`；提取 class_type；family/adapter/adapterVersion/variant 不完整时拒绝；输出包含 execution 草案与 diagnostics。
+- [x] 运行并确认模块不存在失败。
+- [x] 实现分析函数和 CLI；不写占位字符串冒充有效治理数据。
+- [x] 运行脚本测试，并对现有官方工作流执行一次只读冒烟。
+- [x] 提交 `feat: add safe ComfyUI workflow analysis helper`。
 
 ### Task 10: 全量验证与文档收口
 
@@ -227,10 +227,19 @@
 - Modify: `docs/superpowers/specs/2026-09-04-comfyui-workflow-switching-design.md`（仅在实现发现契约偏差时同步）
 - Modify: `docs/superpowers/plans/2026-09-04-comfyui-workflow-switching.md`（勾选完成项）
 
-- [ ] 运行 `npx --yes node@22 --test test/*.test.js`。
-- [ ] 运行 `node --test test/*.test.js`（frontweb）。
-- [ ] 运行 `npm run build`（frontweb）。
-- [ ] 运行 registry load、目录与两个真实工作流的离线冒烟。
-- [ ] 运行 `git diff --check` 和 `git status --short`，确认无依赖安装噪声。
-- [ ] 更新计划复选框与最终测试数字。
-- [ ] 提交 `docs: complete ComfyUI workflow switching verification`。
+- [x] 运行 `npx --yes node@22 --test test/*.test.js`。
+- [x] 运行 `node --test test/*.test.js`（frontweb）。
+- [x] 运行 `npm run build`（frontweb）。
+- [x] 运行 registry load、目录与两个真实工作流的离线冒烟。
+- [x] 运行 `git diff --check` 和 `git status --short`，确认无依赖安装噪声。
+- [x] 更新计划复选框与最终测试数字。
+- [x] 提交 `docs: complete ComfyUI workflow switching verification`。
+
+## 最终验证记录（2026-09-05）
+
+- 后端 Node 22 全量测试：623/623 通过。
+- 前端全量测试：185/185 通过。
+- 前端 Vite 生产构建：通过（1666 个模块）。
+- 两个真实工作流离线冒烟：注册表加载、目录生成、SHA 校验和提示词构建均通过；`minimax_h3_director_r2v` 构建 8 个节点，`h3-continuity-v1` 构建 7 个节点。
+- 两轮独立只读代码复审：最终未发现 Critical、Important 或 Minor 级可复现问题。
+- 开发与验证仅在 `codex/comfyui-workflow-switching-v2` 隔离 worktree 完成，未合并主分支。

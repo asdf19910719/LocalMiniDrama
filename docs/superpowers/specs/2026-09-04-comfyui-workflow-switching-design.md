@@ -70,7 +70,7 @@
 - `dimensions.multipleOf`: 正整数，允许普通工作流声明自己的网格；
 - `references.min/max`: 工作流自己的参考图边界。
 
-`adapter` 只表示“如何把统一输入绑定到工作流图”，不再参与 H3 判定。H3 草稿门禁只看 `execution.requiresPromptDraft`，H3 结构校验只看 `execution.promptContract`。
+`adapter` 只表示“如何把统一输入绑定到工作流图”，不再参与 H3 判定。声明 adapter 时必须同时声明 `adapterVersion`，且注册表加载阶段必须与已注册实现的版本严格一致。H3 草稿门禁只看 `execution.requiresPromptDraft`，H3 结构校验只看 `execution.promptContract`。
 
 现有 `minimax_h3_director_r2v` 与 `h3-continuity-v1` 都补齐显式 H3 执行契约。注册表加载时拒绝缺少或非法的 execution；测试夹具也必须声明契约，避免隐式行为重新出现。
 
@@ -218,7 +218,7 @@ Provider 提交和测试连接按 execution 执行：
 - 从输入文件原始字节计算 SHA-256；
 - 解析 API JSON 并提取 class_type 集合；
 - `customNodes` 表示 ComfyUI class_type，第三方包锁定位于 `runtimeLock.customNodes`，两者不混用；
-- adapter 元数据必须成组提供；只给 family 或 variant 时立即报错；
+- adapter 元数据（family、adapter、adapterVersion、variant）必须成组提供；缺少任一项立即报错；
 - 输出 execution 骨架与缺失治理项诊断；
 - 输出明确标记为 draft，补齐并通过正式 registry loader 后才能加入注册表。
 
@@ -229,11 +229,13 @@ Provider 提交和测试连接按 execution 执行：
 任务创建时快照记录实际工作流：
 
 - `model == workflowId == selectedWorkflowId`；
-- workflow SHA、variant、adapter、execution；
+- workflow 文件路径（仅内部执行使用）、SHA、variant、adapter/version、execution；
 - 最终有效尺寸、时长、帧率、seed 和 planHash；
 - 不包含密钥。
 
-submit/retry/recover 只从快照恢复工作流和参数；通道白名单、默认值或注册表随后改变不重路由已有任务。若快照工作流文件/SHA 已不可用，任务明确失败而不是换用当前默认工作流。
+submit/retry/recover 只从快照恢复工作流和参数；通道白名单、默认值或注册表随后改变不重路由已有任务。若快照工作流文件/SHA 已不可用或 adapter 版本漂移，任务明确失败而不是换用当前默认工作流。内部 `workflowPath` 不通过视频 API 返回。
+
+版本化快照新增字段不能让历史 H3 草稿无故失效。对没有 `workflowSnapshotVersion` 的旧草稿，freshness 使用旧字段投影比较，同时继续严格比较工作流 SHA 和原有生成参数；只有业务输入、参数、配置语义或 SHA 真正变化才标记 stale。
 
 ## 12. 验收标准
 
