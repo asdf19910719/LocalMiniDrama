@@ -61,7 +61,7 @@ test('exposes the same video-generation actions in drawer and sidebar layouts', 
   assert.deepEqual(drawerActions, ['刷新', '生成候选', '取消生成', '重试生成', '质量检查', '选用候选', '创建连续性锚点'])
 })
 
-test('builds numeric candidate input with the default H3 workflow and mode', () => {
+test('builds numeric candidate input with the explicitly selected workflow and mode', () => {
   const request = buildVideoCandidateRequest({
     prompt: '雨夜车站，人物撑伞转身',
     negativePrompt: '画面抖动',
@@ -74,6 +74,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
     continuityMode: 'motion_overlap',
     anchorId: 'anchor-1',
     sourceArtifactId: 'artifact-1',
+    workflowId: 'custom-workflow-v2',
   })
 
   assert.deepEqual(request, {
@@ -87,7 +88,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
       frameRate: 24,
       seed: 77,
       continuityMode: 'motion_overlap',
-      workflowId: 'minimax_h3_director_r2v',
+      workflowId: 'custom-workflow-v2',
       generationMode: 'single_reference',
       anchorId: 'anchor-1',
       sourceArtifactId: 'artifact-1',
@@ -95,7 +96,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
   })
   assert.equal('provider' in request, false)
   assert.equal('model' in request, false)
-  assert.equal(request.structured.workflowId, 'minimax_h3_director_r2v')
+  assert.equal(request.structured.workflowId, 'custom-workflow-v2')
   assert.equal(request.structured.generationMode, 'single_reference')
 })
 
@@ -112,6 +113,7 @@ test('accepts zero as a deterministic random seed', () => {
   })
 
   assert.equal(request.structured.seed, 0)
+  assert.equal('workflowId' in request.structured, false)
 })
 
 test('preserves the normal editor generation context in the unified candidate payload', async () => {
@@ -163,7 +165,6 @@ test('preserves the normal editor generation context in the unified candidate pa
       frameRate: 24,
       seed: 42,
       continuityMode: 'motion_overlap',
-      workflowId: 'minimax_h3_director_r2v',
       generationMode: 'single_reference',
       imageUrl: 'https://assets.example.test/selected-first.png',
       firstFrameUrl: 'https://assets.example.test/selected-first.png',
@@ -457,9 +458,42 @@ const H3_CONFIG = {
   default_model: 'minimax_h3_director_r2v',
 }
 
+const H3_WORKFLOW = {
+  id: 'minimax_h3_director_r2v',
+  default: true,
+  selectable: true,
+  variant: '官方多参考图',
+  execution: {
+    requiresPromptDraft: true,
+    promptContract: 'h3_director_v1',
+    defaults: { width: 1312, height: 736, frameRate: 24, generationMode: 'single_reference' },
+    dimensions: { minWidth: 32, minHeight: 32, multipleOf: 32 },
+  },
+  capabilities: { modes: ['single_reference'], supportsContinuity: false },
+}
+
+const FREE_TEXT_WORKFLOW = {
+  id: 'wan_free_text_v1',
+  default: false,
+  selectable: true,
+  variant: '自由文本',
+  execution: {
+    requiresPromptDraft: false,
+    promptContract: 'free_text_v1',
+    defaults: { width: 864, height: 480, frameRate: 16, generationMode: 'image_to_video' },
+    dimensions: { minWidth: 64, minHeight: 64, multipleOf: 16 },
+  },
+  capabilities: { modes: ['image_to_video'], supportsContinuity: true },
+}
+
 function h3ApiStub(extra = {}) {
   return {
     getDefaultConfig: async () => ({ ...H3_CONFIG }),
+    capabilities: async () => ({
+      workflow: H3_WORKFLOW,
+      workflows: [H3_WORKFLOW, FREE_TEXT_WORKFLOW],
+      capabilities: H3_WORKFLOW.capabilities,
+    }),
     getCandidateHistory: async () => ({ groups: [], latest: null }),
     getH3Draft: async () => ({ draft: null, freshness: { stale: false, reasons: [] } }),
     getReferenceSlots: async () => ({ slots: [], total: 0, overflow: [] }),
@@ -487,14 +521,82 @@ test('detects ComfyUI H3 configs for the draft flow', async () => {
   assert.equal(plain.isH3Config.value, false)
 })
 
+test('selects the server default workflow and exposes only catalog workflow options', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub(),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.form.workflowId, H3_WORKFLOW.id)
+  assert.deepEqual(panel.workflowOptions.value.map((workflow) => workflow.id), [H3_WORKFLOW.id, FREE_TEXT_WORKFLOW.id])
+  assert.equal(panel.currentWorkflow.value.id, H3_WORKFLOW.id)
+  assert.equal(panel.workflowSelectable.value, true)
+})
+
+test('switching workflows applies execution defaults and sends the selected workflow id', async () => {
+  const generated = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 2, storyboard: { id: 2, video_prompt: '自由文本镜头' } }),
+    () => {},
+    h3ApiStub({
+      generateCandidates: async (storyboardId, body) => {
+        generated.push([storyboardId, body])
+        return {}
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+
+  assert.equal(panel.isH3Config.value, false)
+  assert.equal(panel.form.width, 864)
+  assert.equal(panel.form.height, 480)
+  assert.equal(panel.form.frameRate, 16)
+  assert.equal(panel.form.generationMode, 'image_to_video')
+  assert.equal(panel.workflowDimensionRules.value.multipleOf, 16)
+
+  await panel.generateCandidates()
+  assert.equal(generated[0][1].structured.workflowId, FREE_TEXT_WORKFLOW.id)
+})
+
+test('ignores an H3 draft response that arrives after switching workflows', async () => {
+  let resolveDraft
+  const draftResponse = new Promise((resolve) => { resolveDraft = resolve })
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 8, storyboard: { id: 8, video_prompt: '竞态镜头' } }),
+    () => {},
+    h3ApiStub({ getH3Draft: async () => draftResponse }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+  resolveDraft({
+    draft: { id: 99, status: 'valid', final_compiled_prompt: '过期 H3 草稿' },
+    freshness: { stale: false, reasons: [] },
+  })
+  await draftResponse
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.form.workflowId, FREE_TEXT_WORKFLOW.id)
+  assert.equal(panel.h3Draft.value, null)
+  assert.equal(panel.h3DraftText.value, '')
+})
+
 test('restores the existing H3 draft text and chip when the panel opens', async () => {
   const panel = useVideoGenerationPanel(
     reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
     () => {},
     h3ApiStub({
-      getH3Draft: async (storyboardId, videoConfigId) => {
+      getH3Draft: async (storyboardId, videoConfigId, workflowId) => {
         assert.equal(storyboardId, 1)
         assert.equal(videoConfigId, 77)
+        assert.equal(workflowId, H3_WORKFLOW.id)
         return {
           draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译好的 H3 提示词' },
           freshness: { stale: false, reasons: [] },
@@ -516,8 +618,8 @@ test('compile generates the draft text through the compile endpoint', async () =
     reactive({ storyboardId: 3, storyboard: { id: 3, universal_segment_text: '片段描述' } }),
     () => {},
     h3ApiStub({
-      compileH3Draft: async (storyboardId, videoConfigId) => {
-        compileCalls.push([storyboardId, videoConfigId])
+      compileH3Draft: async (storyboardId, videoConfigId, workflowId) => {
+        compileCalls.push([storyboardId, videoConfigId, workflowId])
         return {
           draft: { id: 12, status: 'valid', manually_edited: false, final_compiled_prompt: '新编译提示词' },
           freshness: { stale: false, reasons: [] },
@@ -529,7 +631,7 @@ test('compile generates the draft text through the compile endpoint', async () =
   await new Promise((resolve) => setImmediate(resolve))
 
   await panel.compileH3Draft()
-  assert.deepEqual(compileCalls, [[3, 77]])
+  assert.deepEqual(compileCalls, [[3, 77, H3_WORKFLOW.id]])
   assert.equal(panel.h3DraftText.value, '新编译提示词')
   assert.equal(panel.h3UiState.value.chip, 'ai')
 })

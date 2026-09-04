@@ -8,6 +8,7 @@ import {
   mapFreshnessReasons,
 } from '../utils/h3DraftState.js'
 import { assetImageUrl } from '../utils/mediaUrl.js'
+import { requiresH3Draft, slotReferenceFallbackPolicy } from '../utils/videoModeCompatibility.js'
 
 // H3 草稿文本防抖自动保存间隔(spec §11.3,Task 17)
 const H3_DRAFT_SAVE_DEBOUNCE_MS = 800
@@ -17,6 +18,7 @@ const H3_DRAFT_GATE_ERROR_CODES = new Set([
   'H3_DRAFT_INVALID',
   'H3_DRAFT_HASH_MISMATCH',
   'H3_DRAFT_CONFIG_MISMATCH',
+  'H3_DRAFT_WORKFLOW_MISMATCH',
 ])
 
 const VIDEO_ACTIONS = Object.freeze([
@@ -276,9 +278,10 @@ export function buildVideoCandidateRequest(form = {}, overrides = {}) {
     frameRate: positiveNumber(form.frameRate ?? 24, '帧率'),
     seed: nonNegativeInteger(form.seed ?? 42, '随机种子'),
     continuityMode: trimmed(form.continuityMode) || 'none',
-    workflowId: trimmed(form.workflowId) || 'minimax_h3_director_r2v',
     generationMode: trimmed(form.generationMode) || 'single_reference',
   }
+  const workflowId = trimmed(form.workflowId)
+  if (workflowId) structured.workflowId = workflowId
   const optional = {
     anchorId: trimmed(form.anchorId),
     sourceArtifactId: trimmed(form.sourceArtifactId),
@@ -357,7 +360,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     candidateCount: 2,
     continuityMode: 'none',
     useVoiceReference: false,
-    workflowId: 'minimax_h3_director_r2v',
+    workflowId: '',
     generationMode: 'single_reference',
     anchorId: '',
     sourceArtifactId: '',
@@ -442,6 +445,23 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     currentGroup.value?.selected_artifact_id || selectedCandidate.value?.artifact?.id || ''
   ))
   const sourceAnchor = computed(() => normalizedSourceAnchor(props.storyboard))
+  const workflowOptions = computed(() => (
+    Array.isArray(capabilities.value?.workflows) ? capabilities.value.workflows : []
+  ))
+  const currentWorkflow = computed(() => (
+    workflowOptions.value.find((workflow) => workflow.id === form.workflowId) || null
+  ))
+  const workflowSelectable = computed(() => (
+    trimmed(defaultConfig.value?.provider).toLowerCase() !== 'comfyui'
+      || currentWorkflow.value?.selectable === true
+  ))
+  const workflowDimensionRules = computed(() => ({
+    minWidth: positiveDefault(currentWorkflow.value?.execution?.dimensions?.minWidth, 32),
+    maxWidth: positiveDefault(currentWorkflow.value?.execution?.dimensions?.maxWidth, 8192),
+    minHeight: positiveDefault(currentWorkflow.value?.execution?.dimensions?.minHeight, 32),
+    maxHeight: positiveDefault(currentWorkflow.value?.execution?.dimensions?.maxHeight, 8192),
+    multipleOf: positiveDefault(currentWorkflow.value?.execution?.dimensions?.multipleOf, 32),
+  }))
   const configStatus = computed(() => defaultConfig.value ? '服务已配置' : '未配置默认服务')
   const providerName = computed(() => {
     const config = defaultConfig.value
@@ -460,16 +480,15 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     return config.name || labels[trimmed(config.provider).toLowerCase()] || trimmed(config.provider) || '默认视频服务'
   })
   const modelName = computed(() => (
-    trimmed(defaultConfig.value?.default_model)
+    (trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui' && trimmed(form.workflowId))
+      || trimmed(defaultConfig.value?.default_model)
       || trimmed(Array.isArray(defaultConfig.value?.model) ? defaultConfig.value.model[0] : defaultConfig.value?.model)
       || '由默认配置决定'
   ))
-  const isH3Config = computed(() => {
-    const cfg = defaultConfig.value || {}
-    const provider = String(cfg.provider || '').toLowerCase()
-    const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
-  })
+  const isH3Config = computed(() => (
+    trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui'
+      && requiresH3Draft(currentWorkflow.value)
+  ))
   const h3UiState = computed(() => deriveH3DraftUiState({
     draft: h3Draft.value,
     freshness: h3Freshness.value,
@@ -511,20 +530,24 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   async function loadH3Draft() {
     const configId = defaultConfig.value?.id
-    if (!isH3Config.value || configId == null || typeof videosAPI.getH3Draft !== 'function') return
+    const requestWorkflowId = form.workflowId
+    if (!isH3Config.value || configId == null || !requestWorkflowId || typeof videosAPI.getH3Draft !== 'function') return
     const requestStoryboardId = props.storyboardId
     const requestVersion = ++h3DraftVersion
     h3DraftLoading.value = true
     try {
-      const result = await videosAPI.getH3Draft(requestStoryboardId, configId)
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      const result = await videosAPI.getH3Draft(requestStoryboardId, configId, requestWorkflowId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
     } catch (caught) {
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(null, null)
       setError(caught)
     } finally {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) {
         h3DraftLoading.value = false
       }
     }
@@ -533,7 +556,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   /** 「生成 H3 提示词」:调用 compile 草稿接口(替代旧 POST /videos/h3-preview 预览) */
   async function compileH3Draft() {
     const configId = defaultConfig.value?.id
-    if (!isH3Config.value || configId == null || creating.value || h3Compiling.value) return
+    const requestWorkflowId = form.workflowId
+    if (!isH3Config.value || configId == null || !requestWorkflowId || creating.value || h3Compiling.value) return
     if (typeof videosAPI.compileH3Draft !== 'function') return
     // 编译前先补存本地未保存文本:编译结果会 replaceText,不补存会静默覆盖未落库的编辑。
     // 补存失败则中止编译(与 generateCandidates 的门禁同款模式),错误保留展示。
@@ -551,14 +575,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Compiling.value = true
     setError(null)
     try {
-      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId)
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId, requestWorkflowId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
       await loadReferenceSlots()
     } catch (caught) {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) setError(caught)
     } finally {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) {
         h3Compiling.value = false
       }
     }
@@ -708,6 +735,31 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     form.seed = nonNegativeDefault(settings.seed, 42)
   }
 
+  function applyWorkflowDefaults(workflow) {
+    if (!workflow) return
+    const defaults = workflow.execution?.defaults || {}
+    form.width = positiveDefault(defaults.width, form.width)
+    form.height = positiveDefault(defaults.height, form.height)
+    form.duration = positiveDefault(defaults.durationSeconds, form.duration)
+    form.frameRate = positiveDefault(defaults.frameRate, form.frameRate)
+    form.seed = nonNegativeDefault(defaults.seed, form.seed)
+    const mode = workflow.capabilities?.modes?.[0]
+    if (mode) form.generationMode = mode
+    if (workflow.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
+  }
+
+  async function onWorkflowChange(workflowId) {
+    form.workflowId = trimmed(workflowId)
+    resetH3DraftState()
+    applyWorkflowDefaults(currentWorkflow.value)
+    setError(null)
+    if (isH3Config.value) {
+      await Promise.all([loadH3Draft(), loadReferenceSlots()])
+    } else if (shouldUseSlotReferences()) {
+      await loadReferenceSlots()
+    }
+  }
+
   function positiveDefault(value, fallback) {
     const number = Number(value)
     return Number.isFinite(number) && number > 0 ? number : fallback
@@ -722,15 +774,20 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configLoading.value = true
     try {
       defaultConfig.value = await videosAPI.getDefaultConfig()
+      applyConfigDefaults(defaultConfig.value)
       if (typeof videosAPI.capabilities === 'function' && trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui') {
         capabilities.value = await videosAPI.capabilities()
-        const workflow = capabilities.value?.workflow
-        if (workflow?.id) form.workflowId = workflow.id
-        const mode = capabilities.value?.capabilities?.modes?.[0]
-        if (mode) form.generationMode = mode
-        if (capabilities.value?.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
+        const workflows = Array.isArray(capabilities.value?.workflows) ? capabilities.value.workflows : []
+        const workflow = workflows.find((item) => item.default)
+          || workflows.find((item) => item.id === capabilities.value?.workflow?.id)
+          || workflows.find((item) => item.selectable)
+          || null
+        form.workflowId = workflow?.id || ''
+        applyWorkflowDefaults(workflow)
+      } else {
+        capabilities.value = null
+        form.workflowId = ''
       }
-      applyConfigDefaults(defaultConfig.value)
     } catch (caught) {
       defaultConfig.value = null
       setError(caught)
@@ -822,6 +879,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     const requestStoryboardId = props.storyboardId
     const storyboardKey = String(requestStoryboardId)
     if (creating.value || inFlightCreates.has(storyboardKey)) return
+    if (!workflowSelectable.value) {
+      setError(Object.assign(new Error(currentWorkflow.value?.unavailableReason || '所选工作流当前不可用。'), { code: 'VIDEO_WORKFLOW_INVALID' }))
+      return
+    }
     // H3 门禁(Task 16):先补存待保存文本,再按 valid+未 stale+未保存中放行
     if (isH3Config.value) {
       await flushH3DraftSave()
@@ -854,6 +915,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (shouldUseSlotReferences() && !h3SlotsLoaded.value) {
         // 抽屉刚打开就点生成时槽位可能仍在途：等待完成，避免回退到陈旧远程 URL
         await loadReferenceSlots()
+      }
+      if (!h3SlotsLoaded.value
+        && slotReferenceFallbackPolicy(defaultConfig.value, currentWorkflow.value) === 'abort') {
+        setError(Object.assign(new Error('参考图槽位加载失败，请重试。'), { code: 'VIDEO_REFERENCE_SLOTS_UNAVAILABLE' }))
+        return
       }
       if (h3SlotsLoaded.value && shouldUseSlotReferences()) {
         overrides.referenceImageUrls = slotReferenceUrls()
@@ -1078,6 +1144,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     generationMode,
     defaultConfig,
     capabilities,
+    workflowOptions,
+    currentWorkflow,
+    workflowSelectable,
+    workflowDimensionRules,
     configLoading,
     configStatus,
     providerName,
@@ -1120,6 +1190,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     compileH3Draft,
     loadH3Draft,
     loadReferenceSlots,
+    onWorkflowChange,
     onH3DraftTextInput,
     scheduleH3DraftSave,
     flushH3DraftSave,

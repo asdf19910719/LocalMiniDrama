@@ -35,6 +35,25 @@
     </section>
 
     <el-form class="generation-form" label-position="top" @submit.prevent="generateCandidates">
+      <el-form-item v-if="workflowOptions.length" label="ComfyUI 工作流" required>
+        <el-select
+          v-model="form.workflowId"
+          style="width: 100%"
+          aria-label="ComfyUI 工作流"
+          @change="onWorkflowChange"
+        >
+          <el-option
+            v-for="workflow in workflowOptions"
+            :key="workflow.id"
+            :label="`${workflow.variant || workflow.id}${workflow.default ? '（默认）' : ''}`"
+            :value="workflow.id"
+            :disabled="!workflow.selectable"
+          />
+        </el-select>
+        <small v-if="currentWorkflow && !currentWorkflow.selectable" class="duration-hint">
+          当前工作流不可用：{{ currentWorkflow.unavailableReason || currentWorkflow.status || '配置无效' }}
+        </small>
+      </el-form-item>
       <el-form-item :label="isUniversalStoryboard ? '全能模式片段描述' : '视频提示词'" required>
         <small v-if="promptRestored" style="margin-left:6px;color:#909399;font-weight:normal">已恢复上次生成使用的提示词展示（业务提示词保持不变）</small>
         <el-input
@@ -59,8 +78,8 @@
           </div>
         </el-form-item>
         <div class="h3-workflow-meta">
-          <el-tag size="small" effect="plain">工作流：官方多参考图（Sage 加速）</el-tag>
-          <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
+          <el-tag size="small" effect="plain">工作流：{{ currentWorkflow?.variant || currentWorkflow?.id }}</el-tag>
+          <el-tag size="small" effect="plain">生成模式：{{ form.generationMode }}</el-tag>
         </div>
         <div class="h3-preview-actions">
           <el-button size="small" :loading="h3Compiling" :disabled="!defaultConfig" @click="compileH3Draft">生成 H3 提示词</el-button>
@@ -107,10 +126,10 @@
       </template>
       <div class="number-grid">
         <el-form-item label="宽度">
-          <el-input-number v-model="form.width" :min="32" :step="32" :controls="true" controls-position="right" />
+          <el-input-number v-model="form.width" :min="workflowDimensionRules.minWidth" :max="workflowDimensionRules.maxWidth" :step="workflowDimensionRules.multipleOf" :controls="true" controls-position="right" />
         </el-form-item>
         <el-form-item label="高度">
-          <el-input-number v-model="form.height" :min="32" :step="32" :controls="true" controls-position="right" />
+          <el-input-number v-model="form.height" :min="workflowDimensionRules.minHeight" :max="workflowDimensionRules.maxHeight" :step="workflowDimensionRules.multipleOf" :controls="true" controls-position="right" />
         </el-form-item>
         <el-form-item label="时长（秒）">
           <el-tooltip
@@ -161,7 +180,7 @@
         type="primary"
         native-type="submit"
         :loading="creating"
-        :disabled="!defaultConfig || (isH3Config ? !h3UiState.canGenerate : !String(form.prompt || '').trim())"
+        :disabled="!defaultConfig || !workflowSelectable || (isH3Config ? !h3UiState.canGenerate : !String(form.prompt || '').trim())"
         class="generate-button"
       >
         <el-icon><Plus /></el-icon>
@@ -384,6 +403,10 @@ const {
   form,
   generationMode,
   defaultConfig,
+  workflowOptions,
+  currentWorkflow,
+  workflowSelectable,
+  workflowDimensionRules,
   configLoading,
   configStatus,
   providerName,
@@ -420,6 +443,7 @@ const {
   refresh,
   generateCandidates,
   compileH3Draft,
+  onWorkflowChange,
   onH3DraftTextInput,
   cancelCandidate,
   retryCandidate,
