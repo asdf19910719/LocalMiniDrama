@@ -570,12 +570,46 @@ input_reference = (图片文件，可选)</pre>
           />
         </el-form-item>
         <template v-if="isComfyUIForm">
-          <el-form-item prop="default_model">
-            <template #label><span class="form-label-tip">工作流</span></template>
-            <el-select v-model="form.default_model" style="width: 100%" @change="onComfyWorkflowChange">
-              <el-option v-for="workflow in availableModels" :key="workflow" :label="workflow" :value="workflow" />
+          <el-alert
+            v-if="comfyWorkflowCatalogState === 'error'"
+            type="error"
+            :closable="false"
+            show-icon
+            title="ComfyUI 工作流目录加载失败，当前值已保留且暂时禁止保存"
+            :description="comfyWorkflowCatalogError"
+            style="margin-bottom: 12px"
+          />
+          <el-form-item>
+            <template #label><span class="form-label-tip">允许的工作流</span></template>
+            <el-select
+              v-model="comfySelectedWorkflowIds"
+              multiple
+              filterable
+              style="width: 100%"
+              :loading="comfyWorkflowCatalogState === 'loading'"
+              :disabled="comfyWorkflowCatalogState !== 'ready'"
+              placeholder="从注册表目录选择一个或多个工作流"
+            >
+              <el-option
+                v-for="workflow in comfyWorkflowOptions"
+                :key="workflow.id"
+                :label="workflow.label"
+                :value="workflow.id"
+                :disabled="workflow.disabled"
+              />
             </el-select>
-            <p class="field-tip">选择已登记的 ComfyUI 工作流；连接检查会校验工作流、节点、模型和显存，且不会启动推理。</p>
+            <p class="field-tip">目录中的 configured / invalid 项会保留显示并说明不可用原因；连接检查会逐项校验且不启动推理。</p>
+          </el-form-item>
+          <el-form-item prop="default_model">
+            <template #label><span class="form-label-tip">默认工作流</span></template>
+            <el-select
+              v-model="form.default_model"
+              style="width: 100%"
+              :disabled="comfyWorkflowCatalogState !== 'ready'"
+              placeholder="从已选且可用的工作流中选择"
+            >
+              <el-option v-for="workflow in comfyDefaultWorkflowOptions" :key="workflow.id" :label="workflow.label" :value="workflow.id" />
+            </el-select>
           </el-form-item>
           <el-form-item>
             <template #label><span class="form-label-tip">画面尺寸</span></template>
@@ -584,7 +618,7 @@ input_reference = (图片文件，可选)</pre>
               <span>×</span>
               <el-input-number v-model="form.height" :min="32" :step="32" controls-position="right" />
             </div>
-            <p class="field-tip">宽高必须为 32 的倍数，默认 1280 × 704。</p>
+            <p class="field-tip">宽高必须为 32 的倍数，默认 1312 × 736。</p>
           </el-form-item>
         </template>
         <el-form-item v-if="form.service_type === 'jimeng2_character_auth'">
@@ -1071,21 +1105,30 @@ input_reference = (图片文件，可选)</pre>
     <!-- 测试连接 -->
     <el-dialog v-model="testVisible" title="测试连接" width="420px">
       <p v-if="testResult === null">正在测试…</p>
-      <template v-else-if="testResult">
-        <template v-if="testProvider === 'comfyui'">
-          <el-alert
-            type="success"
-            title="ComfyUI 连接检查通过"
-            description="以下检查均为只读检查，未启动推理任务。"
-            show-icon
-            :closable="false"
-          />
-          <ul class="comfyui-checks">
-            <li v-for="check in testChecks" :key="check.name">{{ check.name }}：{{ check.message }}</li>
-          </ul>
-        </template>
+      <template v-else-if="testProvider === 'comfyui'">
         <el-alert
-          v-else-if="testServiceType === 'image' || testServiceType === 'storyboard_image' || testServiceType === 'video'"
+          :type="testResult ? 'success' : 'error'"
+          :title="testResult ? 'ComfyUI 工作流连接检查全部通过' : '部分 ComfyUI 工作流检查失败'"
+          description="以下检查均为只读检查，未启动推理任务。"
+          show-icon
+          :closable="false"
+        />
+        <div v-for="item in testWorkflowResults" :key="item.workflow" class="comfyui-workflow-check">
+          <div>
+            <strong>{{ item.workflow }}</strong>
+            <el-tag :type="item.status === 'ready' ? 'success' : item.status === 'experimental_disabled' ? 'warning' : 'danger'" size="small">
+              {{ item.status }}
+            </el-tag>
+          </div>
+          <ul v-if="item.checks.length" class="comfyui-checks">
+            <li v-for="check in item.checks" :key="`${item.workflow}-${check.name}`">{{ check.name }}：{{ check.message }}</li>
+          </ul>
+          <p v-if="item.error" class="field-tip">{{ item.error }}</p>
+        </div>
+      </template>
+      <template v-else-if="testResult">
+        <el-alert
+          v-if="testServiceType === 'image' || testServiceType === 'storyboard_image' || testServiceType === 'video'"
           type="success"
           title="连接成功"
           description="API Key 有效，网络已连通。提示：测试仅验证 Key 合法性，不实际生成图片/视频，模型名填错、账号未开通该功能或配额不足时实际生成仍可能报错。"
@@ -1140,14 +1183,18 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, QuestionFilled, Download, Upload, Delete, ChatDotRound, Picture, Film, VideoCamera, Key, Microphone, Folder } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
+import { videosAPI } from '@/api/videos'
 import { generationSettingsAPI } from '@/api/prompts'
 import PromptEditor from '@/components/PromptEditor.vue'
 import SceneModelMap from '@/components/SceneModelMap.vue'
 import Sd2AssetManagement from '@/components/Sd2AssetManagement.vue'
 import {
+  buildComfyuiWorkflowCheckPlan,
   comfyuiConfigDefaults,
+  comfyuiWorkflowOptionsFromCatalog,
   isApiKeyRequired,
   isComfyuiVideoConfig,
+  normalizeComfyuiModelSelection,
   serializeVideoProviderSettings,
 } from '@/utils/aiConfigVideoProvider'
 
@@ -1274,14 +1321,31 @@ const form = ref({
   group_id: '',
 })
 const presetModelPick = ref('')
+const comfyWorkflowCatalog = ref(null)
+const comfyWorkflowCatalogState = ref('idle')
+const comfyWorkflowCatalogError = ref('')
+let comfyWorkflowCatalogVersion = 0
 
 const formModelList = computed(() => parseModelText(form.value.modelText))
 const isComfyUIForm = computed(() => isComfyuiVideoConfig(form.value))
+const comfyWorkflowOptions = computed(() => comfyuiWorkflowOptionsFromCatalog(
+  comfyWorkflowCatalogState.value === 'ready' ? comfyWorkflowCatalog.value : null,
+  formModelList.value,
+))
+const comfySelectedWorkflowIds = computed({
+  get: () => formModelList.value,
+  set: (values) => onComfyWorkflowSelectionChange(values),
+})
+const comfyDefaultWorkflowOptions = computed(() => {
+  const selected = new Set(formModelList.value)
+  return comfyWorkflowOptions.value.filter((workflow) => selected.has(workflow.id) && workflow.selectable)
+})
 
 // 保证「生成时默认使用」下拉有可选且选中值在列表内，否则会不显示或修改无效
 watch(
   () => [formModelList.value, form.value.default_model],
   () => {
+    if (isComfyUIForm.value) return
     const list = formModelList.value
     if (list.length === 0) return
     const current = form.value.default_model
@@ -1374,6 +1438,7 @@ const testServiceType = ref('')
 const testError = ref('')
 const testProvider = ref('')
 const testChecks = ref([])
+const testWorkflowResults = ref([])
 const oneKeyTongyiVisible = ref(false)
 const oneKeyTongyiKey = ref('')
 const oneKeyTongyiSaving = ref(false)
@@ -1417,7 +1482,7 @@ const providerConfigs = {
     { id: 'agnes', name: 'Agnes AI', models: ['agnes-image-2.1-flash', 'agnes-image-2.0-flash'] }
   ],
   video: [
-    { id: 'comfyui', name: 'ComfyUI（本机工作流）', models: ['minimax_h3_director_r2v'] },
+    { id: 'comfyui', name: 'ComfyUI（本机工作流）', models: [] },
     { id: 'klingai', name: '可灵官方 Omni (api-beijing.klingai.com)', models: ['kling-video-o1', 'kling-v3-omni'] },
     { id: 'ffir', name: '飞儿API / 可灵 Omni-Video (ffir.cn)', models: ['kling-video-o1', 'kling-v3-omni'] },
     { id: 'kling', name: '可灵 Kling', models: ['kling-omni-video', 'kling-video', 'kling-motion-control'] },
@@ -1739,7 +1804,8 @@ function onProviderChange(providerId) {
   // 自动填充接口规范
   form.value.api_protocol = providerProtocolMap[providerId] || (st === 'text' ? '' : 'openai')
   if (st === 'video' && providerId === 'comfyui') {
-    Object.assign(form.value, comfyuiConfigDefaults(p.models))
+    const firstSelectable = comfyWorkflowOptions.value.find((workflow) => workflow.selectable)?.id || ''
+    Object.assign(form.value, comfyuiConfigDefaults(firstSelectable ? [firstSelectable] : []))
     form.value.api_protocol = ''
     form.value.endpoint = ''
     form.value.query_endpoint = ''
@@ -1777,8 +1843,43 @@ function onProviderChange(providerId) {
   }
 }
 
-function onComfyWorkflowChange(workflow) {
-  form.value.modelText = workflow || ''
+function applyNormalizedComfySelection(selected, defaultModel = form.value.default_model) {
+  const options = comfyuiWorkflowOptionsFromCatalog(
+    comfyWorkflowCatalogState.value === 'ready' ? comfyWorkflowCatalog.value : null,
+    selected,
+  )
+  const normalized = normalizeComfyuiModelSelection({ selected, defaultModel, options })
+  form.value.modelText = normalized.models.join('\n')
+  form.value.default_model = normalized.defaultModel
+  return normalized
+}
+
+function onComfyWorkflowSelectionChange(workflows) {
+  applyNormalizedComfySelection(workflows)
+}
+
+async function loadComfyWorkflowCatalog() {
+  const requestVersion = ++comfyWorkflowCatalogVersion
+  comfyWorkflowCatalogState.value = 'loading'
+  comfyWorkflowCatalogError.value = ''
+  try {
+    const result = await videosAPI.workflows()
+    if (requestVersion !== comfyWorkflowCatalogVersion) return
+    comfyWorkflowCatalog.value = result
+    comfyWorkflowCatalogState.value = 'ready'
+    if (isComfyUIForm.value) {
+      const selected = formModelList.value.length
+        ? formModelList.value
+        : [comfyWorkflowOptions.value.find((workflow) => workflow.selectable)?.id].filter(Boolean)
+      applyNormalizedComfySelection(selected)
+    }
+  } catch (error) {
+    if (requestVersion !== comfyWorkflowCatalogVersion) return
+    comfyWorkflowCatalog.value = null
+    comfyWorkflowCatalogState.value = 'error'
+    comfyWorkflowCatalogError.value = error?.message || '工作流目录加载失败'
+    // 保留 modelText/default_model 原值；错误态禁止保存，避免用前端回退项覆盖配置。
+  }
 }
 
 /** 通义一键配置用 */
@@ -1936,6 +2037,9 @@ function openEdit(row) {
     width,
     height,
   }
+  if (isComfyuiVideoConfig(row) && comfyWorkflowCatalogState.value === 'ready') {
+    applyNormalizedComfySelection(modelList, form.value.default_model)
+  }
   dialogVisible.value = true
 }
 
@@ -1943,6 +2047,17 @@ async function submit() {
   await formRef.value?.validate?.().catch(() => {})
   let comfyuiSettings
   if (isComfyUIForm.value) {
+    if (comfyWorkflowCatalogState.value !== 'ready') {
+      ElMessage.warning('工作流目录尚未加载成功，已保留原配置且禁止覆盖保存')
+      return
+    }
+    const selection = applyNormalizedComfySelection(formModelList.value)
+    if (!selection.canSave) {
+      ElMessage.warning(selection.invalidSelected.length
+        ? `请移除不可用工作流：${selection.invalidSelected.join('、')}`
+        : '请至少选择一个可用工作流并指定默认项')
+      return
+    }
     try {
       comfyuiSettings = serializeVideoProviderSettings(form.value)
     } catch (error) {
@@ -1999,7 +2114,6 @@ async function submit() {
       settings = previous?.settings
         ? serializeVideoProviderSettings({ ...form.value, settings: previous.settings })
         : comfyuiSettings
-      modelList = form.value.default_model ? [form.value.default_model] : []
     }
     const payload = {
       service_type: form.value.service_type,
@@ -2116,7 +2230,38 @@ async function openTest(row) {
   testServiceType.value = row.service_type || 'text'
   testProvider.value = row.provider || ''
   testChecks.value = []
+  testWorkflowResults.value = []
   try {
+    if (String(row.provider || '').trim().toLowerCase() === 'comfyui') {
+      const workflows = (Array.isArray(row.model) ? row.model : [row.model]).map((item) => String(item || '').trim()).filter(Boolean)
+      const plan = buildComfyuiWorkflowCheckPlan(workflows, comfyWorkflowCatalog.value)
+      for (const item of plan) {
+        const workflow = item.workflow
+        if (item.status !== 'pending') {
+          testWorkflowResults.value.push({ ...item, checks: [] })
+          continue
+        }
+        try {
+          const result = await aiAPI.testConnection({
+            base_url: row.base_url,
+            api_key: row.api_key,
+            model: workflow,
+            workflow,
+            provider: row.provider,
+            endpoint: row.endpoint,
+            service_type: row.service_type,
+            settings: row.settings,
+          })
+          testWorkflowResults.value.push({ workflow, status: 'ready', checks: Array.isArray(result?.checks) ? result.checks : [], error: '' })
+        } catch (error) {
+          testWorkflowResults.value.push({ workflow, status: 'failed', checks: [], error: error?.message || '连接检查失败' })
+        }
+      }
+      testChecks.value = testWorkflowResults.value.flatMap((item) => item.checks)
+      testResult.value = plan.length > 0 && testWorkflowResults.value.every((item) => item.status === 'ready')
+      if (!testResult.value) testError.value = workflows.length ? '部分工作流检查失败' : '配置中没有工作流'
+      return
+    }
     const result = await aiAPI.testConnection({
       base_url: row.base_url,
       api_key: row.api_key,
@@ -2351,6 +2496,7 @@ async function loadVendorLock() {
 onMounted(() => {
   loadVendorLock()
   loadList()
+  loadComfyWorkflowCatalog()
   loadGenerationSettings()
   loadImageGenerationSettings()
 })
@@ -2384,6 +2530,17 @@ onMounted(() => {
   padding-left: 22px;
   color: var(--el-text-color-regular);
   line-height: 1.8;
+}
+.comfyui-workflow-check {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-radius: 6px;
+}
+.comfyui-workflow-check > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
 }
 </style>
 
