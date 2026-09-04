@@ -38,6 +38,42 @@ function findOutput(value) {
   return null;
 }
 
+function historyMessages(history) {
+  const messages = history?.status?.messages;
+  return Array.isArray(messages) ? messages.filter((message) => Array.isArray(message) && message.length >= 2) : [];
+}
+
+function isoFromComfyTimestamp(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function executionTimingFromHistory(history) {
+  const messages = historyMessages(history);
+  const started = messages.find(([type]) => type === 'execution_start')?.[1];
+  const completed = [...messages].reverse().find(([type]) => (
+    type === 'execution_success' || type === 'execution_error' || type === 'execution_interrupted'
+  ))?.[1];
+  const startedAt = isoFromComfyTimestamp(started?.timestamp);
+  const completedAt = isoFromComfyTimestamp(completed?.timestamp);
+  return startedAt && completedAt ? { startedAt, completedAt } : null;
+}
+
+function executionErrorFromHistory(history) {
+  const failure = [...historyMessages(history)].reverse().find(([type]) => type === 'execution_error')?.[1];
+  if (!failure) return null;
+  return {
+    code: 'COMFYUI_WORKFLOW_FAILED',
+    message: String(failure.exception_message || failure.exception_type || 'ComfyUI workflow failed'),
+    details: {
+      nodeId: failure.node_id == null ? null : String(failure.node_id),
+      nodeType: failure.node_type || null,
+    },
+  };
+}
+
 function sha256Buffer(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
@@ -206,16 +242,23 @@ function createComfyUIClient({
     const { body } = await request(`/history/${encodeURIComponent(normalizedId)}`);
     const history = body && (body[normalizedId] || (body.status || body.outputs ? body : null));
     const status = history?.status || {};
+    const executionTiming = executionTimingFromHistory(history);
     if (executionWasInterrupted(status)) {
       return { status: 'interrupted', progress: 100, history };
     }
     if (status.status_str === 'error'
       || status.status_str === 'failed'
       || (status.completed === false && status.status_str === 'failure')) {
-      return { status: 'failed', progress: 100, history };
+      return {
+        status: 'failed', progress: 100, history,
+        error: executionErrorFromHistory(history) || {
+          code: 'COMFYUI_WORKFLOW_FAILED', message: 'ComfyUI workflow failed',
+        },
+        executionTiming,
+      };
     }
     if (status.completed === true || status.status_str === 'success' || history?.outputs) {
-      return { status: 'completed', progress: 100, history };
+      return { status: 'completed', progress: 100, history, executionTiming };
     }
 
     const queue = await getQueue();
@@ -351,4 +394,4 @@ function createComfyUIClient({
   };
 }
 
-module.exports = { ComfyUIClientError, createComfyUIClient, findOutput, parseFfmpegProbe };
+module.exports = { ComfyUIClientError, createComfyUIClient, findOutput, parseFfmpegProbe, executionTimingFromHistory, executionErrorFromHistory };

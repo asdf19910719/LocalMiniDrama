@@ -87,6 +87,9 @@ function rowToItem(row) {
     continuity_mode: row.continuity_mode,
     anchor_id: row.anchor_id,
     candidate_group_id: row.candidate_group_id,
+    candidate_group_number: row.candidate_group_number ?? null,
+    candidate_number: row.candidate_number ?? null,
+    candidate_group_selected: Boolean(row.candidate_group_selected),
     image_gen_id: row.image_gen_id,
     image_url: row.image_url,
     first_frame_url: row.first_frame_url,
@@ -108,6 +111,52 @@ function rowToItem(row) {
     completed_at: row.completed_at,
     can_resume_poll: (status === 'failed' || status === 'interrupted') && hasProviderTaskId(row),
   };
+}
+
+function tableExists(db, table) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+}
+
+function addCandidateMetadata(db, rows) {
+  if (!rows.length || !tableExists(db, 'director_candidate_groups') || !tableExists(db, 'director_candidates')) return rows;
+  const ids = rows.map((row) => Number(row.id)).filter(Number.isFinite);
+  if (!ids.length) return rows;
+  const links = db.prepare(`SELECT c.id AS candidate_id, c.group_id, c.video_generation_id,
+      g.shot_id, g.selected_candidate_id
+    FROM director_candidates c
+    JOIN director_candidate_groups g ON g.id = c.group_id
+    WHERE c.video_generation_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+  if (!links.length) return rows;
+
+  const shotIds = [...new Set(links.map((link) => String(link.shot_id)))];
+  const groups = db.prepare(`SELECT id, shot_id, created_at FROM director_candidate_groups
+    WHERE shot_id IN (${shotIds.map(() => '?').join(',')}) ORDER BY created_at, id`).all(...shotIds);
+  const groupNumbers = new Map();
+  for (const shotId of shotIds) {
+    groups.filter((group) => String(group.shot_id) === shotId)
+      .forEach((group, index) => groupNumbers.set(group.id, index + 1));
+  }
+
+  const groupIds = [...new Set(links.map((link) => link.group_id))];
+  const candidates = db.prepare(`SELECT id, group_id, created_at FROM director_candidates
+    WHERE group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY created_at, id`).all(...groupIds);
+  const candidateNumbers = new Map();
+  for (const groupId of groupIds) {
+    candidates.filter((candidate) => candidate.group_id === groupId)
+      .forEach((candidate, index) => candidateNumbers.set(candidate.id, index + 1));
+  }
+
+  const byVideoId = new Map(links.map((link) => [Number(link.video_generation_id), link]));
+  return rows.map((row) => {
+    const link = byVideoId.get(Number(row.id));
+    if (!link) return row;
+    return {
+      ...row,
+      candidate_group_number: groupNumbers.get(link.group_id) || null,
+      candidate_number: candidateNumbers.get(link.candidate_id) || null,
+      candidate_group_selected: link.selected_candidate_id === link.candidate_id,
+    };
+  });
 }
 
 function queryParts(query = {}) {
@@ -151,7 +200,7 @@ function list(db, query = {}) {
     `SELECT vg.*, task.progress AS task_progress, task.message AS task_message, task.error AS task_error
      ${sql} ORDER BY vg.created_at DESC LIMIT ? OFFSET ?`
   ).all(...params, pageSize, (page - 1) * pageSize);
-  return { items: rows.map(rowToItem), total, page, pageSize };
+  return { items: addCandidateMetadata(db, rows).map(rowToItem), total, page, pageSize };
 }
 
 function getById(db, id) {
@@ -161,7 +210,7 @@ function getById(db, id) {
      LEFT JOIN async_tasks task ON task.id = vg.task_id AND task.deleted_at IS NULL
      WHERE vg.id = ? AND vg.deleted_at IS NULL`
   ).get(Number(id));
-  return row ? rowToItem(row) : null;
+  return row ? rowToItem(addCandidateMetadata(db, [row])[0]) : null;
 }
 
 function resolveVideosDir(storagePath, projectSubdir) {

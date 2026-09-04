@@ -647,7 +647,12 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   }
 
   function slotReferenceUrls() {
-    return collectAvailableSlotUrls(h3Slots.value).map((url) => absoluteAssetUrl(assetImageUrl(url)))
+    return collectAvailableSlotUrls(h3Slots.value).map((url) => {
+      const raw = String(url || '').trim()
+      // 网页生图下载件是本地盘符路径：ComfyUI 暂存要求本地文件，不做 http 绝对化
+      if (/^[a-zA-Z]:[\\/]/.test(raw)) return raw
+      return absoluteAssetUrl(assetImageUrl(raw))
+    })
   }
 
   function setError(caught) {
@@ -845,6 +850,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (isH3Config.value && h3Draft.value) {
         overrides.prompt = String(h3Draft.value.final_compiled_prompt ?? '')
         overrides.h3PromptDraftId = h3Draft.value.id
+      }
+      if (shouldUseSlotReferences() && !h3SlotsLoaded.value) {
+        // 抽屉刚打开就点生成时槽位可能仍在途：等待完成，避免回退到陈旧远程 URL
+        await loadReferenceSlots()
       }
       if (h3SlotsLoaded.value && shouldUseSlotReferences()) {
         overrides.referenceImageUrls = slotReferenceUrls()

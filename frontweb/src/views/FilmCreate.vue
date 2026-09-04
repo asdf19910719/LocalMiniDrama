@@ -1535,6 +1535,10 @@
                     继续查询
                   </el-button>
                 </div>
+                <div v-if="assetVideoUrl(getSbVideo(sb.id))" class="sb-video-current-meta">
+                  <span>当前展示：{{ getSbVideoCandidateLabel(sb.id) }}</span>
+                  <span v-if="getSbVideo(sb.id)?.id != null">视频 #{{ getSbVideo(sb.id).id }}</span>
+                </div>
                 <span v-if="isSbVideoGenerating(sb.id)" class="sb-video-regenerating-overlay">
                   <el-icon class="is-loading"><Loading /></el-icon>
                   正在重新生成...
@@ -2792,7 +2796,7 @@ import { useCharacterVariants } from '@/composables/filmCreate/useCharacterVaria
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
-import { resolveSbMainImageRecord } from '@/utils/storyboardMedia'
+import { resolveSbMainImageRecord, resolveSbVideoRecord, videoCandidateLabel } from '@/utils/storyboardMedia'
 
 const route = useRoute()
 const router = useRouter()
@@ -4004,7 +4008,12 @@ function getSbVideo(storyboardId) {
     const found = all.find((v) => v.id === selectedId)
     if (found) return found
   }
-  return all[0]
+  const storyboard = (store.storyboards || []).find((item) => Number(item.id) === Number(storyboardId))
+  return resolveSbVideoRecord(storyboard, sbVideos.value) || all[0]
+}
+
+function getSbVideoCandidateLabel(storyboardId) {
+  return videoCandidateLabel(getSbVideo(storyboardId))
 }
 /** 取下一个分镜（按 storyboard_number 顺序） */
 function getNextStoryboard(storyboardId) {
@@ -4038,7 +4047,7 @@ function getVideoStripItems(storyboardId) {
       key: `vid-${v.id}`,
       video: v,
       src: assetVideoUrl(v),
-      label: `历史${idx + 2}`,
+      label: videoCandidateLabel(v) || `历史${idx + 2}`,
     }))
 }
 /** 选中某条历史视频为当前视频，并持久化到分镜记录供合成视频使用 */
@@ -6453,7 +6462,12 @@ async function collectSlotReferenceAbsoluteUrls(sbId, { silent = false } = {}) {
     const slots = Array.isArray(res?.slots) ? res.slots : []
     return slots
       .filter((slot) => slot?.image_available && slot?.image_url)
-      .map((slot) => toAbsoluteImageUrl(resolveAssetImageUrl(slot.image_url)))
+      .map((slot) => {
+        const raw = String(slot.image_url || '').trim()
+        // 网页生图下载件是本地盘符路径：ComfyUI 暂存要求本地文件，不做 http 绝对化
+        if (/^[a-zA-Z]:[\\/]/.test(raw)) return raw
+        return toAbsoluteImageUrl(resolveAssetImageUrl(raw))
+      })
       .filter(Boolean)
   } catch (error) {
     console.warn('[FilmCreate] 参考图槽位接口加载失败', sbId, error)
@@ -10592,9 +10606,24 @@ html.light .sb-ctrl-mode-btn.el-button:hover {
   border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   transition: border-color 0.2s;
+}
+.sb-video-current-meta {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px 2px;
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+html.light .sb-video-current-meta {
+  color: #6d28d9;
 }
 html.light .sb-video-area {
   background: linear-gradient(145deg, #f5f3ff 0%, #ede9fe 100%);

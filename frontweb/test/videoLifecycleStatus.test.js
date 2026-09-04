@@ -5,7 +5,7 @@ import {
   isActiveVideoGenerationStatus,
   isPlayableVideoGenerationStatus,
 } from '../src/utils/videoLifecycleStatus.js'
-import { getSbVideosList } from '../src/utils/storyboardMedia.js'
+import { getSbVideosList, resolveSbVideoRecord, videoCandidateLabel } from '../src/utils/storyboardMedia.js'
 
 test('treats canonical review and selected videos plus legacy completed videos as playable', () => {
   for (const status of ['review', 'selected', 'completed']) {
@@ -35,4 +35,20 @@ test('storyboard media exposes canonical review and selected videos without hidi
     ],
   }
   assert.deepEqual(getSbVideosList(videos, 5).map((video) => video.id), [1, 2, 3])
+})
+
+test('restores the storyboard-bound video by local path instead of defaulting to newest history', () => {
+  const videos = {
+    5: [
+      { id: 12, status: 'selected', local_path: 'videos/newest.mp4' },
+      { id: 11, status: 'selected', local_path: 'videos/chosen.mp4' },
+    ],
+  }
+
+  assert.equal(resolveSbVideoRecord({ id: 5, local_path: 'videos/chosen.mp4' }, videos)?.id, 11)
+})
+
+test('labels candidate videos with chronological group and candidate numbers', () => {
+  assert.equal(videoCandidateLabel({ id: 77, candidate_group_number: 3, candidate_number: 2 }), '第 3 组 · 候选 2')
+  assert.equal(videoCandidateLabel({ id: 8 }), '视频 #8')
 })

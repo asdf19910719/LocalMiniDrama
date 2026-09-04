@@ -33,6 +33,7 @@ function createTestDb() {
       error_msg TEXT,
       video_url TEXT,
       local_path TEXT,
+      candidate_group_id TEXT,
       image_gen_id INTEGER,
       image_url TEXT,
       created_at TEXT,
@@ -80,6 +81,33 @@ describe('videoService unified lifecycle compatibility', () => {
     assert.equal(resumable.provider_task_id, undefined);
     assert.equal(resumable.error_msg, '查询超时');
     assert.equal(resumable.error.code, 'VIDEO_GENERATION_FAILED');
+  });
+
+  it('adds chronological candidate group and candidate numbers to video history', () => {
+    const db = createTestDb();
+    db.exec(`
+      CREATE TABLE director_candidate_groups (
+        id TEXT PRIMARY KEY, shot_id TEXT, selected_candidate_id TEXT, created_at TEXT
+      );
+      CREATE TABLE director_candidates (
+        id TEXT PRIMARY KEY, group_id TEXT, video_generation_id INTEGER, created_at TEXT
+      );
+    `);
+    const first = insertVideo(db, { status: 'review' });
+    const second = insertVideo(db, { status: 'selected' });
+    db.prepare('UPDATE video_generations SET candidate_group_id = ? WHERE id IN (?, ?)').run('group-b', first, second);
+    db.prepare("INSERT INTO director_candidate_groups VALUES ('group-a', '10', NULL, '2026-09-04T01:00:00.000Z')").run();
+    db.prepare("INSERT INTO director_candidate_groups VALUES ('group-b', '10', 'candidate-2', '2026-09-04T02:00:00.000Z')").run();
+    db.prepare("INSERT INTO director_candidates VALUES ('candidate-1', 'group-b', ?, '2026-09-04T02:00:01.000Z')").run(first);
+    db.prepare("INSERT INTO director_candidates VALUES ('candidate-2', 'group-b', ?, '2026-09-04T02:00:02.000Z')").run(second);
+
+    const rows = videoService.list(db, { storyboard_id: 10, page_size: 10 }).items;
+    const selected = rows.find((row) => row.id === second);
+
+    assert.equal(selected.candidate_group_number, 2);
+    assert.equal(selected.candidate_number, 2);
+    assert.equal(selected.candidate_group_selected, true);
+    db.close();
   });
 
   it('keeps startup recovery inert until the provider registry lifecycle is configured', () => {

@@ -211,4 +211,38 @@ describe('ComfyUI Director client', () => {
     assert.equal(result.history.status.status_str, 'error');
     assert.equal(result.history.status.messages[1][0], 'execution_interrupted');
   });
+
+  it('extracts execution timing and the node error from ComfyUI history messages', async () => {
+    const timedBaseUrl = 'http://timed-comfy.test';
+    const client = createComfyUIClient({
+      baseUrl: timedBaseUrl,
+      fetchImpl: async () => new Response(JSON.stringify({
+        'prompt-timed-failure': {
+          status: {
+            status_str: 'error',
+            completed: false,
+            messages: [
+              ['execution_start', { prompt_id: 'prompt-timed-failure', timestamp: 1788495534244 }],
+              ['execution_error', {
+                prompt_id: 'prompt-timed-failure',
+                timestamp: 1788495540244,
+                exception_message: 'Fault failed: 2',
+                node_type: 'RTXVideoSuperResolution',
+              }],
+            ],
+          },
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const result = await client.getPromptStatus('prompt-timed-failure');
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.error.code, 'COMFYUI_WORKFLOW_FAILED');
+    assert.equal(result.error.message, 'Fault failed: 2');
+    assert.deepEqual(result.executionTiming, {
+      startedAt: '2026-09-04T04:18:54.244Z',
+      completedAt: '2026-09-04T04:19:00.244Z',
+    });
+  });
 });

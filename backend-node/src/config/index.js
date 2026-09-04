@@ -28,7 +28,7 @@ function loadConfig() {
     allow_experimental: parsed.director?.allow_experimental === true,
     allowed_local_roots: Array.isArray(parsed.director?.allowed_local_roots)
       ? parsed.director.allowed_local_roots
-      : ['./data/director-artifacts', './data/storage'],
+      : ['./data/director-artifacts', './data/storage', './data/external-web'],
   };
   return parsed;
 }

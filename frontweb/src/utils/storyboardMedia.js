@@ -134,6 +134,10 @@ export function resolveSbVideoRecord(sb, videosBySbId) {
   if (!sb) return null
   const list = getSbVideosList(videosBySbId, sb.id)
   if (list.length) {
+    if (sb.local_path) {
+      const matched = list.find((v) => v.local_path && String(v.local_path) === String(sb.local_path))
+      if (matched) return matched
+    }
     if (sb.video_url) {
       const matched = list.find((v) => v.video_url === sb.video_url)
       if (matched) return matched
@@ -147,6 +151,15 @@ export function resolveSbVideoRecord(sb, videosBySbId) {
     return { video_url: sb.video_url, local_path: sb.local_path }
   }
   return null
+}
+
+export function videoCandidateLabel(video) {
+  const group = Number(video?.candidate_group_number)
+  const candidate = Number(video?.candidate_number)
+  if (Number.isInteger(group) && group > 0 && Number.isInteger(candidate) && candidate > 0) {
+    return `第 ${group} 组 · 候选 ${candidate}`
+  }
+  return video?.id == null ? '' : `视频 #${video.id}`
 }
 
 export function videoRecordUrl(record) {

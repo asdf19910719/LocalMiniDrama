@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { stageReferenceAssets, safeName, cleanupReferenceAssets } = require('../src/services/videoProviders/referenceAssetStaging');
+const { loadConfig } = require('../src/config');
 
 describe('reference asset staging', () => {
   test('copies allowlisted local refs using hash-derived path-free names', async () => {
@@ -70,5 +71,23 @@ describe('reference asset staging', () => {
     await assert.rejects(() => stageReferenceAssets([{ source: path.join(root, 'outside.png') }], { allowedRoots: [allowed], inputDir: path.join(root, 'out') }), /outside|does not exist|roots/);
     await assert.rejects(() => stageReferenceAssets([{ source: 'https://example.test/a.png' }], { allowedRoots: [allowed], inputDir: path.join(root, 'out') }), /NOT_LOCAL/);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  test('stages downloaded external-web images with the project director allowlist', async () => {
+    const externalRoot = path.resolve('data', 'external-web');
+    const sourceDir = fs.mkdtempSync(path.join(externalRoot, 'staging-test-'));
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ref-stage-out-'));
+    const source = path.join(sourceDir, 'original.png');
+    fs.writeFileSync(source, 'downloaded-image');
+    try {
+      const allowedRoots = loadConfig().director.allowed_local_roots.map((root) => path.resolve(root));
+      const staged = await stageReferenceAssets([{ source }], { allowedRoots, inputDir: outputDir });
+      assert.equal(staged.length, 1);
+      assert.equal(fs.existsSync(path.join(outputDir, staged[0].comfyFilename)), true);
+      await cleanupReferenceAssets(staged, { inputDir: outputDir });
+    } finally {
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
   });
 });

@@ -136,6 +136,9 @@ function createUnifiedVideoGenerationService({
   schedule = (job, delay = 0) => (delay > 0 ? setTimeout(job, delay) : setImmediate(job)),
   pollIntervalMs = 1000,
   gpuBusyRetryDelayMs = 2000,
+  transientRetryDelayMs = 90000,
+  transientRetryLimit = 1,
+  transientRetryCount = new Map(),
   legacyPollMaxAttempts = 300,
   legacyPollIntervalMs = 10000,
   prepareVideoOutput = videoService.prepareSuccessfulVideoOutput,
@@ -326,6 +329,32 @@ function inputFor(row) {
     return code === 'GPU_BUSY' || message === 'GPU_BUSY';
   }
 
+  function isTransientComfyExecutionError(row, error) {
+    if (String(row?.provider || '').trim().toLowerCase() !== 'comfyui') return false;
+    const code = String(error?.code || '').trim();
+    const message = String(error?.message || error || '').trim();
+    return /fault failed|out of memory|cuda(?: error| out of memory)?|inference failed|comfyui execution failed/i.test(`${code} ${message}`);
+  }
+
+  function requeueTransientComfyFailure(row, error, stage) {
+    const count = transientRetryCount.get(row.id) || 0;
+    if (!isTransientComfyExecutionError(row, error) || count >= transientRetryLimit) return false;
+    transientRetryCount.set(row.id, count + 1);
+    setState(row, 'queued', 1, 'ComfyUI 执行瞬时失败（显存/内存波动），90 秒后自动重新提交', {
+      error_msg: null,
+      completed_at: null,
+      provider_task_id: null,
+    });
+    log.warn('Transient ComfyUI execution failure, requeued', {
+      videoGenerationId: row.id,
+      stage,
+      retry: count + 1,
+      message: error?.message || String(error),
+    });
+    enqueueOperation(row.id, 'submit', transientRetryDelayMs);
+    return true;
+  }
+
   function legacyProvider(context) {
     return {
       async submit() {
@@ -450,11 +479,20 @@ function inputFor(row) {
     }
     const finalStatus = status === 'selected' || latest.status === 'selected' ? 'selected' : 'review';
     const now = new Date().toISOString();
+    const executionTiming = output.executionTiming && typeof output.executionTiming === 'object'
+      ? output.executionTiming : {};
+    const providerStartedAt = Number.isFinite(Date.parse(executionTiming.startedAt))
+      ? new Date(executionTiming.startedAt).toISOString() : null;
+    const providerCompletedAt = Number.isFinite(Date.parse(executionTiming.completedAt))
+      ? new Date(executionTiming.completedAt).toISOString() : null;
+    const timingAssignment = tableHasColumn('video_generations', 'started_at') ? ', started_at = ?' : '';
+    const timingParams = timingAssignment ? [providerStartedAt || latest.started_at || now] : [];
     db.prepare(
       `UPDATE video_generations
        SET status = ?, video_url = ?, local_path = ?, error_msg = NULL,
-           completed_at = ?, updated_at = ? WHERE id = ?`
-    ).run(finalStatus, videoUrl, localPath, now, now, row.id);
+           completed_at = ?, updated_at = ?${timingAssignment} WHERE id = ?`
+    ).run(finalStatus, videoUrl, localPath, providerCompletedAt || now, now, ...timingParams, row.id);
+    transientRetryCount.delete(row.id);
     if (latest.candidate_group_id) {
       try {
         const artifact = candidateService.linkUnifiedCandidateArtifact(db, row.id, { ffprobe: output.ffprobe });
@@ -506,9 +544,12 @@ function inputFor(row) {
     const progress = normalizeProgress(result.progress, status === 'review' ? 100 : 0);
 
     if (status === 'failed') {
+      const providerError = providerErrorFromResult(result, '视频生成服务返回失败');
+      if (requeueTransientComfyFailure({ ...latest, provider_task_id: providerTaskId }, providerError, stage)) return;
+      transientRetryCount.delete(latest.id);
       persistFailure(
         { ...latest, provider_task_id: providerTaskId },
-        providerErrorFromResult(result, '视频生成服务返回失败'),
+        providerError,
         stage,
       );
       if (providerTaskId && providerTaskId !== latest.provider_task_id) {
@@ -517,10 +558,12 @@ function inputFor(row) {
       return;
     }
     if (status === 'cancelled') {
+      transientRetryCount.delete(latest.id);
       persistFailure(latest, new Error('视频生成已取消'), stage, 'cancelled', 'VIDEO_CANCELLED');
       return;
     }
     if (status === 'interrupted') {
+      transientRetryCount.delete(latest.id);
       persistFailure(latest, new Error('视频生成执行中断'), stage, 'interrupted', 'VIDEO_EXECUTION_INTERRUPTED');
       return;
     }
@@ -580,7 +623,12 @@ function inputFor(row) {
           completed_at: null,
         });
         enqueueOperation(latest.id, 'submit', gpuBusyRetryDelayMs);
-      } else if (latest && latest.status !== 'cancelled') persistFailure(latest, error, stage);
+      } else if (latest && latest.status !== 'cancelled' && requeueTransientComfyFailure(latest, error, stage)) {
+        // Delayed fresh submission scheduled above.
+      } else if (latest && latest.status !== 'cancelled') {
+        transientRetryCount.delete(latest.id);
+        persistFailure(latest, error, stage);
+      }
       else if (!latest) throw error;
     } finally {
       activeOperations.delete(numericId);

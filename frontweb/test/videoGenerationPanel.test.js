@@ -836,6 +836,52 @@ test('collects universal candidate references from available reference slots', a
   assert.deepEqual(captured[0].structured.referenceImageUrls, ['/static/projects/scene.png', '/static/props/prop.png'])
 })
 
+test('waits for H3 reference slots and preserves Windows local paths before candidate submission', async () => {
+  let resolveSlots
+  const slotsPromise = new Promise((resolve) => { resolveSlots = resolve })
+  const captured = []
+  const panel = useVideoGenerationPanel(
+    reactive({
+      storyboardId: 1,
+      storyboard: { id: 1, universal_segment_text: '片段' },
+      generationContext: {
+        mode: 'universal_omni',
+        prompt: '片段',
+        referenceImageUrls: ['http://127.0.0.1:3013/api/v1/external-generation/stale/content'],
+      },
+    }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译词全文' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      getReferenceSlots: async () => slotsPromise,
+      generateCandidates: async (_storyboardId, body) => {
+        captured.push(body)
+        return {}
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  const generating = panel.generateCandidates()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(captured.length, 0, 'slot loading must finish before submission')
+
+  resolveSlots({
+    slots: [{ index: 1, type: 'scene', image_available: true, image_url: 'E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\original.png' }],
+    total: 1,
+    overflow: [],
+  })
+  await generating
+
+  assert.deepEqual(captured[0].structured.referenceImageUrls, [
+    'E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\original.png',
+  ])
+})
+
 test('warns when the draft text references @图片N beyond the resolved slot count', async () => {
   const panel = useVideoGenerationPanel(
     reactive({ storyboardId: 1, storyboard: { id: 1, universal_segment_text: '片段' } }),

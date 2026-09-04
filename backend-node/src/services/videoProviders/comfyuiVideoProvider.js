@@ -278,9 +278,18 @@ function createComfyUIVideoProvider({
       await cleanupStaged(providerTaskId, context);
     }
     else maintainActiveLease(providerTaskId, context);
-    const output = state.status === 'completed'
+    let output = state.status === 'completed'
       ? await resolveCompletedOutput(context, providerTaskId, state)
       : state.output || null;
+    if (state.status === 'completed' && state.executionTiming) {
+      output = { ...(output || {}), executionTiming: state.executionTiming };
+    } else if (state.status === 'failed') {
+      output = {
+        ...(output || {}),
+        error: state.error || { code: 'COMFYUI_WORKFLOW_FAILED', message: 'ComfyUI workflow failed' },
+        executionTiming: state.executionTiming || null,
+      };
+    }
     return normalized(providerTaskId, state.status, state.progress, output);
   }
 

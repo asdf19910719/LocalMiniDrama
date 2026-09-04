@@ -79,6 +79,7 @@ function createTestDb() {
       task_id TEXT,
       provider_task_id TEXT,
       completed_at TEXT,
+      started_at TEXT,
       error_msg TEXT,
       created_at TEXT,
       updated_at TEXT,
@@ -196,6 +197,7 @@ function createHarness({ submit = [], query = [], recover = [] } = {}) {
   return {
     calls,
     jobs,
+    provider,
     registry,
     schedule(job) {
       jobs.push(job);
@@ -326,6 +328,121 @@ describe('unified video generation lifecycle', () => {
     assert.equal(submitted.status, 'running');
     assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, 'prompt-after-wait');
     assert.equal(harness.calls.submit.length, 2);
+    db.close();
+  });
+
+  it('requeues a failed ComfyUI history result once as a fresh submission', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const harness = createHarness({
+      submit: [
+        { status: 'running', providerTaskId: 'attempt-1', progress: 0 },
+        { status: 'running', providerTaskId: 'attempt-2', progress: 0 },
+      ],
+      query: [{
+        status: 'failed',
+        providerTaskId: 'attempt-1',
+        progress: 100,
+        output: { error: { code: 'COMFYUI_WORKFLOW_FAILED', message: 'CUDA out of memory during inference' } },
+      }],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+
+    const created = await service.createVideoGeneration({ prompt: 'transient retry' });
+    await harness.runNext();
+    assert.equal(service.getVideoGeneration(created.id).status, 'running');
+
+    await harness.runNext();
+    let row = service.getVideoGeneration(created.id);
+    assert.equal(row.status, 'queued');
+    assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, null);
+    assert.equal(row.error_msg, null);
+
+    await harness.runNext();
+    row = service.getVideoGeneration(created.id);
+    assert.equal(row.status, 'running');
+    assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, 'attempt-2');
+    db.close();
+  });
+
+  it('does not auto-retry transient-looking failures from non-ComfyUI providers', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'fake' });
+    const harness = createHarness({ submit: [new Error('CUDA out of memory')] });
+    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+
+    const created = await service.createVideoGeneration({ prompt: 'provider-scoped retry' });
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(harness.jobs.length, 0);
+    db.close();
+  });
+
+  it('fails after one transient ComfyUI retry instead of looping forever', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const failure = {
+      status: 'failed', progress: 100,
+      output: { error: { code: 'COMFYUI_WORKFLOW_FAILED', message: 'Fault failed: 2' } },
+    };
+    const harness = createHarness({
+      submit: [
+        { status: 'running', providerTaskId: 'attempt-1', progress: 0 },
+        { status: 'running', providerTaskId: 'attempt-2', progress: 0 },
+      ],
+      query: [
+        { ...failure, providerTaskId: 'attempt-1' },
+        { ...failure, providerTaskId: 'attempt-2' },
+      ],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+
+    const created = await service.createVideoGeneration({ prompt: 'bounded retry' });
+    await harness.runNext();
+    await harness.runNext();
+    await harness.runNext();
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(harness.jobs.length, 0);
+    assert.equal(harness.calls.submit.length, 2);
+    db.close();
+  });
+
+  it('persists provider execution timestamps instead of local queue wait time', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'fake' });
+    const harness = createHarness({ submit: [{
+      status: 'completed',
+      providerTaskId: 'timed-prompt',
+      progress: 100,
+      output: {
+        localPath: 'videos/timed.mp4',
+        executionTiming: {
+          startedAt: '2026-09-04T04:10:00.000Z',
+          completedAt: '2026-09-04T04:14:30.000Z',
+        },
+      },
+    }] });
+    const service = buildService(db, harness);
+
+    const created = await service.createVideoGeneration({ prompt: 'timing' });
+    await harness.runNext();
+    const row = db.prepare('SELECT started_at, completed_at FROM video_generations WHERE id = ?').get(created.id);
+
+    assert.deepEqual(row, {
+      started_at: '2026-09-04T04:10:00.000Z',
+      completed_at: '2026-09-04T04:14:30.000Z',
+    });
     db.close();
   });
 
