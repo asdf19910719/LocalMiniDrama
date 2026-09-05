@@ -1,0 +1,2087 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-05T07:09:27.717Z",
+  "baseUrl": "http://127.0.0.1:8191/",
+  "controlled": {
+    "director": {
+      "global_prompt": "Fast cinematic action. The same warrior rises quickly, turns, and swings one arm across frame while the camera performs a short lateral tracking move. Stable identity, coherent anatomy and background, natural motion blur, no music.",
+      "seed": 20260907,
+      "width": 1280,
+      "height": 736,
+      "frame_rate": 24,
+      "total_frames": 120,
+      "steps": 20,
+      "sampler": "res_multistep",
+      "scheduler": "simple",
+      "shift_video": 12,
+      "shift_audio": 3,
+      "timeline_data": "{\"version\":4,\"editMode\":\"segment\",\"timelineMode\":\"gen_blank\",\"totalFrames\":120,\"frameRate\":24,\"width\":1280,\"height\":736,\"refMaxSize\":1280,\"output\":{\"mode\":\"fixed\",\"longEdge\":864,\"width\":1280,\"height\":736,\"maxExportFrames\":0,\"exportMode\":\"all\",\"audioMode\":\"generate\",\"continuityEnabled\":false,\"continuityOverlapFrames\":0},\"videoClips\":[],\"video\":{\"fileName\":\"\",\"videoFile\":\"\",\"subfolder\":\"\",\"type\":\"input\",\"frames\":[],\"frameMap\":[]},\"global\":{\"taskType\":\"r2v\",\"prompt\":\"Fast cinematic action. The same warrior rises quickly, turns, and swings one arm across frame while the camera performs a short lateral tracking move. Stable identity, coherent anatomy and background, natural motion blur, no music.\",\"refs\":[{\"index\":0,\"imageFile\":\"h3_te_speed_reference.png\",\"role\":\"subject\"}],\"refAudios\":[],\"refVideos\":[],\"referenceVideo\":{},\"continuousReference\":false,\"commonEnabled\":false},\"segments\":[{\"id\":\"s0\",\"start\":0,\"length\":120,\"frameCount\":120,\"durationSec\":5,\"prompt\":\"Fast cinematic action. The same warrior rises quickly, turns, and swings one arm across frame while the camera performs a short lateral tracking move. Stable identity, coherent anatomy and background, natural motion blur, no music.\",\"taskType\":\"r2v\",\"refs\":[{\"index\":0,\"imageFile\":\"h3_te_speed_reference.png\",\"role\":\"subject\"}],\"refAudios\":[],\"referenceVideo\":{},\"genImage\":{\"imageFile\":\"\"},\"negativePrompt\":\"\",\"continuityFromPrev\":false}],\"gen\":{\"defaultFrameCount\":120},\"runSelectEnabled\":false,\"runSelection\":[]}"
+    },
+    "sage": {
+      "sage_attention": "auto",
+      "allow_compile": false
+    },
+    "encoding": {
+      "bit_depth": 8,
+      "format": "auto",
+      "codec": "auto"
+    }
+  },
+  "runs": {
+    "official": {
+      "label": "official_sage",
+      "promptId": "c3b31886-4779-4549-9a15-d5def7db32c7",
+      "status": "completed",
+      "startedAt": "2026-09-05T07:01:08.781Z",
+      "completedAt": "2026-09-05T07:06:18.011Z",
+      "elapsedSeconds": 309.23,
+      "outputPath": "E:\\AI-worktrees\\h3-te-speed-runtime\\ComfyUI_windows_portable\\ComfyUI\\output\\video\\h3_te_speed_ab\\2026-09-05T07-01-08-766Z_official_00001_.mp4",
+      "media": {
+        "durationSeconds": 5,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "video": {
+          "codec": "h264",
+          "width": 1280,
+          "height": 736,
+          "frameRate": 24,
+          "frames": 120
+        },
+        "audio": {
+          "codec": "aac",
+          "sampleRate": 32000,
+          "channels": 2
+        }
+      },
+      "telemetry": [
+        {
+          "capturedAt": "2026-09-05T07:01:08.822Z",
+          "temperatureC": 43,
+          "powerW": 8.69,
+          "memoryUsedMiB": 9100,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:10.882Z",
+          "temperatureC": 49,
+          "powerW": 98.11,
+          "memoryUsedMiB": 7532,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 74
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:12.886Z",
+          "temperatureC": 53,
+          "powerW": 116.37,
+          "memoryUsedMiB": 12844,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 95
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:14.854Z",
+          "temperatureC": 53,
+          "powerW": 112.69,
+          "memoryUsedMiB": 13404,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 66
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:16.854Z",
+          "temperatureC": 61,
+          "powerW": 182.68,
+          "memoryUsedMiB": 10476,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:18.882Z",
+          "temperatureC": 59,
+          "powerW": 291.25,
+          "memoryUsedMiB": 11468,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 55
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:20.881Z",
+          "temperatureC": 59,
+          "powerW": 153.52,
+          "memoryUsedMiB": 12012,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:22.882Z",
+          "temperatureC": 59,
+          "powerW": 165.56,
+          "memoryUsedMiB": 12012,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:24.898Z",
+          "temperatureC": 64,
+          "powerW": 190.9,
+          "memoryUsedMiB": 11852,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:26.899Z",
+          "temperatureC": 65,
+          "powerW": 210.22,
+          "memoryUsedMiB": 12972,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:28.907Z",
+          "temperatureC": 62,
+          "powerW": 207.2,
+          "memoryUsedMiB": 11884,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:30.914Z",
+          "temperatureC": 74,
+          "powerW": 300.74,
+          "memoryUsedMiB": 11852,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:32.924Z",
+          "temperatureC": 68,
+          "powerW": 300.28,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:34.931Z",
+          "temperatureC": 75,
+          "powerW": 292.55,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:36.937Z",
+          "temperatureC": 71,
+          "powerW": 298.52,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:38.940Z",
+          "temperatureC": 67,
+          "powerW": 306.05,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:40.952Z",
+          "temperatureC": 78,
+          "powerW": 294.64,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:42.960Z",
+          "temperatureC": 73,
+          "powerW": 299.22,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:44.972Z",
+          "temperatureC": 76,
+          "powerW": 300.17,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:46.972Z",
+          "temperatureC": 73,
+          "powerW": 299.25,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:48.982Z",
+          "temperatureC": 76,
+          "powerW": 299.11,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:50.996Z",
+          "temperatureC": 77,
+          "powerW": 299.94,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:53.013Z",
+          "temperatureC": 71,
+          "powerW": 298.86,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:55.028Z",
+          "temperatureC": 78,
+          "powerW": 300.02,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:57.040Z",
+          "temperatureC": 71,
+          "powerW": 300.14,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:01:59.039Z",
+          "temperatureC": 78,
+          "powerW": 301.03,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:01.048Z",
+          "temperatureC": 72,
+          "powerW": 299.32,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:03.048Z",
+          "temperatureC": 78,
+          "powerW": 300.16,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:05.050Z",
+          "temperatureC": 72,
+          "powerW": 299.32,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:07.061Z",
+          "temperatureC": 79,
+          "powerW": 300.2,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:09.075Z",
+          "temperatureC": 72,
+          "powerW": 299.54,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:11.086Z",
+          "temperatureC": 79,
+          "powerW": 300.76,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:13.089Z",
+          "temperatureC": 73,
+          "powerW": 300.41,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:15.094Z",
+          "temperatureC": 79,
+          "powerW": 300.44,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:17.094Z",
+          "temperatureC": 74,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:19.098Z",
+          "temperatureC": 79,
+          "powerW": 300.32,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:21.107Z",
+          "temperatureC": 73,
+          "powerW": 300.6,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:23.120Z",
+          "temperatureC": 79,
+          "powerW": 299.56,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:25.128Z",
+          "temperatureC": 75,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:27.139Z",
+          "temperatureC": 79,
+          "powerW": 299.04,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:29.140Z",
+          "temperatureC": 75,
+          "powerW": 300.45,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:31.143Z",
+          "temperatureC": 78,
+          "powerW": 298.78,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:33.149Z",
+          "temperatureC": 73,
+          "powerW": 300.51,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:35.156Z",
+          "temperatureC": 77,
+          "powerW": 298.54,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:37.171Z",
+          "temperatureC": 76,
+          "powerW": 300.35,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:39.181Z",
+          "temperatureC": 73,
+          "powerW": 299.31,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:41.194Z",
+          "temperatureC": 79,
+          "powerW": 300.55,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:43.208Z",
+          "temperatureC": 73,
+          "powerW": 299.8,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:45.208Z",
+          "temperatureC": 79,
+          "powerW": 300.19,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:47.219Z",
+          "temperatureC": 73,
+          "powerW": 299.51,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:49.235Z",
+          "temperatureC": 80,
+          "powerW": 300.2,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:51.247Z",
+          "temperatureC": 72,
+          "powerW": 299.62,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:53.262Z",
+          "temperatureC": 80,
+          "powerW": 299.69,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:55.262Z",
+          "temperatureC": 73,
+          "powerW": 300.23,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:57.268Z",
+          "temperatureC": 80,
+          "powerW": 299.51,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:02:59.271Z",
+          "temperatureC": 75,
+          "powerW": 300.52,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:01.285Z",
+          "temperatureC": 79,
+          "powerW": 299.25,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:03.292Z",
+          "temperatureC": 75,
+          "powerW": 300.42,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:05.300Z",
+          "temperatureC": 74,
+          "powerW": 295.99,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 95
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:07.313Z",
+          "temperatureC": 80,
+          "powerW": 300.42,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:09.323Z",
+          "temperatureC": 73,
+          "powerW": 299.7,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:11.330Z",
+          "temperatureC": 80,
+          "powerW": 300.01,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:13.334Z",
+          "temperatureC": 74,
+          "powerW": 300.16,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:15.342Z",
+          "temperatureC": 80,
+          "powerW": 300.09,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:17.346Z",
+          "temperatureC": 74,
+          "powerW": 299.42,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:19.356Z",
+          "temperatureC": 80,
+          "powerW": 300.05,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:21.365Z",
+          "temperatureC": 75,
+          "powerW": 300.95,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:23.379Z",
+          "temperatureC": 80,
+          "powerW": 299.66,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:25.391Z",
+          "temperatureC": 75,
+          "powerW": 300.26,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:27.397Z",
+          "temperatureC": 80,
+          "powerW": 299.36,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:29.403Z",
+          "temperatureC": 76,
+          "powerW": 300.63,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:31.409Z",
+          "temperatureC": 79,
+          "powerW": 298.86,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:33.412Z",
+          "temperatureC": 77,
+          "powerW": 300.73,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:35.424Z",
+          "temperatureC": 71,
+          "powerW": 298.53,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:37.436Z",
+          "temperatureC": 80,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:39.439Z",
+          "temperatureC": 74,
+          "powerW": 300.3,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:41.442Z",
+          "temperatureC": 80,
+          "powerW": 300.54,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:43.445Z",
+          "temperatureC": 74,
+          "powerW": 299.45,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:45.449Z",
+          "temperatureC": 80,
+          "powerW": 299.95,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:47.453Z",
+          "temperatureC": 76,
+          "powerW": 299.98,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:49.461Z",
+          "temperatureC": 80,
+          "powerW": 300.61,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:51.471Z",
+          "temperatureC": 73,
+          "powerW": 300.8,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:53.479Z",
+          "temperatureC": 80,
+          "powerW": 299.37,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:55.486Z",
+          "temperatureC": 76,
+          "powerW": 300.5,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:57.486Z",
+          "temperatureC": 80,
+          "powerW": 298.7,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:03:59.495Z",
+          "temperatureC": 78,
+          "powerW": 300.83,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:01.497Z",
+          "temperatureC": 71,
+          "powerW": 298.42,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:03.504Z",
+          "temperatureC": 80,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:05.512Z",
+          "temperatureC": 73,
+          "powerW": 299.76,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:07.514Z",
+          "temperatureC": 81,
+          "powerW": 300.26,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:09.528Z",
+          "temperatureC": 75,
+          "powerW": 300.99,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:11.543Z",
+          "temperatureC": 81,
+          "powerW": 299.48,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:13.549Z",
+          "temperatureC": 76,
+          "powerW": 300.7,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:15.561Z",
+          "temperatureC": 79,
+          "powerW": 298.86,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:17.567Z",
+          "temperatureC": 75,
+          "powerW": 300.61,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:19.570Z",
+          "temperatureC": 77,
+          "powerW": 298.74,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:21.576Z",
+          "temperatureC": 80,
+          "powerW": 299.93,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:23.588Z",
+          "temperatureC": 74,
+          "powerW": 299.94,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:25.593Z",
+          "temperatureC": 82,
+          "powerW": 299.3,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:27.608Z",
+          "temperatureC": 74,
+          "powerW": 299.85,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:29.611Z",
+          "temperatureC": 80,
+          "powerW": 300.29,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:31.620Z",
+          "temperatureC": 74,
+          "powerW": 299.56,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:33.624Z",
+          "temperatureC": 80,
+          "powerW": 300.37,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:35.623Z",
+          "temperatureC": 73,
+          "powerW": 299.77,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:37.629Z",
+          "temperatureC": 81,
+          "powerW": 299.17,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:39.642Z",
+          "temperatureC": 76,
+          "powerW": 299.74,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:41.654Z",
+          "temperatureC": 79,
+          "powerW": 298.61,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:43.655Z",
+          "temperatureC": 78,
+          "powerW": 301,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:45.666Z",
+          "temperatureC": 75,
+          "powerW": 298.36,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:47.676Z",
+          "temperatureC": 80,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:49.678Z",
+          "temperatureC": 74,
+          "powerW": 300.1,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:51.680Z",
+          "temperatureC": 81,
+          "powerW": 300.09,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:53.688Z",
+          "temperatureC": 74,
+          "powerW": 300.27,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:55.693Z",
+          "temperatureC": 80,
+          "powerW": 300.64,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:57.694Z",
+          "temperatureC": 76,
+          "powerW": 299.7,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:04:59.705Z",
+          "temperatureC": 81,
+          "powerW": 299.94,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:01.715Z",
+          "temperatureC": 74,
+          "powerW": 300.91,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:03.718Z",
+          "temperatureC": 81,
+          "powerW": 299.31,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:05.733Z",
+          "temperatureC": 76,
+          "powerW": 299.89,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:07.745Z",
+          "temperatureC": 79,
+          "powerW": 298.87,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:09.755Z",
+          "temperatureC": 75,
+          "powerW": 300.69,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:11.769Z",
+          "temperatureC": 77,
+          "powerW": 298.26,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:13.775Z",
+          "temperatureC": 78,
+          "powerW": 300.44,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:15.787Z",
+          "temperatureC": 74,
+          "powerW": 300.03,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:17.796Z",
+          "temperatureC": 80,
+          "powerW": 300.7,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:19.800Z",
+          "temperatureC": 74,
+          "powerW": 299.99,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:21.812Z",
+          "temperatureC": 81,
+          "powerW": 300.24,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:23.813Z",
+          "temperatureC": 73,
+          "powerW": 300.14,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:25.814Z",
+          "temperatureC": 81,
+          "powerW": 300.12,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:27.819Z",
+          "temperatureC": 76,
+          "powerW": 299.86,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:29.822Z",
+          "temperatureC": 81,
+          "powerW": 299.53,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:31.825Z",
+          "temperatureC": 76,
+          "powerW": 300.67,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:33.836Z",
+          "temperatureC": 80,
+          "powerW": 299.78,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:35.849Z",
+          "temperatureC": 76,
+          "powerW": 300.61,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:37.859Z",
+          "temperatureC": 77,
+          "powerW": 252.6,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:39.863Z",
+          "temperatureC": 80,
+          "powerW": 299.32,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:41.874Z",
+          "temperatureC": 76,
+          "powerW": 300.54,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:43.880Z",
+          "temperatureC": 80,
+          "powerW": 299.08,
+          "memoryUsedMiB": 10892,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:45.904Z",
+          "temperatureC": 76,
+          "powerW": 299.44,
+          "memoryUsedMiB": 6124,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:47.892Z",
+          "temperatureC": 60,
+          "powerW": 61.65,
+          "memoryUsedMiB": 10604,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:49.897Z",
+          "temperatureC": 73,
+          "powerW": 259.68,
+          "memoryUsedMiB": 10636,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:51.903Z",
+          "temperatureC": 64,
+          "powerW": 233.56,
+          "memoryUsedMiB": 10828,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:53.910Z",
+          "temperatureC": 74,
+          "powerW": 265.49,
+          "memoryUsedMiB": 10828,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:55.919Z",
+          "temperatureC": 65,
+          "powerW": 216.64,
+          "memoryUsedMiB": 10860,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:57.926Z",
+          "temperatureC": 74,
+          "powerW": 268.14,
+          "memoryUsedMiB": 10860,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:05:59.932Z",
+          "temperatureC": 68,
+          "powerW": 221.88,
+          "memoryUsedMiB": 11052,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:01.930Z",
+          "temperatureC": 74,
+          "powerW": 268.58,
+          "memoryUsedMiB": 11052,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:03.947Z",
+          "temperatureC": 69,
+          "powerW": 197.84,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:05.949Z",
+          "temperatureC": 74,
+          "powerW": 268.18,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:07.957Z",
+          "temperatureC": 69,
+          "powerW": 190.34,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:09.961Z",
+          "temperatureC": 74,
+          "powerW": 268.08,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:11.967Z",
+          "temperatureC": 67,
+          "powerW": 180.79,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:13.980Z",
+          "temperatureC": 74,
+          "powerW": 267.91,
+          "memoryUsedMiB": 11084,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:16.013Z",
+          "temperatureC": 53,
+          "powerW": 43.17,
+          "memoryUsedMiB": 9932,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:18.045Z",
+          "temperatureC": 51,
+          "powerW": 30.12,
+          "memoryUsedMiB": 9932,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        }
+      ]
+    },
+    "te": {
+      "label": "official_sage_te_speed",
+      "promptId": "5a615bd7-a916-4270-9bc6-499ef3026beb",
+      "status": "completed",
+      "startedAt": "2026-09-05T07:06:18.082Z",
+      "completedAt": "2026-09-05T07:09:27.649Z",
+      "elapsedSeconds": 189.567,
+      "outputPath": "E:\\AI-worktrees\\h3-te-speed-runtime\\ComfyUI_windows_portable\\ComfyUI\\output\\video\\h3_te_speed_ab\\2026-09-05T07-01-08-766Z_te_00001_.mp4",
+      "media": {
+        "durationSeconds": 5,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "video": {
+          "codec": "h264",
+          "width": 1280,
+          "height": 736,
+          "frameRate": 24,
+          "frames": 120
+        },
+        "audio": {
+          "codec": "aac",
+          "sampleRate": 32000,
+          "channels": 2
+        }
+      },
+      "telemetry": [
+        {
+          "capturedAt": "2026-09-05T07:06:18.122Z",
+          "temperatureC": 51,
+          "powerW": 30.03,
+          "memoryUsedMiB": 9932,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:20.167Z",
+          "temperatureC": 58,
+          "powerW": 129.04,
+          "memoryUsedMiB": 7948,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 89
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:22.164Z",
+          "temperatureC": 58,
+          "powerW": 116.01,
+          "memoryUsedMiB": 13132,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 73
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:24.158Z",
+          "temperatureC": 57,
+          "powerW": 110.33,
+          "memoryUsedMiB": 10076,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 66
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:26.165Z",
+          "temperatureC": 67,
+          "powerW": 205.56,
+          "memoryUsedMiB": 10924,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:28.180Z",
+          "temperatureC": 69,
+          "powerW": 273.44,
+          "memoryUsedMiB": 11596,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:30.188Z",
+          "temperatureC": 62,
+          "powerW": 169.62,
+          "memoryUsedMiB": 12012,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 94
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:32.193Z",
+          "temperatureC": 62,
+          "powerW": 161.72,
+          "memoryUsedMiB": 11884,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:34.196Z",
+          "temperatureC": 63,
+          "powerW": 202.96,
+          "memoryUsedMiB": 12076,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:36.203Z",
+          "temperatureC": 64,
+          "powerW": 209.75,
+          "memoryUsedMiB": 12812,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:38.206Z",
+          "temperatureC": 70,
+          "powerW": 286.18,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:40.219Z",
+          "temperatureC": 78,
+          "powerW": 300.3,
+          "memoryUsedMiB": 11884,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:42.223Z",
+          "temperatureC": 71,
+          "powerW": 300.34,
+          "memoryUsedMiB": 11884,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:44.227Z",
+          "temperatureC": 74,
+          "powerW": 289.42,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 93
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:46.234Z",
+          "temperatureC": 80,
+          "powerW": 299.92,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:48.242Z",
+          "temperatureC": 72,
+          "powerW": 300.2,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:50.245Z",
+          "temperatureC": 80,
+          "powerW": 299.73,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:52.247Z",
+          "temperatureC": 74,
+          "powerW": 299.62,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:54.253Z",
+          "temperatureC": 73,
+          "powerW": 296.95,
+          "memoryUsedMiB": 11788,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:56.255Z",
+          "temperatureC": 79,
+          "powerW": 300.42,
+          "memoryUsedMiB": 11788,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:06:58.267Z",
+          "temperatureC": 73,
+          "powerW": 299.56,
+          "memoryUsedMiB": 11788,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:00.282Z",
+          "temperatureC": 79,
+          "powerW": 300.67,
+          "memoryUsedMiB": 11788,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:02.284Z",
+          "temperatureC": 72,
+          "powerW": 300.82,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:04.298Z",
+          "temperatureC": 80,
+          "powerW": 299.69,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:06.312Z",
+          "temperatureC": 75,
+          "powerW": 298.85,
+          "memoryUsedMiB": 11756,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:08.322Z",
+          "temperatureC": 73,
+          "powerW": 299.79,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:10.329Z",
+          "temperatureC": 80,
+          "powerW": 299.95,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:12.346Z",
+          "temperatureC": 73,
+          "powerW": 299.89,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:14.358Z",
+          "temperatureC": 80,
+          "powerW": 300.52,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:16.364Z",
+          "temperatureC": 75,
+          "powerW": 301.16,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:18.377Z",
+          "temperatureC": 80,
+          "powerW": 299.68,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:20.382Z",
+          "temperatureC": 76,
+          "powerW": 299.52,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:22.396Z",
+          "temperatureC": 74,
+          "powerW": 301.12,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:24.397Z",
+          "temperatureC": 80,
+          "powerW": 301.31,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:26.406Z",
+          "temperatureC": 74,
+          "powerW": 299.67,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:28.414Z",
+          "temperatureC": 76,
+          "powerW": 300.8,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:30.426Z",
+          "temperatureC": 73,
+          "powerW": 299.13,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:32.429Z",
+          "temperatureC": 76,
+          "powerW": 299.62,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:34.444Z",
+          "temperatureC": 71,
+          "powerW": 290.63,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 82
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:36.449Z",
+          "temperatureC": 80,
+          "powerW": 300.34,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:38.455Z",
+          "temperatureC": 74,
+          "powerW": 299.7,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:40.469Z",
+          "temperatureC": 80,
+          "powerW": 300.7,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:42.473Z",
+          "temperatureC": 76,
+          "powerW": 299.97,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:44.471Z",
+          "temperatureC": 81,
+          "powerW": 299.77,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:46.477Z",
+          "temperatureC": 74,
+          "powerW": 300.66,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:48.493Z",
+          "temperatureC": 77,
+          "powerW": 297.96,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:50.498Z",
+          "temperatureC": 77,
+          "powerW": 299.79,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:52.502Z",
+          "temperatureC": 73,
+          "powerW": 299.99,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:54.515Z",
+          "temperatureC": 80,
+          "powerW": 300.12,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:56.517Z",
+          "temperatureC": 74,
+          "powerW": 299.4,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:07:58.524Z",
+          "temperatureC": 81,
+          "powerW": 300.28,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:00.534Z",
+          "temperatureC": 76,
+          "powerW": 300.68,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:02.535Z",
+          "temperatureC": 80,
+          "powerW": 299,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:04.542Z",
+          "temperatureC": 76,
+          "powerW": 300.55,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:06.550Z",
+          "temperatureC": 80,
+          "powerW": 298.72,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:08.566Z",
+          "temperatureC": 78,
+          "powerW": 299.65,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:10.578Z",
+          "temperatureC": 71,
+          "powerW": 299.5,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:12.583Z",
+          "temperatureC": 80,
+          "powerW": 300.88,
+          "memoryUsedMiB": 11340,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:14.595Z",
+          "temperatureC": 74,
+          "powerW": 298.91,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:16.595Z",
+          "temperatureC": 81,
+          "powerW": 300.24,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:18.608Z",
+          "temperatureC": 73,
+          "powerW": 300.02,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:20.609Z",
+          "temperatureC": 81,
+          "powerW": 300.44,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:22.613Z",
+          "temperatureC": 76,
+          "powerW": 299.85,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:24.614Z",
+          "temperatureC": 81,
+          "powerW": 299.5,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:26.617Z",
+          "temperatureC": 76,
+          "powerW": 300.67,
+          "memoryUsedMiB": 11372,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:28.616Z",
+          "temperatureC": 80,
+          "powerW": 298.86,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:30.629Z",
+          "temperatureC": 75,
+          "powerW": 300.61,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:32.634Z",
+          "temperatureC": 78,
+          "powerW": 299.56,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:34.648Z",
+          "temperatureC": 76,
+          "powerW": 299.72,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:36.657Z",
+          "temperatureC": 73,
+          "powerW": 300.09,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:38.672Z",
+          "temperatureC": 80,
+          "powerW": 300.12,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:40.686Z",
+          "temperatureC": 74,
+          "powerW": 299.46,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:42.691Z",
+          "temperatureC": 81,
+          "powerW": 300.86,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:44.697Z",
+          "temperatureC": 73,
+          "powerW": 300.47,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:46.702Z",
+          "temperatureC": 81,
+          "powerW": 300.01,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:48.705Z",
+          "temperatureC": 71,
+          "powerW": 274.36,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:50.710Z",
+          "temperatureC": 76,
+          "powerW": 306.28,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:52.717Z",
+          "temperatureC": 80,
+          "powerW": 298.9,
+          "memoryUsedMiB": 11436,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:54.732Z",
+          "temperatureC": 76,
+          "powerW": 299.31,
+          "memoryUsedMiB": 5516,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:56.733Z",
+          "temperatureC": 63,
+          "powerW": 92.12,
+          "memoryUsedMiB": 10060,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:08:58.747Z",
+          "temperatureC": 74,
+          "powerW": 267.34,
+          "memoryUsedMiB": 10060,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:00.757Z",
+          "temperatureC": 65,
+          "powerW": 210.89,
+          "memoryUsedMiB": 10316,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:02.772Z",
+          "temperatureC": 74,
+          "powerW": 268.37,
+          "memoryUsedMiB": 10316,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:04.777Z",
+          "temperatureC": 67,
+          "powerW": 196.9,
+          "memoryUsedMiB": 10316,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 100
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:06.789Z",
+          "temperatureC": 74,
+          "powerW": 268.6,
+          "memoryUsedMiB": 10348,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:08.798Z",
+          "temperatureC": 69,
+          "powerW": 183.73,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:10.810Z",
+          "temperatureC": 74,
+          "powerW": 268.4,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:12.813Z",
+          "temperatureC": 73,
+          "powerW": 227.58,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:14.818Z",
+          "temperatureC": 74,
+          "powerW": 268.45,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:16.825Z",
+          "temperatureC": 72,
+          "powerW": 210.76,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:18.834Z",
+          "temperatureC": 74,
+          "powerW": 268.48,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:20.838Z",
+          "temperatureC": 73,
+          "powerW": 214.89,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:22.841Z",
+          "temperatureC": 74,
+          "powerW": 268.48,
+          "memoryUsedMiB": 10508,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 99
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:24.847Z",
+          "temperatureC": 53,
+          "powerW": 35.82,
+          "memoryUsedMiB": 9132,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        },
+        {
+          "capturedAt": "2026-09-05T07:09:26.853Z",
+          "temperatureC": 51,
+          "powerW": 29.95,
+          "memoryUsedMiB": 9068,
+          "memoryTotalMiB": 16303,
+          "utilizationPercent": 0
+        }
+      ]
+    }
+  },
+  "timingReductionPercent": 38.7
+}

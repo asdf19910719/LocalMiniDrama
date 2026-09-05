@@ -298,6 +298,7 @@ describe('official H3 Director R2V registry and adapter', () => {
       { index: 0, imageFile: 'ref_abc.png', role: 'subject' },
       { index: 1, imageFile: 'ref_def.png', role: 'environment' },
     ]);
+    assert.equal(node.inputs.steps, 20);
   });
 
   it('accepts raw reference aliases when staging has not run yet', () => {
@@ -339,5 +340,95 @@ describe('official H3 Director R2V registry and adapter', () => {
     assert.throws(() => loadRegistry(registryPath), /API|format|prompt/i);
     fs.writeFileSync(registryPath, JSON.stringify({ version: 1, workflows: [makeEntry(workflowPath)] }));
     assert.throws(() => loadRegistry(registryPath), /required|missing|Sage|ref2va/i);
+  });
+});
+
+describe('official H3 Director R2V TE-Speed graph', () => {
+  const teWorkflowPath = path.resolve(__dirname, '../configs/workflows/minimax_h3_director_r2v_te_speed.json');
+
+  it('places one original TE-Speed node after Sage and before Director', () => {
+    assert.equal(fs.existsSync(teWorkflowPath), true, `missing TE workflow: ${teWorkflowPath}`);
+    const workflow = JSON.parse(fs.readFileSync(teWorkflowPath, 'utf8')).prompt;
+    const entries = Object.entries(workflow);
+    const nodes = (type) => entries.filter(([, node]) => node.class_type === type);
+    assert.equal(nodes('TESpeedMiniMaxH3').length, 1);
+    const [teId, te] = nodes('TESpeedMiniMaxH3')[0];
+    const [sageId, sage] = nodes('PathchSageAttentionKJ')[0];
+    const [unetId] = nodes('UNETLoader')[0];
+    const [, director] = nodes('MiniMaxH3Director')[0];
+    assert.deepEqual(sage.inputs.model, [unetId, 0]);
+    assert.deepEqual(te.inputs.model, [sageId, 0]);
+    assert.deepEqual(director.inputs.model, [teId, 0]);
+    assert.deepEqual({
+      processing_control_value: te.inputs.processing_control_value,
+      processing_percent_1: te.inputs.processing_percent_1,
+      processing_percent_2: te.inputs.processing_percent_2,
+      mcs: te.inputs.mcs,
+      device: te.inputs.device,
+      mode: te.inputs.mode,
+    }, {
+      processing_control_value: 0.08,
+      processing_percent_1: 0.1,
+      processing_percent_2: 0.9,
+      mcs: 2,
+      device: 'auto',
+      mode: 'standard',
+    });
+    assert.equal(director.inputs.steps, 20);
+    assert.equal(director.inputs.scheduler, 'simple');
+    assert.equal(director.inputs.sampler, 'res_multistep');
+  });
+
+  it('registers the verified TE-Speed workflow with immutable original-node provenance', () => {
+    const { loadRegistry, selectWorkflow } = loadSut();
+    const registry = loadRegistry(path.resolve(__dirname, '../configs/director-workflows.json'));
+    const entry = selectWorkflow(registry, 'minimax_h3_director_r2v_te_speed');
+    assert.equal(entry.status, 'verified');
+    assert.equal(entry.adapterVersion, 'v2');
+    assert.equal(entry.capabilities.supportsTESpeed, true);
+    assert.equal(entry.capabilities.approximateAcceleration, true);
+    assert.ok(entry.requiredNodes.includes('TESpeedMiniMaxH3'));
+    assert.equal(entry.acceleration.implementation, 'TE-Speed-MiniMaxH3');
+    assert.equal(entry.acceleration.commitSha, 'beda0e4be76367625b5e82500b7c4867c3d8bbd6');
+    assert.equal(entry.acceleration.binarySha256, 'sha256:84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c');
+    assert.equal(entry.acceleration.cachePolicy, 'te_node_always_changed');
+  });
+
+  it('detects TE-Speed capabilities and rejects unsafe graph variants', () => {
+    assert.equal(fs.existsSync(teWorkflowPath), true, `missing TE workflow: ${teWorkflowPath}`);
+    const { validateWorkflow, describeCapabilities } = require('../src/director/adapters/h3DirectorR2VAdapter');
+    const workflow = JSON.parse(fs.readFileSync(teWorkflowPath, 'utf8'));
+    assert.equal(describeCapabilities(workflow).supportsTESpeed, true);
+    assert.equal(describeCapabilities(workflow).approximateAcceleration, true);
+
+    const beforeSage = structuredClone(workflow);
+    beforeSage.prompt['9'].inputs.model = ['1', 0];
+    assert.throws(() => validateWorkflow(beforeSage), /Sage.*TE-Speed|chain|connection/i);
+
+    const duplicate = structuredClone(workflow);
+    duplicate.prompt['10'] = structuredClone(duplicate.prompt['9']);
+    assert.throws(() => validateWorkflow(duplicate), /exactly one|one TE-Speed/i);
+
+    const spectrum = structuredClone(workflow);
+    spectrum.prompt['10'] = { class_type: 'SpectrumApplyMiniMaxH3', inputs: { model: ['9', 0] } };
+    assert.throws(() => validateWorkflow(spectrum), /Spectrum/i);
+  });
+
+  it('does not expose TE-Speed parameters through business input', () => {
+    assert.equal(fs.existsSync(teWorkflowPath), true, `missing TE workflow: ${teWorkflowPath}`);
+    const { buildPrompt } = require('../src/director/adapters/h3DirectorR2VAdapter');
+    const workflow = JSON.parse(fs.readFileSync(teWorkflowPath, 'utf8'));
+    const prompt = buildPrompt(workflow, {
+      prompt: 'A subject turns toward camera.',
+      referenceImageUrls: ['subject.png'],
+      processing_control_value: 1,
+      mcs: 10,
+      device: 'gpu',
+      mode: '4-step LoRA',
+    });
+    assert.equal(prompt['9'].inputs.processing_control_value, 0.08);
+    assert.equal(prompt['9'].inputs.mcs, 2);
+    assert.equal(prompt['9'].inputs.device, 'auto');
+    assert.equal(prompt['9'].inputs.mode, 'standard');
   });
 });

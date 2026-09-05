@@ -1,7 +1,7 @@
 'use strict';
 
 const ADAPTER_ID = 'h3_director_r2v';
-const ADAPTER_VERSION = 'v1';
+const ADAPTER_VERSION = 'v2';
 const MAX_REFERENCES = 9;
 
 function fail(message, code = 'ADAPTER_INPUT_INVALID') {
@@ -13,6 +13,19 @@ function fail(message, code = 'ADAPTER_INPUT_INVALID') {
 
 function classTypes(workflow) {
   return new Set(Object.values(workflow?.prompt || {}).map((node) => node?.class_type).filter(Boolean));
+}
+
+function entriesByType(workflow, type) {
+  return Object.entries(workflow?.prompt || {}).filter(([, node]) => node?.class_type === type);
+}
+
+function modelSource(node) {
+  const source = node?.inputs?.model;
+  return Array.isArray(source) && source.length === 2 ? [String(source[0]), Number(source[1])] : null;
+}
+
+function sameSource(actual, nodeId) {
+  return Array.isArray(actual) && actual[0] === String(nodeId) && actual[1] === 0;
 }
 
 function stagedReferences(input = {}, stagedAssets) {
@@ -45,19 +58,38 @@ function validateWorkflow(workflow) {
     fail('H3 Director R2V adapter requires an API-format workflow', 'ADAPTER_WORKFLOW_INVALID');
   }
   const types = classTypes(workflow);
+  if ([...types].some((type) => /spectrum/i.test(String(type)))) {
+    fail('H3 Director R2V workflow cannot combine Spectrum with TE-Speed', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  }
   for (const required of ['MiniMaxH3Director', 'PathchSageAttentionKJ']) {
     if (!types.has(required)) fail(`H3 Director R2V workflow is missing ${required}`, 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
-  const director = Object.values(workflow.prompt).find((node) => node?.class_type === 'MiniMaxH3Director');
-  const unet = Object.values(workflow.prompt).find((node) => node?.class_type === 'UNETLoader');
+  const [directorEntry] = entriesByType(workflow, 'MiniMaxH3Director');
+  const [unetEntry] = entriesByType(workflow, 'UNETLoader');
+  const [sageEntry] = entriesByType(workflow, 'PathchSageAttentionKJ');
+  const teEntries = entriesByType(workflow, 'TESpeedMiniMaxH3');
+  const director = directorEntry?.[1];
+  const unet = unetEntry?.[1];
   if (!String(unet?.inputs?.unet_name || '').toLowerCase().includes('ref2va')) {
     fail('H3 Director R2V workflow must use a ref2va UNET', 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
-  const sage = Object.values(workflow.prompt).find((node) => node?.class_type === 'PathchSageAttentionKJ');
+  const sage = sageEntry?.[1];
   if (sage?.inputs?.sage_attention !== 'auto' || sage?.inputs?.allow_compile !== false) {
     fail('H3 Director R2V workflow must configure SageAttention auto with compile disabled', 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
   if (!director) fail('H3 Director R2V workflow is missing MiniMaxH3Director', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  if (teEntries.length > 1) fail('H3 Director R2V workflow must contain exactly one TE-Speed node', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  if (teEntries.length === 1) {
+    const [teId, te] = teEntries[0];
+    const [sageId] = sageEntry;
+    const [unetId] = unetEntry;
+    const chainValid = sameSource(modelSource(sage), unetId)
+      && sameSource(modelSource(te), sageId)
+      && sameSource(modelSource(director), teId);
+    if (!chainValid) {
+      fail('H3 Director R2V TE-Speed chain must be UNET -> Sage -> TE-Speed -> Director', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+    }
+  }
 }
 
 function validate(input = {}, workflow, stagedAssets) {
@@ -113,12 +145,15 @@ function buildPrompt(template, input = {}, stagedAssets = []) {
 
 function describeCapabilities(workflow) {
   if (workflow) validateWorkflow(workflow);
+  const supportsTESpeed = entriesByType(workflow, 'TESpeedMiniMaxH3').length === 1;
   return {
     modes: ['single_reference'],
     maxReferenceImages: MAX_REFERENCES,
     supportsContinuity: false,
     supportsAudio: true,
     supportsSage: true,
+    supportsTESpeed,
+    approximateAcceleration: supportsTESpeed,
   };
 }
 

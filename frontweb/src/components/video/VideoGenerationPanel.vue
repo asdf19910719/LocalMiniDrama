@@ -59,9 +59,17 @@
           </div>
         </el-form-item>
         <div class="h3-workflow-meta">
-          <el-tag size="small" effect="plain">工作流：官方多参考图（Sage 加速）</el-tag>
+          <el-tag size="small" effect="plain">工作流：{{ workflowLabel }}</el-tag>
           <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
         </div>
+        <el-alert
+          v-if="approximateAcceleration"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          title="当前启用 TE-Speed 近似加速（实验）：速度更快，但结果不会与官方工作流逐像素一致。"
+        />
         <div class="h3-preview-actions">
           <el-button size="small" :loading="h3Compiling" :disabled="!defaultConfig" @click="compileH3Draft">生成 H3 提示词</el-button>
           <el-tag v-if="h3DraftLoading" size="small" type="info" effect="plain">草稿读取中</el-tag>
@@ -397,6 +405,8 @@ const {
   configStatus,
   providerName,
   modelName,
+  workflowLabel,
+  approximateAcceleration,
   isH3Config,
   loading,
   creating,

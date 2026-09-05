@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import { nextTick, reactive } from 'vue'
 
 import {
@@ -503,6 +504,41 @@ test('detects ComfyUI H3 configs for the draft flow', async () => {
   await nextTick()
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(plain.isH3Config.value, false)
+})
+
+test('renders capability-driven TE-Speed identity without exposing tuning controls', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getDefaultConfig: async () => ({
+        ...H3_CONFIG,
+        default_model: 'minimax_h3_director_r2v_te_speed',
+      }),
+      capabilities: async () => ({
+        workflow: {
+          id: 'minimax_h3_director_r2v_te_speed',
+          label: '官方多参考图（Sage + TE-Speed 实验）',
+        },
+        capabilities: {
+          modes: ['single_reference'],
+          supportsContinuity: false,
+          supportsTESpeed: true,
+          approximateAcceleration: true,
+        },
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.isH3Config.value, true)
+  assert.equal(panel.workflowLabel.value, '官方多参考图（Sage + TE-Speed 实验）')
+  assert.equal(panel.approximateAcceleration.value, true)
+
+  const component = fs.readFileSync(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8')
+  assert.match(component, /近似加速/)
+  assert.doesNotMatch(component, /v-model="form\.(?:processingControlValue|mcs|teSpeedDevice|teSpeedMode)"/)
 })
 
 test('restores the existing H3 draft text and chip when the panel opens', async () => {

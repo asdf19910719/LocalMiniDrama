@@ -59,6 +59,32 @@ function nonSensitiveBaseUrl(value) {
   }
 }
 
+const ACCELERATION_KEYS = [
+  'kind',
+  'implementation',
+  'version',
+  'repository',
+  'commitSha',
+  'binarySha256',
+  'wrapperSha256',
+  'cachePolicy',
+  'mode',
+  'device',
+  'approximate',
+];
+
+function snapshotAcceleration(workflow) {
+  const source = workflow?.acceleration;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  return ACCELERATION_KEYS.reduce((snapshot, key) => {
+    if (Object.prototype.hasOwnProperty.call(source, key)
+      && (source[key] == null || ['string', 'number', 'boolean'].includes(typeof source[key]))) {
+      snapshot[key] = source[key];
+    }
+    return snapshot;
+  }, {});
+}
+
 function buildVideoConfigSnapshot(resolved = {}) {
   const config = resolved.config || {};
   const workflow = resolved.workflow || config.workflow || null;
@@ -79,6 +105,7 @@ function buildVideoConfigSnapshot(resolved = {}) {
     sage: resolved.sage || workflow?.sage || (workflow?.capabilities?.supportsSage ? {
       node: 'PathchSageAttentionKJ', attention: 'auto', allowCompile: false,
     } : null),
+    acceleration: snapshotAcceleration(workflow),
     planHash: resolved.planHash || null,
     baseUrl: nonSensitiveBaseUrl(config.base_url),
     endpoint: nonSensitivePath(config.endpoint),

@@ -474,11 +474,20 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       || trimmed(Array.isArray(defaultConfig.value?.model) ? defaultConfig.value.model[0] : defaultConfig.value?.model)
       || '由默认配置决定'
   ))
+  const workflowLabel = computed(() => (
+    trimmed(capabilities.value?.workflow?.label)
+      || (capabilities.value?.capabilities?.supportsTESpeed
+        ? '官方多参考图（Sage + TE-Speed 实验）'
+        : '官方多参考图（Sage）')
+  ))
+  const approximateAcceleration = computed(() => (
+    capabilities.value?.capabilities?.approximateAcceleration === true
+  ))
   const isH3Config = computed(() => {
     const cfg = defaultConfig.value || {}
     const provider = String(cfg.provider || '').toLowerCase()
     const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
+    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimax-h3') || model.includes('minimaxh3'))
   })
   const h3UiState = computed(() => deriveH3DraftUiState({
     draft: h3Draft.value,
@@ -1094,6 +1103,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configStatus,
     providerName,
     modelName,
+    workflowLabel,
+    approximateAcceleration,
     isH3Config,
     loading,
     creating,

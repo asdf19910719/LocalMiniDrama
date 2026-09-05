@@ -3,12 +3,13 @@
   "workflows": [
     {
       "id": "minimax_h3_director_r2v",
+      "label": "官方多参考图（Sage）",
       "status": "verified",
       "workflowPath": "workflows/minimax_h3_director_r2v.json",
-      "workflowSha256": "sha256:e3c5fc867d701b1923b9f80dbdc97fad5568e2a25db5fc6e375cc5c53a6ee2c6",
+      "workflowSha256": "sha256:ccefbbb04b9c856475b4fac7a2bcb2c058829d9568eacadf01486c8c44c55d6e",
       "family": "h3_director",
       "adapter": "h3_director_r2v",
-      "adapterVersion": "v1",
+      "adapterVersion": "v2",
       "variant": "official_sage",
       "workflowFormat": "api",
       "requiredNodes": [
@@ -39,7 +40,9 @@
         "maxReferenceImages": 9,
         "supportsContinuity": false,
         "supportsAudio": true,
-        "supportsSage": true
+        "supportsSage": true,
+        "supportsTESpeed": false,
+        "approximateAcceleration": false
       },
       "inputSchemaVersion": 1,
       "inputSchema": {
@@ -119,6 +122,158 @@
         ]
       },
       "verifiedEvidence": "docs/research/h3-continuity-test-report.md"
+    },
+    {
+      "id": "minimax_h3_director_r2v_te_speed",
+      "label": "官方多参考图（Sage + TE-Speed 实验）",
+      "status": "verified",
+      "workflowPath": "workflows/minimax_h3_director_r2v_te_speed.json",
+      "workflowSha256": "sha256:5dc07486bc02c420813b11048eab15819f52c0162bd190ed05fb1f4870741513",
+      "family": "h3_director",
+      "adapter": "h3_director_r2v",
+      "adapterVersion": "v2",
+      "variant": "official_sage_te_speed_original_3_3",
+      "workflowFormat": "api",
+      "requiredNodes": [
+        "UNETLoader",
+        "CLIPLoader",
+        "VAELoader",
+        "MiniMaxH3Director",
+        "CreateVideo",
+        "SaveVideo",
+        "PathchSageAttentionKJ",
+        "TESpeedMiniMaxH3"
+      ],
+      "modelFiles": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax_h3_video_vae_fp16.safetensors",
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "customNodes": [
+        "MiniMaxH3Director",
+        "CreateVideo",
+        "SaveVideo",
+        "PathchSageAttentionKJ",
+        "TESpeedMiniMaxH3"
+      ],
+      "capabilities": {
+        "modes": [
+          "single_reference"
+        ],
+        "maxReferenceImages": 9,
+        "supportsContinuity": false,
+        "supportsAudio": true,
+        "supportsSage": true,
+        "supportsTESpeed": true,
+        "approximateAcceleration": true
+      },
+      "acceleration": {
+        "kind": "temporal_feature_cache",
+        "implementation": "TE-Speed-MiniMaxH3",
+        "version": "3.3",
+        "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+        "commitSha": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+        "binarySha256": "sha256:84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c",
+        "wrapperSha256": "sha256:305a0afb643f6907fe2742069cca2cea0cc5dae78478c8ec82d761c98f0684aa",
+        "cachePolicy": "te_node_always_changed",
+        "mode": "standard",
+        "device": "auto",
+        "approximate": true
+      },
+      "inputSchemaVersion": 1,
+      "inputSchema": {
+        "common": [
+          "prompt",
+          "negativePrompt",
+          "width",
+          "height",
+          "durationSeconds",
+          "frameRate",
+          "seed"
+        ],
+        "references": [
+          "referenceImageUrls"
+        ],
+        "advanced": [
+          "refMaxSize",
+          "continuityOverlapFrames"
+        ]
+      },
+      "provenance": {
+        "provider": "MiniMax + tl2012tl",
+        "modelFamily": "MiniMax H3 Director R2V",
+        "source": "official Sage workflow with original TE-Speed-MiniMaxH3 3.3 binary and a cache-isolation registration shim",
+        "license": {
+          "status": "review_required",
+          "evidence": "docs/research/H3官方Sage与原版TE-Speed对照报告-2026-09-05.md"
+        }
+      },
+      "runtimeLock": {
+        "comfyUIVersion": "0.33.1",
+        "models": [
+          {
+            "fileName": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "relativePath": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 20970379616
+          },
+          {
+            "fileName": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "relativePath": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6",
+            "fileSizeBytes": 15687142551
+          },
+          {
+            "fileName": "minimax_h3_video_vae_fp16.safetensors",
+            "relativePath": "vae/minimax_h3_video_vae_fp16.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 5207808496
+          },
+          {
+            "fileName": "minimax_h3_audio_vae_fp32.safetensors",
+            "relativePath": "vae/minimax_h3_audio_vae_fp32.safetensors",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "fileSizeBytes": 605254808
+          }
+        ],
+        "customNodes": [
+          {
+            "name": "ComfyUI_MiniMaxH3_Director",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "b29b0f178c342c507791823228e2509c462011dc6c58ab3522a90364af2f9f96"
+              }
+            ]
+          },
+          {
+            "name": "ComfyUI-KJNodes",
+            "files": [
+              {
+                "path": "__init__.py",
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ]
+          },
+          {
+            "name": "TE-Speed-MiniMaxH3",
+            "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+            "commit": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+            "files": [
+              {
+                "path": "nodes.pyd",
+                "sha256": "84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c"
+              },
+              {
+                "path": "__init__.py",
+                "sha256": "305a0afb643f6907fe2742069cca2cea0cc5dae78478c8ec82d761c98f0684aa"
+              }
+            ]
+          }
+        ]
+      },
+      "verifiedEvidence": "docs/research/H3官方Sage与原版TE-Speed对照报告-2026-09-05.md"
     },
     {
       "id": "h3-continuity-v1",

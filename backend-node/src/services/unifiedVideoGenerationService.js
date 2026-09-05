@@ -121,7 +121,7 @@ function isH3VideoConfig(resolved) {
   const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
   const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
   const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimaxh3') || model.includes('minimax-h3'))
     || protocol === 'minimax_h3';
 }
 
@@ -1026,6 +1026,7 @@ function inputFor(row) {
       model: resolved.model,
       workflow: workflow ? {
         id: workflow.id,
+        label: workflow.label || workflow.id,
         status: workflow.status,
         variant: workflow.variant,
         sha256: workflow.workflowSha256,
