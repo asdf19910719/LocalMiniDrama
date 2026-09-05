@@ -491,6 +491,70 @@ describe('compileDraft', () => {
     assert.equal(calls.length, 0);
   });
 
+  it('allows zero reference slots when the selected workflow contract has min 0', async () => {
+    const sbId = insertStoryboard(db, { scene_id: null });
+    insertVideoConfig(db, { id: 7 });
+    const calls = [];
+    const compileFn = async (_db, _log, input) => {
+      calls.push(input);
+      return {
+        sourcePrompt: input.prompt,
+        compiledPrompt: 'integrated_multimodal_description: [Shot 1] A woman walks toward the door.\noverall_soundscape: Footsteps and rain.\nnon_diegetic_music: N/A',
+        promptFormat: 'T2VA',
+        compilerVersion: 'h3-skill-agent-v1',
+        skillProvenance: null,
+      };
+    };
+    const service = makeService({
+      compileFn,
+      workflowRegistry: { workflows: [{
+        id: 'minimax-h3', status: 'verified', workflowSha256: 'sha256:min-zero',
+        execution: {
+          promptContract: 'h3_director_v1', requiresPromptDraft: true,
+          dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+          references: { min: 0, max: 4 }, vramPolicy: 'h3_estimate',
+          defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+        },
+      }] },
+    });
+
+    const draft = await service.compileDraft(db, {}, nullLog, {
+      storyboardId: sbId, videoConfigId: '7', workflowId: 'minimax-h3',
+    });
+
+    assert.equal(draft.status, 'valid');
+    assert.deepEqual(calls[0].referenceUrls, []);
+  });
+
+  it('uses the selected workflow max reference count instead of the legacy limit', async () => {
+    const sbId = insertStoryboard(db, { scene_id: null });
+    for (let i = 0; i < 5; i += 1) {
+      insertProp(db, sbId, { name: `道具${i}`, imageUrl: `/static/prop-${i}.png` });
+    }
+    insertVideoConfig(db, { id: 7 });
+    const { calls, compileFn } = makeStubCompile();
+    const service = makeService({
+      compileFn,
+      workflowRegistry: { workflows: [{
+        id: 'minimax-h3', status: 'verified', workflowSha256: 'sha256:max-four',
+        execution: {
+          promptContract: 'h3_director_v1', requiresPromptDraft: true,
+          dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+          references: { min: 0, max: 4 }, vramPolicy: 'h3_estimate',
+          defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+        },
+      }] },
+    });
+
+    await assert.rejects(
+      () => service.compileDraft(db, {}, nullLog, {
+        storyboardId: sbId, videoConfigId: '7', workflowId: 'minimax-h3',
+      }),
+      (error) => error.code === 'REFERENCE_COUNT_OVERFLOW' && error.details?.maxSlots === 4,
+    );
+    assert.equal(calls.length, 0);
+  });
+
   it(`rejects with REFERENCE_COUNT_OVERFLOW when total slots exceed ${H3_MAX_SLOTS}`, async () => {
     const sbId = insertStoryboard(db, { scene_id: null });
     for (let i = 0; i < H3_MAX_SLOTS + 1; i += 1) {

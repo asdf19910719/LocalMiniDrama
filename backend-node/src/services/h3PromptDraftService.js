@@ -310,8 +310,8 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
 
   /**
    * 编译并落一条 status='valid' 的草稿。流程(spec §11.1):
-   * 业务提示词(universal_segment_text 优先,空则 video_prompt)→ 槽位解析
-   * (缺图/0 张/超限校验)→ H3 编译(复用 h3PromptCompiler 的 bundle 与技能代理)→
+   * 业务提示词(universal_segment_text 优先,空则 video_prompt)→ 工作流执行契约→ 槽位解析
+   * (缺图/数量边界校验)→ H3 编译(复用 h3PromptCompiler 的 bundle 与技能代理)→
    * 确定性校验 → 固化快照/参数/指纹 → INSERT。
    */
   async function compileDraft(db, cfg, log, { storyboardId, videoConfigId, workflowId } = {}) {
@@ -325,7 +325,16 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
       throw draftError('UNIVERSAL_PROMPT_EMPTY', '业务提示词为空(万能提示词与视频提示词均为空),无法编译 H3 提示词');
     }
 
-    const { slots, total } = resolveStoryboardSlots(db, storyboard.id, { maxSlots: H3_MAX_SLOTS });
+    const runtime = resolveVideoRuntime(db, videoConfigId, { workflowId });
+    const referenceLimits = runtime.workflow?.execution?.references || { min: 1, max: H3_MAX_SLOTS };
+    const { slots, total } = resolveStoryboardSlots(db, storyboard.id, { maxSlots: referenceLimits.max });
+    if (total > referenceLimits.max) {
+      throw draftError(
+        'REFERENCE_COUNT_OVERFLOW',
+        `参考图槽位共 ${total} 个,超出上限 ${referenceLimits.max} 张,请减少绑定后重试`,
+        { total, minSlots: referenceLimits.min, maxSlots: referenceLimits.max },
+      );
+    }
     const missing = slots.filter((slot) => !slot.image_available);
     if (missing.length > 0) {
       const labels = missing.map((slot) => `#${slot.index} ${slot.name || slot.type}`).join('、');
@@ -336,14 +345,14 @@ function createH3PromptDraftService({ compileFn, workflowRegistry = null, allowE
       );
     }
     const available = slots.filter((slot) => slot.image_available);
-    if (available.length === 0) {
-      throw draftError('REFERENCE_COUNT_INVALID', '无可用参考图(至少需要 1 张有图槽位),无法编译 H3 提示词');
-    }
-    if (total > H3_MAX_SLOTS) {
-      throw draftError('REFERENCE_COUNT_OVERFLOW', `参考图槽位共 ${total} 个,超出上限 ${H3_MAX_SLOTS} 张,请减少绑定后重试`, { total, maxSlots: H3_MAX_SLOTS });
+    if (available.length < referenceLimits.min) {
+      throw draftError(
+        'REFERENCE_COUNT_INVALID',
+        `可用参考图共 ${available.length} 张,少于工作流要求的 ${referenceLimits.min} 张`,
+        { total: available.length, minSlots: referenceLimits.min, maxSlots: referenceLimits.max },
+      );
     }
 
-    const runtime = resolveVideoRuntime(db, videoConfigId, { workflowId });
     const params = deriveGenerationParams(storyboard, runtime);
     const sourceSlotsFingerprint = slotsFingerprint(slots);
     const skillVersion = COMPILER_VERSION;

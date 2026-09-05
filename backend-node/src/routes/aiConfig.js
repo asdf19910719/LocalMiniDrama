@@ -162,7 +162,14 @@ function testConnection(log, { providerRegistry } = {}) {
       response.success(res, { message: '连接测试成功' });
     } catch (err) {
       log.error('AI config test connection failed', { error: err.message });
-      response.badRequest(res, '连接测试失败: ' + (err.message || '未知错误'));
+      const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 400;
+      response.error(
+        res,
+        status,
+        err.code || 'BAD_REQUEST',
+        '连接测试失败: ' + (err.message || '未知错误'),
+        err.details,
+      );
     }
   };
 }

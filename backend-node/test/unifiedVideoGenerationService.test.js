@@ -225,7 +225,73 @@ function buildService(db, harness, overrides = {}) {
   });
 }
 
+function testComfyuiWorkflowRegistry() {
+  return {
+    workflows: [{
+      id: 'old-model',
+      status: 'verified',
+      workflowPath: 'E:/test/workflows/old-model.json',
+      workflowSha256: 'sha256:test-old-model',
+      execution: {
+        promptContract: 'free_text_v1',
+        requiresPromptDraft: false,
+        dimensions: { minWidth: 64, maxWidth: 4096, minHeight: 64, maxHeight: 4096, multipleOf: 8 },
+        references: { min: 0, max: 3 },
+        vramPolicy: 'none',
+        defaults: { width: 1280, height: 704, durationSeconds: 5, frameRate: 24, seed: 1 },
+      },
+    }],
+  };
+}
+
 describe('unified video generation lifecycle', () => {
+  it('rejects manual resubmission of a persisted ComfyUI task without a versioned workflow snapshot', async () => {
+    const db = createTestDb();
+    const harness = createHarness();
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7,
+      provider: 'comfyui',
+      model: 'h3-continuity-v1',
+      settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'failed', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    await assert.rejects(
+      () => service.retryVideoGeneration(id),
+      (error) => error.code === 'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE' && error.status === 409,
+    );
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(id).status, 'failed');
+    assert.equal(harness.jobs.length, 0);
+  });
+
+  it('fails legacy ComfyUI submissions during restart recovery instead of selecting the live registry', async () => {
+    const db = createTestDb();
+    const harness = createHarness();
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7,
+      provider: 'comfyui',
+      model: 'h3-continuity-v1',
+      settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'waiting', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    assert.equal(await service.recoverVideoGenerations(), 1);
+    const row = db.prepare('SELECT status, error_msg FROM video_generations WHERE id = ?').get(id);
+    assert.equal(row.status, 'failed');
+    assert.equal(JSON.parse(row.error_msg).code, 'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE');
+    assert.equal(harness.jobs.length, 0);
+  });
+
   it('persists the selected ComfyUI workflow consistently and keeps its snapshot on retry', async () => {
     const db = createTestDb();
     seedDefaultConfig(db, {
@@ -480,7 +546,10 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
     };
-    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+    const service = buildService(db, harness, {
+      transientRetryDelayMs: 1,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
+    });
 
     const created = await service.createVideoGeneration({ prompt: 'transient retry' });
     await harness.runNext();
@@ -513,7 +582,8 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
-    const firstService = buildService(db, firstHarness);
+    const workflowRegistry = testComfyuiWorkflowRegistry();
+    const firstService = buildService(db, firstHarness, { workflowRegistry });
     const created = await firstService.createVideoGeneration({ prompt: 'restart-safe retry' });
     await firstHarness.runNext();
     await firstHarness.runNext();
@@ -526,7 +596,7 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return restartedHarness.provider; },
     };
-    const restartedService = buildService(db, restartedHarness);
+    const restartedService = buildService(db, restartedHarness, { workflowRegistry });
     await restartedService.recoverVideoGenerations();
     await restartedHarness.runNext();
 
@@ -571,7 +641,10 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
     };
-    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+    const service = buildService(db, harness, {
+      transientRetryDelayMs: 1,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
+    });
 
     const created = await service.createVideoGeneration({ prompt: 'bounded retry' });
     await harness.runNext();

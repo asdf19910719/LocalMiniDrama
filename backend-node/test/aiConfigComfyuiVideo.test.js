@@ -171,3 +171,31 @@ test('uses the shared ComfyUI provider for a read-only connection check and retu
     message: 'ComfyUI 连接检查通过，未启动推理任务',
   });
 });
+
+test('preserves stable provider error codes from ComfyUI connection checks', async () => {
+  const routes = aiConfigRoutes(createDb(), log, {}, {
+    providerRegistry: {
+      get() {
+        return {
+          async testConnection() {
+            const error = new Error('工作流缺少输入绑定 adapter');
+            error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+            error.status = 400;
+            error.details = { workflowId: 'alternate' };
+            throw error;
+          },
+        };
+      },
+    },
+  });
+  const res = responseRecorder();
+
+  await routes.testConnection({ body: {
+    service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188',
+    workflow: 'alternate', settings: '{}',
+  } }, res);
+
+  assert.equal(res.result.status, 400);
+  assert.equal(res.result.body.error.code, 'WORKFLOW_ADAPTER_REQUIRED');
+  assert.deepEqual(res.result.body.error.details, { workflowId: 'alternate' });
+});

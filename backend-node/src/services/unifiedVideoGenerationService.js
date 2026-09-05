@@ -194,6 +194,17 @@ function createUnifiedVideoGenerationService({
     return snapshot;
   }
 
+  function assertSafeComfyuiSubmissionSnapshot(row, snapshot = snapshotFor(row)) {
+    if (String(snapshot.provider || row.provider || '').trim().toLowerCase() !== 'comfyui') return snapshot;
+    if (Number(snapshot.workflowSnapshotVersion) === 1) return snapshot;
+    throw new VideoLifecycleError(
+      'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE',
+      '历史 ComfyUI 任务缺少不可变工作流快照，无法安全重新提交',
+      409,
+      { videoGenerationId: row.id },
+    );
+  }
+
   function configFor(row, snapshot) {
     const config = db.prepare(
       'SELECT * FROM ai_service_configs WHERE id = ? AND deleted_at IS NULL AND is_active = 1'
@@ -636,6 +647,7 @@ function inputFor(row) {
       if (stage === 'submit') {
         if (row.provider_task_id) stage = 'query';
         else {
+          assertSafeComfyuiSubmissionSnapshot(row, context.snapshot);
           setState(row, 'queued', 1, '正在提交视频生成任务', { error_msg: null, completed_at: null });
           result = await provider.submit(context);
         }
@@ -964,7 +976,8 @@ function inputFor(row) {
     if (!RETRYABLE_STATUSES.has(row.status)) {
       throw new VideoLifecycleError('VIDEO_NOT_RETRYABLE', '仅失败或中断的视频任务可以重试', 409, { status: row.status });
     }
-    snapshotFor(row);
+    const snapshot = snapshotFor(row);
+    if (!row.provider_task_id) assertSafeComfyuiSubmissionSnapshot(row, snapshot);
     const task = taskService.createTask(db, log, 'video_generation', String(row.drama_id || ''));
     const status = row.provider_task_id ? 'queued' : 'waiting';
     const now = new Date().toISOString();
@@ -1009,11 +1022,23 @@ function inputFor(row) {
         updateAsyncTask(row, 'queued', 1, '正在恢复原视频任务');
         enqueueOperation(row.id, 'recover');
       } else if (row.status === 'waiting') {
+        try {
+          assertSafeComfyuiSubmissionSnapshot(row);
+        } catch (error) {
+          persistFailure(row, error, 'recover');
+          continue;
+        }
         updateAsyncTask(row, 'waiting', 0, '等待恢复视频生成');
         enqueueOperation(row.id, 'submit');
       } else if (row.status === 'queued') {
         const marker = parseTransientRetryMarker(row.error_msg);
         if (marker && marker.retryCount <= transientRetryLimit) {
+          try {
+            assertSafeComfyuiSubmissionSnapshot(row);
+          } catch (error) {
+            persistFailure(row, error, 'recover');
+            continue;
+          }
           transientRetryCount.set(row.id, marker.retryCount);
           updateAsyncTask(row, 'queued', 1, '正在恢复 ComfyUI 自动重试');
           enqueueOperation(row.id, 'submit', Math.max(0, marker.retryAtMs - Date.now()));

@@ -24,12 +24,27 @@ function parseJsonObjectOrNull(value) {
   }
 }
 
-/** 草稿行序列化:validation_errors 解析为对象透传给前端(GET/PUT/compile 共用)。 */
+function publicDraftGenerationParams(value) {
+  const parsed = parseJsonObjectOrNull(value);
+  if (!parsed) return value;
+  const snapshot = parsed.videoConfigSnapshot;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return value;
+  const publicSnapshot = { ...snapshot };
+  delete publicSnapshot.workflowPath;
+  delete publicSnapshot.workflow_path;
+  return JSON.stringify({ ...parsed, videoConfigSnapshot: publicSnapshot });
+}
+
+/** 草稿公开 DTO:解析校验错误并移除仅供后端执行的本机工作流路径。 */
 function serializeH3Draft(draft) {
   if (!draft) return null;
-  if (draft.validation_errors == null) return draft;
+  const serialized = {
+    ...draft,
+    generation_params: publicDraftGenerationParams(draft.generation_params),
+  };
+  if (draft.validation_errors == null) return serialized;
   const parsed = parseJsonObjectOrNull(draft.validation_errors);
-  return parsed ? { ...draft, validation_errors: parsed } : draft;
+  return parsed ? { ...serialized, validation_errors: parsed } : serialized;
 }
 
 /** 润色接口：邻镜结构化摘要（含全能片段与其它提示词字段） */
@@ -1235,6 +1250,11 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           WORKFLOW_NOT_FOUND: 400,
           WORKFLOW_INVALID: 400,
           WORKFLOW_EXPERIMENTAL_REQUIRED: 400,
+          WORKFLOW_EXECUTION_INVALID: 400,
+          VIDEO_WORKFLOW_NOT_ALLOWED: 400,
+          VIDEO_DIMENSIONS_INVALID: 400,
+          VIDEO_PARAMETERS_INVALID: 400,
+          VIDEO_REFERENCE_COUNT_INVALID: 400,
         };
         if (err.code && statusByCode[err.code] != null) {
           return response.error(res, statusByCode[err.code], err.code, err.message, err.details);

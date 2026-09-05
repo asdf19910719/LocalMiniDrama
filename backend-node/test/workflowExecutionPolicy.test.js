@@ -48,6 +48,21 @@ describe('workflow execution policy', () => {
     );
   });
 
+  it('rejects empty and boolean numeric fields instead of coercing them to numbers', () => {
+    for (const invalidExecution of [
+      execution({ references: { min: null, max: 3 } }),
+      execution({ references: { min: 0, max: null } }),
+      execution({ defaults: { ...execution().defaults, seed: null } }),
+      execution({ references: { min: false, max: 3 } }),
+      execution({ defaults: { ...execution().defaults, seed: ' ' } }),
+    ]) {
+      assert.throws(
+        () => validateWorkflowExecution(invalidExecution, 'null-number'),
+        (error) => error.code === 'WORKFLOW_EXECUTION_INVALID',
+      );
+    }
+  });
+
   it('requires a draft only when the execution contract says so', () => {
     assert.equal(workflowRequiresDraft({ adapter: 'anything', execution: execution() }), false);
     assert.equal(workflowRequiresDraft({ adapter: null, execution: execution({ requiresPromptDraft: true }) }), true);

@@ -110,6 +110,27 @@ function context(input = {}) {
   };
 }
 
+function workflowContext(workflow, input = {}) {
+  const base = context(input);
+  return {
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      configId: 7,
+      provider: 'comfyui',
+      model: workflow.id,
+      workflowId: workflow.id,
+      workflowSnapshotVersion: 1,
+      workflowPath: workflow.workflowPath,
+      workflowSha256: workflow.workflowSha256,
+      workflowStatus: workflow.status,
+      workflowExecution: workflow.execution,
+      adapter: workflow.adapter || null,
+      adapterVersion: workflow.adapterVersion || null,
+    },
+  };
+}
+
 describe('ComfyUI video provider adapter', () => {
   test('submits from the immutable workflow snapshot after the live registry changes', async (t) => {
     const fixture = createWorkflowFixture();
@@ -152,6 +173,31 @@ describe('ComfyUI video provider adapter', () => {
     assert.equal(fake.calls[0].prompt['5'].inputs.height, 704);
   });
 
+  test('refuses to submit a legacy snapshot through the live workflow registry', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const fake = createFakeClient();
+    const provider = createComfyUIVideoProvider({
+      registry: fixture.registry,
+      comfyClient: fake,
+      gpuMutex: createGpuMutex(),
+    });
+
+    await assert.rejects(
+      () => provider.submit({
+        ...context({
+          prompt: 'integrated_multimodal_description: [Shot 1] A detective crosses a rain-soaked street.\noverall_soundscape: Rain and footsteps.\nnon_diegetic_music: N/A',
+        }),
+        snapshot: {
+          model: 'h3-continuity-v1',
+          settings: { width: 1280, height: 704 },
+        },
+      }),
+      (error) => error.code === 'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE' && error.status === 409,
+    );
+    assert.equal(fake.calls.length, 0);
+  });
+
   test('fails explicitly when the snapshotted workflow file no longer matches its SHA', async (t) => {
     const fixture = createWorkflowFixture();
     t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
@@ -192,7 +238,7 @@ describe('ComfyUI video provider adapter', () => {
       gpuMutex,
     });
 
-    const result = await provider.submit(context({ width: '1280', height: '704' }));
+    const result = await provider.submit(workflowContext(fixture.registry.workflows[0], { width: '1280', height: '704' }));
 
     const submitted = fake.calls[0];
     assert.equal(submitted.workflowId, 'h3-continuity-v1');
@@ -223,7 +269,7 @@ describe('ComfyUI video provider adapter', () => {
       { width: 0, height: 704 },
       { width: 1280, height: -32 },
     ]) {
-      await assert.rejects(() => provider.submit(context(dimensions)), /32 的倍数/);
+      await assert.rejects(() => provider.submit(workflowContext(fixture.registry.workflows[0], dimensions)), /32 的倍数/);
     }
     assert.equal(fake.calls.length, 0);
   });
@@ -234,7 +280,7 @@ describe('ComfyUI video provider adapter', () => {
     const fake = createFakeClient();
     const gpuMutex = createGpuMutex();
     const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
-    await provider.submit(context());
+    await provider.submit(workflowContext(fixture.registry.workflows[0]));
 
     const running = await provider.query({ providerTaskId: 'prompt-1' });
     assert.deepEqual(running, {
@@ -252,7 +298,7 @@ describe('ComfyUI video provider adapter', () => {
     assert.equal(recovered.output.ffprobe.streams[0].width, 1280);
     assert.equal(gpuMutex.inspect(), null);
 
-    await provider.submit({ ...context(), taskId: 'video-2' });
+    await provider.submit({ ...workflowContext(fixture.registry.workflows[0]), taskId: 'video-2' });
     const cancelled = await provider.cancel({ providerTaskId: 'prompt-1' });
     assert.deepEqual(cancelled, {
       providerTaskId: 'prompt-1', status: 'cancelled', progress: 100, output: null,
@@ -267,7 +313,7 @@ describe('ComfyUI video provider adapter', () => {
     fake.cancel = async () => { throw new Error('interrupt endpoint unavailable'); };
     const gpuMutex = createGpuMutex();
     const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
-    await provider.submit(context());
+    await provider.submit(workflowContext(fixture.registry.workflows[0]));
 
     await assert.rejects(
       () => provider.cancel({ providerTaskId: 'prompt-1' }),
@@ -275,7 +321,7 @@ describe('ComfyUI video provider adapter', () => {
     );
 
     assert.equal(gpuMutex.inspect().owner, 'video-1');
-    await assert.rejects(() => provider.submit({ ...context(), taskId: 'video-2' }), /GPU_BUSY/);
+    await assert.rejects(() => provider.submit({ ...workflowContext(fixture.registry.workflows[0]), taskId: 'video-2' }), /GPU_BUSY/);
   });
 
   test('releases the GPU lease when completed artifact finalization fails', async (t) => {
@@ -290,7 +336,7 @@ describe('ComfyUI video provider adapter', () => {
       else fake.probeArtifact = async () => { throw new Error('output probe failed'); };
       const gpuMutex = createGpuMutex();
       const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
-      await provider.submit(context());
+      await provider.submit(workflowContext(fixture.registry.workflows[0]));
 
       await assert.rejects(
         () => provider.query({ providerTaskId: 'prompt-1' }),
@@ -298,7 +344,7 @@ describe('ComfyUI video provider adapter', () => {
       );
 
       assert.equal(gpuMutex.inspect(), null);
-      await assert.doesNotReject(() => provider.submit({ ...context(), taskId: `video-after-${failure}` }));
+      await assert.doesNotReject(() => provider.submit({ ...workflowContext(fixture.registry.workflows[0]), taskId: `video-after-${failure}` }));
     }
   });
 
@@ -311,7 +357,7 @@ describe('ComfyUI video provider adapter', () => {
     const provider = createComfyUIVideoProvider({
       registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
     });
-    await provider.submit(context());
+    await provider.submit(workflowContext(fixture.registry.workflows[0]));
     const token = gpuMutex.inspect().token;
 
     now = 1_090;
@@ -331,7 +377,7 @@ describe('ComfyUI video provider adapter', () => {
     const provider = createComfyUIVideoProvider({
       registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
     });
-    await provider.submit(context());
+    await provider.submit(workflowContext(fixture.registry.workflows[0]));
     const expiredToken = gpuMutex.inspect().token;
     now = 1_101;
     assert.equal(gpuMutex.inspect(), null);
@@ -354,7 +400,7 @@ describe('ComfyUI video provider adapter', () => {
     const provider = createComfyUIVideoProvider({
       registry: fixture.registry, comfyClient: fake, gpuMutex, leaseMs: 100,
     });
-    await provider.submit(context());
+    await provider.submit(workflowContext(fixture.registry.workflows[0]));
     now = 1_101;
     const other = gpuMutex.acquire('other-job', { leaseMs: 100 });
 
@@ -479,9 +525,11 @@ describe('ComfyUI video provider adapter', () => {
     const fake = createFakeClient();
     const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex: createGpuMutex() });
     await assert.doesNotReject(() => provider.submit({
+      ...workflowContext(selected, {
+        prompt: 'plain prompt', width: 1000, height: 700,
+        durationSeconds: undefined, frameRate: undefined, seed: undefined,
+      }),
       taskId: 'free-text-task',
-      snapshot: { model: 'free-text-v1', settings: { vram_budget_mb: 1 } },
-      input: { prompt: 'plain prompt', width: 1000, height: 700 },
     }));
     assert.equal(fake.calls[0].inputs.durationSeconds, 4);
   });

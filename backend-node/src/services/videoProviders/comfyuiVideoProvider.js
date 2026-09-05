@@ -145,7 +145,13 @@ function createComfyUIVideoProvider({
 
   function selectSnapshot(context) {
     const snapshot = context?.snapshot;
-    if (Number(snapshot?.workflowSnapshotVersion) !== 1) return null;
+    if (Number(snapshot?.workflowSnapshotVersion) !== 1) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE',
+        'ComfyUI 提交缺少不可变工作流快照，无法安全执行',
+        { videoGenerationId: context?.videoGenerationId ?? null },
+      );
+    }
     const workflowId = String(snapshot.workflowId || snapshot.model || '').trim();
     if (!workflowId || !snapshot.workflowPath || !snapshot.workflowSha256 || !snapshot.workflowExecution) {
       throw snapshotError(

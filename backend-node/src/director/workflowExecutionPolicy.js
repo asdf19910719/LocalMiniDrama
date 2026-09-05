@@ -11,6 +11,9 @@ function policyError(workflowId, message, code = 'WORKFLOW_EXECUTION_INVALID') {
 }
 
 function positiveInteger(value, field, workflowId, { allowZero = false } = {}) {
+  if (value == null || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) {
+    throw policyError(workflowId, `${field} 必须是${allowZero ? '非负' : '正'}整数`);
+  }
   const number = Number(value);
   if (!Number.isSafeInteger(number) || (allowZero ? number < 0 : number <= 0)) {
     throw policyError(workflowId, `${field} 必须是${allowZero ? '非负' : '正'}整数`);
@@ -19,6 +22,9 @@ function positiveInteger(value, field, workflowId, { allowZero = false } = {}) {
 }
 
 function positiveNumber(value, field, workflowId) {
+  if (value == null || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) {
+    throw policyError(workflowId, `${field} 必须大于 0`);
+  }
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw policyError(workflowId, `${field} 必须大于 0`);
   return number;
