@@ -243,3 +243,15 @@
 - 两个真实工作流离线冒烟：注册表加载、目录生成、SHA 校验和提示词构建均通过；`minimax_h3_director_r2v` 构建 8 个节点，`h3-continuity-v1` 构建 7 个节点。
 - 两轮独立只读代码复审：最终未发现 Critical、Important 或 Minor 级可复现问题。
 - 开发与验证仅在 `codex/comfyui-workflow-switching-v2` 隔离 worktree 完成，未合并主分支。
+
+## 评审修复与再验证（2026-09-06）
+
+- 修复 H3 草稿 GET、compile、save 公开 DTO 泄露内部 `workflowPath`；数据库中的不可变执行快照继续保留该路径。
+- 禁止缺少 `workflowSnapshotVersion` 的 ComfyUI 任务重新 submit；手动重试、启动恢复和瞬时失败重提均失败关闭，已有 `provider_task_id` 的历史任务继续只执行 recover/query。
+- H3 草稿编译改为先解析所选工作流，再按 `execution.references.min/max` 校验参考图，覆盖 `min: 0` 与 `max: 4`。
+- 补齐 storyboard 编译的稳定 400 错误映射；执行契约拒绝 null、空字符串、布尔、数组等非标量数值；ComfyUI 连接检查保留稳定 4xx/5xx status、code 和 details。
+- 功能分支已合入本机 `main@b887e43`，无文本冲突；没有在主分支工作区开发或合并回主分支。
+- 后端 Node 22 全量测试：640/640 通过；前端全量测试：191/191 通过；浏览器扩展测试：65/65 通过。
+- 前端 Vite 生产构建与浏览器扩展 bundle 构建均通过；前端仅保留非阻塞的 chunk 体积警告。
+- 两个真实工作流的注册表加载、目录生成、文件 SHA 和提示词构建离线烟测通过：`minimax_h3_director_r2v` 8 个节点，`h3-continuity-v1` 7 个节点。
+- 最终独立只读复审未发现剩余 Critical、Important 或 Minor，结论为 Ready to merge。
