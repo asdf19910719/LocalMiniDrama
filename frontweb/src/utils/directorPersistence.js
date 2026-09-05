@@ -8,18 +8,23 @@ function parseJsonObject(text, fieldName) {
   }
 }
 
+const DEFAULT_DIRECTOR_WORKFLOW_ID = 'h3-continuity-v1'
+
+function normalizeWorkflowId(value) {
+  return String(value ?? '').trim() || DEFAULT_DIRECTOR_WORKFLOW_ID
+}
+
 export function buildDirectorGenerationRequest({
   workflowId = 'h3-continuity-v1',
   candidateCount = 2,
   promptText = '{}',
   inputsText = '{}',
 } = {}) {
-  if (!String(workflowId).trim()) throw new Error('workflowId is required')
   if (!Number.isInteger(Number(candidateCount)) || Number(candidateCount) < 1 || Number(candidateCount) > 3) {
     throw new Error('candidateCount must be an integer from 1 through 3')
   }
   return {
-    workflowId: String(workflowId).trim(),
+    workflowId: normalizeWorkflowId(workflowId),
     candidateCount: Number(candidateCount),
     prompt: parseJsonObject(promptText, 'prompt'),
     inputs: parseJsonObject(inputsText, 'inputs'),
@@ -44,7 +49,7 @@ export function buildStructuredDirectorGenerationRequest({
 } = {}) {
   if (!String(promptText).trim()) throw new Error('shot prompt is required')
   const base = {
-    workflowId: String(workflowId).trim(),
+    workflowId: normalizeWorkflowId(workflowId),
     candidateCount: Number(candidateCount),
     structured: {
       prompt: String(promptText).trim(),
