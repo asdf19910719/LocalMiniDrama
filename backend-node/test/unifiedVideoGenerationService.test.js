@@ -292,6 +292,64 @@ describe('unified video generation lifecycle', () => {
     assert.equal(harness.jobs.length, 0);
   });
 
+  it('recovers a legacy ComfyUI task with an existing provider task id without resubmitting it', async () => {
+    const db = createTestDb();
+    const harness = createHarness({
+      recover: [{
+        providerTaskId: 'legacy-upstream-task', status: 'completed', progress: 100,
+        output: { videoUrl: 'https://cdn.example.test/legacy-recovered.mp4' },
+      }],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7, provider: 'comfyui', model: 'h3-continuity-v1', settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, provider_task_id, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'failed', 'legacy-upstream-task', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    const retried = await service.retryVideoGeneration(id);
+    assert.equal(retried.status, 'queued');
+    await harness.runNext();
+
+    assert.equal(harness.calls.recover.length, 1);
+    assert.equal(harness.calls.submit.length, 0);
+    assert.equal(service.getVideoGeneration(id).status, 'review');
+  });
+
+  it('restores a legacy ComfyUI task with an existing provider task id after restart without resubmitting it', async () => {
+    const db = createTestDb();
+    const harness = createHarness({
+      recover: [{ providerTaskId: 'legacy-running-task', status: 'running', progress: 45 }],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7, provider: 'comfyui', model: 'h3-continuity-v1', settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, provider_task_id, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'running', 'legacy-running-task', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    assert.equal(await service.recoverVideoGenerations(), 1);
+    await harness.runNext();
+
+    assert.equal(harness.calls.recover.length, 1);
+    assert.equal(harness.calls.submit.length, 0);
+    assert.equal(service.getVideoGeneration(id).status, 'running');
+  });
+
   it('persists the selected ComfyUI workflow consistently and keeps its snapshot on retry', async () => {
     const db = createTestDb();
     seedDefaultConfig(db, {

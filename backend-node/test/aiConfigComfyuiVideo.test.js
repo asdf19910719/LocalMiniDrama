@@ -199,3 +199,31 @@ test('preserves stable provider error codes from ComfyUI connection checks', asy
   assert.equal(res.result.body.error.code, 'WORKFLOW_ADAPTER_REQUIRED');
   assert.deepEqual(res.result.body.error.details, { workflowId: 'alternate' });
 });
+
+test('preserves retryable provider 5xx statuses from ComfyUI connection checks', async () => {
+  const routes = aiConfigRoutes(createDb(), log, {}, {
+    providerRegistry: {
+      get() {
+        return {
+          async testConnection() {
+            const error = new Error('ComfyUI 暂时不可用');
+            error.code = 'COMFYUI_UNAVAILABLE';
+            error.status = 503;
+            error.details = { retryable: true };
+            throw error;
+          },
+        };
+      },
+    },
+  });
+  const res = responseRecorder();
+
+  await routes.testConnection({ body: {
+    service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188',
+    workflow: 'alternate', settings: '{}',
+  } }, res);
+
+  assert.equal(res.result.status, 503);
+  assert.equal(res.result.body.error.code, 'COMFYUI_UNAVAILABLE');
+  assert.deepEqual(res.result.body.error.details, { retryable: true });
+});
