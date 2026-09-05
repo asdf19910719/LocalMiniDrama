@@ -23,6 +23,29 @@
 - Do not invoke a paid or remote music-generation service as part of this implementation.
 - Run backend tests with `cd backend-node && node --test test/*.test.js`, frontend tests with `cd frontweb && node --test test/*.test.js`, and the frontend build with `cd frontweb && npm run build`.
 
+## Pre-implementation Environment Gate
+
+`backend-node/package.json` requires Node `22.x`, and the checked-out `better-sqlite3` binary is built for ABI 127. The currently resolved shell Node is `v24.19.0`/ABI 137, so database tests fail before business assertions. Do not begin Task 1 under that runtime and do not rebuild project dependencies for unsupported Node 24 merely to hide the mismatch.
+
+- [ ] Select a Node `22.x` executable and verify the runtime and native module by constructing a database, not by calling `require()` alone:
+
+```powershell
+cd backend-node
+node -p "process.version + ' abi=' + process.versions.modules"
+node -e "const Database=require('better-sqlite3'); const db=new Database(':memory:'); db.close(); console.log('sqlite_native_ok')"
+```
+
+Expected: Node reports `v22.x`, ABI `127`, and the second command prints `sqlite_native_ok`.
+
+- [ ] Establish a fresh backend baseline before editing:
+
+```powershell
+cd backend-node
+node --test test/*.test.js
+```
+
+Expected: exit code 0. If tests fail for business assertions on Node 22, record those failures as the pre-existing baseline and resolve or explicitly isolate them before attributing later failures to this plan.
+
 ---
 
 ## File Structure
