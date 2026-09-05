@@ -151,6 +151,7 @@ function createDb() {
       manually_edited INTEGER DEFAULT 0,
       status TEXT DEFAULT 'valid',
       validation_errors TEXT,
+      workflow_id TEXT,
       created_at TEXT,
       updated_at TEXT
     );

@@ -1,4 +1,5 @@
 export const COMFYUI_DEFAULT_BASE_URL = 'http://127.0.0.1:8188'
+export const DEFAULT_H3_TE_SPEED_WORKFLOW_ID = 'minimax_h3_director_r2v_te_speed'
 
 export function isComfyuiVideoConfig({ service_type, provider } = {}) {
   return service_type === 'video' && String(provider || '').trim().toLowerCase() === 'comfyui'
@@ -9,7 +10,10 @@ export function isApiKeyRequired(config) {
 }
 
 export function comfyuiConfigDefaults(workflows = []) {
-  const workflow = String(workflows[0] || '').trim()
+  const normalized = workflows.map((value) => String(value || '').trim()).filter(Boolean)
+  const workflow = normalized.includes(DEFAULT_H3_TE_SPEED_WORKFLOW_ID)
+    ? DEFAULT_H3_TE_SPEED_WORKFLOW_ID
+    : String(normalized[0] || '')
   return {
     base_url: COMFYUI_DEFAULT_BASE_URL,
     modelText: workflow,

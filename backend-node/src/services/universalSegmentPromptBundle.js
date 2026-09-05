@@ -7,6 +7,11 @@
  * @returns {{ ok:true, userPrompt:string, durationLabel:string, durationSec:number, sbId:number, episodeId:number, storyboardNumber:number } | { ok:false, code:'not_found'|'bad_request', message:string }}
  */
 const { resolveStoryboardSlots } = require('./referenceSlotService');
+const {
+  buildStoryboardGenerationContext,
+  generationContextFingerprint,
+} = require('./storyboardGenerationContextService');
+const { serializeCanonicalJson } = require('./storyboardAvContractService');
 
 /** field_overrides 白名单：字符串键（trim 后非空才覆盖）+ duration（数字有效才覆盖） */
 const FIELD_OVERRIDE_STRING_KEYS = [
@@ -30,6 +35,12 @@ function sanitizeFieldOverrides(value) {
   if (value.duration != null && value.duration !== '') {
     const n = Number(value.duration);
     if (Number.isFinite(n) && n > 0) out.duration = n;
+  }
+  for (const key of ['audio_description', 'transition']) {
+    const nested = value[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      out[key] = structuredClone(nested);
+    }
   }
   return out;
 }
@@ -56,6 +67,11 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
   if (overrides) {
     for (const [key, value] of Object.entries(overrides)) sb[key] = value;
   }
+
+  const generationContext = buildStoryboardGenerationContext(db, sbId, {
+    fieldOverrides: overrides,
+    universalSegmentOverride: opts.universalSegmentOverride,
+  });
 
   let dramaId = null;
   let dramaRow = null;
@@ -513,6 +529,10 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     line3Required,
     `EPISODE_SCRIPT:\n${episodeScript || '(本集剧本为空；仅凭分镜与邻镜推断节奏，勿编造大段新剧情)'}`,
     chunk('EPISODE_TABLE_TITLE', episodeTableTitle),
+    `AUDIO_PLAN:\n${serializeCanonicalJson(generationContext.episode.audio_plan)}`,
+    `AUDIO_DESCRIPTION:\n${serializeCanonicalJson(generationContext.audio)}`,
+    `TRANSITION_PLAN:\n${serializeCanonicalJson(generationContext.transition)}`,
+    `REFERENCE_SLOT_MAP:\n${serializeCanonicalJson(generationContext.references)}`,
     imageSlotMapBlock,
     sceneLayoutBlock || null,
     charBindingBlock,
@@ -536,6 +556,8 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     sbId,
     episodeId: Number(sb.episode_id) || 0,
     storyboardNumber: Number(sb.storyboard_number) || 0,
+    generationContext,
+    contextFingerprint: generationContextFingerprint(generationContext),
   };
 }
 

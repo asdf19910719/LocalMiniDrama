@@ -1,4 +1,6 @@
 const { bindStoryboardFrameImage } = require('./storyboardFrameBinding');
+const path = require('node:path');
+const { resolveStoryboardSlots } = require('./referenceSlotService');
 
 const TABLES = {
   character: { table: 'characters', name: 'name' },
@@ -41,7 +43,9 @@ function resolveTarget(db, task) {
     throw new Error(`Unsupported image generation target type: ${targetType}`);
   }
   if (targetType === 'character_variant') {
-    const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name FROM character_variants cv
+    const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name,
+      c.image_url AS character_image_url, c.local_path AS character_local_path
+      FROM character_variants cv
       JOIN characters c ON c.id = cv.character_id WHERE cv.id=? AND cv.deleted_at IS NULL`).get(targetId);
     if (!row) throw new Error(`Image generation ${targetType} target not found`);
     if (Number(row.drama_id) !== dramaId) throw new Error('Image generation target belongs to another drama');
@@ -69,29 +73,49 @@ function reference(role, sourceId, url) {
   return url ? { role, sourceId, url } : null;
 }
 
-function collectStoryboardReferences(db, target, dramaId) {
-  const references = [];
-  if (target.scene_id) {
-    const scene = db.prepare('SELECT * FROM scenes WHERE id=? AND deleted_at IS NULL').get(target.scene_id);
-    if (scene && Number(scene.drama_id) === dramaId) {
-      const ref = reference('scene', scene.id, scene.ref_image || scene.image_url || scene.local_path);
-      if (ref) references.push(ref);
+function addressableReferenceUrl(db, { local_path: localPath, remote_image_url: remoteImageUrl, image_url: resolvedImageUrl } = {}) {
+  const local = String(localPath || '').trim();
+  const remote = String(remoteImageUrl || '').trim();
+  if (local) {
+    if (/^https?:\/\//i.test(local) || /^\/(?:static|api)\//i.test(local)) return local;
+    if (path.isAbsolute(local) || /^\\\\/.test(local)) {
+      try {
+        const external = db.prepare(`SELECT result.id
+          FROM external_generation_results result
+          JOIN image_generations image ON image.id = result.image_generation_id
+          WHERE image.local_path = ?
+          ORDER BY result.rowid DESC LIMIT 1`).get(local);
+        if (external?.id) {
+          return `/api/v1/external-generation/results/${encodeURIComponent(external.id)}/content`;
+        }
+      } catch (_) {}
+      // Never expose an operating-system path to the browser extension.
+      return remote && /^https?:\/\//i.test(remote) ? remote : null;
     }
+    return `/static/${local.replace(/^[\\/]+/, '').replace(/\\/g, '/')}`;
   }
-  const linked = (table, idColumn, role) => {
-    try {
-      const rows = db.prepare(`SELECT r.* FROM ${table} link JOIN ${role === 'character' ? 'characters' : 'props'} r ON r.id=link.${idColumn}
-        WHERE link.storyboard_id=? AND r.deleted_at IS NULL ORDER BY r.id ASC`).all(target.id);
-      for (const row of rows) {
-        if (Number(row.drama_id) !== dramaId) continue;
-        const ref = reference(role, row.id, row.ref_image || row.image_url || row.local_path);
-        if (ref) references.push(ref);
-      }
-    } catch (_) {}
-  };
-  linked('storyboard_characters', 'character_id', 'character');
-  linked('storyboard_props', 'prop_id', 'prop');
-  return references;
+  const resolved = String(resolvedImageUrl || '').trim();
+  return remote || resolved || null;
+}
+
+function collectStoryboardReferences(db, target) {
+  const { slots } = resolveStoryboardSlots(db, target.id);
+  return slots.flatMap((slot) => {
+    if (!slot.image_available) return [];
+    const url = addressableReferenceUrl(db, slot);
+    if (!url) return [];
+    return [{
+      role: slot.type,
+      sourceId: slot.type === 'character_variant' ? slot.variant_id : slot.asset_id,
+      url,
+      slotIndex: slot.index,
+      assetId: slot.asset_id,
+      variantId: slot.variant_id ?? null,
+      name: slot.name ?? null,
+      referenceRole: slot.reference_role ?? null,
+      framingNote: slot.framing_note ?? null,
+    }];
+  });
 }
 
 function buildGenerationInput(db, task) {
@@ -103,6 +127,12 @@ function buildGenerationInput(db, task) {
     prompt = target.polished_prompt || target.appearance || target.description || target.name || '';
   } else if (target.target_type === 'character_variant') {
     prompt = target.image_prompt || target.appearance || target.description || target.name || '';
+    const identityUrl = addressableReferenceUrl(db, {
+      local_path: target.character_local_path,
+      image_url: target.character_image_url,
+    });
+    const identityReference = reference('character_identity', target.character_id, identityUrl);
+    if (identityReference) references.push(identityReference);
   } else if (target.target_type === 'scene') {
     prompt = target.polished_prompt_single || target.polished_prompt || target.prompt || target.location || '';
   } else if (target.target_type === 'prop') {
@@ -123,7 +153,7 @@ function buildGenerationInput(db, task) {
       } catch (_) {}
     }
     if (!prompt) prompt = target.polished_prompt || target.image_prompt || target.description || target.title || '';
-    references.push(...collectStoryboardReferences(db, target, Number(target.drama_id)));
+    references.push(...collectStoryboardReferences(db, target));
     if (target.target_type === 'storyboard_last' && target.first_frame_image_id) {
       const first = db.prepare('SELECT id, image_url, local_path FROM image_generations WHERE id=?').get(target.first_frame_image_id);
       const ref = first && reference('storyboard_first', first.id, first.image_url || first.local_path);
@@ -177,4 +207,4 @@ function bindResult(db, task, imageGenerationId) {
   })();
 }
 
-module.exports = { resolveTarget, buildGenerationInput, bindResult };
+module.exports = { resolveTarget, buildGenerationInput, bindResult, addressableReferenceUrl };

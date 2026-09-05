@@ -124,7 +124,17 @@ function cleanAppearanceForIdentity(appText) {
   return t;
 }
 
-function buildCharacterAnchorText(name, anchors, appearance) {
+function parseColorPalette(value) {
+  let list = value;
+  if (typeof value === 'string') {
+    try { list = JSON.parse(value); } catch (_) { return []; }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.map((item) => typeof item === 'string' ? item.trim().toUpperCase() : '')
+    .filter((item) => /^#[0-9A-F]{6}$/.test(item));
+}
+
+function buildCharacterAnchorText(name, anchors, appearance, colorPalette = []) {
   if (anchors && typeof anchors === 'object' && Object.keys(anchors).length > 0) {
     const parts = [`Character: ${name}`];
     if (anchors.face_shape && anchors.face_shape !== 'unspecified') {
@@ -153,10 +163,12 @@ function buildCharacterAnchorText(name, anchors, appearance) {
   }
   // fallback: 清洗 appearance，只保留固定身份特征，彻底剔除服装/配饰等可变描述
   const cleaned = cleanAppearanceForIdentity(appearance);
+  const palette = parseColorPalette(colorPalette);
+  const colorText = palette.length ? `；固定色彩锚点：${palette.join('、')}` : '';
   if (cleaned) {
-    return `${name}（${cleaned}）—— 以上为该角色固定视觉身份锚点，生成画面时必须严格以此为基础，禁止添加任何未在此列出的外貌细节（发型/颜色/脸型/气质等）`;
+    return `${name}（${cleaned}${colorText}）—— 以上为该角色固定视觉身份锚点，生成画面时必须严格以此为基础，禁止添加任何未在此列出的外貌细节（发型/颜色/脸型/气质等）`;
   }
-  return name;
+  return colorText ? `${name}（${colorText.replace(/^；/, '')}）` : name;
 }
 
 function loadStoryboardCharacterNames(db, storyboardId) {
@@ -608,6 +620,7 @@ function generateFramePrompt(db, log, storyboardId, frameType, panelCount, model
 }
 
 module.exports = {
+  parseColorPalette,
   generateFramePrompt,
   saveFramePrompt,
   loadStoryboard,

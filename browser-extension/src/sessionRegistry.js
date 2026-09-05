@@ -5,6 +5,10 @@ export class SessionRegistry {
   async load() { const value = await this.storage.get(this.storageKey); this.sessions = value?.[this.storageKey] || value || {}; this.loaded = true; return this.sessions; }
   async save() { if (this.storage.set.length >= 2) await this.storage.set(this.storageKey, this.sessions); else await this.storage.set({ [this.storageKey]: this.sessions }); }
   get(dramaId, site) { return this.sessions[this.key(dramaId, site)] || null; }
+  findByTabId(tabId) { return Object.values(this.sessions).find((session) => session?.tabId === tabId) || null; }
+  findByActiveAttempt(attemptId) {
+    return Object.values(this.sessions).find((session) => session?.activeAttempt?.attemptId === attemptId) || null;
+  }
   async attach(dramaId, site, session = {}, options = {}) {
     if (!this.loaded) await this.load(); if (dramaId === undefined || dramaId === null || !String(site || '').trim()) throw new Error('dramaId and site are required');
     const key = this.key(dramaId, site); const existing = this.sessions[key]; const conversationId = session.conversationId ?? existing?.conversationId ?? null;

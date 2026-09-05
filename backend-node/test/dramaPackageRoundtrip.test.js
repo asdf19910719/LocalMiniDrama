@@ -44,8 +44,14 @@ function seedSourceDb(db, storageDir) {
     "INSERT INTO dramas (title, description, status, created_at, updated_at) VALUES ('源剧', '测试剧目', 'draft', ?, ?)"
   ).run(now, now).lastInsertRowid);
   const epId = Number(db.prepare(
-    "INSERT INTO episodes (drama_id, episode_number, title, duration, created_at, updated_at) VALUES (?, 1, '第一集', 0, ?, ?)"
-  ).run(dramaId, now, now).lastInsertRowid);
+    "INSERT INTO episodes (drama_id, episode_number, title, duration, audio_plan, production_profile, created_at, updated_at) VALUES (?, 1, '第一集', 0, ?, ?, ?, ?)"
+  ).run(
+    dramaId,
+    JSON.stringify({ bgm: { mode: 'per_segment', prompt: 'shared theme' } }),
+    JSON.stringify({ generation_mode: 'external_import' }),
+    now,
+    now,
+  ).lastInsertRowid);
 
   // 先插入再删除占位人物行，抬高 characters 自增值，确保往返后新库人物 id ≠ 源库 id
   const dummyChar = db.prepare(
@@ -85,19 +91,26 @@ function seedSourceDb(db, storageDir) {
   });
 
   const sceneId = Number(db.prepare(
-    `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, source_key, state, created_at, updated_at)
-     VALUES (?, ?, '废弃教学楼', '雨夜', '昏暗走廊', 'scene_corridor_rain', 'night', ?, ?)`
+    `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, source_key, state, atmosphere, negative_prompt, created_at, updated_at)
+     VALUES (?, ?, '废弃教学楼', '雨夜', '昏暗走廊', 'scene_corridor_rain', 'night', '湿冷压抑', 'sunlight', ?, ?)`
   ).run(dramaId, epId, now, now).lastInsertRowid);
 
   const propId = Number(db.prepare(
-    `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, source_key, created_at, updated_at)
-     VALUES (?, ?, '黄铜钥匙', '关键道具', '打开天台的钥匙', 'brass key', 'prop_brass_key', ?, ?)`
+    `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, source_key, negative_prompt, created_at, updated_at)
+     VALUES (?, ?, '黄铜钥匙', '关键道具', '打开天台的钥匙', 'brass key', 'prop_brass_key', 'oversized', ?, ?)`
   ).run(dramaId, epId, now, now).lastInsertRowid);
 
   const sb1Id = Number(db.prepare(
-    `INSERT INTO storyboards (episode_id, storyboard_number, title, characters, scene_id, source_key, audio_description, transition, created_at, updated_at)
-     VALUES (?, 1, '走廊相遇', ?, ?, 'sb_0001', '雨声与急促脚步声', 'cut', ?, ?)`
-  ).run(epId, JSON.stringify([charId]), sceneId, now, now).lastInsertRowid);
+    `INSERT INTO storyboards (episode_id, storyboard_number, title, characters, scene_id, source_key, audio_description, transition, is_primary, production_metadata, created_at, updated_at)
+     VALUES (?, 1, '走廊相遇', ?, ?, 'sb_0001', '雨声与急促脚步声', 'cut', 1, ?, ?, ?)`
+  ).run(
+    epId,
+    JSON.stringify([charId]),
+    sceneId,
+    JSON.stringify({ field_state: { is_primary: { source: 'manual', locked: true, revision: 1 } } }),
+    now,
+    now,
+  ).lastInsertRowid);
   const sb2Id = Number(db.prepare(
     `INSERT INTO storyboards (episode_id, storyboard_number, title, characters, source_key, created_at, updated_at)
      VALUES (?, 2, '转身离开', '[]', 'sb_0002', ?, ?)`
@@ -168,8 +181,15 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
     assert.deepEqual(sb2Export.character_variant_refs, []);
     assert.equal(sb1Export.audio_description, '雨声与急促脚步声');
     assert.equal(sb1Export.transition, 'cut');
+    assert.equal(sb1Export.is_primary, true);
+    assert.match(sb1Export.production_metadata, /field_state/);
+    assert.match(project.episodes[0].audio_plan, /per_segment/);
+    assert.match(project.episodes[0].production_profile, /external_import/);
     assert.equal(project.scenes[0].state, 'night');
     assert.equal(project.scenes[0].source_key, 'scene_corridor_rain');
+    assert.equal(project.scenes[0].atmosphere, '湿冷压抑');
+    assert.equal(project.scenes[0].negative_prompt, 'sunlight');
+    assert.equal(project.props[0].negative_prompt, 'oversized');
 
     // 导入到全新库
     const dstStorage = fs.mkdtempSync(path.join(tmpRoot, 'dst-storage-'));
@@ -227,8 +247,15 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
       assert.equal(newScene.source_key, 'scene_corridor_rain');
       assert.equal(newScene.state, 'night');
       assert.equal(newScene.location, '废弃教学楼');
+      assert.equal(newScene.atmosphere, '湿冷压抑');
+      assert.equal(newScene.negative_prompt, 'sunlight');
       const newProp = dstDb.prepare('SELECT * FROM props WHERE deleted_at IS NULL').get();
       assert.equal(newProp.source_key, 'prop_brass_key');
+      assert.equal(newProp.negative_prompt, 'oversized');
+
+      const newEpisode = dstDb.prepare('SELECT * FROM episodes WHERE drama_id = ? ORDER BY episode_number').get(result.drama_id);
+      assert.match(newEpisode.audio_plan, /per_segment/);
+      assert.match(newEpisode.production_profile, /external_import/);
 
       // 分镜新字段
       const newSbs = dstDb.prepare(
@@ -238,6 +265,8 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
       assert.equal(newSbs[0].source_key, 'sb_0001');
       assert.equal(newSbs[0].audio_description, '雨声与急促脚步声');
       assert.equal(newSbs[0].transition, 'cut');
+      assert.equal(newSbs[0].is_primary, 1);
+      assert.match(newSbs[0].production_metadata, /field_state/);
       assert.equal(newSbs[1].source_key, 'sb_0002');
       assert.equal(newSbs[1].audio_description, null);
       assert.equal(newSbs[1].transition, null);

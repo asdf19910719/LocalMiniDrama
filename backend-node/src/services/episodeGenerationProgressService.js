@@ -200,12 +200,24 @@ function buildMergeProgress(db, episode) {
   if (!merge) return null;
   const task = merge.task_id ? one(db, 'SELECT * FROM async_tasks WHERE id = ? AND deleted_at IS NULL', merge.task_id) : null;
   const status = String(merge.status || task?.status || 'pending').toLowerCase();
+  const upscale = merge.upscale_job_id
+    ? one(db, `SELECT id, status, progress, current_stage, method, error_code, error_message, next_retry_at
+        FROM video_upscale_jobs WHERE id = ?`, merge.upscale_job_id)
+    : null;
   return {
     status,
     progress: Number.isFinite(Number(task?.progress)) ? Number(task.progress) : (status === 'completed' ? 100 : 0),
     task_id: merge.task_id || task?.id || null,
     message: task?.message || '',
     error: merge.error_msg || task?.error || null,
+    upscale: upscale ? {
+      ...upscale,
+      allowed_actions: {
+        retry: ['failed', 'waiting_provider'].includes(upscale.status),
+        skip: ['failed', 'waiting_provider'].includes(upscale.status),
+        cancel: !['completed', 'failed', 'cancelled', 'skipped'].includes(upscale.status),
+      },
+    } : null,
   };
 }
 

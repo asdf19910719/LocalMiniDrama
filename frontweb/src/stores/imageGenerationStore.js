@@ -11,7 +11,9 @@ import {
   normalizeImageGenerationTask,
   resolveChatGPTPrepareAction,
   shouldPollImageGenerationTask,
+  shouldRecoverImageGenerationTask,
   shouldReattachImageGenerationTask,
+  toChatGPTRecoveryAttempt,
 } from '@/utils/imageGenerationTaskState'
 
 function parseReferenceManifest(value) {
@@ -204,22 +206,16 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       const attempt = (job?.attempts || []).filter((item) => ['submitted', 'generating'].includes(item?.status)).at(-1)
         || (job?.attempts || []).at(-1)
       if (!job?.id || !attempt?.id) throw new Error('找不到可恢复的 ChatGPT 生成记录')
-      const timedOut = detailed.status === 'needs_review' && detailed.error_code === 'result_timeout'
+      const needsReservation = detailed.status === 'needs_review' && shouldRecoverImageGenerationTask(detailed)
       const reserved = await imageGenerationTaskAPI.beginResultRecovery(detailed.id)
-      recoveryReserved = timedOut
+      recoveryReserved = needsReservation
       currentTask.value = normalizeImageGenerationTask({ ...detailed, ...reserved })
       // `attempt` comes from the reactive store tree; post only the plain
       // fields the extension reads so window.postMessage never sees a proxy.
       await sendImageGenerationBridgeMessage({
         action: 'recoverAttempt', dramaId: detailed.drama_id, site: 'chatgpt', jobId: job.id,
         attemptId: attempt.id, conversationId: attempt.conversation_id || job.conversation_id,
-        attempt: {
-          id: attempt.id,
-          status: attempt.status,
-          sequence: attempt.sequence,
-          assistant_message_id: attempt.assistant_message_id ?? null,
-          conversation_id: attempt.conversation_id ?? null,
-        },
+        attempt: toChatGPTRecoveryAttempt(attempt),
       })
       startTaskPolling(0)
       return currentTask.value

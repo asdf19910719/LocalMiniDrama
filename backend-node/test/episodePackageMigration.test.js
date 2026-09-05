@@ -15,5 +15,13 @@ describe('episode package migration', () => {
     assert.ok(cols('scenes').includes('state'));
     assert.ok(cols('storyboards').includes('audio_description'));
     assert.ok(cols('storyboards').includes('transition'));
+    assert.ok(cols('episodes').includes('audio_plan'));
+    assert.ok(cols('episodes').includes('production_profile'));
+    assert.ok(cols('storyboards').includes('is_primary'));
+    assert.ok(cols('storyboards').includes('production_metadata'));
+    assert.ok(cols('scenes').includes('atmosphere'));
+    assert.ok(cols('storyboard_h3_prompt_drafts').includes('coverage_manifest'));
+    assert.ok(cols('storyboard_h3_prompt_drafts').includes('semantic_review_status'));
+    assert.ok(cols('storyboard_h3_prompt_drafts').includes('semantic_review_confirmed'));
   });
 });

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import { nextTick, reactive } from 'vue'
 
 import {
@@ -11,6 +12,7 @@ import {
   normalizeVideoGenerationContext,
   resolveVideoPromptPresentation,
   resolveStoryboardVideoPrompt,
+  workflowIdForTESpeed,
   useVideoGenerationPanel,
   videoErrorCopy,
   videoStatusLabel,
@@ -87,7 +89,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
       frameRate: 24,
       seed: 77,
       continuityMode: 'motion_overlap',
-      workflowId: 'minimax_h3_director_r2v',
+      workflowId: 'minimax_h3_director_r2v_te_speed',
       generationMode: 'single_reference',
       anchorId: 'anchor-1',
       sourceArtifactId: 'artifact-1',
@@ -95,7 +97,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
   })
   assert.equal('provider' in request, false)
   assert.equal('model' in request, false)
-  assert.equal(request.structured.workflowId, 'minimax_h3_director_r2v')
+  assert.equal(request.structured.workflowId, 'minimax_h3_director_r2v_te_speed')
   assert.equal(request.structured.generationMode, 'single_reference')
 })
 
@@ -163,7 +165,7 @@ test('preserves the normal editor generation context in the unified candidate pa
       frameRate: 24,
       seed: 42,
       continuityMode: 'motion_overlap',
-      workflowId: 'minimax_h3_director_r2v',
+        workflowId: 'minimax_h3_director_r2v_te_speed',
       generationMode: 'single_reference',
       imageUrl: 'https://assets.example.test/selected-first.png',
       firstFrameUrl: 'https://assets.example.test/selected-first.png',
@@ -236,6 +238,13 @@ test('provides Chinese lifecycle and error summaries while preserving technical 
       message: 'H3_SKILL_TOOL_CALL_UNSUPPORTED',
     }).summary,
     '当前文本模型不支持技能工具调用，请为 H3 提示词编译选择支持 tool calling 的模型。',
+  )
+  assert.equal(
+    videoErrorCopy({
+      code: 'H3_DRAFT_WORKFLOW_MISMATCH',
+      message: 'H3_DRAFT_WORKFLOW_MISMATCH',
+    }).summary,
+    '提示词草稿与当前 H3 加速开关不一致，请重新生成 H3 提示词。',
   )
 })
 
@@ -503,6 +512,74 @@ test('detects ComfyUI H3 configs for the draft flow', async () => {
   await nextTick()
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(plain.isH3Config.value, false)
+})
+
+test('defaults the TE-Speed switch on and maps off to the official Sage workflow', async () => {
+  assert.equal(workflowIdForTESpeed(true), 'minimax_h3_director_r2v_te_speed')
+  assert.equal(workflowIdForTESpeed(false), 'minimax_h3_director_r2v')
+
+  const draftCalls = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async (_storyboardId, _configId, workflowId) => {
+        draftCalls.push(workflowId)
+        return { draft: null, freshness: { stale: false, reasons: [] } }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.teSpeedEnabled.value, true)
+  assert.equal(panel.form.workflowId, 'minimax_h3_director_r2v_te_speed')
+  assert.equal(panel.approximateAcceleration.value, true)
+
+  await panel.setTESpeedEnabled(false)
+  assert.equal(panel.teSpeedEnabled.value, false)
+  assert.equal(panel.form.workflowId, 'minimax_h3_director_r2v')
+  assert.equal(panel.approximateAcceleration.value, false)
+  assert.equal(draftCalls.at(-1), 'minimax_h3_director_r2v')
+
+  const component = fs.readFileSync(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8')
+  assert.match(component, /TE-Speed 加速/)
+  assert.match(component, /setTESpeedEnabled/)
+})
+
+test('renders capability-driven TE-Speed identity without exposing tuning controls', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub({
+      getDefaultConfig: async () => ({
+        ...H3_CONFIG,
+        default_model: 'minimax_h3_director_r2v_te_speed',
+      }),
+      capabilities: async () => ({
+        workflow: {
+          id: 'minimax_h3_director_r2v_te_speed',
+          label: '官方多参考图（Sage + TE-Speed 实验）',
+        },
+        capabilities: {
+          modes: ['single_reference'],
+          supportsContinuity: false,
+          supportsTESpeed: true,
+          approximateAcceleration: true,
+        },
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.isH3Config.value, true)
+  assert.equal(panel.workflowLabel.value, '官方多参考图（Sage + TE-Speed 实验）')
+  assert.equal(panel.approximateAcceleration.value, true)
+
+  const component = fs.readFileSync(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8')
+  assert.match(component, /近似加速/)
+  assert.doesNotMatch(component, /v-model="form\.(?:processingControlValue|mcs|teSpeedDevice|teSpeedMode)"/)
 })
 
 test('restores the existing H3 draft text and chip when the panel opens', async () => {

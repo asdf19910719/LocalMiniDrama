@@ -117,6 +117,8 @@ describe('Director timeline v1', () => {
     const command = buildFfmpegCommand(timeline, { outputPath: '/tmp/dissolve.mp4' });
     assert.equal(timeline.totalDuration, 3.5);
     assert.match(command.args.join(' '), /xfade=transition=fade:duration=0\.5:offset=1\.5/);
+    assert.match(command.args.join(' '), /acrossfade=d=0\.5/);
+    assert.match(command.args.join(' '), /anullsrc/);
     assert.doesNotMatch(command.args.join(' '), /concat=n=2/);
   });
 

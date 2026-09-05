@@ -1,6 +1,8 @@
 const aiClient = require('./aiClient');
 const { createH3SkillAgent } = require('./h3SkillAgent');
 const { loadSkillPackage } = require('./skillRegistry');
+const { validateH3PromptSemantics } = require('./h3PromptSemanticValidator');
+const { serializeCanonicalJson } = require('./storyboardAvContractService');
 
 const COMPILER_VERSION = 'h3-skill-agent-v1';
 const BASE_REQUIRED_FIELDS = ['integrated_multimodal_description:', 'overall_soundscape:', 'non_diegetic_music:'];
@@ -28,7 +30,10 @@ function h3Mode(input = {}) {
   const refs = Array.isArray(input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls)
     ? (input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls).filter(Boolean)
     : [];
-  if (refs.length) return 'Ref2VA';
+  const contextRefs = Array.isArray(input.context?.references)
+    ? input.context.references.filter((item) => item && item.image_url)
+    : [];
+  if (refs.length || contextRefs.length) return 'Ref2VA';
   if (first && last) return 'FL2VA';
   if (first) return 'I2VA';
   if (last) return 'L2VA';
@@ -60,6 +65,10 @@ function validateH3Prompt(prompt, { durationSeconds, mode } = {}) {
   if (missing.length || empty.length) {
     throw new H3PromptError('H3_PROMPT_FORMAT_INVALID', `H3 prompt has invalid required fields: ${[...missing, ...empty].join(', ')}`, { missing, empty });
   }
+  const positions = requiredFields.map((field) => value.toLowerCase().indexOf(field.toLowerCase()));
+  if (positions.some((position, index) => index > 0 && position <= positions[index - 1])) {
+    throw new H3PromptError('H3_PROMPT_FORMAT_INVALID', 'H3 prompt sections are not in the required order', { order: requiredFields });
+  }
   if (durationSeconds != null && !/\[Shot 1\]/i.test(value)) {
     throw new H3PromptError('H3_PROMPT_TIMELINE_INVALID', 'H3 prompt must contain a [Shot 1] timeline');
   }
@@ -70,6 +79,17 @@ function validateH3Prompt(prompt, { durationSeconds, mode } = {}) {
 }
 
 function sourceBundle(input, mode) {
+  const context = input.context && typeof input.context === 'object' ? input.context : null;
+  const contextReferences = context?.references || [];
+  const audioBindings = contextReferences
+    .filter((item) => item.audio_url && item.audio_label)
+    .map((item) => `<${item.audio_label}> = ${item.entity_name || item.entity_type || 'audio reference'} (${item.audio_url})`);
+  const visualBindings = contextReferences
+    .filter((item) => item.image_url)
+    .map((item) => `<Picture ${item.slot}> = ${item.entity_name || item.entity_type || 'visual reference'}; role=${item.reference_role || 'reference'}; variant=${serializeCanonicalJson(item.variant)}; framing_note=${item.framing_note || 'none'}`);
+  const speech = context?.episode?.audio_plan?.speech || {};
+  const dialogueOwner = context?.audio?.speech_override?.dialogue_owner || speech.dialogue_owner;
+  const narrationOwner = context?.audio?.speech_override?.narration_owner || speech.narration_owner;
   return [
     `MODE: ${mode}`,
     `DURATION_SECONDS: ${Number(input.durationSeconds ?? input.duration) || 5}`,
@@ -82,6 +102,20 @@ function sourceBundle(input, mode) {
       ? `REFERENCE_ASSETS: ${(input.referenceUrls || input.reference_urls || input.referenceImageUrls || input.reference_image_urls).join(', ')}` : null,
     Array.isArray(input.referenceAudios ?? input.reference_audios) && (input.referenceAudios ?? input.reference_audios).length
       ? `REFERENCE_AUDIO: ${(input.referenceAudios ?? input.reference_audios).map((item) => typeof item === 'object' ? (item.characterName || item.audioFile) : item).join(', ')}. The character voice must match the reference audio; lip-sync to the audio when speaking` : null,
+    context ? `GENERATION_CONTEXT_V1: ${serializeCanonicalJson(context)}` : null,
+    context ? `AUDIO_ENABLED: ${(input.audioEnabled ?? context.audio_enabled ?? true) ? 'true' : 'false'}` : null,
+    context && (input.audioEnabled ?? context.audio_enabled ?? true) === false
+      ? 'AUDIO_DISABLED_RULE: Generate no audible dialogue, narration, singing, ambience, effects, or music. Set overall_soundscape and non_diegetic_music to N/A.'
+      : null,
+    context ? `AUDIO_PLAN: ${serializeCanonicalJson(context.episode?.audio_plan || {})}` : null,
+    context ? `AUDIO_DESCRIPTION: ${serializeCanonicalJson(context.audio || {})}` : null,
+    context ? `TRANSITION_PLAN: ${serializeCanonicalJson(context.transition)}` : null,
+    visualBindings.length ? `REFERENCE_VISUAL_BINDINGS:\n${visualBindings.join('\n')}` : null,
+    audioBindings.length ? `REFERENCE_AUDIO_BINDINGS:\n${audioBindings.join('\n')}` : null,
+    context && dialogueOwner !== 'h3_native' && narrationOwner !== 'h3_native'
+      ? 'SPEECH_OWNERSHIP: Do not generate audible dialogue, narration, or singing. Keep mouths closed when the business prompt implies speech; post-production owns language audio.'
+      : null,
+    context ? 'H3_SECTION_RULES: Preserve the official section order. Every provided <Picture N> or <Audio N> label must appear in subject_definitions and again in the applicable prompt body; never invent a <Picture N>, <Video N>, or <Audio N> label without a supplied asset. Put exact native-owned dialogue/narration in the relevant [Shot N] using <d>[Language] ...</d>. Put synchronized effects and audio bridges in detailed_description; summarize only ambience, physical sounds, and non-verbal vocals in overall_soundscape; put audience-only score exclusively in non_diegetic_music.' : null,
   ].filter(Boolean).join('\n');
 }
 
@@ -106,6 +140,16 @@ function createH3PromptCompiler({ skillAgent = defaultSkillAgent } = {}) {
           sourceBundle: sourceBundle(input, mode),
         });
         const output = validateH3Prompt(generated?.prompt, { durationSeconds, mode });
+        if (input.context) {
+          const semantics = validateH3PromptSemantics(output, input.context, {
+            durationSeconds,
+            audioEnabled: input.audioEnabled,
+          });
+          if (!semantics.ok) {
+            const first = semantics.errors[0];
+            throw new H3PromptError(first.code, first.message, { errors: semantics.errors });
+          }
+        }
         return {
           sourcePrompt: source,
           compiledPrompt: output,

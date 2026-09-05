@@ -3,6 +3,127 @@ const propService = require('../services/propService');
 const response = require('../response');
 const dramaExportService = require('../services/dramaExportService');
 const dramaImportService = require('../services/dramaImportService');
+const path = require('node:path');
+const fs = require('node:fs');
+const {
+  normalizeEpisodeAudioPlan,
+  serializeCanonicalJson,
+} = require('../services/storyboardAvContractService');
+const { ensureEpisodeAudioPlan } = require('../services/episodeAudioPlanService');
+const { projectEpisodeRow, projectStoryboardRow } = require('../services/storyboardCanonicalRepository');
+
+function validateEpisodeBgmPath(value, cfg) {
+  if (value == null || String(value).trim() === '') return null;
+  const storageRoot = path.resolve(cfg?.storage?.local_path || './data/storage');
+  const raw = String(value).trim();
+  const candidate = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(storageRoot, raw);
+  const relative = path.relative(storageRoot, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    const error = new Error('BGM 路径必须位于项目媒体存储目录内');
+    error.code = 'EPISODE_AUDIO_PATH_INVALID';
+    throw error;
+  }
+  if (fs.existsSync(candidate) && fs.existsSync(storageRoot)) {
+    const realRoot = fs.realpathSync(storageRoot);
+    const realCandidate = fs.realpathSync(candidate);
+    const realRelative = path.relative(realRoot, realCandidate);
+    if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+      const error = new Error('BGM 文件不能通过符号链接指向项目媒体目录之外');
+      error.code = 'EPISODE_AUDIO_PATH_INVALID';
+      throw error;
+    }
+  }
+  return relative.replace(/\\/g, '/');
+}
+
+function loadEpisodeAudioResponse(db, episodeId) {
+  const episodeRow = db.prepare('SELECT * FROM episodes WHERE id = ? AND deleted_at IS NULL').get(Number(episodeId));
+  if (!episodeRow) return null;
+  const storyboards = db.prepare(
+    'SELECT * FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL ORDER BY storyboard_number, id',
+  ).all(Number(episodeId)).map((row) => projectStoryboardRow(row));
+  return { episode: projectEpisodeRow(episodeRow), storyboards };
+}
+
+function updateEpisodeAudioPlan(db, log, cfg) {
+  return (req, res) => {
+    try {
+      const current = db.prepare('SELECT * FROM episodes WHERE id = ? AND deleted_at IS NULL').get(Number(req.params.id));
+      if (!current) return response.notFound(res, '剧集不存在');
+      const incoming = req.body?.audio_plan ?? req.body ?? {};
+      const prior = normalizeEpisodeAudioPlan(current.audio_plan);
+      const plan = normalizeEpisodeAudioPlan({
+        ...prior,
+        ...incoming,
+        bgm: { ...prior.bgm, ...(incoming.bgm || {}) },
+        speech: { ...prior.speech, ...(incoming.speech || {}) },
+        mastering: { ...prior.mastering, ...(incoming.mastering || {}) },
+        field_state: { ...(prior.field_state || {}), ...(incoming.field_state || {}) },
+      }, { source: 'manual' });
+      if (plan.bgm.local_path) plan.bgm.local_path = validateEpisodeBgmPath(plan.bgm.local_path, cfg);
+      if (plan.bgm.local_path && plan.bgm.source_type === 'none') plan.bgm.source_type = 'local_file';
+      const now = new Date().toISOString();
+      plan.field_state = { ...(prior.field_state || {}), ...(plan.field_state || {}) };
+      for (const group of ['bgm', 'speech', 'mastering']) {
+        for (const key of Object.keys(plan[group] || {})) {
+          if (JSON.stringify(plan[group][key]) !== JSON.stringify(prior[group]?.[key])) {
+            const field = `${group}.${key}`;
+            plan.field_state[field] = {
+              source: 'manual', locked: true,
+              revision: Number(prior.field_state?.[field]?.revision || 0) + 1,
+              updated_at: now,
+            };
+          }
+        }
+      }
+      const unlockFields = req.body?.unlock_fields || incoming.unlock_fields || [];
+      if (!Array.isArray(unlockFields)) {
+        const error = new Error('unlock_fields 必须是数组');
+        error.code = 'STORYBOARD_AV_CONTRACT_INVALID';
+        throw error;
+      }
+      for (const field of unlockFields) {
+        if (!/^(bgm|speech|mastering)\.[a-z_]+$/.test(String(field))) {
+          const error = new Error(`不能解锁音频策略字段 ${field}`);
+          error.code = 'STORYBOARD_AV_CONTRACT_INVALID';
+          throw error;
+        }
+        const previous = plan.field_state[field] || { source: 'default', revision: 0 };
+        plan.field_state[field] = {
+          ...previous,
+          locked: false,
+          revision: Number(previous.revision || 0) + 1,
+          updated_at: now,
+        };
+      }
+      plan.provenance = { ...(plan.provenance || {}), source: 'manual', updated_at: now };
+      db.prepare('UPDATE episodes SET audio_plan = ?, updated_at = ? WHERE id = ?')
+        .run(serializeCanonicalJson(plan), now, Number(req.params.id));
+      response.success(res, loadEpisodeAudioResponse(db, req.params.id));
+    } catch (error) {
+      log.error('Update episode audio plan failed', { code: error.code, error: error.message });
+      if (error.code === 'STORYBOARD_AV_CONTRACT_INVALID' || error.code === 'EPISODE_AUDIO_PATH_INVALID') {
+        return response.error(res, 400, error.code, error.message);
+      }
+      response.internalError(res, error.message);
+    }
+  };
+}
+
+function planEpisodeAudio(db, log) {
+  return async (req, res) => {
+    try {
+      const plan = await ensureEpisodeAudioPlan(db, log, { episodeId: Number(req.params.id), force: true });
+      const payload = loadEpisodeAudioResponse(db, req.params.id);
+      if (!payload) return response.notFound(res, '剧集不存在');
+      response.success(res, { ...payload, audio_plan: plan });
+    } catch (error) {
+      log.error('Plan episode audio failed', { code: error.code, error: error.message });
+      if (error.code === 'EPISODE_AUDIO_PLAN_INVALID') return response.error(res, 400, error.code, error.message);
+      response.internalError(res, error.message);
+    }
+  };
+}
 
 function createDrama(db, log) {
   return (req, res) => {
@@ -301,5 +422,7 @@ module.exports = function dramaRoutes(db, cfg, log) {
     importDrama: importDrama(db, cfg, log),
     listExamples: listExamples(log),
     importExample: importExample(db, cfg, log),
+    updateEpisodeAudioPlan: updateEpisodeAudioPlan(db, log, cfg),
+    planEpisodeAudio: planEpisodeAudio(db, log),
   };
 };

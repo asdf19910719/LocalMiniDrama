@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const fs = require('node:fs');
 const sharp = require('sharp');
-const { createExternalJob, createGenerationAttempt } = require('../src/services/externalGenerationService');
+const { createExternalJob, createGenerationAttempt, recordAttemptEvent } = require('../src/services/externalGenerationService');
 const { importExternalResult } = require('../src/services/externalGenerationImportService');
 
 const TASK_SCHEMA = `CREATE TABLE IF NOT EXISTS image_generation_tasks (
@@ -45,33 +45,41 @@ describe('chatgpt candidate auto finalize', () => {
   });
   afterEach(() => db.close());
 
-  it('auto-selects the first imported candidate and completes the task', async () => {
+  it('auto-selects the first imported candidate but keeps the queue locked until capture settles', async () => {
     const { attempt } = makeCharacterTask(db);
     const result = await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes: await pngBytes('#ff0000') });
     const task = db.prepare("SELECT status, image_generation_id FROM image_generation_tasks WHERE id='task-1'").get();
-    assert.equal(task.status, 'completed');
+    assert.equal(task.status, 'generating');
     assert.equal(Number(task.image_generation_id), Number(result.imageGenerationId));
     const image = db.prepare('SELECT character_id FROM image_generations WHERE id=?').get(result.imageGenerationId);
     assert.equal(image.character_id, 5);
     const row = db.prepare('SELECT status, selected FROM external_generation_results WHERE id=?').get(result.resultId);
     assert.equal(row.status, 'bound');
     assert.equal(row.selected, 1);
+
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-1', eventType: 'COMPLETED' });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'completed');
   });
 
   it('keeps later candidates switchable without stealing the primary', async () => {
     const { attempt } = makeCharacterTask(db);
     const first = await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes: await pngBytes('#ff0000') });
     const second = await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 1, sourceUrl: 'https://example.invalid/b.png', bytes: await pngBytes('#00ff00') });
-    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'completed');
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'generating');
     assert.equal(db.prepare('SELECT selected FROM external_generation_results WHERE id=?').get(first.resultId).selected, 1);
     assert.equal(db.prepare('SELECT selected FROM external_generation_results WHERE id=?').get(second.resultId).selected, 0);
     assert.equal(db.prepare('SELECT status FROM external_generation_results WHERE id=?').get(second.resultId).status, 'imported');
+
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-2', eventType: 'COMPLETED' });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'completed');
   });
 
   it('falls back to needs_review when the setting is off', async () => {
     db.prepare("INSERT INTO global_settings (key, value, updated_at) VALUES ('chatgpt_web_auto_select', 'false', datetime('now'))").run();
     const { attempt } = makeCharacterTask(db);
     await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes: await pngBytes('#ff0000') });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'generating');
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-manual-review', eventType: 'COMPLETED' });
     assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'needs_review');
     assert.equal(db.prepare('SELECT character_id FROM image_generations ORDER BY id DESC LIMIT 1').get().character_id, null);
   });
@@ -80,13 +88,34 @@ describe('chatgpt candidate auto finalize', () => {
     const { attempt } = makeCharacterTask(db);
     db.prepare('DELETE FROM characters WHERE id=5').run();
     await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes: await pngBytes('#ff0000') });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'generating');
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-missing-target', eventType: 'COMPLETED' });
     assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'needs_review');
   });
 
-  it('routes a preparing task through submitted before completing', async () => {
+  it('routes a preparing task through submitted/generating before capture completion', async () => {
     const { attempt } = makeCharacterTask(db);
     db.prepare("UPDATE image_generation_tasks SET status='preparing' WHERE id='task-1'").run();
     await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes: await pngBytes('#ff0000') });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'generating');
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-preparing', eventType: 'COMPLETED' });
     assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-1'").get().status, 'completed');
+  });
+
+  it('completes a recovery when every observed candidate was already imported', async () => {
+    const { attempt } = makeCharacterTask(db);
+    const bytes = await pngBytes('#ff0000');
+    await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes });
+    db.prepare("UPDATE image_generation_tasks SET status='generating', error_code='RESULT_CAPTURE_FAILED', error_message='old error' WHERE id='task-1'").run();
+    db.prepare("UPDATE external_generation_attempts SET status='generating' WHERE id=?").run(attempt.id);
+
+    const duplicate = await importExternalResult(db, { attemptId: attempt.id, assistantMessageId: 'assistant-1', resultIndex: 0, sourceUrl: 'https://example.invalid/a.png', bytes });
+    assert.equal(duplicate.duplicate, true);
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'capture-settled-duplicate', eventType: 'COMPLETED' });
+
+    assert.deepEqual(
+      db.prepare("SELECT status, error_code, error_message FROM image_generation_tasks WHERE id='task-1'").get(),
+      { status: 'completed', error_code: null, error_message: null },
+    );
   });
 });

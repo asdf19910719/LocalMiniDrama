@@ -16,3 +16,9 @@ test('keeps Omni providers on their multi-reference protocol', () => {
 test('does not silently accept an unrelated model', () => {
   assert.equal(canUseUniversalOmniVideoApi({ provider: 'comfyui', default_model: 'other-workflow' }), false)
 })
+
+test('accepts the registered underscored TE-Speed H3 workflow id', () => {
+  const cfg = { provider: 'comfyui', default_model: 'minimax_h3_director_r2v_te_speed' }
+  assert.equal(isH3ComfyUiConfig(cfg), true)
+  assert.equal(canUseUniversalOmniVideoApi(cfg), true)
+})

@@ -15,6 +15,13 @@ export const videosAPI = {
   create(body) {
     return request.post('/videos', body)
   },
+  async prepareAndCreate(body) {
+    const result = await request.post('/videos/prepared', body)
+    return result?.generation || result
+  },
+  prepareAndCreateMany(inputs) {
+    return request.post('/videos/prepared/batch', { inputs: Array.isArray(inputs) ? inputs : [] })
+  },
   capabilities() {
     return request.get('/videos/capabilities')
   },

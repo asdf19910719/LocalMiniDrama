@@ -97,6 +97,30 @@ describe('taskService.failOrphanedAsyncTasksOnStartup', () => {
     assert.equal(taskService.getTask(db, 'video-terminal-row').status, 'failed');
   });
 
+  it('preserves a video merge task backed by a recoverable upscale job', () => {
+    const db = createTestDb();
+    db.exec(`
+      CREATE TABLE video_merges (id INTEGER PRIMARY KEY, task_id TEXT, deleted_at TEXT);
+      CREATE TABLE video_upscale_jobs (
+        id TEXT PRIMARY KEY, video_merge_id INTEGER, status TEXT, config_snapshot_json TEXT
+      );
+    `);
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO async_tasks
+      (id, type, status, progress, message, resource_id, created_at, updated_at)
+      VALUES ('merge-task', 'video_merge', 'processing', 35, '等待云端', '9', ?, ?)`)
+      .run(now, now);
+    db.prepare("INSERT INTO video_merges (id, task_id) VALUES (9, 'merge-task')").run();
+    db.prepare(`INSERT INTO video_upscale_jobs
+      (id, video_merge_id, status, config_snapshot_json)
+      VALUES ('upscale-job', 9, 'waiting_provider', '{"provider":"zealman"}')`).run();
+
+    const count = taskService.failOrphanedAsyncTasksOnStartup(db, { warn() {}, info() {} });
+
+    assert.equal(count, 0);
+    assert.equal(taskService.getTask(db, 'merge-task').status, 'processing');
+  });
+
   it('cancelTask marks active task as failed', () => {
     const db = createTestDb();
     const now = new Date().toISOString();

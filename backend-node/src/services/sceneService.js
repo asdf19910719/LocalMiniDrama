@@ -25,6 +25,7 @@ function updateScene(db, log, sceneId, req) {
   if (req.location != null) { updates.push('location = ?'); params.push(req.location); }
   if (req.time != null) { updates.push('time = ?'); params.push(req.time); }
   if (req.prompt != null) { updates.push('prompt = ?'); params.push(req.prompt); }
+  if (req.atmosphere !== undefined) { updates.push('atmosphere = ?'); params.push(req.atmosphere ?? null); }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   if (req.polished_prompt_single != null) { updates.push('polished_prompt_single = ?'); params.push(req.polished_prompt_single); }
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
@@ -60,14 +61,15 @@ function createScene(db, log, dramaId, req) {
   const episodeId = req.episode_id != null ? Number(req.episode_id) : null;
   try {
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, image_url, local_path, storyboard_count, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, atmosphere, image_url, local_path, storyboard_count, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
     ).run(
       Number(dramaId),
       episodeId,
       req.location || '',
       req.time || '',
       req.prompt || '',
+      req.atmosphere ?? null,
       req.image_url ?? null,
       req.local_path ?? null,
       now,
@@ -115,6 +117,7 @@ function listByDramaId(db, dramaId) {
     location: row.location,
     time: row.time,
     prompt: row.prompt,
+    atmosphere: row.atmosphere ?? null,
     polished_prompt: row.polished_prompt || null,
     polished_prompt_single: row.polished_prompt_single || null,
     description: row.description || null,
@@ -135,6 +138,7 @@ function getSceneById(db, id) {
     location: row.location,
     time: row.time,
     prompt: row.prompt,
+    atmosphere: row.atmosphere ?? null,
     polished_prompt: row.polished_prompt || null,
     polished_prompt_single: row.polished_prompt_single || null,
     image_url: row.image_url,

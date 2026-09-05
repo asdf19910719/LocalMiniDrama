@@ -507,6 +507,32 @@ test('recoverAttempt routes recovery to the bound provider tab', async () => {
   ])
 })
 
+test('diagnostics exits an open image editor before reporting the provider ready', async () => {
+  const actions = []
+  let editorOpen = true
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => {
+        actions.push(message.action)
+        if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        if (message.action === 'exitImageEditor') { editorOpen = false; return { ok: true, value: true } }
+        if (message.action === 'ready') return { ok: true, value: editorOpen
+          ? { composer: false, submit: false, mode: 'image_editor' }
+          : { composer: true, submit: true, mode: 'conversation' } }
+        return { ok: true }
+      },
+    },
+  }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+
+  const result = await controller.handle({ action: 'diagnostics', dramaId: 3, site: 'chatgpt', conversationId: 'conv-1' })
+
+  assert.equal(result.diagnostics.canProceed, true)
+  assert.equal(result.diagnostics.checks.find((check) => check.key === 'composer').status, 'ok')
+  assert.deepEqual(actions.slice(-3), ['ready', 'exitImageEditor', 'ready'])
+})
+
 test('cancelAttemptSend aborts a queued send before any provider action', async () => {
   const messages = []
   const chromeApi = {
@@ -612,4 +638,201 @@ test('assistant identity promotions emit a bound event before import', async () 
   assert.equal(response.ok, true)
   assert.equal(emitted[0][1].eventType, 'ASSISTANT_BOUND')
   assert.equal(emitted[0][1].payload.assistantMessageId, 'assistant-final')
+})
+
+test('provider readiness closes the ChatGPT image editor before using the conversation composer', async () => {
+  const messages = []
+  const responses = [
+    { ok: true, value: { composer: false, submit: false, mode: 'image_editor' } },
+    { ok: true },
+    { ok: true, value: { composer: true, submit: true, mode: 'conversation' } },
+  ]
+  const controller = new BackgroundController({
+    chromeApi: { tabs: { sendMessage: async (tabId, message) => { messages.push([tabId, message]); return responses.shift() } } },
+    storage: storage(),
+  })
+
+  const ready = await controller.waitForProviderReady(77, 3, 0, { submit: true })
+
+  assert.equal(ready, true)
+  assert.deepEqual(messages, [
+    [77, { action: 'ready' }],
+    [77, { action: 'exitImageEditor' }],
+    [77, { action: 'ready' }],
+  ])
+})
+
+test('send persists the active capture before the provider click', async () => {
+  const chromeApi = {
+    tabs: {
+      query: async () => [{ id: 77, url: 'https://chatgpt.com/c/conv-1' }],
+      sendMessage: async (_tabId, message) => message.action === 'identity'
+        ? { ok: true, value: { conversationId: 'conv-1', confidence: 'url' } }
+        : { ok: true, value: { composer: true, submit: true, mode: 'conversation' } },
+    },
+  }
+  const controller = new BackgroundController({ chromeApi, storage: storage(), fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }) })
+  controller.emit = async () => ({ id: 'event-1' })
+
+  await controller.handle({
+    action: 'send', dramaId: 3, site: 'chatgpt', attemptId: 'attempt-persisted', payload: {},
+  })
+
+  assert.deepEqual(controller.sessions.get(3, 'chatgpt').activeAttempt, {
+    attemptId: 'attempt-persisted',
+    conversationId: 'conv-1',
+    userMessageId: null,
+    assistantMessageId: null,
+    grayShellReloads: 0,
+  })
+})
+
+test('gray shell recovery reloads at most twice and keeps the stable assistant identity', async () => {
+  const reloads = []
+  const controller = new BackgroundController({
+    chromeApi: { tabs: { reload: async (tabId) => { reloads.push(tabId) } } },
+    storage: storage(),
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', {
+    tabId: 77,
+    conversationId: 'conv-1',
+    activeAttempt: {
+      attemptId: 'attempt-shell', conversationId: 'conv-1', assistantMessageId: null, grayShellReloads: 0,
+    },
+  })
+
+  const message = { action: 'recoverGrayShell', payload: {
+    attemptId: 'attempt-shell', conversationId: 'conv-1', assistantMessageId: 'request-conv-1-5',
+  } }
+  await controller.handle(message, { tab: { id: 77 } })
+  await controller.handle(message, { tab: { id: 77 } })
+  await assert.rejects(() => controller.handle(message, { tab: { id: 77 } }), /RESULT_SHELL_STUCK/)
+
+  assert.deepEqual(reloads, [77, 77])
+  assert.deepEqual(controller.sessions.get(3, 'chatgpt').activeAttempt, {
+    attemptId: 'attempt-shell',
+    conversationId: 'conv-1',
+    assistantMessageId: 'request-conv-1-5',
+    grayShellReloads: 2,
+  })
+})
+
+test('page reload automatically reattaches a persisted active capture by stable identity', async () => {
+  const messages = []
+  const controller = new BackgroundController({
+    chromeApi: { tabs: { sendMessage: async (tabId, message) => {
+      messages.push([tabId, message])
+      if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1' } }
+      return { ok: true }
+    } } },
+    storage: storage(),
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', {
+    tabId: 77,
+    conversationId: 'conv-1',
+    activeAttempt: {
+      attemptId: 'attempt-shell', conversationId: 'conv-1', assistantMessageId: 'request-conv-1-5', grayShellReloads: 1,
+    },
+  })
+
+  const recovered = await controller.recoverActiveCapture(77)
+
+  assert.equal(recovered, true)
+  assert.deepEqual(messages, [
+    [77, { action: 'identity' }],
+    [77, { action: 'recoverAttempt', attempt: {
+      attemptId: 'attempt-shell',
+      conversationId: 'conv-1',
+      assistantMessageId: 'request-conv-1-5',
+      grayShellReloads: 1,
+    } }],
+  ])
+})
+
+test('page reload reattaches from the user anchor before an assistant identity exists', async () => {
+  const messages = []
+  const controller = new BackgroundController({
+    chromeApi: { tabs: { sendMessage: async (tabId, message) => {
+      messages.push([tabId, message])
+      if (message.action === 'identity') return { ok: true, value: { conversationId: 'conv-1' } }
+      return { ok: true }
+    } } },
+    storage: storage(),
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', {
+    tabId: 77,
+    conversationId: 'conv-1',
+    activeAttempt: {
+      attemptId: 'attempt-user-only', conversationId: 'conv-1', userMessageId: 'user-final-uuid', assistantMessageId: null, grayShellReloads: 0,
+    },
+  })
+
+  const recovered = await controller.recoverActiveCapture(77)
+
+  assert.equal(recovered, true)
+  assert.deepEqual(messages.at(-1), [77, { action: 'recoverAttempt', attempt: {
+    attemptId: 'attempt-user-only',
+    conversationId: 'conv-1',
+    userMessageId: 'user-final-uuid',
+    assistantMessageId: null,
+    grayShellReloads: 0,
+  } }])
+})
+
+test('user-message binding persists a durable recovery anchor and records it in the backend', async () => {
+  const controller = new BackgroundController({
+    chromeApi: {},
+    storage: storage(),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: {} }) }),
+  })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', {
+    tabId: 77,
+    conversationId: 'conv-1',
+    activeAttempt: {
+      attemptId: 'attempt-user-anchor', conversationId: 'conv-1', assistantMessageId: null, grayShellReloads: 0,
+    },
+  })
+  const emitted = []
+  controller.emit = async (...args) => { emitted.push(args); return { id: 'event-user-bound' } }
+
+  const response = await controller.handle({ action: 'attemptUserBound', payload: {
+    attemptId: 'attempt-user-anchor', conversationId: 'conv-1', userMessageId: 'user-message-uuid',
+  } })
+
+  assert.equal(response.ok, true)
+  assert.equal(controller.sessions.get(3, 'chatgpt').activeAttempt.userMessageId, 'user-message-uuid')
+  assert.deepEqual(emitted, [[
+    'ATTEMPT_EVENT',
+    {
+      attemptId: 'attempt-user-anchor',
+      conversationId: 'conv-1',
+      eventType: 'USER_BOUND',
+      payload: { userMessageId: 'user-message-uuid' },
+    },
+  ]])
+})
+
+test('capture completion records a terminal event before clearing recovery state', async () => {
+  const controller = new BackgroundController({ chromeApi: {}, storage: storage() })
+  await controller.init()
+  await controller.sessions.attach(3, 'chatgpt', {
+    tabId: 77,
+    conversationId: 'conv-1',
+    activeAttempt: { attemptId: 'attempt-complete', conversationId: 'conv-1', assistantMessageId: 'assistant-1' },
+  })
+  const emitted = []
+  controller.emit = async (...args) => { emitted.push(args); return { id: 'event-completed' } }
+
+  const response = await controller.handle({ action: 'attemptCaptureComplete', payload: { attemptId: 'attempt-complete' } })
+
+  assert.equal(response.ok, true)
+  assert.deepEqual(emitted, [[
+    'ATTEMPT_EVENT',
+    { attemptId: 'attempt-complete', conversationId: 'conv-1', eventType: 'COMPLETED', payload: {} },
+  ]])
+  assert.equal(controller.sessions.get(3, 'chatgpt').activeAttempt, null)
 })

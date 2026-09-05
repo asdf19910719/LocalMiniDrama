@@ -104,7 +104,24 @@ function failOrphanedAsyncTasksOnStartup(db, log) {
   const hasVideoGenerations = Boolean(db.prepare(
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'video_generations'"
   ).get());
+  const hasVideoMerges = Boolean(db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'video_merges'"
+  ).get());
+  const hasVideoUpscaleJobs = Boolean(db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'video_upscale_jobs'"
+  ).get());
   const orphaned = rows.filter((row) => {
+    if (row.type === 'video_merge' && hasVideoMerges && hasVideoUpscaleJobs) {
+      const recoverableMerge = db.prepare(
+        `SELECT 1 FROM video_merges vm
+         JOIN video_upscale_jobs vu ON vu.video_merge_id = vm.id
+         WHERE vm.task_id = ? AND vm.deleted_at IS NULL
+           AND vu.status IN ('pending','waiting_provider','starting_provider','uploading','queued','running','downloading','stitching','validating')
+           AND vu.config_snapshot_json IS NOT NULL AND TRIM(vu.config_snapshot_json) != ''
+         LIMIT 1`
+      ).get(row.id);
+      return !recoverableMerge;
+    }
     if (row.type !== 'video_generation') return true;
     if (!hasVideoGenerations) return true;
     const recoverable = db.prepare(

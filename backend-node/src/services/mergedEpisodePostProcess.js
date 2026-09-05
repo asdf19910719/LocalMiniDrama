@@ -5,6 +5,44 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { getFfmpegPath, getFfprobePath } = require('../utils/ffmpegPath');
+const { buildEpisodeAudioMixPlan } = require('./episodeAudioMixService');
+const { normalizeEpisodeAudioPlan, normalizeStoryboardAudioDescription } = require('./storyboardAvContractService');
+
+function resolveStorageLocalFile(storageRoot, storedPath, { mustExist = true } = {}) {
+  if (storedPath == null || !String(storedPath).trim()) return null;
+  const raw = String(storedPath).trim();
+  if (path.isAbsolute(raw)) {
+    const error = new Error('AUDIO_PATH_OUTSIDE_STORAGE: audio path must be storage-relative');
+    error.code = 'AUDIO_PATH_OUTSIDE_STORAGE';
+    throw error;
+  }
+  const root = path.resolve(storageRoot);
+  const candidate = path.resolve(root, raw.replace(/^[/\\]+/, ''));
+  const relative = path.relative(root, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    const error = new Error('AUDIO_PATH_OUTSIDE_STORAGE: audio path escapes storage root');
+    error.code = 'AUDIO_PATH_OUTSIDE_STORAGE';
+    throw error;
+  }
+  if (!fs.existsSync(candidate)) return mustExist ? null : candidate;
+  const realRoot = fs.realpathSync(root);
+  const realCandidate = fs.realpathSync(candidate);
+  const realRelative = path.relative(realRoot, realCandidate);
+  if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+    const error = new Error('AUDIO_PATH_OUTSIDE_STORAGE: audio path resolves outside storage root');
+    error.code = 'AUDIO_PATH_OUTSIDE_STORAGE';
+    throw error;
+  }
+  return realCandidate;
+}
+
+function resolveSpeechOwner(row, episodeAudioPlan, layer) {
+  let shotAudio = null;
+  try { shotAudio = normalizeStoryboardAudioDescription(row?.audio_description); } catch (_) {}
+  return shotAudio?.speech_override?.[`${layer}_owner`]
+    || episodeAudioPlan?.speech?.[`${layer}_owner`]
+    || (layer === 'dialogue' ? 'h3_native' : 'post_tts');
+}
 
 function ffprobeDurationSec(filePath) {
   const probe = getFfprobePath();
@@ -107,63 +145,6 @@ function fitAudioToSlot(inputPath, slotSec, outPath, log) {
   }
 }
 
-function concatMp3List(segmentPaths, outPath, log) {
-  const listFile = path.join(path.dirname(outPath), `mix_concat_${Date.now()}.txt`);
-  try {
-    const lines = segmentPaths.map((p) => {
-      const normalized = path.resolve(p).replace(/\\/g, '/');
-      return `file '${normalized.replace(/'/g, "'\\''")}'`;
-    });
-    fs.writeFileSync(listFile, lines.join('\n'), 'utf8');
-    return runFfmpeg(
-      ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c:a', 'libmp3lame', '-q:a', '4', outPath],
-      log,
-      'concat_mix'
-    );
-  } finally {
-    try {
-      if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
-    } catch (_) {}
-  }
-}
-
-function alignAudioToVideoDuration(inMp3, videoDur, outPath, log) {
-  const n = ffprobeDurationSec(inMp3);
-  if (n == null || !Number.isFinite(videoDur) || videoDur <= 0.1) return false;
-  const eps = 0.08;
-  if (n > videoDur + eps) {
-    const factor = n / videoDur;
-    const chain = buildAtempoChain(factor);
-    if (!chain) {
-      try {
-        fs.copyFileSync(inMp3, outPath);
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
-    return runFfmpeg(
-      ['-y', '-i', inMp3, '-af', chain, '-t', String(videoDur), '-c:a', 'libmp3lame', '-q:a', '4', outPath],
-      log,
-      'align_speed'
-    );
-  }
-  if (n < videoDur - eps) {
-    const pad = videoDur - n;
-    return runFfmpeg(
-      ['-y', '-i', inMp3, '-af', `apad=pad_dur=${pad}`, '-t', String(videoDur), '-c:a', 'libmp3lame', '-q:a', '4', outPath],
-      log,
-      'align_pad'
-    );
-  }
-  try {
-    fs.copyFileSync(inMp3, outPath);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
 function amixTwoTracks(pathA, pathB, slotSec, outPath, log) {
   return runFfmpeg(
     [
@@ -177,6 +158,49 @@ function amixTwoTracks(pathA, pathB, slotSec, outPath, log) {
     log,
     'amix_seg'
   );
+}
+
+function transitionDurationMs(scene) {
+  const transition = scene?.transition && typeof scene.transition === 'object' ? scene.transition : {};
+  if (String(transition.type || 'cut').toLowerCase() === 'cut') return 0;
+  const seconds = Number(transition.duration ?? transition.duration_seconds);
+  const milliseconds = Number(transition.duration_ms);
+  const value = Number.isFinite(seconds) ? seconds * 1000 : (Number.isFinite(milliseconds) ? milliseconds : 0);
+  return Math.max(0, Math.round(value));
+}
+
+function segmentStartTimesMs(scenes) {
+  let cursor = 0;
+  return (Array.isArray(scenes) ? scenes : []).map((scene) => {
+    const start = cursor;
+    const duration = Math.max(200, Math.round((Number(scene?.duration) || 5) * 1000));
+    cursor += Math.max(0, duration - transitionDurationMs(scene));
+    return start;
+  });
+}
+
+function buildSpeechTimelineFilter(scenes) {
+  const list = Array.isArray(scenes) ? scenes : [];
+  const starts = segmentStartTimesMs(list);
+  const filters = list.map((scene, index) => {
+    const duration = Math.max(0.2, Number(scene?.duration) || 5);
+    return `[${index}:a]atrim=duration=${duration},asetpts=PTS-STARTPTS,adelay=${starts[index]}:all=1[seg${index}]`;
+  });
+  if (list.length === 1) filters.push('[seg0]anull[aout]');
+  else if (list.length > 1) filters.push(`${list.map((_, index) => `[seg${index}]`).join('')}amix=inputs=${list.length}:duration=longest:normalize=0[aout]`);
+  return { filterComplex: filters.join(';'), startTimesMs: starts };
+}
+
+function mixSpeechTimeline(segmentPaths, scenes, videoDuration, outPath, log) {
+  const timeline = buildSpeechTimelineFilter(scenes);
+  const args = ['-y'];
+  for (const segment of segmentPaths) args.push('-i', segment);
+  args.push(
+    '-filter_complex', timeline.filterComplex,
+    '-map', '[aout]', '-t', String(videoDuration),
+    '-c:a', 'libmp3lame', '-q:a', '4', outPath,
+  );
+  return runFfmpeg(args, log, 'speech_timeline');
 }
 
 function getDrawtextFontOption() {
@@ -202,9 +226,14 @@ function getDrawtextFontOption() {
  * @param {object} mergeOpts — burn_dialogue_audio, burn_narration_subtitles, watermark_text
  */
 async function runMergedEpisodePostProcess(db, log, opts) {
-  const { mergedAbsPath, storageRoot, scenes, episodeId, mergeOpts = {} } = opts;
+  const { mergedAbsPath, storageRoot, scenes, episodeId, mergeOpts = {}, preserveInput = false } = opts;
   const wantDial = !!mergeOpts.burn_dialogue_audio;
   const wantNarr = !!mergeOpts.burn_narration_subtitles;
+  let episodeAudioPlan = normalizeEpisodeAudioPlan(null);
+  try {
+    const episode = db.prepare('SELECT audio_plan FROM episodes WHERE id = ? AND deleted_at IS NULL').get(Number(episodeId));
+    episodeAudioPlan = normalizeEpisodeAudioPlan(episode?.audio_plan);
+  } catch (_) {}
   const watermarkText = (mergeOpts.watermark_text && String(mergeOpts.watermark_text).trim())
     ? String(mergeOpts.watermark_text).trim().slice(0, 200)
     : '';
@@ -213,9 +242,26 @@ async function runMergedEpisodePostProcess(db, log, opts) {
     return { ok: false, error: '无效合成参数' };
   }
 
-  const needAudio = wantDial || wantNarr;
-  if (!needAudio && !watermarkText) {
+  const storyboardRows = scenes.map((scene) => db.prepare(
+    'SELECT dialogue, narration, audio_local_path, narration_audio_local_path, audio_description FROM storyboards WHERE id = ? AND deleted_at IS NULL'
+  ).get(Number(scene.scene_id)) || null);
+  const includeDialogueTrack = wantDial && storyboardRows.some((row) => resolveSpeechOwner(row, episodeAudioPlan, 'dialogue') === 'post_tts');
+  const includeNarrationTrack = wantNarr && storyboardRows.some((row) => (
+    resolveSpeechOwner(row, episodeAudioPlan, 'narration') === 'post_tts'
+    && row?.narration && String(row.narration).trim()
+  ));
+  const needSpeech = includeDialogueTrack || includeNarrationTrack;
+  const needAudio = needSpeech || episodeAudioPlan.bgm.mode === 'episode_track';
+  const hasNarrationSubtitles = wantNarr && storyboardRows.some((row) => row?.narration && String(row.narration).trim());
+  if (!needAudio && !wantNarr && !watermarkText) {
     return { ok: false, error: 'NO_POST_OPTS' };
+  }
+  if (!needAudio && wantNarr && !hasNarrationSubtitles && !watermarkText) {
+    return {
+      ok: true,
+      noOp: true,
+      relativePath: path.relative(storageRoot, mergedAbsPath).replace(/\\/g, '/'),
+    };
   }
 
   const videoDur = ffprobeDurationSec(mergedAbsPath);
@@ -232,34 +278,35 @@ async function runMergedEpisodePostProcess(db, log, opts) {
     let srtPath = null;
     let srtLines = [];
 
-    if (needAudio) {
-      let tMs = 0;
+    if (needSpeech || wantNarr) {
       let srtIdx = 1;
       const segmentFiles = [];
+      const startTimes = segmentStartTimesMs(scenes);
 
       for (let i = 0; i < scenes.length; i++) {
         const sc = scenes[i];
         const sbId = Number(sc.scene_id);
         const slotSec = Math.max(0.2, Number(sc.duration) || 5);
-        const row = db.prepare(
-          'SELECT dialogue, narration, audio_local_path, narration_audio_local_path FROM storyboards WHERE id = ? AND deleted_at IS NULL'
-        ).get(sbId);
+        const row = storyboardRows[i];
+        const dialogueOwnedByPost = resolveSpeechOwner(row, episodeAudioPlan, 'dialogue') === 'post_tts';
+        const narrationOwnedByPost = resolveSpeechOwner(row, episodeAudioPlan, 'narration') === 'post_tts';
 
         const narrText = (row?.narration && String(row.narration).trim()) ? String(row.narration).trim() : '';
         if (wantNarr && narrText) {
           const durMs = Math.round(slotSec * 1000);
-          srtLines.push(String(srtIdx++), `${formatSrtTimestamp(tMs)} --> ${formatSrtTimestamp(tMs + durMs)}`, narrText, '');
+          srtLines.push(String(srtIdx++), `${formatSrtTimestamp(startTimes[i])} --> ${formatSrtTimestamp(startTimes[i] + durMs)}`, narrText, '');
         }
-        tMs += Math.round(slotSec * 1000);
+
+        if (!needSpeech) continue;
 
         const diaFit = path.join(tempRoot, `dia_fit_${i}.mp3`);
         const narrFit = path.join(tempRoot, `narr_fit_${i}.mp3`);
         const segOut = path.join(tempRoot, `seg_mix_${i}.mp3`);
 
-        if (wantDial) {
+        if (includeDialogueTrack) {
           const rel = row?.audio_local_path && String(row.audio_local_path).trim();
-          const srcAbs = rel ? path.join(storageRoot, rel.replace(/\//g, path.sep)) : null;
-          if (srcAbs && fs.existsSync(srcAbs)) {
+          const srcAbs = dialogueOwnedByPost ? resolveStorageLocalFile(storageRoot, rel) : null;
+          if (srcAbs) {
             if (!fitAudioToSlot(srcAbs, slotSec, diaFit, log)) {
               return { ok: false, error: `对白配音时长对齐失败 #${i}` };
             }
@@ -268,28 +315,29 @@ async function runMergedEpisodePostProcess(db, log, opts) {
           }
         }
 
-        if (wantNarr) {
-          if (!narrText) {
+        if (includeNarrationTrack) {
+          if (!narrationOwnedByPost || !narrText) {
             if (!writeSilenceMp3(slotSec, narrFit, log)) {
               return { ok: false, error: `旁白静音片段失败 #${i}` };
             }
           } else {
             const segRaw = path.join(tempRoot, `narr_raw_${i}.mp3`);
-            let synth;
-            try {
-              synth = await ttsService.synthesize(db, log, {
-                text: narrText,
-                storyboard_id: null,
-                storage_base: storageRoot,
-              });
-            } catch (e) {
-              log.warn('merged post: narration TTS failed', { segment: i, error: e.message });
-              return { ok: false, error: `解说旁白 TTS 失败：${e.message}` };
+            let narrAbs = resolveStorageLocalFile(storageRoot, row?.narration_audio_local_path);
+            if (!narrAbs) {
+              let synth;
+              try {
+                synth = await ttsService.synthesize(db, log, {
+                  text: narrText,
+                  storyboard_id: null,
+                  storage_base: storageRoot,
+                });
+              } catch (e) {
+                log.warn('merged post: narration TTS failed', { segment: i, error: e.message });
+                return { ok: false, error: `解说旁白 TTS 失败：${e.message}` };
+              }
+              narrAbs = resolveStorageLocalFile(storageRoot, synth.local_path);
             }
-            const narrAbs = path.join(storageRoot, synth.local_path.replace(/\//g, path.sep));
-            if (!fs.existsSync(narrAbs)) {
-              return { ok: false, error: `旁白 TTS 文件不存在` };
-            }
+            if (!narrAbs) return { ok: false, error: '旁白 TTS 文件不存在' };
             try {
               fs.copyFileSync(narrAbs, segRaw);
             } catch (_) {
@@ -301,17 +349,17 @@ async function runMergedEpisodePostProcess(db, log, opts) {
           }
         }
 
-        if (wantDial && wantNarr) {
+        if (includeDialogueTrack && includeNarrationTrack) {
           if (!amixTwoTracks(diaFit, narrFit, slotSec, segOut, log)) {
             return { ok: false, error: `对白与旁白混音失败 #${i}` };
           }
-        } else if (wantDial) {
+        } else if (includeDialogueTrack) {
           try {
             fs.copyFileSync(diaFit, segOut);
           } catch (_) {
             return { ok: false, error: `对白片段复制失败 #${i}` };
           }
-        } else if (wantNarr) {
+        } else if (includeNarrationTrack) {
           try {
             fs.copyFileSync(narrFit, segOut);
           } catch (_) {
@@ -322,14 +370,11 @@ async function runMergedEpisodePostProcess(db, log, opts) {
         segmentFiles.push(segOut);
       }
 
-      const concatOut = path.join(tempRoot, 'full_mix.mp3');
-      if (!concatMp3List(segmentFiles, concatOut, log)) {
-        return { ok: false, error: '音轨拼接失败' };
-      }
-
-      alignedAudioPath = path.join(tempRoot, 'aligned_mix.mp3');
-      if (!alignAudioToVideoDuration(concatOut, videoDur, alignedAudioPath, log)) {
-        return { ok: false, error: '音轨与视频总时长对齐失败' };
+      if (needSpeech) {
+        alignedAudioPath = path.join(tempRoot, 'aligned_mix.mp3');
+        if (!mixSpeechTimeline(segmentFiles, scenes, videoDur, alignedAudioPath, log)) {
+          return { ok: false, error: '音轨按转场时间线对齐失败' };
+        }
       }
 
       if (wantNarr && srtLines.length > 0) {
@@ -367,14 +412,45 @@ async function runMergedEpisodePostProcess(db, log, opts) {
     }
 
     if (needAudio) {
-      if (!alignedAudioPath || !fs.existsSync(alignedAudioPath)) {
+      if (needSpeech && (!alignedAudioPath || !fs.existsSync(alignedAudioPath))) {
         return { ok: false, error: '内部错误：缺少对齐音轨' };
       }
-      const args = ['-y', '-i', mergedAbsPath, '-i', alignedAudioPath];
+      let bgmPath = null;
+      if (episodeAudioPlan.bgm.mode === 'episode_track' && episodeAudioPlan.bgm.local_path) {
+        const candidate = path.resolve(storageRoot, String(episodeAudioPlan.bgm.local_path).replace(/^[/\\]+/, ''));
+        const relative = path.relative(path.resolve(storageRoot), candidate);
+        if (!relative.startsWith('..') && !path.isAbsolute(relative) && fs.existsSync(candidate)) {
+          try {
+            const realRoot = fs.realpathSync(storageRoot);
+            const realCandidate = fs.realpathSync(candidate);
+            const realRelative = path.relative(realRoot, realCandidate);
+            if (realRelative && !realRelative.startsWith('..') && !path.isAbsolute(realRelative)) bgmPath = realCandidate;
+          } catch (_) {}
+        }
+      }
+      const mixPlan = buildEpisodeAudioMixPlan({
+        basePath: mergedAbsPath,
+        baseHasAudio: ffprobeHasAudio(mergedAbsPath),
+        dialoguePath: needSpeech ? alignedAudioPath : null,
+        dialogueOwner: needSpeech ? 'post_tts' : 'none',
+        narrationOwner: 'none',
+        bgmMode: episodeAudioPlan.bgm.mode,
+        bgmPath,
+        bgmLevel: Math.pow(10, Number(episodeAudioPlan.bgm.volume_db || -22) / 20),
+        bgmFadeInMs: episodeAudioPlan.bgm.fade_in_ms,
+        bgmFadeOutMs: episodeAudioPlan.bgm.fade_out_ms,
+        duckingDb: episodeAudioPlan.bgm.ducking_db,
+        durationSeconds: videoDur,
+        targetLufs: episodeAudioPlan.mastering.target_lufs,
+        truePeak: episodeAudioPlan.mastering.true_peak_db,
+      });
+      const args = ['-y', '-i', mergedAbsPath];
+      for (const audioInput of mixPlan.inputs) args.push('-i', audioInput);
+      const combinedFilters = [filterComplex, mixPlan.filterComplex].filter(Boolean).join(';');
       if (filterComplex) {
-        args.push('-filter_complex', filterComplex, '-map', '[vout]', '-map', '1:a');
+        args.push('-filter_complex', combinedFilters, '-map', '[vout]', '-map', '[aout]');
       } else {
-        args.push('-map', '0:v', '-map', '1:a');
+        args.push('-filter_complex', mixPlan.filterComplex, '-map', '0:v', '-map', '[aout]');
       }
       args.push(
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
@@ -406,7 +482,7 @@ async function runMergedEpisodePostProcess(db, log, opts) {
     const relFromRoot = path.relative(storageRoot, outAbs).replace(/\\/g, '/');
 
     try {
-      if (fs.existsSync(mergedAbsPath) && outAbs !== mergedAbsPath) {
+      if (!preserveInput && fs.existsSync(mergedAbsPath) && outAbs !== mergedAbsPath) {
         fs.unlinkSync(mergedAbsPath);
       }
     } catch (e) {
@@ -443,4 +519,8 @@ function ffprobeHasAudio(filePath) {
 module.exports = {
   runMergedEpisodePostProcess,
   ffprobeDurationSec,
+  segmentStartTimesMs,
+  buildSpeechTimelineFilter,
+  resolveSpeechOwner,
+  resolveStorageLocalFile,
 };

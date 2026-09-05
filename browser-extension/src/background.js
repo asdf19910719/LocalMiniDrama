@@ -205,10 +205,29 @@ export class BackgroundController {
     if (response?.ok === false) throw new Error(response.error || 'provider adapter rejected request')
     return response
   }
+  async recoverActiveCapture(tabId) {
+    await this.init()
+    const session = this.sessions.findByTabId(tabId)
+    const attempt = session?.activeAttempt
+    // Without a bound assistant identity, choosing the newest reply could
+    // steal a user's unrelated ChatGPT result. Wait for the normal sender or
+    // backend timeout instead of guessing.
+    if (!attempt?.attemptId || (!attempt?.assistantMessageId && !attempt?.userMessageId)) return false
+    const identity = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'identity' }).catch(() => null)
+    if (!identity?.ok || (attempt.conversationId && identity.value?.conversationId !== attempt.conversationId)) return false
+    const response = await this.chromeApi.tabs.sendMessage(tabId, { action: 'recoverAttempt', attempt }).catch(() => null)
+    return response?.ok === true
+  }
   async waitForProviderReady(tabId, attempts = 40, intervalMs = 250, { submit = false } = {}) {
     if (!tabId || !this.chromeApi?.tabs?.sendMessage) return false;
+    let imageEditorExitAttempted = false;
     for (let index = 0; index < attempts; index += 1) {
       const ready = await this.chromeApi.tabs.sendMessage(tabId, { action: 'ready' }).catch(() => null);
+      if (ready?.ok && ready.value?.mode === 'image_editor' && !imageEditorExitAttempted) {
+        imageEditorExitAttempted = true;
+        const exited = await this.chromeApi.tabs.sendMessage(tabId, { action: 'exitImageEditor' }).catch(() => null);
+        if (exited?.ok) continue;
+      }
       // Older content scripts do not implement ready; let fill report the
       // adapter-specific error in that case while newer scripts can gate on
       // the composer actually being mounted.
@@ -268,7 +287,11 @@ export class BackgroundController {
             : actualConversation
               ? { key: 'conversation', status: 'ok', message: '项目会话匹配' }
               : { key: 'conversation', status: 'failed', code: 'CONVERSATION_MISSING', message: 'ChatGPT 当前没有可用会话' });
-          const ready = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'ready' }).catch(() => null);
+          let ready = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'ready' }).catch(() => null);
+          if (ready?.ok && ready.value?.mode === 'image_editor') {
+            const exited = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'exitImageEditor' }).catch(() => null);
+            if (exited?.ok) ready = await this.chromeApi?.tabs?.sendMessage?.(tabId, { action: 'ready' }).catch(() => null);
+          }
           checks.push(ready?.ok && ready.value?.composer === false
             ? { key: 'composer', status: 'failed', code: 'COMPOSER_NOT_READY', message: 'ChatGPT 输入框尚未就绪' }
             : ready?.ok === false
@@ -334,6 +357,17 @@ export class BackgroundController {
             } else this.sessions.assertConversation(message.dramaId, message.site, conversationId)
           }
           ensureLive();
+          if (message.dramaId !== undefined && message.site === 'chatgpt') {
+            await this.sessions.attach(message.dramaId, message.site, {
+              activeAttempt: {
+                attemptId: message.attemptId,
+                conversationId,
+                userMessageId: null,
+                assistantMessageId: null,
+                grayShellReloads: 0,
+              },
+            })
+          }
           if (tabId) {
             const ready = await this.waitForProviderReady(tabId, 240, 500, { submit: true });
             ensureLive();
@@ -365,6 +399,8 @@ export class BackgroundController {
     }
     if (action === 'cancelAttemptSend') {
       if (message?.attemptId) this.cancelledSends.set(message.attemptId, Date.now());
+      const activeSession = this.sessions.findByActiveAttempt(message?.attemptId)
+      if (activeSession) await this.sessions.attach(activeSession.dramaId, activeSession.site, { activeAttempt: null })
       return { ok: true, cancelled: Boolean(message?.attemptId) };
     }
     if (action === 'recoverAttempt') {
@@ -378,9 +414,33 @@ export class BackgroundController {
         ...attempt,
         attemptId: message.attemptId || attempt.attemptId || attempt.id,
         conversationId,
+        ...(attempt.userMessageId || attempt.user_message_id
+          ? { userMessageId: attempt.userMessageId || attempt.user_message_id }
+          : {}),
         assistantMessageId: attempt.assistantMessageId || attempt.assistant_message_id || null,
       } });
       return { ok: true, conversationId, tabId };
+    }
+    if (action === 'recoverGrayShell') {
+      const payload = message.payload || {}
+      const session = this.sessions.findByActiveAttempt(payload.attemptId)
+      if (!session) throw new Error('ACTIVE_CAPTURE_NOT_FOUND')
+      const tabId = sender.tab?.id ?? session.tabId
+      if (!tabId || (session.tabId && tabId !== session.tabId)) throw new Error('ACTIVE_CAPTURE_TAB_MISMATCH')
+      const activeAttempt = session.activeAttempt
+      const reloads = Number(activeAttempt.grayShellReloads || 0)
+      if (reloads >= 2) throw new Error('RESULT_SHELL_STUCK')
+      await this.sessions.attach(session.dramaId, session.site, {
+        activeAttempt: {
+          ...activeAttempt,
+          conversationId: payload.conversationId || activeAttempt.conversationId || session.conversationId || null,
+          assistantMessageId: payload.assistantMessageId || activeAttempt.assistantMessageId || null,
+          grayShellReloads: reloads + 1,
+        },
+      })
+      if (!this.chromeApi?.tabs?.reload) throw new Error('PROVIDER_RELOAD_UNAVAILABLE')
+      await this.chromeApi.tabs.reload(tabId)
+      return { ok: true, reloading: true }
     }
     if (action === 'capturedResult') {
       const payload = { ...(message.payload || {}), bytes: normalizeBytes(message.payload?.bytes) };
@@ -391,6 +451,14 @@ export class BackgroundController {
     if (action === 'attemptGenerating') {
       const payload = message.payload || {};
       if (!payload.attemptId) throw new Error('attemptId is required');
+      const activeSession = this.sessions.findByActiveAttempt(payload.attemptId)
+      if (activeSession) await this.sessions.attach(activeSession.dramaId, activeSession.site, {
+        activeAttempt: {
+          ...activeSession.activeAttempt,
+          conversationId: payload.conversationId || activeSession.activeAttempt.conversationId || null,
+          assistantMessageId: payload.assistantMessageId || activeSession.activeAttempt.assistantMessageId || null,
+        },
+      })
       const event = await this.emit('ATTEMPT_EVENT', {
         attemptId: payload.attemptId,
         conversationId: payload.conversationId || null,
@@ -399,10 +467,38 @@ export class BackgroundController {
       });
       return { ok: true, event };
     }
+    if (action === 'attemptUserBound') {
+      const payload = message.payload || {}
+      if (!payload.attemptId) throw new Error('attemptId is required')
+      if (!payload.userMessageId) throw new Error('userMessageId is required')
+      const activeSession = this.sessions.findByActiveAttempt(payload.attemptId)
+      if (activeSession) await this.sessions.attach(activeSession.dramaId, activeSession.site, {
+        activeAttempt: {
+          ...activeSession.activeAttempt,
+          conversationId: payload.conversationId || activeSession.activeAttempt.conversationId || null,
+          userMessageId: payload.userMessageId,
+        },
+      })
+      const event = await this.emit('ATTEMPT_EVENT', {
+        attemptId: payload.attemptId,
+        conversationId: payload.conversationId || null,
+        eventType: 'USER_BOUND',
+        payload: { userMessageId: payload.userMessageId },
+      })
+      return { ok: true, event }
+    }
     if (action === 'attemptBound') {
       const payload = message.payload || {};
       if (!payload.attemptId) throw new Error('attemptId is required');
       if (!payload.assistantMessageId) throw new Error('assistantMessageId is required');
+      const activeSession = this.sessions.findByActiveAttempt(payload.attemptId)
+      if (activeSession) await this.sessions.attach(activeSession.dramaId, activeSession.site, {
+        activeAttempt: {
+          ...activeSession.activeAttempt,
+          conversationId: payload.conversationId || activeSession.activeAttempt.conversationId || null,
+          assistantMessageId: payload.assistantMessageId,
+        },
+      })
       const event = await this.emit('ATTEMPT_EVENT', {
         attemptId: payload.attemptId,
         conversationId: payload.conversationId || null,
@@ -410,6 +506,19 @@ export class BackgroundController {
         payload: { assistantMessageId: payload.assistantMessageId },
       });
       return { ok: true, event };
+    }
+    if (action === 'attemptCaptureComplete') {
+      const attemptId = message.payload?.attemptId
+      const activeSession = this.sessions.findByActiveAttempt(attemptId)
+      const conversationId = message.payload?.conversationId || activeSession?.activeAttempt?.conversationId || activeSession?.conversationId || null
+      await this.emit('ATTEMPT_EVENT', {
+        attemptId,
+        conversationId,
+        eventType: 'COMPLETED',
+        payload: {},
+      })
+      if (activeSession) await this.sessions.attach(activeSession.dramaId, activeSession.site, { activeAttempt: null })
+      return { ok: true }
     }
     if (action === 'adapterError') {
       const payload = message.payload || {};
@@ -433,9 +542,11 @@ export function registerBackground(chromeApi = globalThis.chrome, options = {}) 
   chromeApi.runtime.onMessage.addListener(listener);
   chromeApi.runtime.onMessageExternal?.addListener(listener);
   chromeApi.runtime.onStartup?.addListener(() => controller.flush()); chromeApi.runtime.onInstalled?.addListener(() => controller.flush());
-  chromeApi.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
+  chromeApi.tabs?.onUpdated?.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo?.status && changeInfo.status !== 'complete') return;
-    return injectChatGPTContentScript(chromeApi, tabId, tab?.url || changeInfo?.url);
+    const injected = await injectChatGPTContentScript(chromeApi, tabId, tab?.url || changeInfo?.url);
+    if (injected) await controller.recoverActiveCapture(tabId);
+    return injected;
   });
   return controller;
 }

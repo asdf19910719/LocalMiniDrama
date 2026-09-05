@@ -156,6 +156,7 @@ describe('generateVariantImage', () => {
 
   it('uses variant image_prompt as main path, passes model through, and writes back image_url/local_path/extra_images', async () => {
     const charId = insertCharacter(db);
+    db.prepare("UPDATE characters SET local_path='characters/base-identity.png' WHERE id=?").run(charId);
     const variant = createVariant(db, {
       character_id: charId,
       name: '雨夜',
@@ -182,6 +183,7 @@ describe('generateVariantImage', () => {
     assert.equal(apiParams.size, '1920x1920');
     assert.equal(apiParams.drama_id, 1);
     assert.equal(apiParams.user_negative_prompt, 'blurry');
+    assert.deepEqual(apiParams.reference_image_urls, ['characters/base-identity.png']);
 
     // 下载保存:characters 分类 + 工程子目录
     assert.equal(calls.download.length, 1);

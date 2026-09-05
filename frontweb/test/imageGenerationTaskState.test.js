@@ -9,6 +9,7 @@ import {
   shouldPollImageGenerationTask,
   shouldReattachImageGenerationTask,
   shouldRecoverImageGenerationTask,
+  toChatGPTRecoveryAttempt,
 } from '../src/utils/imageGenerationTaskState.js'
 import { clearImageGenerationEnvironmentCache, runImageGenerationEnvironmentCheck } from '../src/utils/imageGenerationEnvironment.js'
 
@@ -35,10 +36,14 @@ test('polls only active ChatGPT tasks waiting for a result', () => {
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'api', status: 'submitted' }), false)
 })
 
-test('offers result recovery for active and timed-out ChatGPT tasks only', () => {
+test('offers result recovery for active, timed-out, and capture-failed ChatGPT tasks only', () => {
   assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'submitted' }), true)
   assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'generating' }), true)
   assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'result_timeout' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'UNBOUND_RESULT' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'RESULT_CAPTURE_FAILED' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'RESULT_SHELL_STUCK' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'ADAPTER_ERROR' }), false)
   assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review' }), false)
   assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'api', status: 'submitted' }), false)
 })
@@ -64,6 +69,24 @@ test('an idempotent prepare response never submits the same ChatGPT prompt twice
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'submitted' } }), 'recover')
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'generating' } }), 'recover')
   assert.equal(resolveChatGPTPrepareAction({ already_submitted: true, task: { status: 'needs_review' } }), 'review')
+})
+
+test('ChatGPT recovery payload retains both user and assistant message anchors', () => {
+  assert.deepEqual(toChatGPTRecoveryAttempt({
+    id: 'attempt-1',
+    status: 'generating',
+    sequence: 2,
+    user_message_id: 'user-message-uuid',
+    assistant_message_id: 'request-conversation-1-3',
+    conversation_id: 'conversation-1',
+  }), {
+    id: 'attempt-1',
+    status: 'generating',
+    sequence: 2,
+    user_message_id: 'user-message-uuid',
+    assistant_message_id: 'request-conversation-1-3',
+    conversation_id: 'conversation-1',
+  })
 })
 
 test('environment check combines backend and ChatGPT diagnostics by channel', async () => {

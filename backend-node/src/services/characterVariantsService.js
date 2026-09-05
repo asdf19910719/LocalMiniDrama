@@ -289,6 +289,11 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
   const model = options.model ? String(options.model).trim() || null : null;
   const preferredProvider = !model && effectiveCfg?.ai?.default_image_provider ? effectiveCfg.ai.default_image_provider : null;
   const userNeg = imageClient.resolveAssetUserNegativeForApi(model, variant.negative_prompt || char.negative_prompt);
+  const identityReference = String(char.local_path || char.image_url || '').trim();
+  const rawStorage = cfg?.storage?.local_path;
+  const storagePath = rawStorage
+    ? (path.isAbsolute(rawStorage) ? rawStorage : path.join(process.cwd(), rawStorage))
+    : path.join(process.cwd(), './data/storage');
 
   let result;
   try {
@@ -299,6 +304,12 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
       model: model || undefined,
       preferred_provider: preferredProvider || undefined,
       user_negative_prompt: userNeg || undefined,
+      reference_image_urls: identityReference ? [identityReference] : undefined,
+      files_base_url: cfg?.storage?.base_url || undefined,
+      storage_local_path: storagePath,
+      system_prompt: identityReference
+        ? 'Image 1: base character identity reference. Preserve face, age and body shape only; follow the state prompt for clothing, hair condition and pose.'
+        : undefined,
     });
   } catch (err) {
     log.error('Variant image API failed', { variant_id: variantId, error: err.message });
@@ -319,10 +330,6 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
 
   let localPath = null;
   try {
-    const rawStorage = cfg?.storage?.local_path;
-    const storagePath = rawStorage
-      ? (path.isAbsolute(rawStorage) ? rawStorage : path.join(process.cwd(), rawStorage))
-      : path.join(process.cwd(), './data/storage');
     const projectSubdir = storageLayout.getProjectStorageSubdir(db, char.drama_id);
     localPath = await uploadService.downloadImageToLocal(
       storagePath,

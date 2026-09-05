@@ -27,6 +27,8 @@ const externalGenerationRoutes = require('./externalGeneration');
 const imageGenerationTaskRoutes = require('./imageGenerationTasks');
 const episodeGenerationProgressRoutes = require('./episodeGenerationProgress');
 const episodePackageRoutes = require('./episodePackage');
+const videoUpscaleRoutes = require('./videoUpscale');
+const { createVideoUpscaleRuntime } = require('../services/videoUpscale/videoUpscaleRuntime');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
 const { createGpuMutex } = require('../director/gpuMutex');
@@ -37,6 +39,7 @@ const {
   createVideoProviderRegistry,
 } = require('../services/videoProviders');
 const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
+const { createPreparedVideoGenerationService } = require('../services/preparedVideoGenerationService');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
 const { stageReferenceAssets, cleanupReferenceAssets } = require('../services/videoProviders/referenceAssetStaging');
 
@@ -61,6 +64,23 @@ function setupRouter(cfg, db, log) {
   const images = imageRoutes(db, cfg, log);
   const episodeGenerationProgress = episodeGenerationProgressRoutes(db, log);
   const videoMerges = videoMergeRoutes(db, log);
+  const videoUpscaleRuntime = createVideoUpscaleRuntime({ db, appConfig: cfg, log });
+  const videoUpscale = videoUpscaleRoutes(db, log, videoUpscaleRuntime);
+  const videoMergeService = require('../services/videoMergeService');
+  videoMergeService.configureVideoUpscaleRuntime(videoUpscaleRuntime);
+  videoUpscaleRuntime.setCompletionHandler((job) =>
+    videoMergeService.resumeVideoMergeAfterUpscale(db, log, job.video_merge_id));
+  setImmediate(() => {
+    videoUpscaleRuntime.recoverDueJobs().catch((error) => {
+      log.error('recoverVideoUpscaleJobs', { error: error.message });
+    });
+  });
+  const upscaleRecoveryTimer = setInterval(() => {
+    videoUpscaleRuntime.recoverDueJobs().catch((error) => {
+      log.error('recoverVideoUpscaleJobs', { error: error.message });
+    });
+  }, 60_000);
+  upscaleRecoveryTimer.unref?.();
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
@@ -110,6 +130,12 @@ function setupRouter(cfg, db, log) {
     providerRegistry: videoProviderRegistry,
     workflowRegistry: directorRegistry,
   });
+  const preparedVideoGenerationService = createPreparedVideoGenerationService({
+    db,
+    log,
+    workflowRegistry: directorRegistry,
+    lifecycleService: unifiedVideoGenerationService,
+  });
   require('../services/videoService').configureUnifiedVideoGenerationService(
     db,
     unifiedVideoGenerationService,
@@ -117,6 +143,7 @@ function setupRouter(cfg, db, log) {
   const videos = videoRoutes(db, log, {
     providerRegistry: videoProviderRegistry,
     lifecycleService: unifiedVideoGenerationService,
+    preparedService: preparedVideoGenerationService,
   });
   setImmediate(() => {
     unifiedVideoGenerationService.recoverVideoGenerations().catch((error) => {
@@ -133,7 +160,11 @@ function setupRouter(cfg, db, log) {
   });
   const director = directorRoutes(db, log, {
     runner: directorRunner,
-    videoGenerationService: unifiedVideoGenerationService,
+    videoGenerationService: {
+      ...unifiedVideoGenerationService,
+      createVideoGeneration: (input) => preparedVideoGenerationService.prepareAndCreateVideoGeneration(input)
+        .then((result) => result.generation),
+    },
     registry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
     artifactRoot: directorArtifactRoot,
@@ -323,6 +354,8 @@ function setupRouter(cfg, db, log) {
   r.get('/episodes/:episode_id/storyboards', storyboards.episodeStoryboardsGet);
   r.post('/episodes/:episode_id/finalize', drama.finalizeEpisode);
   r.get('/episodes/:episode_id/download', drama.downloadEpisodeVideo);
+  r.patch('/episodes/:id/audio-plan', drama.updateEpisodeAudioPlan);
+  r.post('/episodes/:id/audio-plan/plan', drama.planEpisodeAudio);
 
   // ---------- tasks ----------
   r.get('/tasks/:task_id', task.getTaskStatus);
@@ -360,6 +393,8 @@ function setupRouter(cfg, db, log) {
   r.get('/videos', videos.list);
   r.get('/videos/capabilities', videos.capabilities);
   r.post('/videos', videos.create);
+  r.post('/videos/prepared', videos.preparedCreate);
+  r.post('/videos/prepared/batch', videos.preparedBatch);
   r.post('/videos/h3-preview', videos.h3Preview);
   r.post('/videos/image/:image_gen_id', videos.fromImage);
   r.post('/videos/episode/:episode_id/batch', videos.episodeBatch);
@@ -374,6 +409,13 @@ function setupRouter(cfg, db, log) {
   r.post('/video-merges', videoMerges.create);
   r.get('/video-merges/:merge_id', videoMerges.get);
   r.delete('/video-merges/:merge_id', videoMerges.delete);
+
+  // ---------- cloud video upscale ----------
+  r.get('/video-upscale/capabilities', videoUpscale.capabilities);
+  r.get('/video-upscale/jobs/:id', videoUpscale.get);
+  r.post('/video-upscale/jobs/:id/retry', videoUpscale.retry);
+  r.post('/video-upscale/jobs/:id/skip', videoUpscale.skip);
+  r.post('/video-upscale/jobs/:id/cancel', videoUpscale.cancel);
 
   // ---------- assets ----------
   r.get('/assets', assets.list);
@@ -394,6 +436,7 @@ function setupRouter(cfg, db, log) {
   r.get('/storyboards/:id/h3-prompt-draft', storyboards.h3PromptDraftGet);
   r.post('/storyboards/:id/h3-prompt-draft/compile', storyboards.h3PromptDraftCompile);
   r.put('/storyboards/:id/h3-prompt-draft', storyboards.h3PromptDraftSave);
+  r.post('/storyboards/:id/h3-prompt-draft/confirm-semantic-review', storyboards.h3PromptDraftConfirmSemanticReview);
   r.get('/storyboards/:id', storyboards.getOne);
   r.put('/storyboards/:id', storyboards.update);
   r.delete('/storyboards/:id', storyboards.delete);

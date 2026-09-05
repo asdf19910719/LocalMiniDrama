@@ -137,6 +137,7 @@ function createDb() {
       manually_edited INTEGER DEFAULT 0,
       status TEXT DEFAULT 'valid',
       validation_errors TEXT,
+      workflow_id TEXT,
       created_at TEXT,
       updated_at TEXT
     );
@@ -240,11 +241,16 @@ function insertVariantLink(db, { storyboardId, imageUrl = '/static/variant.png' 
 }
 
 /** H3 默认配置(comfyui + minimax_h3 协议 + minimax-h3 模型) */
-function insertH3Config(db, { id = 7, isDefault = 1 } = {}) {
+function insertH3Config(db, {
+  id = 7,
+  isDefault = 1,
+  models = ['minimax-h3'],
+  defaultModel = models[0],
+} = {}) {
   db.prepare(
     `INSERT INTO ai_service_configs (id, service_type, provider, api_protocol, name, base_url, model, default_model, settings, is_default, is_active, updated_at)
-     VALUES (?, 'video', 'comfyui', 'minimax_h3', 'H3 本地工作流', 'http://127.0.0.1:8188', '["minimax-h3"]', 'minimax-h3', '{"width":864,"height":480}', ?, 1, ?)`
-  ).run(id, isDefault, T0);
+     VALUES (?, 'video', 'comfyui', 'minimax_h3', 'H3 本地工作流', 'http://127.0.0.1:8188', ?, ?, '{"width":864,"height":480}', ?, 1, ?)`
+  ).run(id, JSON.stringify(models), defaultModel, isDefault, T0);
   return id;
 }
 
@@ -340,13 +346,13 @@ describe('h3 draft gating for candidate generation', () => {
     assert.equal(isH3VideoConfig({ provider: 'fake', protocol: 'fake-protocol', model: 'old-model' }), false);
   });
 
-  it('rejects H3 candidate generation without h3_prompt_draft_id with H3_DRAFT_REQUIRED and never invokes the skill', async () => {
+  it('rejects projectless H3 candidate generation with H3_STORYBOARD_REQUIRED and never invokes the skill', async () => {
     insertH3Config(db, { id: 7 });
     const service = buildService(db, harness);
 
     await assert.rejects(
       service.createVideoGeneration({ prompt: 'a woman walks', duration: 5 }),
-      (e) => e.code === 'H3_DRAFT_REQUIRED'
+      (e) => e.code === 'H3_STORYBOARD_REQUIRED'
     );
 
     assert.equal(compileStub.calls.length, 0);
@@ -609,6 +615,40 @@ describe('storyboard h3 draft routes', () => {
     assert.equal(getRes.body.data.draft.id, compiledDraft.id);
     assert.equal(getRes.body.data.draft.final_compiled_prompt, VALID_REF_PROMPT);
     assert.deepEqual(getRes.body.data.freshness, { stale: false, reasons: [] });
+  });
+
+  it('compiles and retrieves drafts for the explicitly selected TE-Speed workflow', async () => {
+    setup();
+    insertH3Config(db, {
+      id: 7,
+      models: ['minimax_h3_director_r2v'],
+      defaultModel: 'minimax_h3_director_r2v',
+    });
+    const sbId = seedStoryboardWithSlots();
+
+    const compileRes = responseCapture();
+    await routes.h3PromptDraftCompile({
+      params: { id: String(sbId) },
+      body: { video_config_id: '7', workflow_id: 'minimax_h3_director_r2v_te_speed' },
+    }, compileRes);
+
+    assert.equal(compileRes.statusCode, 200);
+    assert.equal(compileRes.body.data.draft.workflow_id, 'minimax_h3_director_r2v_te_speed');
+
+    const teRes = responseCapture();
+    routes.h3PromptDraftGet({
+      params: { id: String(sbId) },
+      query: { video_config_id: '7', workflow_id: 'minimax_h3_director_r2v_te_speed' },
+    }, teRes);
+    assert.equal(teRes.body.data.draft.id, compileRes.body.data.draft.id);
+    assert.deepEqual(teRes.body.data.freshness, { stale: false, reasons: [] });
+
+    const officialRes = responseCapture();
+    routes.h3PromptDraftGet({
+      params: { id: String(sbId) },
+      query: { video_config_id: '7', workflow_id: 'minimax_h3_director_r2v' },
+    }, officialRes);
+    assert.equal(officialRes.body.data.draft, null);
   });
 
   it('GET returns draft=null with non-stale freshness when no draft exists', () => {

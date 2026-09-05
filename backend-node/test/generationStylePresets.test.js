@@ -24,3 +24,15 @@ for (const value of EXTRA) {
 test('custom is not a preset', () => {
   assert.equal(resolveStylePreset('custom'), null);
 });
+
+test('cinematic keeps every principal face clear in multi-character shots', () => {
+  const preset = resolveStylePreset('cinematic');
+
+  assert.ok(preset);
+  assert.doesNotMatch(preset.zh, /浅景深|虚化背景/);
+  assert.doesNotMatch(preset.en, /shallow depth of field/i);
+  assert.match(preset.zh, /景深随镜头叙事动态选择/);
+  assert.match(preset.zh, /所有主要人物面部保持清晰可辨/);
+  assert.match(preset.en, /shot-appropriate depth of field/i);
+  assert.match(preset.en, /all principal characters' faces sharply focused and clearly identifiable/i);
+});

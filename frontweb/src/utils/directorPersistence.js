@@ -114,6 +114,31 @@ export function normalizeDirectorShotState(payload = {}, createdGroup = null) {
   return { groups, latest }
 }
 
+export async function refreshSelectedStoryboardVideo({
+  storyboardId,
+  selectedVideoId = null,
+  currentTarget = null,
+  storyboards = [],
+  selectStoryboardVideo,
+  refreshStoryboardMedia,
+  fetchStoryboard,
+} = {}) {
+  if (storyboardId == null) return currentTarget
+  if (selectedVideoId != null) selectStoryboardVideo?.(storyboardId, selectedVideoId)
+  await refreshStoryboardMedia(storyboardId)
+  let refreshed = null
+  try {
+    refreshed = await fetchStoryboard(storyboardId)
+  } catch (_) {}
+  const index = Array.isArray(storyboards)
+    ? storyboards.findIndex((item) => String(item.id) === String(storyboardId))
+    : -1
+  const existing = index >= 0 ? storyboards[index] : currentTarget
+  const target = refreshed ? { ...(existing || {}), ...refreshed } : existing
+  if (index >= 0 && target) storyboards.splice(index, 1, target)
+  return target || currentTarget
+}
+
 export function formatArtifactMedia(artifact = {}) {
   const media = artifact.media || {}
   const parts = [media.width && media.height ? `${media.width}x${media.height}` : '尺寸未知']

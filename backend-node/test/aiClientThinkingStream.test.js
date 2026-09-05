@@ -77,6 +77,30 @@ test('streaming text appends each content delta exactly once', async () => {
   }
 });
 
+test('streaming text preserves a UTF-8 character split across response chunks', async () => {
+  const expected = '苏妍（@图片2）站在门外';
+  const server = await listen(async (_req, res) => {
+    const payload = Buffer.from(`data: ${JSON.stringify({
+      choices: [{ delta: { content: expected }, finish_reason: 'stop' }],
+    })}\n\ndata: [DONE]\n\n`, 'utf8');
+    const splitAfter = payload.indexOf(Buffer.from('）', 'utf8')) + 1;
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+    res.write(payload.subarray(0, splitAfter));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    res.end(payload.subarray(splitAfter));
+  });
+
+  try {
+    const result = await aiClient.generateText(
+      createConfigDb(server.baseUrl), silentLog(), 'text', 'prompt', '', {}
+    );
+    assert.equal(result, expected);
+    assert.equal(result.includes('\uFFFD'), false);
+  } finally {
+    await server.close();
+  }
+});
+
 test('thinking stream retries once without thinking when reasoning has no final content', async () => {
   const requestBodies = [];
   const server = await listen((req, res) => {

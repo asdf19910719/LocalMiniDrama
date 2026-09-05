@@ -8,13 +8,13 @@ const { resolveDefaultVideoConfig } = require('./videoConfigResolver');
 const { buildVideoConfigSnapshot } = require('./videoGenerationSnapshot');
 const { createH3PromptCompiler } = require('./h3PromptCompiler');
 const { createH3PromptDraftService } = require('./h3PromptDraftService');
+const { isSwitchableH3WorkflowPair } = require('./h3WorkflowSelection');
 const { buildVideoGenerationPlan } = require('./videoGenerationPlan');
 const { selectWorkflow, readWorkflowTemplate } = require('../director/workflowRegistry');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
 const TERMINAL_STATUSES = new Set(['review', 'selected', 'failed', 'cancelled', 'interrupted']);
-
 class VideoLifecycleError extends Error {
   constructor(code, message, status = 400, details = {}) {
     super(message || code);
@@ -121,7 +121,7 @@ function isH3VideoConfig(resolved) {
   const provider = String(resolved?.provider || resolved?.config?.provider || '').toLowerCase();
   const protocol = String(resolved?.protocol || resolved?.config?.api_protocol || '').toLowerCase();
   const model = String(resolved?.model || resolved?.config?.default_model || '').toLowerCase();
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimaxh3') || model.includes('minimax-h3'))
     || protocol === 'minimax_h3';
 }
 
@@ -136,6 +136,9 @@ function createUnifiedVideoGenerationService({
   schedule = (job, delay = 0) => (delay > 0 ? setTimeout(job, delay) : setImmediate(job)),
   pollIntervalMs = 1000,
   gpuBusyRetryDelayMs = 2000,
+  queryRetryDelayMs = 2000,
+  queryRetryLimit = 3,
+  queryRetryCount = new Map(),
   transientRetryDelayMs = 90000,
   transientRetryLimit = 1,
   transientRetryCount = new Map(),
@@ -301,6 +304,8 @@ function inputFor(row) {
   }
 
   function persistFailure(row, error, stage, status = 'failed', fallbackCode = 'VIDEO_PROVIDER_ERROR') {
+    queryRetryCount.delete(row.id);
+    transientRetryCount.delete(row.id);
     const normalized = structuredError(error, stage, fallbackCode, {
       provider: row.provider || null,
     });
@@ -327,6 +332,72 @@ function inputFor(row) {
     const code = String(error?.code || '').trim().toUpperCase();
     const message = String(error?.message || error || '').trim().toUpperCase();
     return code === 'GPU_BUSY' || message === 'GPU_BUSY';
+  }
+
+  function isTransientComfyQueryError(row, error, stage) {
+    if (!['query', 'recover'].includes(stage)) return false;
+    if (String(row?.provider || '').trim().toLowerCase() !== 'comfyui') return false;
+    const code = String(error?.code || '').trim().toUpperCase();
+    const status = Number(error?.details?.status);
+    if (code === 'COMFYUI_NETWORK_ERROR' || code === 'COMFYUI_TIMEOUT') return true;
+    if (code === 'COMFYUI_HTTP_ERROR') return !Number.isFinite(status) || status >= 500;
+    return /ComfyUI returned HTTP 5\d\d|ComfyUI request (?:failed|timed out)/i
+      .test(String(error?.message || error || ''));
+  }
+
+  function queryRetryMarker(retryCount, retryAt) {
+    return JSON.stringify({
+      code: 'COMFYUI_QUERY_RETRY_PENDING',
+      message: 'ComfyUI 状态查询暂时失败，正在自动重试',
+      retryCount,
+      retryAt,
+    });
+  }
+
+  function parseQueryRetryMarker(value) {
+    const parsed = parseJsonObject(value);
+    if (parsed?.code !== 'COMFYUI_QUERY_RETRY_PENDING') return null;
+    const retryCount = Number(parsed.retryCount);
+    const retryAtMs = Date.parse(parsed.retryAt);
+    if (!Number.isInteger(retryCount) || retryCount < 1) return null;
+    return {
+      retryCount,
+      retryAtMs: Number.isFinite(retryAtMs) ? retryAtMs : Date.now(),
+    };
+  }
+
+  function requeueTransientComfyQueryFailure(row, error) {
+    const count = queryRetryCount.get(row.id) || 0;
+    if (count >= queryRetryLimit) return false;
+    const retryCount = count + 1;
+    const retryAt = new Date(Date.now() + queryRetryDelayMs).toISOString();
+    queryRetryCount.set(row.id, retryCount);
+    setState(row, 'running', 10, `ComfyUI 状态查询暂时失败，正在重试（${retryCount}/${queryRetryLimit}）`, {
+      error_msg: queryRetryMarker(retryCount, retryAt),
+      completed_at: null,
+    });
+    log.warn('Transient ComfyUI query failure, retrying', {
+      videoGenerationId: row.id,
+      retry: retryCount,
+      code: error?.code || null,
+    });
+    enqueueOperation(row.id, 'query', queryRetryDelayMs);
+    return true;
+  }
+
+  async function releaseProviderLocalLease(row) {
+    try {
+      const context = contextFor(row);
+      const provider = providerFor(context);
+      if (typeof provider.releaseLocalLease === 'function') {
+        await provider.releaseLocalLease(context);
+      }
+    } catch (error) {
+      log.warn('Failed to release local video provider lease', {
+        videoGenerationId: row.id,
+        error: error.message,
+      });
+    }
   }
 
   function isTransientComfyExecutionError(row, error) {
@@ -559,6 +630,7 @@ function inputFor(row) {
       log.info('Ignored late video provider result', { videoGenerationId: row.id, stage });
       return;
     }
+    queryRetryCount.delete(latest.id);
     if (!result || typeof result !== 'object') {
       persistFailure(latest, new Error('VIDEO_PROVIDER_RESULT_INVALID'), stage, 'failed', 'VIDEO_PROVIDER_RESULT_INVALID');
       return;
@@ -641,15 +713,32 @@ function inputFor(row) {
       await applyProviderResult(row, result, stage);
     } catch (error) {
       const latest = row && rawRow(row.id);
-      if (latest && latest.status !== 'cancelled' && stage === 'submit' && isGpuBusyError(error)) {
-        setState(latest, 'queued', 1, 'ComfyUI GPU 正忙，等待上一个视频任务完成后重试', {
+      const gpuBusy = latest && isGpuBusyError(error);
+      const transientQueryError = latest && isTransientComfyQueryError(latest, error, stage);
+      if (latest && latest.status !== 'cancelled' && stage === 'submit' && gpuBusy) {
+        setState(latest, 'waiting', 0, '本地排队中，等待 ComfyUI GPU 空闲后提交', {
           error_msg: null,
           completed_at: null,
         });
         enqueueOperation(latest.id, 'submit', gpuBusyRetryDelayMs);
+      } else if (latest && latest.status !== 'cancelled' && gpuBusy
+        && ['query', 'recover'].includes(stage)) {
+        const waitingStatus = latest.status === 'queued' ? 'queued' : 'running';
+        const pendingQueryRetry = parseQueryRetryMarker(latest.error_msg);
+        setState(latest, waitingStatus, waitingStatus === 'queued' ? 5 : 10,
+          '本地排队中，等待查询已有的 ComfyUI 任务', {
+            error_msg: pendingQueryRetry ? latest.error_msg : null,
+            completed_at: null,
+          });
+        enqueueOperation(latest.id, stage, gpuBusyRetryDelayMs);
+      } else if (latest && latest.status !== 'cancelled' && transientQueryError
+        && requeueTransientComfyQueryFailure(latest, error)) {
+        // The upstream task still exists; keep its local lease and retry only the status query.
       } else if (latest && latest.status !== 'cancelled' && requeueTransientComfyFailure(latest, error, stage)) {
         // Delayed fresh submission scheduled above.
       } else if (latest && latest.status !== 'cancelled') {
+        if (transientQueryError) await releaseProviderLocalLease(latest);
+        queryRetryCount.delete(latest.id);
         transientRetryCount.delete(latest.id);
         persistFailure(latest, error, stage);
       }
@@ -663,7 +752,8 @@ function inputFor(row) {
    * H3 候选生成草稿门禁(spec §11.4):候选接口不得调用 H3 技能、不得重新编译,
    * 只消费草稿——重算指纹、读取 final_compiled_prompt、验证哈希后原样提交。
    * 错误语义:H3_DRAFT_REQUIRED / DRAFT_NOT_FOUND / H3_DRAFT_STORYBOARD_MISMATCH → 400;
-   * H3_DRAFT_CONFIG_MISMATCH / H3_DRAFT_STALE / H3_DRAFT_INVALID / H3_DRAFT_HASH_MISMATCH → 409。
+   * H3_DRAFT_CONFIG_MISMATCH / H3_DRAFT_WORKFLOW_MISMATCH / H3_DRAFT_STALE /
+   * H3_DRAFT_INVALID / H3_DRAFT_HASH_MISMATCH → 409。
    */
   function requireH3PromptDraft(input, resolved, storyboardId) {
     const draftId = input.h3_prompt_draft_id ?? input.h3PromptDraftId;
@@ -694,6 +784,24 @@ function inputFor(row) {
         { draft_video_config_id: draft.video_config_id ?? null, video_config_id: resolved.config.id },
       );
     }
+    const explicitWorkflowId = String(input.workflow_id ?? input.workflowId ?? '').trim();
+    const requestedWorkflowId = explicitWorkflowId || String(resolved.model || '').trim();
+    const draftWorkflowId = String(draft.workflow_id ?? '').trim();
+    const legacyDraftCannotRepresentSwitch = explicitWorkflowId
+      && !draftWorkflowId
+      && requestedWorkflowId !== String(resolved.model || '').trim();
+    if ((draftWorkflowId && requestedWorkflowId && draftWorkflowId !== requestedWorkflowId)
+      || legacyDraftCannotRepresentSwitch) {
+      throw new VideoLifecycleError(
+        'H3_DRAFT_WORKFLOW_MISMATCH',
+        '提示词草稿与当前 H3 加速开关不一致,请重新生成 H3 提示词',
+        409,
+        {
+          draft_workflow_id: draftWorkflowId || null,
+          workflow_id: requestedWorkflowId || null,
+        },
+      );
+    }
     // 时长一致性门禁:草稿按分镜行时长编译并固化在 generation_params.durationSeconds,
     // 候选请求的时长若被面板改动(1-60),提交的视频会与提示词节奏矛盾 → 409。
     // request duration 取值口径与 createVideoGeneration 一致(input.duration,可能由
@@ -720,10 +828,13 @@ function inputFor(row) {
         { reasons: freshness.reasons },
       );
     }
-    if (draft.status !== 'valid') {
+    const reviewReady = draft.status === 'needs_review' && Number(draft.semantic_review_confirmed) === 1;
+    if (draft.status !== 'valid' && !reviewReady) {
       throw new VideoLifecycleError(
-        'H3_DRAFT_INVALID',
-        '提示词草稿未通过结构校验,请修正文本后再生成',
+        draft.status === 'needs_review' ? 'H3_SEMANTIC_REVIEW_REQUIRED' : 'H3_DRAFT_INVALID',
+        draft.status === 'needs_review'
+          ? '提示词草稿的音频语义需要人工确认后才能生成'
+          : '提示词草稿未通过结构校验,请修正文本后再生成',
         409,
         { validation_errors: parseJsonObject(draft.validation_errors) },
       );
@@ -736,8 +847,39 @@ function inputFor(row) {
       );
     }
     // 沿用草稿的 prompt_format / skill 列写 video_generations(现有列继续写)。
+    const referenceSnapshot = parseJsonObject(draft.reference_snapshot) || {};
+    const referenceAudios = Array.isArray(referenceSnapshot.audio) ? referenceSnapshot.audio : [];
+    const labels = [...String(draft.final_compiled_prompt || '').matchAll(/<Audio\s+(\d+)>/gi)]
+      .map((match) => Number(match[1]));
+    const uniqueLabels = [...new Set(labels)].sort((a, b) => a - b);
+    const expectedLabels = referenceAudios.map((_, index) => index + 1);
+    if (JSON.stringify(uniqueLabels) !== JSON.stringify(expectedLabels)) {
+      throw new VideoLifecycleError(
+        'H3_REFERENCE_SEMANTICS_INVALID',
+        'H3 提示词中的音频标签与草稿参考音频快照不一致',
+        409,
+        { expected: expectedLabels, actual: uniqueLabels },
+      );
+    }
+    const suppliedAudios = Array.isArray(input.reference_audios) ? input.reference_audios : [];
+    if (suppliedAudios.length) {
+      const urlOf = (item) => String(item?.audio_url ?? item?.audioFile ?? item?.local_path ?? item ?? '').trim();
+      if (JSON.stringify(suppliedAudios.map(urlOf)) !== JSON.stringify(referenceAudios.map(urlOf))) {
+        throw new VideoLifecycleError(
+          'H3_REFERENCE_SEMANTICS_INVALID',
+          '提交的参考音频顺序与已验证草稿不一致',
+          409,
+        );
+      }
+    }
     return {
       prompt: String(draft.final_compiled_prompt ?? ''),
+      referenceAudios: referenceAudios.map((item) => ({
+        ...item,
+        audioFile: item.audioFile ?? item.audio_url ?? item.local_path,
+        characterName: item.characterName ?? item.entity_name ?? '',
+      })),
+      audioEnabled: draftParams?.audioEnabled !== false,
       compiled: {
         sourcePrompt: draft.source_prompt ?? null,
         compiledPrompt: draft.final_compiled_prompt,
@@ -751,7 +893,9 @@ function inputFor(row) {
   async function createVideoGeneration(input = {}) {
     const resolved = resolveDefaultVideoConfig(db, { requestedModel: input.model });
     const explicitWorkflowId = input.workflow_id || input.workflowId;
-    if (workflowRegistry && explicitWorkflowId && String(explicitWorkflowId).trim() !== String(resolved.model).trim()) {
+    if (workflowRegistry && explicitWorkflowId
+      && String(explicitWorkflowId).trim() !== String(resolved.model).trim()
+      && !isSwitchableH3WorkflowPair(resolved.model, explicitWorkflowId)) {
       const error = new Error('VIDEO_WORKFLOW_NOT_ALLOWED');
       error.code = 'VIDEO_WORKFLOW_NOT_ALLOWED';
       throw error;
@@ -785,11 +929,18 @@ function inputFor(row) {
     const sourcePrompt = appendStyle(input.prompt, input.style);
     let prompt = sourcePrompt;
     let compiled = null;
+    let validatedReferenceAudios = Array.isArray(input.reference_audios) ? input.reference_audios : [];
+    let validatedAudioEnabled = settings.audio_enabled !== false;
     if (isH3VideoConfig(resolved)) {
+      if (!Number.isFinite(storyboardId)) {
+        throw new VideoLifecycleError('H3_STORYBOARD_REQUIRED', 'H3 生成必须绑定项目分镜', 400);
+      }
       // H3 分支不再内部编译:消费草稿(spec §11.4)。非 H3 配置完全走旧路径(忽略 h3_prompt_draft_id)。
       const gate = requireH3PromptDraft(input, resolved, storyboardId);
       prompt = gate.prompt;
       compiled = gate.compiled;
+      validatedReferenceAudios = gate.referenceAudios;
+      validatedAudioEnabled = gate.audioEnabled;
     }
     let planResult = null;
     if (workflow?.adapter) {
@@ -825,6 +976,7 @@ function inputFor(row) {
       generationMode: planResult?.plan.mode || input.generation_mode || 'single_reference',
       planHash: planResult?.planHash || null,
     });
+    if (isH3VideoConfig(resolved)) snapshot.settings.audio_enabled = validatedAudioEnabled;
     const snapshotSettings = snapshot.settings || {};
     let createdId;
 
@@ -877,7 +1029,7 @@ function inputFor(row) {
         values.push(provenance ? JSON.stringify(provenance) : null);
       }
       if (tableHasColumn('video_generations', 'reference_audios')) {
-        const refAudios = Array.isArray(input.reference_audios) ? input.reference_audios : [];
+        const refAudios = validatedReferenceAudios;
         columns.push('reference_audios');
         values.push(refAudios.length ? JSON.stringify(refAudios) : null);
       }
@@ -916,6 +1068,7 @@ function inputFor(row) {
       `UPDATE video_generations
        SET status = 'cancelled', error_msg = ?, completed_at = ?, updated_at = ? WHERE id = ?`
     ).run(serialized, now, now, row.id);
+    queryRetryCount.delete(row.id);
     if (row.task_id) {
       taskService.updateTaskError(db, row.task_id, serialized);
       db.prepare('UPDATE async_tasks SET progress = 100 WHERE id = ?').run(row.task_id);
@@ -941,6 +1094,7 @@ function inputFor(row) {
     if (!RETRYABLE_STATUSES.has(row.status)) {
       throw new VideoLifecycleError('VIDEO_NOT_RETRYABLE', '仅失败或中断的视频任务可以重试', 409, { status: row.status });
     }
+    queryRetryCount.delete(row.id);
     snapshotFor(row);
     const task = taskService.createTask(db, log, 'video_generation', String(row.drama_id || ''));
     const status = row.provider_task_id ? 'queued' : 'waiting';
@@ -983,8 +1137,16 @@ function inputFor(row) {
     ).all();
     for (const row of rows) {
       if (row.provider_task_id && String(row.provider_task_id).trim()) {
-        updateAsyncTask(row, 'queued', 1, '正在恢复原视频任务');
-        enqueueOperation(row.id, 'recover');
+        const marker = parseQueryRetryMarker(row.error_msg);
+        if (marker) {
+          queryRetryCount.set(row.id, marker.retryCount);
+          updateAsyncTask(row, 'running', 10,
+            `正在恢复 ComfyUI 状态查询（已重试 ${marker.retryCount} 次）`);
+          enqueueOperation(row.id, 'recover', Math.max(0, marker.retryAtMs - Date.now()));
+        } else {
+          updateAsyncTask(row, 'queued', 1, '正在恢复原视频任务');
+          enqueueOperation(row.id, 'recover');
+        }
       } else if (row.status === 'waiting') {
         updateAsyncTask(row, 'waiting', 0, '等待恢复视频生成');
         enqueueOperation(row.id, 'submit');
@@ -1015,6 +1177,7 @@ function inputFor(row) {
       ? selectWorkflow(workflowRegistry, workflowId, { allowExperimental: false })
       : null;
     const capabilities = workflow?.capabilities ? { ...workflow.capabilities } : {};
+    capabilities.requiresStoryboardH3Draft = isH3VideoConfig(resolved);
     if (workflow?.adapter) {
       const adapter = require('../director/workflowRegistry').getWorkflowAdapter(workflow);
       const template = readWorkflowTemplate(workflow.workflowPath);
@@ -1026,6 +1189,7 @@ function inputFor(row) {
       model: resolved.model,
       workflow: workflow ? {
         id: workflow.id,
+        label: workflow.label || workflow.id,
         status: workflow.status,
         variant: workflow.variant,
         sha256: workflow.workflowSha256,
@@ -1056,4 +1220,5 @@ module.exports = {
   normalizeProviderStatus,
   structuredError,
   isH3VideoConfig,
+  isSwitchableH3WorkflowPair,
 };

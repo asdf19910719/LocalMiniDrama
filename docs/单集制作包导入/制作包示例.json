@@ -7,10 +7,34 @@
     "generated_at": "2026-09-03T10:00:00+08:00"
   },
   "generation_profile": {
+    "contract_profile": "complete_av_v1",
     "video_mode": "multi_reference_r2v",
     "uses_first_last_frame": false,
     "max_reference_images": 9,
     "reference_order": ["scene", "character_variant", "prop"]
+  },
+  "audio_plan": {
+    "version": 1,
+    "bgm": {
+      "mode": "per_segment",
+      "planning": "external",
+      "source_type": "generated",
+      "prompt": "克制、温暖而略带悬念的雨夜钢琴与柔和弦乐母题,低动态,主动给对白让位",
+      "continuity_key": "rain_night_warmth",
+      "volume_db": -22,
+      "ducking_db": -8,
+      "fade_in_ms": 800,
+      "fade_out_ms": 1200,
+      "crossfade_ms": 500
+    },
+    "mastering": {
+      "target_lufs": -14,
+      "true_peak_db": -1
+    },
+    "speech": {
+      "dialogue_owner": "h3_native",
+      "narration_owner": "post_tts"
+    }
   },
   "episode": {
     "source_key": "ep_rain_night_store_01",
@@ -26,6 +50,9 @@
       "source_key": "char_lin_wan",
       "name": "林晚",
       "description": "24 岁的便利店夜班店员,性格温和但保持警觉。",
+      "appearance": "24 岁中国女性,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,神情温和而警觉",
+      "image_prompt": "24 岁中国女性林晚的人物基础参考图,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,中性站姿,正面全身与面部细节清晰,纯色背景,写实电影风格,单人",
+      "negative_prompt": "多人,年龄错误,发色错误,脸部变形,肢体畸形,多余手指,模糊,文字,水印",
       "voice_profile": "青年女声,语速平缓,略带倦意",
       "variants": [
         {
@@ -55,6 +82,7 @@
       "name": "便利店门口",
       "state": "雨夜",
       "description": "玻璃门外的雨幕,门内地砖有被踩湿的水痕。",
+      "atmosphere": "湿冷、安静而略带戒备感,室内冷白光与门外雨幕形成反差",
       "image_prompt": "深夜便利店入口空镜,玻璃门上有雨痕,门外雨幕连片,地砖反光,冷白灯光,写实风格,无人物",
       "negative_prompt": "人物,文字水印,卡通风格"
     },
@@ -63,6 +91,7 @@
       "name": "便利店店内",
       "state": "深夜营业中",
       "description": "货架整齐,冷柜灯光亮起,收银台柜台整洁。",
+      "atmosphere": "封闭安静的深夜营业空间,冷白灯光中逐渐出现微弱暖意",
       "image_prompt": "深夜便利店内景空镜,整齐货架,亮着灯的冷柜,收银柜台,冷白荧光灯氛围,写实风格,无人物",
       "negative_prompt": "人物,文字水印,卡通风格"
     }
@@ -111,14 +140,27 @@
         }
       ],
       "narration": "凌晨两点,这场雨丝毫没有停的意思。",
+      "is_primary": true,
       "audio_description": {
-        "ambient": "持续雨声,冷柜低鸣",
-        "foley": "自动门滑动声,脚步踩湿地垫声",
-        "voice": "林晚轻声说欢迎光临",
-        "silence_requirement": "无背景音乐"
+        "ambience": ["持续雨声", "冷柜低鸣"],
+        "sound_effects": ["自动门滑动声", "脚步踩湿地垫声"],
+        "dialogue_treatment": "林晚的近距离轻声对白保持清晰,环境声在对白时自然退后",
+        "silence": false,
+        "music_cue": {
+          "mode": "inherit",
+          "intensity": 0.2,
+          "start": "自动门打开后轻柔淡入",
+          "end": "对白开始前降低到极弱"
+        }
       },
       "transition": {
-        "to_next": "硬切"
+        "type": "cut",
+        "duration": 0,
+        "audio_bridge": {
+          "mode": "carry",
+          "duration_ms": 300,
+          "description": "雨声跨切延续到下一镜"
+        }
       },
       "image_prompt": "深夜便利店,自动门打开,门口站着浑身湿透的客人,柜台后的女店员抬头看向来人,雨夜冷白灯光,电影感构图",
       "universal_segment_text": "@图片1 是雨夜的便利店门口空镜,@图片2 是柜台后的林晚,客人推门进店时她抬起头;@图片3 的热咖啡正放在柜台上冒着热气。",
@@ -157,8 +199,30 @@
           "performance": "语气小心,带着一点不好意思"
         }
       ],
-      "audio_description": "雨声减弱为背景底噪,突出杯底摩擦柜台的一声轻响和林晚的低语",
-      "transition": "淡出到黑场",
+      "is_primary": true,
+      "audio_description": {
+        "ambience": ["门外雨声减弱为背景底噪", "冷柜低鸣"],
+        "sound_effects": ["杯底摩擦柜台的轻响", "客人接杯时纸杯轻微挤压声"],
+        "dialogue_treatment": "林晚低语贴近、自然,杯底声不得盖过台词",
+        "silence": false,
+        "music_cue": {
+          "mode": "override",
+          "prompt": "延续 rain_night_warmth 母题,稀疏钢琴加入一层温暖弦乐,在客人接杯时轻微抬升",
+          "intensity": 0.35,
+          "start": "承接上一镜的极弱钢琴",
+          "end": "随画面淡出一起淡出"
+        }
+      },
+      "transition": {
+        "type": "fade",
+        "duration": 0.4,
+        "visual_description": "淡出到黑场",
+        "audio_bridge": {
+          "mode": "fade",
+          "duration_ms": 400,
+          "description": "雨声与分段 BGM 同步淡出"
+        }
+      },
       "image_prompt": "便利店柜台近景,女店员双手递出冒热气的纸杯咖啡,客人伸手接过,背景货架虚化,冷白灯光,电影感",
       "universal_segment_text": "@图片1 是深夜店内空镜,@图片2 是淋湿状态的林晚,她把 @图片3 的热咖啡轻轻推向客人。",
       "notes": "本镜使用林晚的“雨夜淋湿”状态,演示同一人物不同状态的精确关联。"

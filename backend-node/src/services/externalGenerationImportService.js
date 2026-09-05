@@ -32,23 +32,38 @@ function autoSelectEnabled(db) {
   return settingsService.getGlobalSetting(db, 'chatgpt_web_auto_select', true) !== false;
 }
 
-// 首张候选自动挂载定稿;后续候选只追加,不抢占主图;不可归属(开关关/目标缺失/
-// 任务已终态)回退 needs_review 手动流。
+function keepTaskGenerating(db, taskId, imageGenerationId) {
+  let task = tasksService.getTask(db, taskId);
+  if (!task || task.status === 'needs_review') return;
+  if (task.status === 'preparing') task = tasksService.transitionTask(db, task.id, 'submitted');
+  if (task.status === 'submitted') {
+    tasksService.transitionTask(db, task.id, 'generating', { imageGenerationId });
+  } else if (task.status === 'generating') {
+    tasksService.transitionTask(db, task.id, 'generating', { imageGenerationId });
+  }
+}
+
+// 首张候选自动挂载定稿;后续候选只追加,不抢占主图。任务保持 generating,
+// 直到扩展确认候选集合已稳定并发送 COMPLETED,避免队列过早启动下一条任务。
 function finalizeImportedResult(db, { attempt, resultId, imageGenerationId }) {
   const taskId = attempt.image_generation_task_id;
   if (!taskId) return;
   const task = db.prepare('SELECT * FROM image_generation_tasks WHERE id=?').get(taskId);
   if (!task || !['preparing', 'submitted', 'generating', 'needs_review'].includes(task.status)) return;
-  const prior = db.prepare(`SELECT COUNT(*) AS n FROM external_generation_results r
+  const selected = db.prepare(`SELECT r.image_generation_id FROM external_generation_results r
     JOIN external_generation_attempts a ON a.id = r.attempt_id
-    WHERE a.job_id = ? AND r.id != ? AND r.status IN ('imported','bound')`).get(attempt.job_id, resultId).n;
-  if (!autoSelectEnabled(db) || prior > 0) { markUnifiedTaskNeedsReview(db, attempt.id); return; }
-  try { targets.resolveTarget(db, task); } catch (_) { markUnifiedTaskNeedsReview(db, attempt.id); return; }
-  if (task.status === 'preparing') tasksService.transitionTask(db, task.id, 'submitted');
+    WHERE a.job_id = ? AND r.id != ? AND r.selected=1
+    ORDER BY r.created_at LIMIT 1`).get(attempt.job_id, resultId);
+  if (selected?.image_generation_id) {
+    keepTaskGenerating(db, task.id, selected.image_generation_id);
+    return;
+  }
+  if (!autoSelectEnabled(db)) { keepTaskGenerating(db, task.id, null); return; }
+  try { targets.resolveTarget(db, task); } catch (_) { keepTaskGenerating(db, task.id, null); return; }
   targets.bindResult(db, task, imageGenerationId);
   db.prepare("UPDATE external_generation_results SET selected=1, status='bound', updated_at=? WHERE id=?")
     .run(new Date().toISOString(), resultId);
-  tasksService.transitionTask(db, task.id, 'completed', { imageGenerationId });
+  keepTaskGenerating(db, task.id, imageGenerationId);
 }
 
 async function importExternalResult(db, input) {

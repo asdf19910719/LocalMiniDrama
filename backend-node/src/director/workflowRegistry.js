@@ -303,6 +303,7 @@ function loadRegistry(registryPath, options = {}) {
       adapterVersion: entry.adapterVersion || null,
       variant: entry.variant || null,
       capabilities: entry.capabilities ? cloneJson(entry.capabilities) : null,
+      acceleration: entry.acceleration ? cloneJson(entry.acceleration) : null,
       inputSchemaVersion: entry.inputSchemaVersion || 1,
       provenance: cloneJson(entry.provenance),
       runtimeLock: cloneJson(entry.runtimeLock),

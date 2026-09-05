@@ -38,14 +38,27 @@ describe('Director postproduction pipeline', () => {
     assert.deepEqual(plan.audioInputs, ['music.mp3', 'dialogue.mp3']);
     assert.ok(plan.args.includes('music.mp3'));
     assert.ok(plan.args.includes('dialogue.mp3'));
-    assert.match(plan.command, /amix=inputs=2/);
+    assert.match(plan.command, /\[0:a\].*amix=inputs=3/);
     assert.equal(plan.ttsPath, 'dialogue.mp3');
   });
 
   it('does not reference a missing base audio stream for video-only timelines', () => {
-    const plan = buildPostproductionPlan({ inputPath: 'video-only.mp4', outputPath: 'out.mp4', musicPath: 'music.mp3' });
+    const plan = buildPostproductionPlan({ inputPath: 'video-only.mp4', outputPath: 'out.mp4', musicPath: 'music.mp3', baseHasAudio: false });
     assert.doesNotMatch(plan.command, /\[0:a\]/);
-    assert.match(plan.command, /amix=inputs=1/);
+    assert.match(plan.command, /\[1:a\]anull\[aout\]/);
+    assert.doesNotMatch(plan.command, /anullsrc/);
+  });
+
+  it('honors preserve, replace, and video-only audio policies', () => {
+    const preserve = buildPostproductionPlan({ inputPath: 'in.mp4', outputPath: 'preserve.mp4', musicPath: 'music.mp3', audioPolicy: 'preserve' });
+    assert.deepEqual(preserve.audioInputs, []);
+    assert.equal(preserve.requestedAudioInputs[0], 'music.mp3');
+    assert.equal(preserve.args.includes('music.mp3'), false);
+    const replace = buildPostproductionPlan({ inputPath: 'in.mp4', outputPath: 'replace.mp4', ttsPath: 'voice.mp3', audioPolicy: 'replace' });
+    assert.doesNotMatch(replace.command, /\[0:a\]/);
+    assert.match(replace.command, /\[1:a\]anull\[aout\]/);
+    const videoOnly = buildPostproductionPlan({ inputPath: 'in.mp4', outputPath: 'silent.mp4', audioPolicy: 'video_only' });
+    assert.ok(videoOnly.args.includes('-an'));
   });
 
   it('rejects a 720p claim when the probe does not match the requested output', () => {

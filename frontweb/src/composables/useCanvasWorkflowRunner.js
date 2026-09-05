@@ -58,7 +58,7 @@ export async function runVideoStep(drama, sb, genOpts) {
   const absoluteFirst = toAbsoluteMediaUrl(imgPath)
   const absoluteLast = last ? toAbsoluteMediaUrl(last) : undefined
   const prompt = resolveStoryboardVideoPrompt(sb)
-  const res = await videosAPI.create({
+  const res = await videosAPI.prepareAndCreate({
     drama_id: drama.id,
     storyboard_id: sb.id,
     prompt,

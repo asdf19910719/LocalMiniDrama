@@ -57,7 +57,7 @@ function checkImageGenerationEnvironment(db, input = {}) {
         targetType: input.targetType ?? input.target_type,
         targetId: input.targetId ?? input.target_id,
       });
-      const invalidReference = generation.references.find((reference) => !reference?.url || !/^https?:|^data:|^blob:/i.test(String(reference.url)));
+      const invalidReference = generation.references.find((reference) => !reference?.url || !/^(?:https?:|data:|blob:|\/(?:api|static)\/)/i.test(String(reference.url)));
       checks.push(invalidReference
         ? check('task_references', 'failed', 'REFERENCE_URL_INVALID', '任务参考图地址无效')
         : check('task_references', 'ok', null, `任务目标和 ${generation.references.length} 个参考图已解析`));

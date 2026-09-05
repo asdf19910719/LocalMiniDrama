@@ -33,8 +33,13 @@ function buildPostproductionPlan({
   upscale = null,
   fps = 24,
   audioPolicy = 'replace_or_mix',
+  baseHasAudio = true,
 } = {}) {
   if (!inputPath || !outputPath) throw new Error('Postproduction inputPath and outputPath are required');
+  const normalizedAudioPolicy = String(audioPolicy || 'replace_or_mix').toLowerCase();
+  if (!['mix', 'replace_or_mix', 'replace', 'preserve', 'video_only'].includes(normalizedAudioPolicy)) {
+    throw new Error(`Unsupported audio policy: ${audioPolicy}`);
+  }
   const output = {
     width: Number(upscale?.width || 864),
     height: Number(upscale?.height || 480),
@@ -61,18 +66,27 @@ function buildPostproductionPlan({
     ...(ttsPath ? [ttsPath] : []),
     ...(Array.isArray(audioPaths) ? audioPaths.filter(Boolean) : []),
   ];
-  const audioInputs = [...new Set(extraAudioPaths)];
+  const requestedAudioInputs = [...new Set(extraAudioPaths)];
+  const audioInputs = ['preserve', 'video_only'].includes(normalizedAudioPolicy) ? [] : requestedAudioInputs;
   const args = ['-y', '-i', inputPath];
   for (const audioPath of audioInputs) args.push('-i', audioPath);
 
   if (audioInputs.length) {
     const vf = videoFilter ? `[0:v]${videoFilter}[vout]` : '[0:v]null[vout]';
-    const audioInputsForMix = audioInputs.map((_, index) => `[${index + 1}:a]`).join('');
-    const audio = `${audioInputsForMix}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=2[aout]`;
+    const includeBaseAudio = normalizedAudioPolicy !== 'replace' && baseHasAudio;
+    const mixLabels = [
+      ...(includeBaseAudio ? ['[0:a]'] : []),
+      ...audioInputs.map((_, index) => `[${index + 1}:a]`),
+    ];
+    const audio = mixLabels.length === 1
+      ? `${mixLabels[0]}anull[aout]`
+      : `${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=longest:dropout_transition=2[aout]`;
     args.push('-filter_complex', `${vf};${audio}`, '-map', '[vout]', '-map', '[aout]');
   } else {
     if (videoFilter) args.push('-vf', videoFilter);
-    args.push('-map', '0:v', '-map', '0:a?');
+    args.push('-map', '0:v');
+    if (normalizedAudioPolicy === 'video_only') args.push('-an');
+    else args.push('-map', '0:a?');
   }
   args.push(
     '-r', String(output.fps),
@@ -90,11 +104,12 @@ function buildPostproductionPlan({
     inputPath,
     outputPath,
     output,
-    audioPolicy,
+    audioPolicy: normalizedAudioPolicy,
     subtitlePath,
     musicPath,
     ttsPath,
     audioInputs,
+    requestedAudioInputs,
     audioPaths: audioInputs,
     color: normalizedColor,
     upscale: upscale ? { mode: upscale.mode || 'ffmpeg-lanczos', width: output.width, height: output.height } : null,

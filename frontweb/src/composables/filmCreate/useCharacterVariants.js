@@ -1,22 +1,42 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { buildVariantPrimaryPatch } from '../../utils/characterVariantStudio.js'
 
 /**
  * 由「分镜已勾选角色 + 各自选择的人物状态」组装 links payload（纯函数，供测试与保存复用）。
  * @param {Array<{character_id: number|string, variant_id: number|string}>} selections - 按展示顺序
  * @param {number} [sortStart=1] - sort_order 起始值
- * @returns {Array<{character_id: number, variant_id: number, reference_role: string, sort_order: number, framing_note: null}>}
+ * @param {Array<object>} [existingLinks=[]] - 已持久化关联；相同角色保留 role/order/framing 元数据
+ * @returns {Array<{character_id: number, variant_id: number, reference_role: string|null, sort_order: number, framing_note: string|null}>}
  */
-export function buildVariantLinks(selections, sortStart = 1) {
+export function buildVariantLinks(selections, sortStart = 1, existingLinks = []) {
   const list = Array.isArray(selections) ? selections : []
   const start = Number.isFinite(Number(sortStart)) ? Number(sortStart) : 1
-  return list.map((s, i) => ({
-    character_id: Number(s?.character_id),
-    variant_id: Number(s?.variant_id),
-    reference_role: 'primary',
-    sort_order: start + i,
-    framing_note: null
-  }))
+  const existingByCharacter = new Map(
+    (Array.isArray(existingLinks) ? existingLinks : [])
+      .map((link) => [Number(link?.character_id), link])
+      .filter(([characterId]) => Number.isFinite(characterId))
+  )
+  const usedOrders = new Set()
+  let nextOrder = start
+  return list.map((s) => {
+    const characterId = Number(s?.character_id)
+    const existing = existingByCharacter.get(characterId)
+    let sortOrder = Number(existing?.sort_order)
+    if (!Number.isFinite(sortOrder) || usedOrders.has(sortOrder)) {
+      while (usedOrders.has(nextOrder)) nextOrder += 1
+      sortOrder = nextOrder
+      nextOrder += 1
+    }
+    usedOrders.add(sortOrder)
+    return {
+      character_id: characterId,
+      variant_id: Number(s?.variant_id),
+      reference_role: existing ? (existing.reference_role ?? null) : 'primary',
+      sort_order: sortOrder,
+      framing_note: existing ? (existing.framing_note ?? null) : null
+    }
+  })
 }
 
 /**
@@ -45,6 +65,7 @@ export function useCharacterVariants(deps) {
   /** 正在生成图片的状态 id（非 null 时禁用全部状态生图按钮，防并发重复生图） */
   const generatingVariantId = ref(null)
   const variantDefaultSettingId = ref(null)
+  const variantCandidateSettingId = ref(null)
 
   // ── 状态编辑弹窗 ──────────────────────────────────────
   const showVariantEditor = ref(false)
@@ -59,6 +80,8 @@ export function useCharacterVariants(deps) {
   // ── 分镜 × 人物状态选择 ───────────────────────────────
   /** sbId -> { characterId -> variantId } 用户显式选择的分镜人物状态 */
   const sbVariantSelections = ref({})
+  /** sbId -> 后端持久化的有序关联；用于首屏缩略图和保存时保留导入元数据 */
+  const sbVariantLinksByStoryboardId = ref({})
   const sbVariantLinksSaving = ref(false)
 
   // ── 加载 ──────────────────────────────────────────────
@@ -97,6 +120,12 @@ export function useCharacterVariants(deps) {
   /** 模板读取某角色的状态列表（未加载时返回空数组，不触发请求） */
   function getVariantsForCharacter(characterId) {
     return variantsByCharacterId.value.get(Number(characterId)) || []
+  }
+
+  /** ChatGPT 异步任务完成后刷新所有已经进入过工作台的人物状态缓存。 */
+  async function refreshLoadedVariants() {
+    const characterIds = [...variantsByCharacterId.value.keys()]
+    await Promise.all(characterIds.map((characterId) => loadVariants(characterId, { force: true })))
   }
 
   /** 角色默认状态 id（is_default 优先，否则第一个），无状态返回 null */
@@ -238,7 +267,43 @@ export function useCharacterVariants(deps) {
     }
   }
 
+  /** 从状态自己的历史候选中切换当前图；基础人物图不参与候选。 */
+  async function selectVariantCandidate(variant, candidatePath) {
+    if (!variant?.id || variantCandidateSettingId.value != null) return
+    variantCandidateSettingId.value = variant.id
+    try {
+      const payload = buildVariantPrimaryPatch(variant, candidatePath)
+      const updated = await characterAPI.updateVariant(variant.id, payload)
+      await loadVariants(variant.character_id, { force: true })
+      const authoritative = updated?.id ? updated : { ...variant, ...payload }
+      const key = Number(variant.character_id)
+      const current = getVariantsForCharacter(key)
+      variantsByCharacterId.value.set(key, current.map((item) => Number(item.id) === Number(variant.id) ? authoritative : item))
+      notify.success('已设为当前状态图，旧图保留在候选历史')
+    } catch (e) {
+      notify.error(e?.message || '切换状态图失败')
+    } finally {
+      variantCandidateSettingId.value = null
+    }
+  }
+
   // ── 分镜人物状态选择 ──────────────────────────────────
+  function hydrateSbVariantLinks(storyboards, { replace = true } = {}) {
+    const nextSelections = replace ? {} : { ...sbVariantSelections.value }
+    const nextLinks = replace ? {} : { ...sbVariantLinksByStoryboardId.value }
+    for (const storyboard of Array.isArray(storyboards) ? storyboards : []) {
+      const sbId = Number(storyboard?.id)
+      if (!Number.isFinite(sbId)) continue
+      const links = Array.isArray(storyboard?.character_variant_links)
+        ? storyboard.character_variant_links.filter((link) => Number.isFinite(Number(link?.character_id)) && Number.isFinite(Number(link?.variant_id)))
+        : []
+      nextLinks[sbId] = links
+      nextSelections[sbId] = Object.fromEntries(links.map((link) => [Number(link.character_id), Number(link.variant_id)]))
+    }
+    sbVariantLinksByStoryboardId.value = nextLinks
+    sbVariantSelections.value = nextSelections
+  }
+
   /** 读取分镜中某角色的状态 id（用户未选时回落到默认状态） */
   function getSbVariantId(sbId, characterId) {
     const explicit = sbVariantSelections.value?.[sbId]?.[Number(characterId)]
@@ -249,6 +314,28 @@ export function useCharacterVariants(deps) {
   function setSbVariantId(sbId, characterId, variantId) {
     const cur = sbVariantSelections.value[sbId] || {}
     sbVariantSelections.value = { ...sbVariantSelections.value, [sbId]: { ...cur, [Number(characterId)]: variantId } }
+  }
+
+  function getSbSelectedVariant(sbId, characterId) {
+    const characterKey = Number(characterId)
+    const variantId = Number(getSbVariantId(sbId, characterKey))
+    if (!Number.isFinite(variantId)) return null
+    const loaded = getVariantsForCharacter(characterKey).find((variant) => Number(variant.id) === variantId)
+    if (loaded) return loaded
+    const hydrated = (sbVariantLinksByStoryboardId.value?.[sbId] || []).find(
+      (link) => Number(link.character_id) === characterKey && Number(link.variant_id) === variantId
+    )
+    if (!hydrated) return null
+    return {
+      id: variantId,
+      character_id: characterKey,
+      name: hydrated.variant_name ?? hydrated.name ?? '',
+      image_url: hydrated.image_url ?? null,
+      local_path: hydrated.local_path ?? null,
+      reference_role: hydrated.reference_role ?? null,
+      sort_order: hydrated.sort_order ?? null,
+      framing_note: hydrated.framing_note ?? null
+    }
   }
 
   /** 分镜勾选角色变化后调用：按需预加载各角色的状态列表（缓存命中自动跳过） */
@@ -288,7 +375,10 @@ export function useCharacterVariants(deps) {
     const selections = ids.map((cid) => ({ character_id: cid, variant_id: getSbVariantId(sbId, cid) }))
     sbVariantLinksSaving.value = true
     try {
-      await storyboardsAPI.updateVariantLinks(sbId, buildVariantLinks(selections))
+      const existing = sbVariantLinksByStoryboardId.value?.[sbId] || []
+      const links = buildVariantLinks(selections, 1, existing)
+      const saved = await storyboardsAPI.updateVariantLinks(sbId, links)
+      hydrateSbVariantLinks([{ id: sbId, character_variant_links: Array.isArray(saved) ? saved : links }], { replace: false })
     } catch (e) {
       notify.error(e?.message || '保存人物状态关联失败')
     } finally {
@@ -301,7 +391,9 @@ export function useCharacterVariants(deps) {
     variantsByCharacterId,
     generatingVariantId,
     variantDefaultSettingId,
+    variantCandidateSettingId,
     loadVariants,
+    refreshLoadedVariants,
     getVariantsForCharacter,
     defaultVariantIdFor,
     variantOptionLabel,
@@ -319,10 +411,14 @@ export function useCharacterVariants(deps) {
     removeVariant,
     generateVariantImage,
     setVariantDefault,
+    selectVariantCandidate,
     // 分镜状态选择
     sbVariantSelections,
+    sbVariantLinksByStoryboardId,
     sbVariantLinksSaving,
+    hydrateSbVariantLinks,
     getSbVariantId,
+    getSbSelectedVariant,
     setSbVariantId,
     ensureSbVariantsLoaded,
     onSbVariantChange,

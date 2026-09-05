@@ -451,6 +451,21 @@
         @check-environment="onEpisodeProgressEnvironmentCheck"
         @open-video="onEpisodeProgressOpenVideo"
       />
+      <AudioPlanPanel
+        :episode-id="currentEpisodeId"
+        :audio-plan="currentEpisode?.audio_plan"
+        :storyboards="storyboards"
+        @updated="onEpisodeAudioPlanUpdated"
+        @h3-stale="onEpisodeAudioPlanStale"
+        @edit-shot="(shot) => scrollToAnchor('sb-' + shot.id)"
+      />
+      <el-alert
+        v-if="episodeAudioH3Stale"
+        type="warning"
+        :closable="false"
+        title="音频策略或分镜声音已变化，现有 H3 草稿来源已过期；下次生成会自动重新编译。"
+        show-icon
+      />
 
       <section class="section card resource-panel">
         <div class="collapse-header" @click="resourcePanelCollapsed = !resourcePanelCollapsed">
@@ -554,30 +569,30 @@
                         <el-button size="small" type="primary" plain @click="openVariantEditor(char.id)">新增状态</el-button>
                       </div>
                       <div v-if="!getVariantsForCharacter(char.id).length" class="char-variants-empty">暂无状态，点击「新增状态」创建</div>
-                      <div v-for="v in getVariantsForCharacter(char.id)" :key="v.id" class="char-variant-item">
-                        <div
-                          class="char-variant-thumb"
-                          :class="{ 'char-variant-thumb--clickable': v.image_url || v.local_path }"
+                      <div class="char-variant-card-grid">
+                        <article
+                          v-for="v in getVariantsForCharacter(char.id)"
+                          :key="v.id"
+                          class="char-variant-card"
                           role="button"
                           tabindex="0"
-                          @click="(v.image_url || v.local_path) && openImagePreview(assetImageUrl(v))"
+                          @click="openVariantStudio(char, v)"
+                          @keydown.enter.prevent="openVariantStudio(char, v)"
                         >
-                          <img v-if="v.image_url || v.local_path" :src="assetImageUrl(v)" alt="" />
-                          <span v-else class="char-variant-thumb-empty">暂无图</span>
-                        </div>
-                        <div class="char-variant-info">
-                          <div class="char-variant-name">
-                            <span :title="v.appearance || v.name">{{ v.name || '未命名' }}</span>
-                            <el-tag v-if="v.is_default" size="small" type="success" effect="plain">默认</el-tag>
+                          <div class="char-variant-card-image">
+                            <img v-if="v.image_url || v.local_path" :src="assetImageUrl(v)" :alt="v.name || '人物状态'" />
+                            <span v-else class="char-variant-card-empty"><el-icon><Picture /></el-icon>暂无图</span>
+                            <el-tag v-if="v.is_default" size="small" type="success" effect="dark">默认</el-tag>
                           </div>
-                          <div v-if="v.appearance" class="char-variant-desc">{{ v.appearance }}</div>
-                        </div>
-                        <div class="char-variant-actions">
-                          <el-button size="small" :loading="generatingVariantId === v.id" :disabled="generatingVariantId != null && generatingVariantId !== v.id" @click="onGenerateVariantImage(v)">生图</el-button>
-                          <el-button size="small" @click="openVariantEditor(char.id, v)">编辑</el-button>
-                          <el-button size="small" :loading="variantDefaultSettingId === v.id" :disabled="!!v.is_default" @click="setVariantDefault(v)">设默认</el-button>
-                          <el-button size="small" type="danger" text @click="removeVariant(v)">删除</el-button>
-                        </div>
+                          <div class="char-variant-card-body">
+                            <strong :title="v.appearance || v.name">{{ v.name || '未命名' }}</strong>
+                            <span>{{ getVariantAffectedStoryboards(v.id).length }} 个分镜引用</span>
+                          </div>
+                          <div class="char-variant-card-actions" @click.stop>
+                            <el-button size="small" type="primary" plain @click="openVariantStudio(char, v)">打开工作台</el-button>
+                            <el-button size="small" type="danger" text @click="removeVariant(v)">删除</el-button>
+                          </div>
+                        </article>
                       </div>
                     </div>
                     <div v-if="getCharAffectedStoryboards(char.id).length" class="asset-storyboard-link">
@@ -1159,12 +1174,12 @@
                       v-for="c in getSbSelectedCharacters(sb.id)"
                       :key="c.id"
                       class="sb-thumb-item sb-thumb-avatar"
-                      :class="{ 'sb-thumb-clickable': hasAssetImage(c) }"
-                      :title="c.name"
+                      :class="{ 'sb-thumb-clickable': hasAssetImage(getSbSelectedVariant(sb.id, c.id)) }"
+                      :title="`${c.name || '角色'} · ${getSbSelectedVariant(sb.id, c.id)?.name || '未选择状态'}`"
                       role="button"
-                      @click="hasAssetImage(c) && openImagePreview(assetImageUrl(c))"
+                      @click="hasAssetImage(getSbSelectedVariant(sb.id, c.id)) && openImagePreview(assetImageUrl(getSbSelectedVariant(sb.id, c.id)))"
                     >
-                      <img v-if="hasAssetImage(c)" :src="assetImageUrl(c)" alt="" />
+                      <img v-if="hasAssetImage(getSbSelectedVariant(sb.id, c.id))" :src="assetImageUrl(getSbSelectedVariant(sb.id, c.id))" alt="" />
                       <span v-else class="sb-thumb-placeholder">{{ (c.name || '')[0] }}</span>
                     </div>
                     <el-dropdown trigger="click" @command="(cmd) => onSbAddCharacterCommand(sb.id, cmd)">
@@ -1663,6 +1678,16 @@
             <div class="video-option-row">
               <el-switch v-model="videoSubtitle" />
               <span v-if="videoSubtitle" class="video-option-hint">开启后，合成整集时会检测解说旁白：若有文案则自动生成 SRT、按分镜时长合成旁白语音（过长加速 / 过短补静音）、与成片对齐后烧录字幕并混音。</span>
+            </div>
+          </el-form-item>
+          <el-form-item label="云端超分">
+            <div class="video-option-row video-upscale-option">
+              <el-switch v-model="videoUpscale" />
+              <el-select v-if="videoUpscale" v-model="videoUpscaleMethod" style="width: 190px">
+                <el-option label="FlashVSR（推荐/较快）" value="flash" />
+                <el-option label="SeedVR2（更慢/偏质量）" value="seed" />
+              </el-select>
+              <span v-if="videoUpscale" class="video-option-hint">在镜头合并后、字幕和水印前执行 2× 超分：1312×736 → 2624×1472。云端关机时会保留基础视频并等待恢复。</span>
             </div>
           </el-form-item>
           <el-form-item label="对白烧录">
@@ -2713,6 +2738,28 @@
     <el-dialog v-model="showAiConfigDialog" title="AI 配置" width="90%" destroy-on-close class="ai-config-dialog">
       <AIConfigContent v-if="showAiConfigDialog" />
     </el-dialog>
+    <CharacterVariantStudio
+      :visible="variantStudioVisible"
+      :character="variantStudioCharacter"
+      :variants="variantStudioVariants"
+      :active-variant-id="variantStudioActiveId"
+      :storyboards="storyboards"
+      :default-channel="imageGenerationDefaultChannel"
+      :generating-variant-id="generatingVariantId"
+      :default-setting-id="variantDefaultSettingId"
+      :candidate-setting-id="variantCandidateSettingId"
+      :regenerating="variantStudioRegenerating"
+      @close="variantStudioVisible = false"
+      @select-variant="variantStudioActiveId = $event"
+      @generate="onGenerateVariantImage"
+      @edit="openVariantFromStudioEdit"
+      @set-default="setVariantDefault"
+      @choose-candidate="onVariantStudioChooseCandidate"
+      @preview="openImagePreview"
+      @storyboard="scrollToStoryboard"
+      @regenerate="onVariantStudioRegenerate"
+      @select-channel="onSelectImageChannel"
+    />
     <ImageGenerationDrawer
       :visible="imageGenerationDrawerVisible"
       :task="imageGenerationTask"
@@ -2777,8 +2824,10 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import CharacterVariantStudio from '@/components/CharacterVariantStudio.vue'
 import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
+import AudioPlanPanel from '@/components/episode/AudioPlanPanel.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -2796,7 +2845,9 @@ import { useCharacterVariants } from '@/composables/filmCreate/useCharacterVaria
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
+import { findVariantAffectedStoryboards } from '@/utils/characterVariantStudio'
 import { resolveSbMainImageRecord, resolveSbVideoRecord, videoCandidateLabel } from '@/utils/storyboardMedia'
+import { refreshSelectedStoryboardVideo } from '@/utils/directorPersistence'
 
 const route = useRoute()
 const router = useRouter()
@@ -2832,7 +2883,7 @@ watch(imageGenerationSettledTick, () => {
   if (settledRefreshTimer) clearTimeout(settledRefreshTimer)
   settledRefreshTimer = setTimeout(() => {
     settledRefreshTimer = null
-    loadDrama().catch(() => {})
+    Promise.allSettled([loadDrama(), refreshLoadedVariants()])
   }, 1500)
 })
 
@@ -2947,6 +2998,8 @@ const videoMusic = ref('')
 const videoSfx = ref('')
 const videoQuality = ref('high')
 const videoSubtitle = ref(false)
+const videoUpscale = ref(false)
+const videoUpscaleMethod = ref('flash')
 /** 合成整集时把各镜对白 TTS（audio_local_path）按分镜时长对齐并混入成片 */
 const videoBurnDialogue = ref(false)
 const videoWatermark = ref(false)
@@ -2960,6 +3013,15 @@ const props = computed(() => store.props)
 const storyboards = computed(() => store.storyboards)
 const currentEpisode = computed(() => store.currentEpisode)
 const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
+const episodeAudioH3Stale = ref(false)
+function onEpisodeAudioPlanUpdated(payload) {
+  if (payload?.episode && store.currentEpisode) Object.assign(store.currentEpisode, payload.episode)
+  if (Array.isArray(payload?.storyboards) && store.currentEpisode) store.currentEpisode.storyboards = payload.storyboards
+}
+function onEpisodeAudioPlanStale() {
+  episodeAudioH3Stale.value = true
+  ElMessage.warning('音频策略已变化；下次生成视频时会重新准备 H3 提示词草稿')
+}
 const videoProgress = computed(() => store.videoProgress)
 const videoStatus = computed(() => store.videoStatus)
 
@@ -3031,8 +3093,12 @@ async function onImageGenerationRequeue(task) {
 
 async function onImageGenerationSelect(result) {
   try {
+    const selectedTask = imageGenerationTask.value
     await selectImageGenerationResult(result)
-    await loadDrama()
+    await Promise.all([
+      loadDrama(),
+      selectedTask?.target_type === 'character_variant' ? refreshLoadedVariants() : Promise.resolve(),
+    ])
     closeImageGenerationDrawer()
   } catch (error) {
     ElMessage.error(error?.message || '结果绑定失败')
@@ -3189,18 +3255,50 @@ const {
 
 // ── Composable: Character Variants（人物状态） ──────────
 const {
-  generatingVariantId, variantDefaultSettingId,
-  loadVariants, getVariantsForCharacter, variantOptionLabel,
+  generatingVariantId, variantDefaultSettingId, variantCandidateSettingId,
+  loadVariants, refreshLoadedVariants, getVariantsForCharacter, variantOptionLabel,
   variantPanelCharacterId, toggleVariantPanel,
   showVariantEditor, variantEditorForm, variantEditorSaving,
-  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault,
-  sbVariantLinksSaving, getSbVariantId, ensureSbVariantsLoaded, onSbVariantChange,
+  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault, selectVariantCandidate,
+  sbVariantLinksSaving, hydrateSbVariantLinks, getSbVariantId, getSbSelectedVariant, ensureSbVariantsLoaded, onSbVariantChange,
 } = useCharacterVariants({
   characterAPI,
   storyboardsAPI,
   getSbCharacterIds,
   getCharacterName: (id) => (characters.value ?? []).find((c) => Number(c.id) === Number(id))?.name || ''
 })
+
+const variantStudioVisible = ref(false)
+const variantStudioCharacterId = ref(null)
+const variantStudioActiveId = ref(null)
+const variantStudioCharacter = computed(() => (characters.value || []).find((character) => Number(character.id) === Number(variantStudioCharacterId.value)) || null)
+const variantStudioVariants = computed(() => getVariantsForCharacter(variantStudioCharacterId.value))
+const variantStudioRegenerating = computed(() => regenSbImagesForAsset.has('variant-' + variantStudioActiveId.value))
+
+function getVariantAffectedStoryboards(variantId) {
+  return findVariantAffectedStoryboards(storyboards.value, variantId)
+}
+
+async function openVariantStudio(character, variant) {
+  if (!character?.id) return
+  await loadVariants(character.id)
+  variantStudioCharacterId.value = character.id
+  const list = getVariantsForCharacter(character.id)
+  variantStudioActiveId.value = variant?.id ?? list[0]?.id ?? null
+  variantStudioVisible.value = true
+}
+
+function openVariantFromStudioEdit(variant) {
+  openVariantEditor(variantStudioCharacterId.value, variant)
+}
+
+async function onVariantStudioChooseCandidate(variant, candidatePath) {
+  await selectVariantCandidate(variant, candidatePath)
+}
+
+function onVariantStudioRegenerate(variant, affected) {
+  return onRegenAffectedSbImages('variant-' + variant.id, affected)
+}
 
 async function onGenerateCharacters() {
   trackFilmCreateAction('generate_characters_click')
@@ -4826,6 +4924,7 @@ function syncStoryboardStateFromEpisode(ep) {
   sbLayoutDescription.value = nextLayoutDescription
   sbCreationMode.value = nextCreationMode
   sbUniversalSegmentText.value = nextUniversalSegment
+  hydrateSbVariantLinks(boards)
   // 预加载各分镜已勾选角色的状态列表（懒加载缓存，重复调用自动跳过）
   for (const sbId of Object.keys(nextCharIds)) {
     if ((nextCharIds[sbId] || []).length) ensureSbVariantsLoaded(Number(sbId))
@@ -6402,12 +6501,13 @@ function getSbUniversalOmniRefSlots(sb) {
     })
   }
   for (const c of getSbSelectedCharacters(sb.id)) {
-    if (hasAssetImage(c)) {
+    const variant = getSbSelectedVariant(sb.id, c.id)
+    if (hasAssetImage(variant)) {
       out.push({
         index: idx++,
         kind: 'character',
-        name: (c.name || '角色').toString(),
-        thumbUrl: assetImageUrl(c),
+        name: `${c.name || '角色'}·${variant.name || '状态'}`,
+        thumbUrl: assetImageUrl(variant),
       })
     }
   }
@@ -6438,7 +6538,8 @@ function collectSbOmniReferenceAbsoluteUrls(sb) {
   const scene = getSbSelectedScene(sb.id)
   if (scene && hasAssetImage(scene)) pushAbs(assetImageUrl(scene))
   for (const c of getSbSelectedCharacters(sb.id)) {
-    if (hasAssetImage(c)) pushAbs(assetImageUrl(c))
+    const variant = getSbSelectedVariant(sb.id, c.id)
+    if (hasAssetImage(variant)) pushAbs(assetImageUrl(variant))
   }
   for (const p of getSbSelectedProps(sb.id)) {
     if (hasAssetImage(p)) pushAbs(assetImageUrl(p))
@@ -6855,12 +6956,23 @@ function onVideoGenerationAnchorCreated(anchor) {
   videoGenerationSourceAnchor.value = anchor || null
 }
 
-async function onVideoGenerationSelected() {
+async function onVideoGenerationSelected(selection) {
   const storyboardId = videoGenerationTarget.value?.id
   if (!storyboardId) return
-  await loadSingleStoryboardMedia(storyboardId)
-  await loadDrama()
-  videoGenerationTarget.value = storyboards.value.find((item) => item.id === storyboardId) || videoGenerationTarget.value
+  const selectedVideoId = selection?.candidate?.video_generation_id
+    ?? selection?.candidate?.video_generation?.id
+    ?? null
+  videoGenerationTarget.value = await refreshSelectedStoryboardVideo({
+    storyboardId,
+    selectedVideoId,
+    currentTarget: videoGenerationTarget.value,
+    storyboards: store.currentEpisode?.storyboards || [],
+    selectStoryboardVideo: (id, videoId) => {
+      sbSelectedVideoId.value = { ...sbSelectedVideoId.value, [id]: videoId }
+    },
+    refreshStoryboardMedia: loadSingleStoryboardMedia,
+    fetchStoryboard: storyboardsAPI.get,
+  })
 }
 
 async function onGenerateSbVideo(sb) {
@@ -6952,7 +7064,7 @@ async function onGenerateSbVideo(sb) {
       referenceUrls = [...referenceUrls, vLast]
     }
     const preferClassicPrompt = universal && !universalOmniApi
-    const res = await videosAPI.create({
+    const res = await videosAPI.prepareAndCreate({
       drama_id: dramaId.value,
       storyboard_id: sb.id,
       prompt: buildSbVideoPromptForApi(sb, { preferClassicPrompt }),
@@ -7406,7 +7518,7 @@ async function startBatchVideoGeneration() {
           if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
             refUrls = [...refUrls, vLast]
           }
-          const res = await videosAPI.create({
+          const res = await videosAPI.prepareAndCreate({
             drama_id: dramaId.value,
             storyboard_id: sb.id,
             prompt: buildSbVideoPromptForApi(sb),
@@ -7466,6 +7578,11 @@ function getFinalizeMergeOptions() {
     burn_narration_subtitles: !!videoSubtitle.value,
     burn_dialogue_audio: !!videoBurnDialogue.value,
     watermark_text: videoWatermark.value ? String(videoWatermarkText.value || '').trim().slice(0, 200) : '',
+    upscale: {
+      enabled: !!videoUpscale.value,
+      method: videoUpscaleMethod.value,
+      failure_policy: 'wait_for_action',
+    },
   }
 }
 
@@ -8104,7 +8221,7 @@ async function runOneClickPipeline(textOnly = false) {
             if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
               refUrls = [...refUrls, vLast]
             }
-            const res = await videosAPI.create({
+            const res = await videosAPI.prepareAndCreate({
               drama_id: dramaIdVal,
               storyboard_id: sb.id,
               prompt: buildSbVideoPromptForApi(sb),
@@ -8446,7 +8563,7 @@ async function runRepairPipeline() {
             if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
               refUrls = [...refUrls, vLast]
             }
-            const res = await videosAPI.create({
+            const res = await videosAPI.prepareAndCreate({
               drama_id: dramaIdVal,
               storyboard_id: sb.id,
               prompt: buildSbVideoPromptForApi(sb),
@@ -11208,71 +11325,78 @@ html.light .char-variants-panel {
   color: var(--el-text-color-placeholder, #c0c4cc);
   padding: 4px 0;
 }
-.char-variant-item {
-  display: flex;
-  align-items: flex-start;
+.char-variant-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 8px;
-  padding: 6px 0;
-  border-top: 1px dashed var(--el-border-color-lighter, #e4e7ed);
 }
-.char-variant-thumb {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
+.char-variant-card {
+  min-width: 0;
+  padding: 6px;
   border: 1px solid var(--el-border-color-lighter, #e4e7ed);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 8px;
+  background: var(--el-bg-color, #fff);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.char-variant-card:hover,
+.char-variant-card:focus-visible {
+  border-color: var(--el-color-primary, #409eff);
+  box-shadow: 0 4px 14px rgba(64, 158, 255, .12);
+  outline: none;
+  transform: translateY(-1px);
+}
+.char-variant-card-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 6px;
   background: var(--el-fill-color, #f0f2f5);
 }
-.char-variant-thumb--clickable {
-  cursor: pointer;
-}
-.char-variant-thumb img {
+.char-variant-card-image img {
   width: 100%;
   height: 100%;
+  display: block;
   object-fit: cover;
 }
-.char-variant-thumb-empty {
-  font-size: 10px;
+.char-variant-card-image > .char-variant-card-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
   color: var(--el-text-color-placeholder, #c0c4cc);
+  font-size: 11px;
 }
-.char-variant-info {
-  flex: 1;
-  min-width: 0;
+.char-variant-card-image .el-tag {
+  position: absolute;
+  left: 7px;
+  top: 7px;
 }
-.char-variant-name {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  min-width: 0;
+.char-variant-card-body {
+  display: grid;
+  gap: 3px;
+  padding: 7px 1px 6px;
 }
-.char-variant-name span:first-child {
+.char-variant-card-body strong {
   overflow: hidden;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.char-variant-desc {
-  font-size: 11px;
+.char-variant-card-body span {
   color: var(--el-text-color-secondary, #909399);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 10px;
 }
-.char-variant-actions {
-  flex-shrink: 0;
+.char-variant-card-actions {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }
-.char-variant-actions .el-button + .el-button {
-  margin-left: 0;
-}
+.char-variant-card-actions .el-button + .el-button { margin-left: 0; }
 
 /* ── 分镜人物状态下拉 ───────────────────────────────── */
 .sb-variant-selects {
