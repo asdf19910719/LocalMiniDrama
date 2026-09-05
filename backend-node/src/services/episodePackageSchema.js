@@ -54,6 +54,10 @@ const packageJsonSchema = {
       type: 'object',
       additionalProperties: true,
       properties: {
+        contract_profile: {
+          enum: ['complete_av_v1'],
+          description: '可选。新生成包固定为 complete_av_v1,启用人物与声画字段完整性校验；旧包省略。',
+        },
         video_mode: { type: 'string', description: '视频模式,当前为 multi_reference_r2v。' },
         uses_first_last_frame: {
           type: 'boolean',
@@ -68,6 +72,77 @@ const packageJsonSchema = {
           type: 'array',
           items: { type: 'string' },
           description: '参考图顺序,固定为 ["scene", "character_variant", "prop"]。',
+        },
+      },
+    },
+    audio_plan: {
+      description: '可选仅为兼容旧包；新生成包应始终提供。剧集级声音策略；BGM 只允许关闭、整集后期音轨或逐段生成。',
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        version: { const: 1, description: '声音策略结构版本,当前固定为 1。' },
+        bgm: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            mode: {
+              enum: ['none', 'episode_track', 'per_segment'],
+              description: 'none=无 BGM；episode_track=后期整集音轨；per_segment=每段视频由 H3 按 cue 生成。',
+            },
+            prompt: {
+              type: ['string', 'null'],
+              minLength: 1,
+              description: '剧集统一音乐母题；per_segment 时约束所有分镜的音乐连续性。',
+            },
+            planning: {
+              enum: ['manual', 'ai', 'external'],
+              description: '音乐规划来源；外部 AI 已完成规划时使用 external。',
+            },
+            continuity_key: {
+              type: ['string', 'null'],
+              minLength: 1,
+              description: '跨分镜稳定的音乐连续性键。',
+            },
+            source_type: {
+              enum: ['none', 'local_file', 'media_library', 'generated'],
+              description: 'per_segment 通常使用 generated；episode_track 可使用 local_file 或 media_library。',
+            },
+            local_path: {
+              type: ['string', 'null'],
+              description: 'episode_track 本地音轨路径；跨机器制作包通常不应依赖此字段。',
+            },
+            volume_db: { type: 'number', description: 'BGM 基础增益,建议 -22。' },
+            ducking_db: { type: 'number', description: '对白/旁白出现时 BGM 压低量,建议 -8。' },
+            fade_in_ms: { type: 'number', minimum: 0, description: '整集音轨淡入毫秒数。' },
+            fade_out_ms: { type: 'number', minimum: 0, description: '整集音轨淡出毫秒数。' },
+            crossfade_ms: {
+              type: 'number',
+              minimum: 0,
+              description: 'per_segment 镜头边界音频交叉淡化毫秒数。',
+            },
+          },
+        },
+        mastering: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            target_lufs: { type: 'number', description: '最终成片目标综合响度,建议 -14 LUFS。' },
+            true_peak_db: { type: 'number', description: '最终成片真峰值上限,建议 -1 dBTP。' },
+          },
+        },
+        speech: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            dialogue_owner: {
+              enum: ['h3_native', 'post_tts', 'none'],
+              description: '对白唯一生产方,防止 H3 与后期 TTS 重复发声。',
+            },
+            narration_owner: {
+              enum: ['h3_native', 'post_tts', 'none'],
+              description: '旁白唯一生产方,防止 H3 与后期 TTS 重复发声。',
+            },
+          },
         },
       },
     },
@@ -109,7 +184,10 @@ const packageJsonSchema = {
           },
           name: { type: 'string', minLength: 1, description: '必填。人物名称。' },
           description: { type: 'string', minLength: 1, description: '必填。人物身份和剧情功能。' },
-          voice_profile: { type: 'string', description: '可选。声音特征,当前导入链路忽略。' },
+          appearance: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物跨状态保持稳定的外观锚点。' },
+          image_prompt: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物基础生图提示词。' },
+          negative_prompt: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物级负向提示词。' },
+          voice_profile: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。声音特征,导入为角色 voice_style。' },
           variants: {
             description: '人物状态数组,至少 1 个。服装、年龄阶段、受伤、伪装等视觉差异都是独立状态。',
             type: 'array',
@@ -168,6 +246,7 @@ const packageJsonSchema = {
             description: '必填。场景状态,如“白天营业中”“深夜停电”。',
           },
           description: { type: 'string', minLength: 1, description: '必填。场景描述。' },
+          atmosphere: { type: 'string', description: '可选。场景氛围与声画气质。' },
           image_prompt: { type: 'string', minLength: 1, description: '必填。生图提示词,空镜、不含剧情人物。' },
           negative_prompt: { type: 'string', description: '可选。负向提示词。' },
         },
@@ -297,12 +376,13 @@ const packageJsonSchema = {
             },
           },
           narration: { type: 'string', description: '可选。旁白。' },
+          is_primary: { type: 'boolean', description: '可选。是否为剧情段落主镜头。' },
           audio_description: {
-            description: '可选。环境音、动作音、人物声和静音要求;字符串或对象均可。',
+            description: '可选。推荐使用结构化对象；字符串仅用于兼容旧包。旧包对象内部保持宽松，新包由 complete_av_v1 条件校验。',
             oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }],
           },
           transition: {
-            description: '可选。与前后镜头的衔接方式;字符串或对象均可。',
+            description: '可选。推荐使用结构化对象；字符串仅用于兼容旧包。旧包对象内部保持宽松，新包由 complete_av_v1 条件校验。',
             oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }],
           },
           image_prompt: { type: 'string', description: '可选。仅用于需要单独生成分镜图时。' },
@@ -315,6 +395,199 @@ const packageJsonSchema = {
       },
     },
   },
+  allOf: [
+    {
+      if: {
+        properties: {
+          generation_profile: {
+            properties: { contract_profile: { const: 'complete_av_v1' } },
+            required: ['contract_profile'],
+          },
+        },
+        required: ['generation_profile'],
+      },
+      then: {
+        required: ['audio_plan'],
+        properties: {
+          audio_plan: {
+            required: ['version', 'bgm', 'speech'],
+            properties: {
+              bgm: {
+                required: ['mode', 'planning', 'source_type'],
+                allOf: [
+                  {
+                    if: { properties: { mode: { const: 'per_segment' } }, required: ['mode'] },
+                    then: {
+                      required: ['prompt', 'continuity_key'],
+                      properties: {
+                        prompt: { type: 'string', minLength: 1 },
+                        continuity_key: { type: 'string', minLength: 1 },
+                      },
+                    },
+                  },
+                ],
+              },
+              speech: { required: ['dialogue_owner', 'narration_owner'] },
+            },
+          },
+          characters: {
+            items: {
+              required: [
+                'source_key', 'name', 'description', 'appearance',
+                'image_prompt', 'negative_prompt', 'voice_profile', 'variants',
+              ],
+              properties: {
+                appearance: { type: 'string', minLength: 1 },
+                image_prompt: { type: 'string', minLength: 1 },
+                negative_prompt: { type: 'string', minLength: 1 },
+                voice_profile: { type: 'string', minLength: 1 },
+              },
+            },
+          },
+          storyboards: {
+            items: {
+              required: ['audio_description'],
+              properties: {
+                audio_description: {
+                  type: 'object',
+                  additionalProperties: true,
+                  properties: {
+                    ambience: {
+                      oneOf: [
+                        { type: 'string' },
+                        { type: 'array', items: { type: 'string' } },
+                      ],
+                      description: '环境底噪与空间声。',
+                    },
+                    sound_effects: {
+                      oneOf: [
+                        { type: 'string' },
+                        { type: 'array', items: { type: 'string' } },
+                      ],
+                      description: '动作音和拟音。',
+                    },
+                    dialogue_treatment: { type: 'string', description: '对白声学表现和与环境声的层级关系。' },
+                    diegetic_music: { description: '画面内有声源的音乐；可用字符串或结构化对象。' },
+                    silence: { type: 'boolean', description: '是否要求刻意静音。' },
+                    music_cue: {
+                      type: 'object',
+                      additionalProperties: true,
+                      properties: {
+                        mode: {
+                          enum: ['inherit', 'override', 'mute', 'stinger'],
+                          description: 'inherit=继承剧集母题；override=本镜覆盖；mute=本镜无 BGM；stinger=短促音乐强调。',
+                        },
+                        prompt: {
+                          type: ['string', 'null'],
+                          description: 'override 或 stinger 的本镜音乐提示；inherit 可省略。',
+                        },
+                        intensity: { type: 'number', minimum: 0, maximum: 1 },
+                        start: { type: ['string', 'null'], description: '音乐进入方式或时点。' },
+                        end: { type: ['string', 'null'], description: '音乐退出方式或时点。' },
+                      },
+                    },
+                    speech_override: {
+                      type: 'object',
+                      additionalProperties: true,
+                      properties: {
+                        dialogue_owner: { enum: ['h3_native', 'post_tts', 'none', null] },
+                        narration_owner: { enum: ['h3_native', 'post_tts', 'none', null] },
+                      },
+                      description: '可选。本镜覆盖剧集级语音归属。',
+                    },
+                  },
+                },
+                transition: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'object',
+                      additionalProperties: true,
+                      properties: {
+                        type: {
+                          type: ['string', 'null'],
+                          description: '画面转场类型；推荐 cut、dissolve、fade,兼容中文别名。',
+                        },
+                        duration: { type: 'number', minimum: 0, description: '转场时长(秒)。' },
+                        visual_description: { type: ['string', 'null'], description: '额外视觉衔接说明。' },
+                        audio_bridge: {
+                          type: 'object',
+                          additionalProperties: true,
+                          properties: {
+                            mode: { type: 'string', description: '如 carry、fade、cut。' },
+                            duration_ms: { type: 'number', minimum: 0 },
+                            description: { type: 'string' },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      if: {
+        allOf: [
+          {
+            properties: {
+              generation_profile: {
+                properties: { contract_profile: { const: 'complete_av_v1' } },
+                required: ['contract_profile'],
+              },
+            },
+            required: ['generation_profile'],
+          },
+          {
+            properties: {
+              audio_plan: {
+                properties: {
+                  bgm: {
+                    properties: { mode: { const: 'per_segment' } },
+                    required: ['mode'],
+                  },
+                },
+                required: ['bgm'],
+              },
+            },
+            required: ['audio_plan'],
+          },
+        ],
+      },
+      then: {
+        properties: {
+          storyboards: {
+            items: {
+              properties: {
+                audio_description: {
+                  type: 'object',
+                  required: ['music_cue'],
+                  properties: {
+                    music_cue: {
+                      type: 'object',
+                      required: ['mode'],
+                      allOf: [
+                        {
+                          if: { properties: { mode: { enum: ['override', 'stinger'] } }, required: ['mode'] },
+                          then: {
+                            required: ['prompt'],
+                            properties: { prompt: { type: 'string', minLength: 1 } },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  ],
 };
 
 function isPlainObject(value) {
@@ -339,6 +612,34 @@ function pushNonEmptyStringError(errors, path, value) {
   }
 }
 
+function pushOptionalNonEmptyStringError(errors, path, value) {
+  if (value !== undefined && !isNonEmptyString(value)) {
+    errors.push({ path, message: `${path} 若提供必须为非空字符串` });
+  }
+}
+
+function pushOptionalNumberError(errors, path, value, { minimum = null } = {}) {
+  if (value === undefined) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || (minimum !== null && value < minimum)) {
+    const suffix = minimum === null ? '有限数值' : `不小于 ${minimum} 的有限数值`;
+    errors.push({ path, message: `${path} 若提供必须为${suffix}` });
+  }
+}
+
+function validateStringList(errors, path, value) {
+  if (value === undefined) return;
+  if (typeof value === 'string') return;
+  if (!Array.isArray(value)) {
+    errors.push({ path, message: `${path} 必须为字符串或字符串数组` });
+    return;
+  }
+  value.forEach((item, index) => {
+    if (typeof item !== 'string') {
+      errors.push({ path: `${path}[${index}]`, message: `${path}[${index}] 必须为字符串` });
+    }
+  });
+}
+
 // 校验“出现则必须是对象”;返回 false 表示已报错、调用方应跳过嵌套校验
 function requireObject(errors, path, value) {
   if (!isPlainObject(value)) {
@@ -355,10 +656,14 @@ function validateVariant(errors, basePath, variant) {
   }
 }
 
-function validateCharacter(errors, basePath, character) {
+function validateCharacter(errors, basePath, character, strictNewPackage = false) {
   if (!requireObject(errors, basePath, character)) return;
   for (const field of ['source_key', 'name', 'description']) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
+  }
+  for (const field of ['appearance', 'image_prompt', 'negative_prompt', 'voice_profile']) {
+    if (strictNewPackage) pushNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
+    else pushOptionalNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
   }
   if (!Array.isArray(character.variants) || character.variants.length < 1) {
     errors.push({
@@ -396,7 +701,88 @@ function validateCharacterRef(errors, basePath, ref) {
   }
 }
 
-function validateStoryboard(errors, basePath, storyboard) {
+function validateStoryboardAudio(errors, basePath, value, {
+  required = false,
+  requireMusicCue = false,
+  strict = false,
+} = {}) {
+  if (value === undefined) {
+    if (required) errors.push({ path: basePath, message: `${basePath} 必填且必须为对象` });
+    return;
+  }
+  if (typeof value === 'string') {
+    if (required) errors.push({ path: basePath, message: `${basePath} 新包必须为结构化对象` });
+    return;
+  }
+  if (!requireObject(errors, basePath, value)) return;
+  if (!strict) return;
+  validateStringList(errors, `${basePath}.ambience`, value.ambience);
+  validateStringList(errors, `${basePath}.sound_effects`, value.sound_effects);
+  if (value.dialogue_treatment !== undefined && typeof value.dialogue_treatment !== 'string') {
+    errors.push({ path: `${basePath}.dialogue_treatment`, message: `${basePath}.dialogue_treatment 必须为字符串` });
+  }
+  if (value.silence !== undefined && typeof value.silence !== 'boolean') {
+    errors.push({ path: `${basePath}.silence`, message: `${basePath}.silence 必须为 boolean` });
+  }
+  const cue = value.music_cue;
+  if (cue === undefined) {
+    if (requireMusicCue) errors.push({ path: `${basePath}.music_cue`, message: `${basePath}.music_cue 必填` });
+  } else if (requireObject(errors, `${basePath}.music_cue`, cue)) {
+    if (cue.mode === undefined) {
+      if (requireMusicCue) errors.push({ path: `${basePath}.music_cue.mode`, message: `${basePath}.music_cue.mode 必填` });
+    } else if (!['inherit', 'override', 'mute', 'stinger'].includes(cue.mode)) {
+      errors.push({ path: `${basePath}.music_cue.mode`, message: `${basePath}.music_cue.mode 无效` });
+    }
+    pushOptionalNumberError(errors, `${basePath}.music_cue.intensity`, cue.intensity, { minimum: 0 });
+    if (typeof cue.intensity === 'number' && Number.isFinite(cue.intensity) && cue.intensity > 1) {
+      const existing = errors.some((item) => item.path === `${basePath}.music_cue.intensity`);
+      if (!existing) errors.push({ path: `${basePath}.music_cue.intensity`, message: `${basePath}.music_cue.intensity 不得大于 1` });
+    }
+    if (requireMusicCue && ['override', 'stinger'].includes(cue.mode)) {
+      pushNonEmptyStringError(errors, `${basePath}.music_cue.prompt`, cue.prompt);
+    }
+    for (const field of ['prompt', 'start', 'end']) {
+      if (field === 'prompt' && requireMusicCue && ['override', 'stinger'].includes(cue.mode)) continue;
+      const item = cue[field];
+      if (item !== undefined && item !== null && typeof item !== 'string') {
+        errors.push({ path: `${basePath}.music_cue.${field}`, message: `${basePath}.music_cue.${field} 必须为字符串或 null` });
+      }
+    }
+  }
+  if (value.speech_override !== undefined && requireObject(errors, `${basePath}.speech_override`, value.speech_override)) {
+    for (const field of ['dialogue_owner', 'narration_owner']) {
+      const owner = value.speech_override[field];
+      if (owner !== undefined && owner !== null && !['h3_native', 'post_tts', 'none'].includes(owner)) {
+        errors.push({ path: `${basePath}.speech_override.${field}`, message: `${basePath}.speech_override.${field} 无效` });
+      }
+    }
+  }
+}
+
+function validateStoryboardTransition(errors, basePath, value, { strict = false } = {}) {
+  if (value === undefined || typeof value === 'string') return;
+  if (!requireObject(errors, basePath, value)) return;
+  if (!strict) return;
+  if (value.type !== undefined && value.type !== null && typeof value.type !== 'string') {
+    errors.push({ path: `${basePath}.type`, message: `${basePath}.type 必须为字符串或 null` });
+  }
+  pushOptionalNumberError(errors, `${basePath}.duration`, value.duration, { minimum: 0 });
+  if (value.visual_description !== undefined && value.visual_description !== null
+      && typeof value.visual_description !== 'string') {
+    errors.push({ path: `${basePath}.visual_description`, message: `${basePath}.visual_description 必须为字符串或 null` });
+  }
+  if (value.audio_bridge !== undefined && requireObject(errors, `${basePath}.audio_bridge`, value.audio_bridge)) {
+    if (value.audio_bridge.mode !== undefined && typeof value.audio_bridge.mode !== 'string') {
+      errors.push({ path: `${basePath}.audio_bridge.mode`, message: `${basePath}.audio_bridge.mode 必须为字符串` });
+    }
+    pushOptionalNumberError(errors, `${basePath}.audio_bridge.duration_ms`, value.audio_bridge.duration_ms, { minimum: 0 });
+    if (value.audio_bridge.description !== undefined && typeof value.audio_bridge.description !== 'string') {
+      errors.push({ path: `${basePath}.audio_bridge.description`, message: `${basePath}.audio_bridge.description 必须为字符串` });
+    }
+  }
+}
+
+function validateStoryboard(errors, basePath, storyboard, options = {}) {
   if (!requireObject(errors, basePath, storyboard)) return;
   for (const field of ['source_key', 'title', 'description', 'scene_ref']) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, storyboard[field]);
@@ -413,6 +799,19 @@ function validateStoryboard(errors, basePath, storyboard) {
       message: `${basePath}.duration_seconds 必须为正数`,
     });
   }
+  if (storyboard.is_primary !== undefined && typeof storyboard.is_primary !== 'boolean') {
+    errors.push({ path: `${basePath}.is_primary`, message: `${basePath}.is_primary 必须为 boolean` });
+  }
+  // 历史协议始终约束外层为 string/object；对象内部由 AV normalizer 宽松归一化。
+  // 细粒度类型检查仅属于 complete_av_v1,避免旧包因 null/别名/宽松值被回归拒绝。
+  validateStoryboardAudio(errors, `${basePath}.audio_description`, storyboard.audio_description, {
+    required: options.strictNewPackage,
+    requireMusicCue: options.requireMusicCue,
+    strict: options.strictNewPackage,
+  });
+  validateStoryboardTransition(errors, `${basePath}.transition`, storyboard.transition, {
+    strict: options.strictNewPackage,
+  });
   const refs = storyboard.character_refs;
   if (refs === undefined) return; // 缺省视为 []
   if (!Array.isArray(refs)) {
@@ -453,18 +852,88 @@ function validatePackageStructure(pkg) {
     errors.push({ path: 'version', message: `version 必须为 "${PACKAGE_SCHEMA_VERSION}"` });
   }
 
+  const strictNewPackage = pkg.generation_profile?.contract_profile === 'complete_av_v1';
+
   if (pkg.generator !== undefined) {
     requireObject(errors, 'generator', pkg.generator);
   }
 
   if (pkg.generation_profile !== undefined) {
     if (requireObject(errors, 'generation_profile', pkg.generation_profile)) {
+      const contractProfile = pkg.generation_profile.contract_profile;
+      if (contractProfile !== undefined && contractProfile !== 'complete_av_v1') {
+        errors.push({ path: 'generation_profile.contract_profile', message: 'generation_profile.contract_profile 无效' });
+      }
       const maxRef = pkg.generation_profile.max_reference_images;
       if (maxRef !== undefined && !isPositiveInteger(maxRef)) {
         errors.push({
           path: 'generation_profile.max_reference_images',
           message: 'generation_profile.max_reference_images 若提供必须为正整数',
         });
+      }
+    }
+  }
+
+  if (pkg.audio_plan === undefined) {
+    if (strictNewPackage) errors.push({ path: 'audio_plan', message: 'complete_av_v1 新包必须提供 audio_plan' });
+  } else {
+    if (requireObject(errors, 'audio_plan', pkg.audio_plan)) {
+      if ((strictNewPackage && pkg.audio_plan.version !== 1)
+          || (!strictNewPackage && pkg.audio_plan.version !== undefined && pkg.audio_plan.version !== 1)) {
+        errors.push({ path: 'audio_plan.version', message: 'audio_plan.version 必须为 1' });
+      }
+      const bgm = pkg.audio_plan.bgm;
+      if (bgm === undefined) {
+        if (strictNewPackage) errors.push({ path: 'audio_plan.bgm', message: 'audio_plan.bgm 必须为对象' });
+      } else if (requireObject(errors, 'audio_plan.bgm', bgm)) {
+        if ((strictNewPackage || bgm.mode !== undefined)
+            && !['none', 'episode_track', 'per_segment'].includes(bgm.mode)) {
+          errors.push({ path: 'audio_plan.bgm.mode', message: 'audio_plan.bgm.mode 无效' });
+        }
+        if ((strictNewPackage || bgm.planning !== undefined)
+            && !['manual', 'ai', 'external'].includes(bgm.planning)) {
+          errors.push({ path: 'audio_plan.bgm.planning', message: 'audio_plan.bgm.planning 无效' });
+        }
+        if ((strictNewPackage || bgm.source_type !== undefined)
+            && !['none', 'local_file', 'media_library', 'generated'].includes(bgm.source_type)) {
+          errors.push({ path: 'audio_plan.bgm.source_type', message: 'audio_plan.bgm.source_type 无效' });
+        }
+        if (strictNewPackage && bgm.mode === 'per_segment') {
+          pushNonEmptyStringError(errors, 'audio_plan.bgm.prompt', bgm.prompt);
+          pushNonEmptyStringError(errors, 'audio_plan.bgm.continuity_key', bgm.continuity_key);
+        } else {
+          for (const field of ['prompt', 'continuity_key']) {
+            if (bgm[field] !== undefined && bgm[field] !== null && typeof bgm[field] !== 'string') {
+              errors.push({ path: `audio_plan.bgm.${field}`, message: `audio_plan.bgm.${field} 必须为字符串或 null` });
+            }
+          }
+        }
+        if (bgm.local_path !== undefined && bgm.local_path !== null && typeof bgm.local_path !== 'string') {
+          errors.push({ path: 'audio_plan.bgm.local_path', message: 'audio_plan.bgm.local_path 必须为字符串或 null' });
+        }
+        for (const field of ['volume_db', 'ducking_db']) {
+          pushOptionalNumberError(errors, `audio_plan.bgm.${field}`, bgm[field]);
+        }
+        for (const field of ['fade_in_ms', 'fade_out_ms', 'crossfade_ms']) {
+          pushOptionalNumberError(errors, `audio_plan.bgm.${field}`, bgm[field], { minimum: 0 });
+        }
+      }
+      if (pkg.audio_plan.mastering !== undefined
+          && requireObject(errors, 'audio_plan.mastering', pkg.audio_plan.mastering)) {
+        for (const field of ['target_lufs', 'true_peak_db']) {
+          pushOptionalNumberError(errors, `audio_plan.mastering.${field}`, pkg.audio_plan.mastering[field]);
+        }
+      }
+      const speech = pkg.audio_plan.speech;
+      if (speech === undefined) {
+        if (strictNewPackage) errors.push({ path: 'audio_plan.speech', message: 'audio_plan.speech 必须为对象' });
+      } else if (requireObject(errors, 'audio_plan.speech', speech)) {
+        for (const field of ['dialogue_owner', 'narration_owner']) {
+          if ((strictNewPackage || speech[field] !== undefined)
+              && !['h3_native', 'post_tts', 'none'].includes(speech[field])) {
+            errors.push({ path: `audio_plan.speech.${field}`, message: `audio_plan.speech.${field} 无效` });
+          }
+        }
       }
     }
   }
@@ -493,7 +962,11 @@ function validatePackageStructure(pkg) {
       continue;
     }
     list.forEach((item, index) => {
-      ASSET_ARRAY_VALIDATORS[field](errors, `${field}[${index}]`, item);
+      if (field === 'characters') {
+        validateCharacter(errors, `${field}[${index}]`, item, strictNewPackage);
+      } else {
+        ASSET_ARRAY_VALIDATORS[field](errors, `${field}[${index}]`, item);
+      }
     });
   }
 
@@ -501,7 +974,10 @@ function validatePackageStructure(pkg) {
     errors.push({ path: 'storyboards', message: 'storyboards 必填且必须为数组' });
   } else {
     pkg.storyboards.forEach((storyboard, index) => {
-      validateStoryboard(errors, `storyboards[${index}]`, storyboard);
+      validateStoryboard(errors, `storyboards[${index}]`, storyboard, {
+        strictNewPackage,
+        requireMusicCue: strictNewPackage && pkg.audio_plan?.bgm?.mode === 'per_segment',
+      });
     });
   }
 
