@@ -153,7 +153,7 @@ test('preserves the normal editor generation context in the unified candidate pa
 
   assert.equal(panel.generationMode.value, 'universal_omni')
   assert.deepEqual(captured, [{
-    candidateCount: 2,
+    candidateCount: 1,
     structured: {
       prompt: '未保存的全能片段提示词',
       negativePrompt: '',
@@ -428,6 +428,24 @@ test('drawer and sidebar callers preserve distinct layout state while sharing ca
   assert.equal(drawer.displayMode.value, 'drawer')
   assert.equal(sidebar.displayMode.value, 'sidebar')
   assert.deepEqual(calls[0][1], calls[1][1])
+})
+
+test('applies the high-resolution drawer preset as 1312 by 736', async () => {
+  const api = {
+    getDefaultConfig: async () => ({ id: 1, is_active: true, is_default: true, provider: 'cloud' }),
+    getCandidateHistory: async () => ({ groups: [], latest: null }),
+  }
+  const panel = useVideoGenerationPanel(reactive({
+    storyboardId: 1,
+    storyboard: { id: 1, video_prompt: 'high-resolution preset' },
+  }), () => {}, api)
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.setDimensions(panel.dimensionPresets[1])
+
+  assert.equal(panel.form.width, 1312)
+  assert.equal(panel.form.height, 736)
 })
 
 test('builds the same numeric candidate request for either panel layout', () => {

@@ -29,6 +29,11 @@ const VIDEO_ACTIONS = Object.freeze([
   '创建连续性锚点',
 ])
 
+const VIDEO_DIMENSION_PRESETS = Object.freeze([
+  Object.freeze({ width: 864, height: 480 }),
+  Object.freeze({ width: 1312, height: 736 }),
+])
+
 const STATUS_LABELS = Object.freeze({
   waiting: '等待中',
   pending: '等待中',
@@ -354,7 +359,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     duration: 5,
     frameRate: 24,
     seed: 42,
-    candidateCount: 2,
+    candidateCount: 1,
     continuityMode: 'none',
     useVoiceReference: false,
     workflowId: 'minimax_h3_director_r2v',
@@ -388,6 +393,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const selectedDuration = ref(5)
   const selectedFps = ref(24)
   const anchorRole = ref('state')
+
+  function setDimensions(preset) {
+    form.width = preset.width
+    form.height = preset.height
+  }
   const anchorOperation = ref('extract_frame')
   const creatingAnchor = ref(false)
   let refreshVersion = 0
@@ -1074,6 +1084,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   return {
     form,
+    dimensionPresets: VIDEO_DIMENSION_PRESETS,
+    setDimensions,
     displayMode,
     generationMode,
     defaultConfig,
