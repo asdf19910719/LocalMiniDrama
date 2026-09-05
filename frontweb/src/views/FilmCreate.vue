@@ -566,7 +566,7 @@
                         >
                           <div class="char-variant-card-image">
                             <img v-if="v.image_url || v.local_path" :src="assetImageUrl(v)" :alt="v.name || '人物状态'" />
-                            <span v-else><el-icon><Picture /></el-icon>暂无图</span>
+                            <span v-else class="char-variant-card-empty"><el-icon><Picture /></el-icon>暂无图</span>
                             <el-tag v-if="v.is_default" size="small" type="success" effect="dark">默认</el-tag>
                           </div>
                           <div class="char-variant-card-body">
@@ -11306,7 +11306,7 @@ html.light .char-variants-panel {
   display: block;
   object-fit: cover;
 }
-.char-variant-card-image > span {
+.char-variant-card-image > .char-variant-card-empty {
   width: 100%;
   height: 100%;
   display: grid;

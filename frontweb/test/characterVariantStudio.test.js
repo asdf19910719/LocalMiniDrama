@@ -1,10 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   buildVariantImageCandidates,
   buildVariantPrimaryPatch,
   findVariantAffectedStoryboards,
 } from '../src/utils/characterVariantStudio.js'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+test('默认状态标签不会继承空状态占位图的全尺寸样式', () => {
+  const source = fs.readFileSync(path.join(root, 'src/views/FilmCreate.vue'), 'utf8')
+  assert.match(source, /<span v-else class="char-variant-card-empty">/)
+  assert.match(source, /\.char-variant-card-image\s*>\s*\.char-variant-card-empty\s*\{/)
+  assert.doesNotMatch(source, /\.char-variant-card-image\s*>\s*span\s*\{/)
+})
 
 test('候选历史把当前状态图置顶并去除重复项', () => {
   const candidates = buildVariantImageCandidates({
