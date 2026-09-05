@@ -2821,6 +2821,7 @@ import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import { findVariantAffectedStoryboards } from '@/utils/characterVariantStudio'
 import { resolveSbMainImageRecord, resolveSbVideoRecord, videoCandidateLabel } from '@/utils/storyboardMedia'
+import { refreshSelectedStoryboardVideo } from '@/utils/directorPersistence'
 
 const route = useRoute()
 const router = useRouter()
@@ -6918,12 +6919,23 @@ function onVideoGenerationAnchorCreated(anchor) {
   videoGenerationSourceAnchor.value = anchor || null
 }
 
-async function onVideoGenerationSelected() {
+async function onVideoGenerationSelected(selection) {
   const storyboardId = videoGenerationTarget.value?.id
   if (!storyboardId) return
-  await loadSingleStoryboardMedia(storyboardId)
-  await loadDrama()
-  videoGenerationTarget.value = storyboards.value.find((item) => item.id === storyboardId) || videoGenerationTarget.value
+  const selectedVideoId = selection?.candidate?.video_generation_id
+    ?? selection?.candidate?.video_generation?.id
+    ?? null
+  videoGenerationTarget.value = await refreshSelectedStoryboardVideo({
+    storyboardId,
+    selectedVideoId,
+    currentTarget: videoGenerationTarget.value,
+    storyboards: store.currentEpisode?.storyboards || [],
+    selectStoryboardVideo: (id, videoId) => {
+      sbSelectedVideoId.value = { ...sbSelectedVideoId.value, [id]: videoId }
+    },
+    refreshStoryboardMedia: loadSingleStoryboardMedia,
+    fetchStoryboard: storyboardsAPI.get,
+  })
 }
 
 async function onGenerateSbVideo(sb) {

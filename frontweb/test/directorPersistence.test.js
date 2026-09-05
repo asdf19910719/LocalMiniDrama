@@ -122,6 +122,44 @@ test('replaces a stale history snapshot after selecting a candidate', () => {
   assert.deepEqual(state.groups, [selected, { id: 'older', status: 'selected', candidates: [] }])
 })
 
+test('refreshes only the selected storyboard media after choosing a video candidate', async () => {
+  const touchedStoryboardIds = []
+  const untouchedStoryboard = { id: 31, title: '分镜 2', status: 'generating' }
+  const storyboards = [
+    { id: 30, title: '旧分镜 1', image_url: 'images/keep.png' },
+    untouchedStoryboard,
+  ]
+  const selectedVideoIds = { 30: 700, 31: 800 }
+
+  const refreshed = await directorPersistence.refreshSelectedStoryboardVideo({
+    storyboardId: 30,
+    selectedVideoId: 900,
+    currentTarget: storyboards[0],
+    storyboards,
+    selectStoryboardVideo: (storyboardId, videoId) => {
+      selectedVideoIds[storyboardId] = videoId
+    },
+    refreshStoryboardMedia: async (storyboardId) => {
+      touchedStoryboardIds.push(storyboardId)
+    },
+    fetchStoryboard: async () => ({
+      id: 30,
+      title: '新分镜 1',
+      local_path: 'videos/selected.mp4',
+    }),
+  })
+
+  assert.deepEqual(touchedStoryboardIds, [30])
+  assert.strictEqual(storyboards[1], untouchedStoryboard)
+  assert.deepEqual(refreshed, {
+    id: 30,
+    title: '新分镜 1',
+    image_url: 'images/keep.png',
+    local_path: 'videos/selected.mp4',
+  })
+  assert.deepEqual(selectedVideoIds, { 30: 900, 31: 800 })
+})
+
 test('formats persisted artifact dimensions, codec, frame rate, duration, and size', () => {
   assert.equal(formatArtifactMedia({
     file_size: 1048576,
