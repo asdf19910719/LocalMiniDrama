@@ -4,6 +4,8 @@
 **日期：** 2026-09-05
 **范围：** 外部 AI JSON 单集包导入、故事梗概生成分镜、全能提示词、H3 Ref2VA 编译、视频生成入口、整集合成与混音
 
+**审查修订：** 2026-09-05 吸收实施前评审：补充对白/旁白声音所有权、字段级来源锁、H3 声音分类与跨语言 coverage manifest、Canvas/FreeCreate 边界、既有显式 `null` 兼容、Director 原声音轨以及普通合成视觉转场/字幕时间线。
+
 ## 1. 背景
 
 项目已有单集制作包导入、故事生成、全能提示词、H3 草稿、候选视频和最终合成能力，但这些环节没有共享一份完整的视听数据合同。当前可验证的问题包括：
@@ -105,6 +107,17 @@
     "target_lufs": -14,
     "true_peak_db": -1
   },
+  "speech": {
+    "dialogue_owner": "h3_native",
+    "narration_owner": "post_tts"
+  },
+  "field_state": {
+    "bgm.mode": {
+      "source": "manual",
+      "locked": true,
+      "revision": 2
+    }
+  },
   "provenance": {
     "source": "story_audio_planner",
     "updated_at": "2026-09-05T00:00:00.000Z"
@@ -119,6 +132,14 @@
 - `per_segment`：每个 H3 分镜按剧集母题和分镜 `music_cue` 生成配乐；最终合成不再叠加整集 BGM。
 
 `source_type` 当前支持 `none`、`local_file`、`media_library` 和 `generated`。本阶段仅执行 `local_file`、`media_library` 与 H3 `per_segment`；`generated` 在 `episode_track` 下只保存意图，不自动调用不存在的音乐 Provider。
+
+`speech.dialogue_owner` 与 `speech.narration_owner` 分别允许：
+
+- `h3_native`：对应语言内容由 H3 原生音轨负责，后期不得再次叠加同类 TTS。
+- `post_tts`：H3 不得生成可闻的对应语言内容，最终混音只叠加 TTS。
+- `none`：H3 和后期均不生成该类语言内容；文本仍可用于字幕或审计。
+
+`audio_enabled=false` 是关闭 H3 整条原生音轨的技术开关，不能替代对白和旁白各自的所有权。默认值为 `dialogue_owner=h3_native`、`narration_owner=post_tts`；旧分镜已有 `audio_local_path` 时兼容投影把对白所有权设为 `post_tts`。任何所有权变化或首次生成对应 TTS 都会使相关 H3 草稿失效。
 
 ### 6.2 分镜声音字段
 
@@ -139,6 +160,10 @@
     "start": "continue",
     "end": "continue"
   },
+  "speech_override": {
+    "dialogue_owner": null,
+    "narration_owner": null
+  },
   "raw_description": null,
   "extensions": {},
   "provenance": {
@@ -154,7 +179,7 @@
 - `mute`：当前分镜无非叙事配乐。
 - `stinger`：当前分镜只生成明确的短促音乐强调。
 
-`diegetic_music` 属于画面世界内声音，进入 `overall_soundscape` 或逐镜正文，不进入 `non_diegetic_music`。
+`diegetic_music` 属于画面世界内声音，必须在发生它的逐镜正文中描述；它不进入 `non_diegetic_music`，也不只作为 `overall_soundscape` 摘要处理。
 
 ### 6.3 分镜转场字段
 
@@ -180,6 +205,7 @@
 
 - `storyboards.is_primary INTEGER DEFAULT 0`：保存故事分镜 AI 已输出的主镜头标记。
 - `scenes.atmosphere TEXT`：保存场景提取结果，避免只能把氛围隐式拼入图片提示词。
+- `storyboards.production_metadata TEXT`：保存标量生产字段的来源、锁定状态和修订号。
 
 人物、场景、道具已有 `negative_prompt`；本设计修复映射和读取，不新建重复列。`characters.voice_style` 接收制作包的 `voice_profile`。
 
@@ -197,6 +223,29 @@
 
 无法识别的对象字段存入 `extensions`。无法可靠拆分的旧字符串存入 `raw_description`；不得删除或猜测原义。
 
+### 6.6 字段级来源与锁定
+
+对象级 `provenance` 只用于审计对象来源，不能决定覆盖。每个可被 AI 重新规划或用户修改的字段都使用 `field_state`：
+
+```json
+{
+  "audio_description.music_cue.prompt": {
+    "source": "manual",
+    "locked": true,
+    "revision": 4,
+    "updated_at": "2026-09-05T00:00:00.000Z"
+  },
+  "transition.type": {
+    "source": "package_import",
+    "locked": false,
+    "revision": 1,
+    "updated_at": "2026-09-05T00:00:00.000Z"
+  }
+}
+```
+
+剧集音频字段的状态保存在 `episodes.audio_plan.field_state`。所有分镜字段，包括 `audio_description.*`、`transition.*`、`layout_description` 和 `is_primary`，统一保存在 `storyboards.production_metadata.field_state`；`audio_description` 和 `transition` 内不再维护第二份状态。用户 PATCH、外部包导入和 AI 规划必须在同一数据库事务里同时更新值、来源、锁定状态和修订号。
+
 ## 7. 来源优先级与覆盖规则
 
 字段来源优先级固定为：
@@ -210,6 +259,8 @@
 ```
 
 重新生成分镜时默认保留手工音频计划、分镜音乐提示、转场和参考槽位。只有显式选择“重新规划声音”或“重新生成全部制作数据”才覆盖对应字段。
+
+AI 写入前逐字段检查 `field_state[path].locked`。锁定字段保持原值；未锁定且来源为旧 AI 的字段允许刷新；导入显式值只有在导入操作本身明确选择覆盖时才更新。PATCH 接口写入用户修改时把对应路径标为 `source=manual, locked=true`；用户可显式“恢复 AI 管理”解除锁定。
 
 AI 不得仅根据 `atmosphere`、`emotion`、题材或视觉描述自行开启 BGM。需要 AI 判断时，必须由整集音频规划器生成结构化结果、保存来源，再由 H3 消费。
 
@@ -367,7 +418,7 @@ H3 编译器接收完整 Generation Context，不再只接收：
 
 ### 12.2 H3 音频映射
 
-`overall_soundscape` 汇总环境声、物理音效、对白处理、剧情内音乐和跨镜声音桥。
+`overall_soundscape` 只汇总贯穿片段的环境声、物理音效和非语言人声。对白、旁白、演唱、剧情内音乐，以及与具体镜头边界同步的声音和声音桥必须写在对应 `[Shot N]` 的 `detailed_description` 中；不能只写进汇总段。
 
 `non_diegetic_music` 映射规则：
 
@@ -386,15 +437,19 @@ H3 编译器接收完整 Generation Context，不再只接收：
 在六段结构校验之外增加：
 
 - BGM 模式与 `non_diegetic_music` 一致。
-- 环境声和标记为关键的音效没有遗漏。
-- 对白与旁白原文完整保留，允许标记格式变化，不允许翻译或改写。
+- 根据声音所有权校验语言内容：`h3_native` 必须在逐镜正文以原语言 `<d>` 完整保留，`post_tts` 和 `none` 必须没有可闻的对应语言内容。
 - 每个启用的参考槽位在定义和正文中引用正确。
 - 不出现未提供的 `<Picture N>`、`<Video N>` 或 `<Audio N>`。
 - 时间点单调递增，最后时间不超过请求时长。
 - 后期转场不被重复描述为 H3 内部画面转场。
 - `audio_enabled=false` 时不生成对白、环境声、音效和 BGM。
 
-失败草稿保存 `validation_errors` 并标记 `invalid`，不得进入视频生成。
+语义验证分两级：
+
+1. **确定性门禁**：六段顺序、引用编号、悬空标签、BGM `N/A` 规则、说话所有权、`h3_native` 对白/旁白原文、时间边界和音频开关。
+2. **跨语言覆盖检查**：环境声、音效和剧情内音乐可能从中文变成英文，不能用普通字符串包含关系做 fail-closed 判断。编译过程保存 `coverage_manifest`，记录每个声音事件的源文本、规范英文表达、目标镜头和目标字段；模型评审返回 `covered/missing/uncertain`。`missing` 阻止生成，`uncertain` 标记 `needs_review`，不伪装成确定性失败。
+
+失败草稿保存 `validation_errors` 并标记 `invalid`；跨语言结果和证据保存在 `coverage_manifest`。`storyboard_h3_prompt_drafts` 增加 `coverage_manifest`、`semantic_review_status` 和 `semantic_review_confirmed`，后者只允许用户对当前草稿哈希确认；文本变化会自动清除确认。`invalid` 或未确认的 `needs_review` 草稿不得进入视频生成。
 
 ### 12.4 草稿指纹
 
@@ -427,6 +482,9 @@ H3 编译器接收完整 Generation Context，不再只接收：
 - 批量生成视频。
 - 一键生成整集。
 - Director 单镜候选入口。
+- Canvas 单镜与批量视频生成入口。
+
+`FreeCreate.vue` 没有 storyboard，不能创建绑定分镜和参考快照的 H3 Ref2VA 草稿。本阶段明确把 H3 Director R2V 标记为 FreeCreate 不支持：前端不提供该配置，后端收到无 storyboard 的 H3 请求时返回 `H3_STORYBOARD_REQUIRED`。非 H3 T2V/I2V Provider 继续保持现有 FreeCreate 行为；通用无分镜 H3 T2VA 另立设计，不在此处制造临时分镜。
 
 批量操作按分镜独立返回 `prepared/generated/failed` 状态；一个分镜失败不允许让其他分镜错误地共享其草稿或参考快照。相同幂等键和相同来源指纹不得重复编译或重复提交。
 
@@ -442,6 +500,14 @@ H3 编译器接收完整 Generation Context，不再只接收：
 4. `episode_bgm`：仅 `bgm.mode=episode_track` 启用。
 
 输入视频无音轨时创建等长静音基轨。加入对白或旁白时不得把 `base_audio` 替换掉。
+
+混音前必须先依据声音所有权选择轨道：
+
+- `dialogue_owner=h3_native`：保留基轨对白，不加入对白 TTS。
+- `dialogue_owner=post_tts`：H3 草稿禁止可闻对白，混音加入对白 TTS。
+- `narration_owner=h3_native`：保留基轨旁白，不加入旁白 TTS。
+- `narration_owner=post_tts`：H3 草稿禁止可闻旁白，混音加入旁白 TTS。
+- 任一所有权为 `none`：对应层不生成也不混入。
 
 ### 14.2 模式行为
 
@@ -460,6 +526,10 @@ H3 编译器接收完整 Generation Context，不再只接收：
 
 视觉转场和音频桥使用同一条规范化时间线计算，不能各自累加时长。
 
+Director 时间线和普通整集合成都必须保留片段音频。Director 的每个片段同时构造 `trim/setpts` 视频链和 `atrim/asetpts` 音频链；硬切使用音视频 concat，定时视觉转场使用 `xfade`，对应音频使用 `acrossfade` 或明确的声音桥。Director 后期混音必须把 `[0:a]` 作为基础输入。
+
+普通整集合成只有在所有片段编解码参数兼容、音轨拓扑一致、全部硬切且没有后处理时才允许使用 `concat -c copy` 快速路径。存在视觉转场、音轨缺失/混合或字幕时间调整时，转入统一滤镜时间线；字幕时间轴按转场重叠后的实际输出时间计算。
+
 ## 15. 前端交互
 
 在剧集制作页增加“声音与配乐”区域：
@@ -468,6 +538,7 @@ H3 编译器接收完整 Generation Context，不再只接收：
 - 剧集音乐母题和连续性标识。
 - 整集 BGM 文件/媒体库选择、音量、压低量和淡入淡出。
 - 分镜环境声、音效、剧情内音乐、音乐提示模式与强度。
+- 对白所有权与旁白所有权，可在分镜上覆盖剧集默认值。
 - 转场及声音桥。
 - 音频规划状态：未规划、AI 规划、手工修改。
 
@@ -492,6 +563,9 @@ H3 编译器接收完整 Generation Context，不再只接收：
 - `H3_AUDIO_POLICY_MISMATCH`
 - `H3_CONTEXT_STALE`
 - `H3_REFERENCE_SEMANTICS_INVALID`
+- `H3_SPEECH_OWNERSHIP_MISMATCH`
+- `H3_SEMANTIC_REVIEW_REQUIRED`
+- `H3_STORYBOARD_REQUIRED`
 - `MERGE_BASE_AUDIO_MISSING`（只有策略明确要求输入音轨时阻塞）
 
 ## 17. 兼容策略
@@ -502,6 +576,8 @@ H3 编译器接收完整 Generation Context，不再只接收：
 - 旧剧集没有 `audio_plan` 且没有任何显式分镜音乐时默认 `bgm.mode=none`，避免系统突然生成音乐；存在显式分镜音乐时按 8.2 的兼容规则转为 `per_segment`。
 - 经典模式和非 H3 Provider 保持原提示词优先级，不强制六段 H3 格式。
 - 旧 H3 草稿因指纹版本升级变为 `stale`，不删除历史文本。
+- 旧分镜已有对白 TTS 文件时默认 `dialogue_owner=post_tts`，否则为 `h3_native`；旧旁白默认 `post_tts`，避免同一语言层重复生成。
+- 更新接口保持既有显式空值语义：请求缺失的字段不更新，现有可空标量或侧车字段显式传 `null` 时继续清除；`clear_fields` 只是额外的显式清除方式，不能取代 `video_url: null` 等既有调用。
 - 导出格式版本递增；导入仍接受旧版本。
 
 ## 18. 测试策略
@@ -510,6 +586,8 @@ H3 编译器接收完整 Generation Context，不再只接收：
 
 - 字符串、对象、空值和未知字段的无损归一化。
 - 三种 BGM 模式与四种 `music_cue` 的组合验证。
+- 对白/旁白三种所有权组合、分镜覆盖与 TTS 生成后的草稿失效。
+- 字段级来源、锁定和 revision 的原子更新；AI 重规划不覆盖锁定字段。
 - JSON 序列化稳定，字段顺序不影响指纹。
 
 ### 18.2 外部 JSON
@@ -529,12 +607,13 @@ H3 编译器接收完整 Generation Context，不再只接收：
 
 - 存在全能提示词时仍保留结构化音效和转场。
 - 三种 BGM 模式得到正确 `non_diegetic_music`。
-- 参考槽位语义、对白、时长和声音保留校验。
+- 参考槽位语义、声音所有权、对白原文、时长和跨语言 coverage manifest 校验。
 - 修改任一视听字段后草稿变为 `stale`。
 
 ### 18.5 生成入口
 
-- 单镜、候选、批量、一键和 Director 均先准备 H3 草稿。
+- FilmCreate 单镜、候选、批量、一键、Director 和 Canvas 均先准备 H3 草稿。
+- FreeCreate 对 H3 Director R2V 返回明确的不支持提示，非 H3 生成不回归。
 - 非 H3 Provider 不触发 H3 编译。
 - 批量并发不串用草稿、参考图或配置。
 
@@ -548,6 +627,8 @@ H3 编译器接收完整 Generation Context，不再只接收：
 
 同时验证 `per_segment` 不重复叠加整集 BGM、`none` 不新增 BGM、无输入音轨时仍可正确生成输出。
 
+Director 和普通整合集成测试还必须验证：片段 H3 音轨仍存在、视觉 `xfade` 生效、音频交叉淡化与视觉边界一致、转场重叠后的总时长正确、字幕时间码使用实际输出时间，以及部分片段无音轨时能用静音轨补齐。
+
 ## 19. 验收标准
 
 1. 外部 JSON 中明确提供的声音、转场、音色、引用语义和制作策略，在导入、页面编辑、全能提示词、H3 草稿和导出后均可追溯。
@@ -558,6 +639,8 @@ H3 编译器接收完整 Generation Context，不再只接收：
 6. 添加对白或旁白后，输出视频仍保留 H3 原始环境声和音效。
 7. `episode_track` 能在普通剧集制作页配置，并进入最终成片。
 8. 后端测试、前端测试和前端构建全部通过。
+9. 同一分镜的对白和旁白分别只有一个声音所有者，成片不出现 H3 与 TTS 双声。
+10. Director、Canvas 和普通整集合成均满足同一 H3 草稿与原声音轨规则。
 
 ## 20. 实施边界与顺序
 

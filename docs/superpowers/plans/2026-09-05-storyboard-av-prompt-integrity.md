@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-05-storyboard-av-prompt-integrity-design.md`
 
+**Review revision:** The plan incorporates the 2026-09-05 pre-implementation review covering speech ownership, field-level locks, H3 audio classification, cross-language coverage evidence, Canvas and FreeCreate entry boundaries, legacy explicit-null behavior, Director base audio, and ordinary visual-transition/subtitle timing.
+
 ## Global Constraints
 
 - Preserve existing user changes in the dirty worktree and stage only files belonging to the current task.
@@ -33,6 +35,7 @@
 - `backend-node/src/services/episodeAudioPlanService.js`: episode-wide audio planning and persistence.
 - `backend-node/src/services/storyboardGenerationContextService.js`: complete context for universal and H3 prompt generation.
 - `backend-node/src/services/h3PromptSemanticValidator.js`: deterministic cross-field H3 checks.
+- `backend-node/src/services/h3PromptSemanticReviewService.js`: cross-language audio-event coverage review and persisted evidence.
 - `backend-node/src/services/preparedVideoGenerationService.js`: create/reuse H3 draft before strict generation submission.
 - `backend-node/src/services/episodeAudioMixService.js`: deterministic FFmpeg audio-layer planning.
 
@@ -74,7 +77,8 @@
 - Produces: `normalizeStoryboardAudioDescription(value, options) -> object`
 - Produces: `normalizeStoryboardTransition(value) -> object`
 - Produces: `serializeCanonicalJson(value) -> string`
-- Produces columns: `episodes.audio_plan`, `episodes.production_profile`, `storyboards.is_primary`, `scenes.atmosphere`
+- Produces: `normalizeFieldState(value) -> object`
+- Produces columns: `episodes.audio_plan`, `episodes.production_profile`, `storyboards.is_primary`, `storyboards.production_metadata`, `scenes.atmosphere`, `storyboard_h3_prompt_drafts.coverage_manifest`, `storyboard_h3_prompt_drafts.semantic_review_status`, `storyboard_h3_prompt_drafts.semantic_review_confirmed`
 
 - [ ] **Step 1: Write failing normalization tests**
 
@@ -85,6 +89,7 @@ const {
   normalizeEpisodeAudioPlan,
   normalizeStoryboardAudioDescription,
   normalizeStoryboardTransition,
+  normalizeFieldState,
   serializeCanonicalJson,
 } = require('../src/services/storyboardAvContractService');
 
@@ -118,6 +123,19 @@ test('unknown audio and transition keys survive in extensions', () => {
   assert.deepEqual(normalizeStoryboardAudioDescription({ ambient: '雨声', vendor_gain: 3 }).extensions, { vendor_gain: 3 });
   assert.deepEqual(normalizeStoryboardTransition({ to_next: '硬切', vendor_curve: 'x' }).extensions, { vendor_curve: 'x' });
 });
+
+test('dialogue and narration owners are independent validated fields', () => {
+  const plan = normalizeEpisodeAudioPlan({ speech: { dialogue_owner: 'h3_native', narration_owner: 'post_tts' } });
+  assert.equal(plan.speech.dialogue_owner, 'h3_native');
+  assert.equal(plan.speech.narration_owner, 'post_tts');
+  assert.throws(() => normalizeEpisodeAudioPlan({ speech: { dialogue_owner: 'both' } }), /AUDIO_PLAN_INVALID/);
+});
+
+test('field state preserves source lock and revision', () => {
+  assert.deepEqual(normalizeFieldState({
+    'audio_description.music_cue.prompt': { source: 'manual', locked: true, revision: 4 },
+  })['audio_description.music_cue.prompt'], { source: 'manual', locked: true, revision: 4, updated_at: null });
+});
 ```
 
 - [ ] **Step 2: Run the new tests and verify the module/columns are missing**
@@ -137,14 +155,18 @@ Expected: FAIL because `storyboardAvContractService` and the four additive colum
 ALTER TABLE episodes ADD COLUMN audio_plan TEXT;
 ALTER TABLE episodes ADD COLUMN production_profile TEXT;
 ALTER TABLE storyboards ADD COLUMN is_primary INTEGER DEFAULT 0;
+ALTER TABLE storyboards ADD COLUMN production_metadata TEXT;
 ALTER TABLE scenes ADD COLUMN atmosphere TEXT;
+ALTER TABLE storyboard_h3_prompt_drafts ADD COLUMN coverage_manifest TEXT;
+ALTER TABLE storyboard_h3_prompt_drafts ADD COLUMN semantic_review_status TEXT;
+ALTER TABLE storyboard_h3_prompt_drafts ADD COLUMN semantic_review_confirmed INTEGER DEFAULT 0;
 ```
 
 Also add matching `ensureColumns()` entries in `src/db/migrate.js` so databases created outside the migration runner converge to the same schema.
 
 - [ ] **Step 4: Implement strict, lossless normalizers**
 
-Implement defaults exactly as the spec defines. Parse object values directly, parse JSON object strings, wrap ordinary strings in `raw_description`, move unknown keys to `extensions`, clamp `music_cue.intensity` to `0..1`, and throw an error with `code = 'AUDIO_PLAN_INVALID'` for invalid modes or shapes.
+Implement defaults exactly as the spec defines. Parse object values directly, parse JSON object strings, wrap ordinary strings in `raw_description`, move unknown keys to `extensions`, clamp `music_cue.intensity` to `0..1`, validate independent dialogue/narration owners against `h3_native|post_tts|none`, normalize field-level source/lock/revision state, and throw an error with `code = 'AUDIO_PLAN_INVALID'` for invalid modes or shapes.
 
 - [ ] **Step 5: Run focused tests**
 
@@ -182,6 +204,7 @@ git commit -m "feat: add canonical storyboard audiovisual contract"
 - Produces: `projectStoryboardRow(row, links) -> canonical API object`
 - Produces: `saveCanonicalStoryboard(db, episodeId, input, options) -> projected storyboard`
 - Produces: `patchStoryboard(db, storyboardId, patch, { clearFields }) -> projected storyboard`
+- Produces: `applyFieldStatePatch(currentState, valuePatch, { source, lock, unlockFields, now }) -> fieldState`
 - Produces: `projectEpisodeRow(row) -> episode object with parsed audio_plan and production_profile`
 
 - [ ] **Step 1: Write failing repository tests**
@@ -217,6 +240,24 @@ test('explicit clear_fields clears only named nullable fields', () => {
   assert.notEqual(row.audio_description, null);
   assert.equal(row.transition, null);
 });
+
+test('legacy explicit null still clears existing nullable scalar fields', () => {
+  patchStoryboard(db, storyboardId, { video_url: null, first_frame_image_id: null }, { clearFields: [] });
+  const row = db.prepare('SELECT video_url, first_frame_image_id, audio_description FROM storyboards WHERE id = ?').get(storyboardId);
+  assert.equal(row.video_url, null);
+  assert.equal(row.first_frame_image_id, null);
+  assert.notEqual(row.audio_description, null);
+});
+
+test('manual patch atomically locks only changed leaf paths', () => {
+  patchStoryboard(db, storyboardId, {
+    audio_description: { music_cue: { prompt: 'manual piano' } },
+  }, { source: 'manual', clearFields: [] });
+  const row = db.prepare('SELECT audio_description, production_metadata FROM storyboards WHERE id = ?').get(storyboardId);
+  const meta = JSON.parse(row.production_metadata);
+  assert.equal(meta.field_state['audio_description.music_cue.prompt'].locked, true);
+  assert.equal(meta.field_state['audio_description.music_cue.prompt'].source, 'manual');
+});
 ```
 
 - [ ] **Step 2: Run the repository tests and verify failure**
@@ -230,7 +271,7 @@ Expected: FAIL because the canonical repository and complete API projection do n
 
 - [ ] **Step 3: Implement canonical projection and persistence**
 
-Use an explicit column map for scalar fields and Task 1 serializers for JSON fields. `saveCanonicalStoryboard()` must be used by create, incremental-save, final overwrite, and import callers. `patchStoryboard()` must distinguish an absent property from an explicit clear request.
+Use an explicit column map for scalar fields and Task 1 serializers for JSON fields. `saveCanonicalStoryboard()` must be used by create, incremental-save, final overwrite, and import callers. `patchStoryboard()` must distinguish an absent property from an explicit `null`; existing nullable scalar and sidecar fields keep their `field: null` clear behavior, while `clear_fields` is an additive alternative. Nested AV objects use leaf-level merge semantics and atomically update `production_metadata.field_state`.
 
 - [ ] **Step 4: Replace incomplete projections**
 
@@ -238,7 +279,7 @@ Change `dramaService.rowToStoryboard()` and single-storyboard responses to inclu
 
 - [ ] **Step 5: Extend the storyboard update route**
 
-Accept `audio_description`, `transition`, `is_primary`, and `clear_fields`; normalize JSON inputs before writing. Reject unknown `clear_fields` values with HTTP 400 and `code: 'STORYBOARD_PATCH_INVALID'`.
+Accept `audio_description`, `transition`, `is_primary`, `clear_fields`, and `unlock_fields`; normalize JSON inputs before writing. PATCH values authored by the user set changed leaf paths to `source=manual, locked=true` and increment their revision. `unlock_fields` returns named paths to AI management without changing their current values. Reject unknown clear/unlock paths with HTTP 400 and `code: 'STORYBOARD_PATCH_INVALID'`.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -426,6 +467,21 @@ test('AI audio planning is one episode-wide call and persists every cue', async 
   assert.equal(calls, 1);
   assert.equal(loadShot(db, episodeId, 2).audio_description.music_cue.mode, 'mute');
 });
+
+test('AI replanning refreshes prior AI fields but preserves manually locked leaves', async () => {
+  seedShotWithFieldState(db, {
+    musicPrompt: 'manual piano',
+    soundEffects: ['old AI door sound'],
+    fieldState: {
+      'audio_description.music_cue.prompt': { source: 'manual', locked: true, revision: 2 },
+      'audio_description.sound_effects': { source: 'story_ai', locked: false, revision: 1 },
+    },
+  });
+  await service.ensureEpisodeAudioPlan(db, log, { episodeId, force: true });
+  const shot = loadShot(db, episodeId, 1);
+  assert.equal(shot.audio_description.music_cue.prompt, 'manual piano');
+  assert.deepEqual(shot.audio_description.sound_effects, ['new planned door sound']);
+});
 ```
 
 - [ ] **Step 3: Run new tests and verify failure**
@@ -447,7 +503,7 @@ Pass `atmosphere` into scene creation. Extend episode story normalization to ret
 
 - [ ] **Step 6: Implement episode-wide audio planning**
 
-Only call the text model when `audio_plan.bgm.mode === 'per_segment'`, `planning === 'ai'`, and a complete plan is absent or `force === true`. Validate that each returned storyboard number exists exactly once; persist the episode plan and all cues in one transaction. Never infer BGM mode inside this service.
+Only call the text model when `audio_plan.bgm.mode === 'per_segment'`, `planning === 'ai'`, and a complete plan is absent or `force === true`. Validate that each returned storyboard number exists exactly once; persist the episode plan and all cues in one transaction. Never infer BGM mode inside this service. Apply AI results leaf by leaf: refresh unlocked prior-AI fields and leave every manually locked path unchanged.
 
 - [ ] **Step 7: Enrich the storyboard AI prompt context**
 
@@ -564,9 +620,14 @@ git commit -m "feat: build complete storyboard generation context"
 **Files:**
 
 - Create: `backend-node/src/services/h3PromptSemanticValidator.js`
+- Create: `backend-node/src/services/h3PromptSemanticReviewService.js`
 - Modify: `backend-node/src/services/h3PromptCompiler.js`
 - Modify: `backend-node/src/services/h3PromptDraftService.js`
 - Modify: `backend-node/src/director/adapters/h3DirectorR2VAdapter.js`
+- Modify: `backend-node/src/routes/storyboards.js`
+- Modify: `frontweb/src/api/h3Draft.js`
+- Modify: `frontweb/src/components/video/VideoGenerationPanel.vue`
+- Modify: `frontweb/src/composables/useVideoGenerationPanel.js`
 - Modify: `backend-node/test/h3PromptCompiler.test.js`
 - Modify: `backend-node/test/h3PromptDraftService.test.js`
 - Create: `backend-node/test/h3PromptSemanticValidator.test.js`
@@ -577,7 +638,8 @@ git commit -m "feat: build complete storyboard generation context"
 
 - Consumes: `GenerationContextV1` and `generationContextFingerprint()` from Task 5.
 - Produces: `validateH3PromptSemantics(compiledPrompt, context, options) -> { ok, errors }`.
-- Produces error codes: `H3_AUDIO_POLICY_MISMATCH`, `H3_REFERENCE_SEMANTICS_INVALID`, `H3_DIALOGUE_MISMATCH`, `H3_TIMELINE_INVALID`.
+- Produces: `reviewH3AudioCoverage(db, log, { compiledPrompt, context }) -> { status, manifest }`, where status is `covered|missing|uncertain`.
+- Produces error codes: `H3_AUDIO_POLICY_MISMATCH`, `H3_REFERENCE_SEMANTICS_INVALID`, `H3_DIALOGUE_MISMATCH`, `H3_SPEECH_OWNERSHIP_MISMATCH`, `H3_TIMELINE_INVALID`, `H3_SEMANTIC_REVIEW_REQUIRED`.
 
 - [ ] **Step 1: Write failing BGM policy tests**
 
@@ -613,18 +675,35 @@ test('reference audio uses the same Audio label in context, draft, and runtime s
 - [ ] **Step 2: Write failing preservation tests**
 
 ```js
-test('validator rejects missing dialogue, key sound, and reference semantics', () => {
+test('deterministic validator rejects missing native dialogue and reference semantics', () => {
   const context = makeContext({
     dialogue: '有人在里面吗？',
-    sounds: ['metal door scrape'],
+    dialogueOwner: 'h3_native',
     references: [{ slot: 1, entity_name: 'Lin Xia', reference_role: 'character_identity' }],
   });
   const result = validateH3PromptSemantics(validH3Prompt({ body: '[Shot 1] A door opens.' }), context);
   assert.deepEqual(new Set(result.errors.map((item) => item.code)), new Set([
     'H3_DIALOGUE_MISMATCH',
-    'H3_AUDIO_POLICY_MISMATCH',
     'H3_REFERENCE_SEMANTICS_INVALID',
   ]));
+});
+
+test('post_tts forbids audible H3 dialogue and prevents duplicate ownership', () => {
+  const context = makeContext({ dialogue: '有人在里面吗？', dialogueOwner: 'post_tts' });
+  const result = validateH3PromptSemantics(validH3Prompt({ body: '[Shot 1] (S1) says <d>[Chinese] 有人在里面吗？</d>.' }), context);
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, 'H3_SPEECH_OWNERSHIP_MISMATCH');
+});
+
+test('cross-language sound coverage is reviewed through a manifest, not substring matching', async () => {
+  const review = await reviewH3AudioCoverage(db, log, {
+    context: makeContext({ sounds: [{ id: 'sfx_1', source_text: '金属门摩擦声', target_shot: 1 }] }),
+    compiledPrompt: validH3Prompt({ body: '[Shot 1] The rusty door produces a harsh metallic scrape.' }),
+  });
+  assert.equal(review.status, 'covered');
+  assert.deepEqual(review.manifest.events[0], {
+    id: 'sfx_1', source_text: '金属门摩擦声', canonical_en: 'harsh metallic door scrape', target_shot: 1, status: 'covered', evidence: 'harsh metallic scrape',
+  });
 });
 ```
 
@@ -639,11 +718,11 @@ Expected: FAIL because H3 compilation currently receives only prompt text, durat
 
 - [ ] **Step 4: Change compiler input to Generation Context**
 
-Generate deterministic compiler guidance for `subject_definitions`, stable `<Picture N>/<Subject N>/<Audio N>` bindings, `overall_soundscape`, and `non_diegetic_music`. Preserve dialogue in its original language and keep H3 Ref2VA section order unchanged.
+Generate compiler guidance for `subject_definitions`, stable `<Picture N>/<Subject N>/<Audio N>` bindings, `overall_soundscape`, and `non_diegetic_music`. Put dialogue, narration, singing, diegetic music, and shot-synchronized sound bridges in the relevant `[Shot N]` of `detailed_description`; restrict `overall_soundscape` to ambience, physical sounds, and non-verbal vocal sound summaries. For `h3_native`, preserve the owned language text in its original language; for `post_tts|none`, omit audible language content and add an explicit no-audible-speech constraint. Keep H3 Ref2VA section order unchanged.
 
 - [ ] **Step 5: Add semantic validation after structural validation**
 
-Store all failures as structured `validation_errors`; mark the draft `invalid`. Manual draft save must run the same semantic validator. Do not submit invalid or stale drafts.
+Deterministically validate structure order, reference labels, BGM policy, speech ownership, native-dialogue exact text, timing, and audio switch. Do not use substring matching to compare Chinese source events with English H3 prose. Run the model-backed coverage reviewer for ambience, effects, diegetic music, and synchronized bridges; persist its event-level evidence in `coverage_manifest`. Mark `missing` as `invalid` and `uncertain` as `needs_review`. Add a confirmation operation that sets `semantic_review_confirmed=1` only for the current compiled prompt hash; any edit, recompile, or source-fingerprint change clears it. Manual draft save must repeat both validation levels. Do not submit invalid, stale, or unconfirmed `needs_review` drafts.
 
 - [ ] **Step 6: Replace the source fingerprint**
 
@@ -653,7 +732,11 @@ Use the complete context fingerprint plus video config, workflow hash, dimension
 
 Map `audioEnabled=false` to the workflow's disabled/no-audio mode instead of always hardcoding `audioMode = "generate"`. Pass ordered reference-audio inputs from the validated draft snapshot to the workflow adapter; reject a mismatch between `<Audio N>` labels and submitted audio assets.
 
-- [ ] **Step 8: Run focused H3 tests**
+- [ ] **Step 8: Expose uncertain semantic review without bypassing the gate**
+
+Show event-level `coverage_manifest` evidence in the H3 panel when status is `needs_review`. The confirmation action sends the displayed draft ID and compiled prompt hash; the backend rejects a stale/hash-mismatched confirmation. After confirmation, candidate generation may proceed only while the same source fingerprint and prompt hash remain current.
+
+- [ ] **Step 9: Run focused H3 tests**
 
 ```powershell
 cd backend-node
@@ -662,10 +745,10 @@ node --test test/h3PromptSemanticValidator.test.js test/h3PromptCompiler.test.js
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit Task 6**
+- [ ] **Step 10: Commit Task 6**
 
 ```powershell
-git add backend-node/src/services/h3PromptSemanticValidator.js backend-node/src/services/h3PromptCompiler.js backend-node/src/services/h3PromptDraftService.js backend-node/src/director/adapters/h3DirectorR2VAdapter.js backend-node/test/h3PromptSemanticValidator.test.js backend-node/test/h3PromptCompiler.test.js backend-node/test/h3PromptDraftService.test.js backend-node/test/h3DraftGating.test.js backend-node/test/directorWorkflowRegistry.test.js
+git add backend-node/src/services/h3PromptSemanticValidator.js backend-node/src/services/h3PromptSemanticReviewService.js backend-node/src/services/h3PromptCompiler.js backend-node/src/services/h3PromptDraftService.js backend-node/src/director/adapters/h3DirectorR2VAdapter.js backend-node/src/routes/storyboards.js frontweb/src/api/h3Draft.js frontweb/src/components/video/VideoGenerationPanel.vue frontweb/src/composables/useVideoGenerationPanel.js backend-node/test/h3PromptSemanticValidator.test.js backend-node/test/h3PromptCompiler.test.js backend-node/test/h3PromptDraftService.test.js backend-node/test/h3DraftGating.test.js backend-node/test/directorWorkflowRegistry.test.js frontweb/test/videoGenerationPanel.test.js
 git commit -m "fix: enforce H3 audiovisual prompt semantics"
 ```
 
@@ -683,7 +766,10 @@ git commit -m "fix: enforce H3 audiovisual prompt semantics"
 - Modify: `frontweb/src/api/videos.js`
 - Modify: `frontweb/src/api/director.js`
 - Modify: `frontweb/src/composables/useVideoGenerationPanel.js`
+- Modify: `frontweb/src/composables/useCanvasWorkflowRunner.js`
+- Modify: `frontweb/src/composables/useCanvasEpisodeGenerate.js`
 - Modify: `frontweb/src/views/FilmCreate.vue`
+- Modify: `frontweb/src/views/FreeCreate.vue`
 - Create: `backend-node/test/preparedVideoGenerationService.test.js`
 - Create: `frontweb/test/h3GenerationEntryPoints.test.js`
 - Modify: `backend-node/test/unifiedVideoGenerationService.test.js`
@@ -724,11 +810,23 @@ test('non-H3 preparation never invokes the H3 compiler', async () => {
 - [ ] **Step 2: Write a failing frontend entry-point test**
 
 ```js
-test('single, batch, one-click, panel, and director use the prepared endpoint', async () => {
-  const source = await readFile(new URL('../src/views/FilmCreate.vue', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /videosAPI\.create\(/);
-  assert.match(source, /videosAPI\.prepareAndCreate/);
-  assert.match(source, /prepareAndCreateMany/);
+test('all storyboard-bound callers use the prepared endpoint', async () => {
+  const files = [
+    '../src/views/FilmCreate.vue',
+    '../src/composables/useCanvasWorkflowRunner.js',
+    '../src/composables/useCanvasEpisodeGenerate.js',
+    '../src/composables/useVideoGenerationPanel.js',
+  ];
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')));
+  assert.equal(sources.some((source) => /videosAPI\.create\(/.test(source)), false);
+  assert.equal(sources.some((source) => /prepareAndCreate/.test(source)), true);
+});
+
+test('FreeCreate rejects storyboard-bound H3 but preserves non-H3 generation', async () => {
+  const h3 = await submitFreeCreate({ providerCapabilities: { requiresStoryboardH3Draft: true } });
+  assert.equal(h3.error.code, 'H3_STORYBOARD_REQUIRED');
+  const cloud = await submitFreeCreate({ providerCapabilities: { requiresStoryboardH3Draft: false } });
+  assert.equal(cloud.submitted, true);
 });
 ```
 
@@ -753,7 +851,7 @@ Expose prepared generation through the existing videos route family. Batch resul
 
 - [ ] **Step 6: Migrate all frontend callers**
 
-Replace direct calls in `FilmCreate.vue`, the video panel composable, and Director candidate submission with the prepared API. Preserve the panel's manually edited valid draft: preparation must reuse it when its fingerprint is current.
+Replace direct calls in `FilmCreate.vue`, both Canvas workflow composables, the video panel composable, and Director candidate submission with the prepared API. Preserve the panel's manually edited valid draft: preparation must reuse it when its fingerprint is current. Make `FreeCreate.vue` filter or reject capabilities that require a storyboard-bound H3 draft; add a backend `H3_STORYBOARD_REQUIRED` check so direct API calls cannot bypass the UI.
 
 - [ ] **Step 7: Run focused tests**
 
@@ -769,7 +867,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit Task 7**
 
 ```powershell
-git add backend-node/src/services/preparedVideoGenerationService.js backend-node/src/services/unifiedVideoGenerationService.js backend-node/src/routes/videos.js backend-node/src/routes/director.js backend-node/src/routes/index.js frontweb/src/api/videos.js frontweb/src/api/director.js frontweb/src/composables/useVideoGenerationPanel.js frontweb/src/views/FilmCreate.vue backend-node/test/preparedVideoGenerationService.test.js frontweb/test/h3GenerationEntryPoints.test.js backend-node/test/unifiedVideoGenerationService.test.js
+git add backend-node/src/services/preparedVideoGenerationService.js backend-node/src/services/unifiedVideoGenerationService.js backend-node/src/routes/videos.js backend-node/src/routes/director.js backend-node/src/routes/index.js frontweb/src/api/videos.js frontweb/src/api/director.js frontweb/src/composables/useVideoGenerationPanel.js frontweb/src/composables/useCanvasWorkflowRunner.js frontweb/src/composables/useCanvasEpisodeGenerate.js frontweb/src/views/FilmCreate.vue frontweb/src/views/FreeCreate.vue backend-node/test/preparedVideoGenerationService.test.js frontweb/test/h3GenerationEntryPoints.test.js backend-node/test/unifiedVideoGenerationService.test.js
 git commit -m "fix: prepare H3 drafts for every generation entry"
 ```
 
@@ -783,9 +881,13 @@ git commit -m "fix: prepare H3 drafts for every generation entry"
 - Modify: `backend-node/src/services/mergedEpisodePostProcess.js`
 - Modify: `backend-node/src/services/videoMergeService.js`
 - Modify: `backend-node/src/routes/videoMerges.js`
+- Modify: `backend-node/src/director/timelineService.js`
+- Modify: `backend-node/src/director/directorPostproductionService.js`
 - Create: `backend-node/test/episodeAudioMixService.test.js`
 - Modify: `backend-node/test/videoMergeDirectorTimeline.test.js`
 - Modify: `backend-node/test/videoMergeUpscaleIntegration.test.js`
+- Modify: `backend-node/test/timelineService.test.js`
+- Modify: `backend-node/test/directorPostproductionService.test.js`
 
 **Interfaces:**
 
@@ -820,11 +922,18 @@ test('missing base audio creates a silent base layer', () => {
   const plan = buildEpisodeAudioMixPlan({ baseHasAudio: false, bgmMode: 'none', durationSeconds: 6 });
   assert.match(plan.filterComplex, /anullsrc/);
 });
+
+test('speech ownership selects exactly one source per language layer', () => {
+  const native = buildEpisodeAudioMixPlan({ baseHasAudio: true, dialogueOwner: 'h3_native', dialoguePath: 'dialogue.wav', durationSeconds: 6 });
+  assert.equal(native.inputs.includes('dialogue.wav'), false);
+  const post = buildEpisodeAudioMixPlan({ baseHasAudio: true, dialogueOwner: 'post_tts', dialoguePath: 'dialogue.wav', durationSeconds: 6 });
+  assert.equal(post.inputs.includes('dialogue.wav'), true);
+});
 ```
 
 - [ ] **Step 2: Add an FFmpeg spectral integration test**
 
-Generate three six-second sine tracks at 220 Hz (base), 440 Hz (dialogue), and 880 Hz (BGM), mux the base into a synthetic video, execute the production mix, and use `ffmpeg -af astats` or decoded PCM frequency analysis to assert that all expected frequencies remain present. Repeat with `per_segment` and assert that the 880 Hz episode track is absent.
+Generate three six-second sine tracks at 220 Hz (base), 440 Hz (dialogue), and 880 Hz (BGM), mux the base into a synthetic video, execute the production mix, and use `ffmpeg -af astats` or decoded PCM frequency analysis to assert that all expected frequencies remain present. Repeat with `per_segment` and assert that the 880 Hz episode track is absent. Run ownership variants and assert `h3_native` does not add the 440 Hz TTS track while `post_tts` adds it once.
 
 - [ ] **Step 3: Run audio tests and verify failure**
 
@@ -837,29 +946,33 @@ Expected: FAIL because current post-processing maps the generated dialogue/narra
 
 - [ ] **Step 4: Implement a pure mix-plan builder**
 
-Build FFmpeg inputs and filters without executing them. Preserve `[0:a]` when present; otherwise synthesize silence. Add dialogue/narration layers with sidechain ducking, add episode BGM only for `episode_track`, apply configured fades, then normalize to target LUFS and true peak.
+Build FFmpeg inputs and filters without executing them. Preserve `[0:a]` when present; otherwise synthesize silence. Add each dialogue/narration layer only when its owner is `post_tts`, use sidechain ducking, add episode BGM only for `episode_track`, apply configured fades, then normalize to target LUFS and true peak.
 
 - [ ] **Step 5: Use one audio timeline for transitions and mixing**
 
-Apply `audio_bridge` and `crossfade_ms` at the same normalized clip boundaries used by visual transitions. For `per_segment`, crossfade existing clip audio; for `none` and `episode_track`, preserve physical sound continuity without inventing music.
+Replace Director's video-only timeline with paired video/audio chains: each clip uses `trim,setpts` plus `atrim,asetpts`; missing audio gets an equal-duration silent stream. Hard cuts concat both chains, while timed visual `xfade` uses matching `acrossfade` or the explicit `audio_bridge`. Apply the same normalized boundaries in ordinary episode merge. For `per_segment`, crossfade existing clip audio; for `none` and `episode_track`, preserve physical sound continuity without inventing music.
 
 - [ ] **Step 6: Replace the destructive audio mapping in merged post-processing**
 
-Route dialogue, narration, subtitle, watermark, and BGM post-processing through `episodeAudioMixService`. Keep watermark-only audio stream copying behavior and preserve input files until the new output is probed successfully.
+Route ordinary and Director dialogue, narration, subtitle, watermark, and BGM post-processing through `episodeAudioMixService`. Director postproduction must include `[0:a]` in its mix. Keep watermark-only audio stream copying behavior and preserve input files until the new output is probed successfully.
 
-- [ ] **Step 7: Run focused audio tests**
+- [ ] **Step 7: Add ordinary visual-transition and subtitle-timeline coverage**
+
+For compatible all-hard-cut inputs with identical audio topology, retain the current concat-copy fast path. Otherwise build the filtered timeline and test `xfade`, transition-overlap total duration, matching audio boundaries, silent replacement for a clip without audio, and narration subtitle timestamps computed from the overlapped output timeline rather than the raw sum of clip durations.
+
+- [ ] **Step 8: Run focused audio tests**
 
 ```powershell
 cd backend-node
-node --test test/episodeAudioMixService.test.js test/videoMergeDirectorTimeline.test.js test/videoMergeUpscaleIntegration.test.js
+node --test test/episodeAudioMixService.test.js test/videoMergeDirectorTimeline.test.js test/videoMergeUpscaleIntegration.test.js test/timelineService.test.js test/directorPostproductionService.test.js
 ```
 
 Expected: PASS when FFmpeg is available; platform tests must skip with an explicit reason only when `ffmpeg` or `ffprobe` is unavailable.
 
-- [ ] **Step 8: Commit Task 8**
+- [ ] **Step 9: Commit Task 8**
 
 ```powershell
-git add backend-node/src/services/episodeAudioMixService.js backend-node/src/services/mergedEpisodePostProcess.js backend-node/src/services/videoMergeService.js backend-node/src/routes/videoMerges.js backend-node/test/episodeAudioMixService.test.js backend-node/test/videoMergeDirectorTimeline.test.js backend-node/test/videoMergeUpscaleIntegration.test.js
+git add backend-node/src/services/episodeAudioMixService.js backend-node/src/services/mergedEpisodePostProcess.js backend-node/src/services/videoMergeService.js backend-node/src/routes/videoMerges.js backend-node/src/director/timelineService.js backend-node/src/director/directorPostproductionService.js backend-node/test/episodeAudioMixService.test.js backend-node/test/videoMergeDirectorTimeline.test.js backend-node/test/videoMergeUpscaleIntegration.test.js backend-node/test/timelineService.test.js backend-node/test/directorPostproductionService.test.js
 git commit -m "fix: preserve generated audio in episode mixes"
 ```
 
@@ -896,6 +1009,13 @@ test('mode switching preserves inactive configuration and marks H3 drafts stale'
   assert.equal(harness.model.bgm.local_path, 'music/main.wav');
   assert.equal(harness.model.bgm.mode, 'per_segment');
   assert.equal(harness.events.some((event) => event.name === 'h3-stale'), true);
+});
+
+test('dialogue and narration ownership controls are saved independently', async () => {
+  const harness = createAudioPlanHarness();
+  await harness.saveEpisode({ speech: { dialogue_owner: 'post_tts', narration_owner: 'none' } });
+  assert.equal(harness.lastEpisodePatch.speech.dialogue_owner, 'post_tts');
+  assert.equal(harness.lastEpisodePatch.speech.narration_owner, 'none');
 });
 
 test('per-shot audio editor sends normalized patch fields', async () => {
@@ -945,7 +1065,7 @@ PATCH validates and persists a user-authored plan. POST `/plan` invokes `ensureE
 
 - [ ] **Step 5: Implement the audio-plan panel**
 
-Provide Chinese controls for the three BGM modes, episode prompt, continuity key, BGM file/media path, levels/fades, and per-shot ambience/effects/diegetic music/cue mode/intensity. Keep inactive mode configuration in the model. Show a clear stale-draft badge after audio changes.
+Provide Chinese controls for the three BGM modes, episode prompt, continuity key, BGM file/media path, levels/fades, independent dialogue/narration ownership, and per-shot ambience/effects/diegetic music/cue mode/intensity/ownership overrides. Keep inactive mode configuration in the model. Show locked/manual field state and provide “恢复 AI 管理”. Show a clear stale-draft badge after audio or speech ownership changes.
 
 - [ ] **Step 6: Complete both end-to-end fixtures**
 
@@ -985,4 +1105,7 @@ git commit -m "feat: expose episode audiovisual production controls"
 - [ ] Confirm imported and story-generated fixtures both retain AV data through H3 compilation.
 - [ ] Confirm each BGM mode produces the specified H3 and merge behavior.
 - [ ] Confirm dialogue/narration post-processing preserves generated base audio.
-- [ ] Confirm all five video-generation entry paths use prepared H3 drafts.
+- [ ] Confirm every storyboard-bound video-generation entry uses prepared H3 drafts.
+- [ ] Confirm Canvas uses prepared H3 drafts and FreeCreate rejects storyboard-bound H3 without affecting non-H3 generation.
+- [ ] Confirm Director and ordinary merge both preserve per-clip audio, visual transition overlap, and subtitle timing.
+- [ ] Confirm each dialogue/narration layer has exactly one active owner and AI replanning preserves locked manual fields.
