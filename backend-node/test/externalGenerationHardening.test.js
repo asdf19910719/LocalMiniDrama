@@ -3,17 +3,17 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const fs = require('node:fs');
 const sharp = require('sharp');
-const { createExternalJob, createGenerationAttempt, runIdempotent } = require('../src/services/externalGenerationService');
+const { createExternalJob, createGenerationAttempt, recordAttemptEvent, runIdempotent } = require('../src/services/externalGenerationService');
 const { importExternalResult, rebindExternalResult } = require('../src/services/externalGenerationImportService');
 
 describe('external generation hardening', () => {
   let db;
   beforeEach(async () => {
     db = new Database(':memory:');
-    db.exec(`CREATE TABLE image_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, storyboard_id INTEGER, drama_id INTEGER, provider TEXT, prompt TEXT, image_url TEXT, local_path TEXT, width INTEGER, height INTEGER, status TEXT, created_at TEXT, updated_at TEXT);
+    db.exec(`CREATE TABLE image_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, storyboard_id INTEGER, drama_id INTEGER, provider TEXT, prompt TEXT, image_url TEXT, local_path TEXT, width INTEGER, height INTEGER, frame_type TEXT, status TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE assets (id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER, name TEXT, type TEXT, category TEXT, url TEXT, local_path TEXT, file_size INTEGER, mime_type TEXT, width INTEGER, height INTEGER, image_gen_id INTEGER, created_at TEXT, updated_at TEXT);
       CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER);
-      CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT, deleted_at TEXT);
+      CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, image_url TEXT, local_path TEXT, image_updated_at TEXT, status TEXT, updated_at TEXT, deleted_at TEXT);
     `);
     db.exec(fs.readFileSync('migrations/24_external_web_generation.sql', 'utf8'));
     db.exec(fs.readFileSync('migrations/25_external_web_generation_hardening.sql', 'utf8'));
@@ -85,8 +85,16 @@ describe('external generation hardening', () => {
     const job = createExternalJob(db, { id: 'job-review', dramaId: 7, storyboardId: 11, site: 'chatgpt', promptSnapshot: 'review' });
     const attempt = createGenerationAttempt(db, job.id, { id: 'attempt-review', status: 'submitted' });
     db.prepare("UPDATE external_generation_attempts SET status='needs_review' WHERE id=?").run(attempt.id);
-    db.exec("CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)");
-    db.prepare("INSERT INTO image_generation_tasks (id, status) VALUES ('task-review', 'submitted')").run();
+    db.exec(`CREATE TABLE image_generation_tasks (
+      id TEXT PRIMARY KEY, drama_id INTEGER, target_type TEXT, target_id INTEGER,
+      generation_channel TEXT, status TEXT, batch_id TEXT, queue_position INTEGER,
+      prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT,
+      image_generation_id INTEGER, external_job_id TEXT, error_code TEXT, error_message TEXT,
+      created_at TEXT, updated_at TEXT, completed_at TEXT
+    )`);
+    db.prepare(`INSERT INTO image_generation_tasks
+      (id, drama_id, target_type, target_id, generation_channel, status, external_job_id, created_at, updated_at)
+      VALUES ('task-review', 7, 'storyboard_main', 11, 'chatgpt_web', 'generating', ?, datetime('now'), datetime('now'))`).run(job.id);
     db.prepare("UPDATE external_generation_jobs SET image_generation_task_id='task-review' WHERE id=?").run(job.id);
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#0000ff' } }).png().toBuffer();
     const imported = await importExternalResult(db, {
@@ -95,6 +103,8 @@ describe('external generation hardening', () => {
     });
     assert.equal(imported.status, 'imported');
     assert.equal(db.prepare("SELECT status FROM external_generation_attempts WHERE id=?").get(attempt.id).status, 'submitted');
-    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id IN (SELECT image_generation_task_id FROM external_generation_jobs WHERE id=?)").get(job.id)?.status, 'needs_review');
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-review'").get().status, 'generating');
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'recovery-capture-settled', eventType: 'COMPLETED' });
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-review'").get().status, 'completed');
   });
 });

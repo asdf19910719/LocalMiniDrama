@@ -9,6 +9,10 @@ function isUserTurn(node) {
   return node?.getAttribute?.('data-turn') === 'user' || node?.getAttribute?.('data-message-author-role') === 'user';
 }
 
+function isAssistantTurn(node) {
+  return node?.getAttribute?.('data-turn') === 'assistant' || node?.getAttribute?.('data-message-author-role') === 'assistant';
+}
+
 function isVisibleControl(element, documentRef) {
   if (!element || element.hidden || element.getAttribute?.('aria-hidden') === 'true') return false;
   if (element.closest?.('[aria-hidden="true"]')) return false;
@@ -27,6 +31,13 @@ function visibleControl(documentRef, selector) {
   return isVisibleControl(fallback, documentRef) ? fallback : null;
 }
 
+function openDialogFor(element) {
+  const dialog = element?.closest?.('[role="dialog"], dialog');
+  if (!dialog) return null;
+  if (dialog.getAttribute?.('aria-hidden') === 'true' || dialog.getAttribute?.('data-state') === 'closed') return null;
+  return dialog;
+}
+
 function isTransientAssistantIdentity(messageId) {
   return /^request-placeholder-/i.test(String(messageId || ''));
 }
@@ -38,18 +49,57 @@ function asFile(input) {
 }
 
 export class ChatGPTAdapter {
-  constructor({ documentRef = globalThis.document, fetchImpl = globalThis.fetch, locationRef = globalThis.location } = {}) {
-    this.document = documentRef; this.fetchImpl = fetchImpl; this.location = locationRef; this.referencesReady = false; this.capturePaused = false; this.seenResultFingerprints = new Set(); this.pendingObserver = null;
+  constructor({ documentRef = globalThis.document, fetchImpl = globalThis.fetch, locationRef = globalThis.location, now = () => Date.now(), grayShellStallMs = 15000, recoveryTimeoutMs = 30000, recoveryPollMs = 250, resultSettleMs = 5000 } = {}) {
+    this.document = documentRef; this.fetchImpl = fetchImpl; this.location = locationRef; this.now = now; this.grayShellStallMs = grayShellStallMs; this.recoveryTimeoutMs = recoveryTimeoutMs; this.recoveryPollMs = recoveryPollMs; this.resultSettleMs = resultSettleMs; this.referencesReady = false; this.capturePaused = false; this.seenResultFingerprints = new Set(); this.pendingObserver = null;
   }
   matches(url = this.location?.href || '') { return /^https:\/\/(www\.)?chatgpt\.com\//.test(url); }
   getConversationIdentity() { return conversationIdentity(this.location?.href); }
-  composer() { return visibleControl(this.document, selectors.composer); }
+  imageEditor() {
+    const candidates = typeof this.document?.querySelectorAll === 'function'
+      ? [...this.document.querySelectorAll(selectors.composer)]
+      : [];
+    for (const candidate of candidates) {
+      if (!isVisibleControl(candidate, this.document)) continue;
+      const dialog = openDialogFor(candidate);
+      if (dialog) return { composer: candidate, dialog };
+    }
+    return null;
+  }
+  pageMode() { return this.imageEditor() ? 'image_editor' : 'conversation'; }
+  composer() {
+    if (this.pageMode() !== 'conversation') return null;
+    const candidates = typeof this.document?.querySelectorAll === 'function'
+      ? [...this.document.querySelectorAll(selectors.composer)]
+      : [];
+    const normal = candidates.find((element) => isVisibleControl(element, this.document) && !openDialogFor(element));
+    if (normal) return normal;
+    const fallback = this.document?.querySelector?.(selectors.composer) || null;
+    return isVisibleControl(fallback, this.document) && !openDialogFor(fallback) ? fallback : null;
+  }
   sendButton() { return visibleControl(this.document, selectors.send); }
   isComposerReady() { return Boolean(this.composer()); }
   isSubmitReady() {
     const composer = this.isComposerReady();
     const button = this.sendButton();
     return composer && Boolean(button && !button.disabled);
+  }
+  async closeImageEditor({ timeoutMs = 3000, intervalMs = 50 } = {}) {
+    const editor = this.imageEditor();
+    if (!editor) return false;
+    const close = editor.dialog.querySelector?.([
+      'button[aria-label*="关闭全屏"]',
+      'button[aria-label*="Close fullscreen"]',
+      'button[aria-label*="关闭"]',
+      'button[aria-label*="Close"]',
+    ].join(','));
+    if (!close || !isVisibleControl(close, this.document)) throw new Error('IMAGE_EDITOR_CLOSE_UNAVAILABLE');
+    close.click();
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (this.imageEditor()) {
+      if (Date.now() >= deadline) throw new Error('IMAGE_EDITOR_CLOSE_TIMEOUT');
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, intervalMs)));
+    }
+    return true;
   }
   fillPrompt(prompt) {
     const element = this.composer(); if (!element) throw new Error('ADAPTER_BROKEN');
@@ -93,17 +143,72 @@ export class ChatGPTAdapter {
     this.capturePaused = false;
     this.seenResultFingerprints.clear();
     const requested = identity?.assistantMessageId || identity?.messageId;
-    const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])].filter((node) => !isUserTurn(node));
-    const target = requested
-      ? nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }))
-      : null;
-    const assistantMessageId = messageIdentity(target)?.messageId;
-    if (!target || !assistantMessageId) {
+    if (!requested) {
       const error = Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' });
       onError(error);
       return () => {};
     }
-    return this.observeAttempt({ ...identity, assistantMessageId }, onResult, onError);
+    const root = this.conversationRoot();
+    let observer = null;
+    let pollTimer = null;
+    let activeStop = null;
+    let stopped = false;
+    const deadline = this.now() + Math.max(0, this.recoveryTimeoutMs);
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      observer?.disconnect();
+      if (pollTimer !== null) clearTimeout(pollTimer);
+      pollTimer = null;
+      activeStop?.();
+    };
+    const discover = () => {
+      if (stopped || activeStop) return;
+      const nodes = [...(this.document?.querySelectorAll(selectors.assistant) || [])].filter((node) => !isUserTurn(node));
+      let target = nodes.find((node) => identityMatches(messageIdentity(node), { messageId: requested }));
+      if (!target && identity?.userMessageId) {
+        const turns = [...(this.document?.querySelectorAll(selectors.turn) || [])];
+        const anchorIndex = turns.findIndex((node) => isUserTurn(node)
+          && identityMatches(messageIdentity(node), { messageId: identity.userMessageId }));
+        if (anchorIndex >= 0) {
+          for (let index = anchorIndex + 1; index < turns.length; index += 1) {
+            const candidate = turns[index];
+            if (isUserTurn(candidate)) {
+              if (identityMatches(messageIdentity(candidate), { messageId: identity.userMessageId })) continue;
+              break;
+            }
+            const candidateId = messageIdentity(candidate)?.messageId;
+            if (isAssistantTurn(candidate) && candidateId && !isTransientAssistantIdentity(candidateId)) {
+              target = candidate;
+              break;
+            }
+          }
+        }
+      }
+      const assistantMessageId = messageIdentity(target)?.messageId;
+      if (target && assistantMessageId) {
+        observer?.disconnect();
+        if (pollTimer !== null) clearTimeout(pollTimer);
+        pollTimer = null;
+        activeStop = this.observeAttempt({ ...identity, assistantMessageId }, onResult, onError);
+        return;
+      }
+      if (this.now() >= deadline) {
+        stop();
+        onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' }));
+        return;
+      }
+      if (pollTimer === null) pollTimer = setTimeout(() => {
+        pollTimer = null;
+        discover();
+      }, Math.max(0, this.recoveryPollMs));
+    };
+    if (root && typeof MutationObserver !== 'undefined') {
+      observer = new MutationObserver(discover);
+      observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+    }
+    discover();
+    return stop;
   }
   conversationRoot() {
     return this.document?.querySelector?.('main[data-conversation-id], main') || this.document?.body || this.document;
@@ -116,13 +221,16 @@ export class ChatGPTAdapter {
     // otherwise a still-loading history turn gets bound and the observer is
     // orphaned when ChatGPT renumbers turns mid-generation.
     const existingNodes = [...(root?.querySelectorAll?.(selectors.assistant) || [])];
+    const existingTurns = [...(root?.querySelectorAll?.(selectors.turn) || [])];
     const known = new Set(existingNodes
       .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
     const preExisting = new WeakSet(existingNodes);
+    const preExistingTurns = new WeakSet(existingTurns);
     if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
     if (!root) { onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); return () => {}; }
     let activeStop = null;
     let activeAssistantId = null;
+    let activeUserId = identity?.userMessageId || null;
     let generatingReported = false;
     const forwardResult = (result) => {
       if (result?.status === 'GENERATING') {
@@ -132,7 +240,31 @@ export class ChatGPTAdapter {
       return onResult(result);
     };
     const discover = () => {
-      const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
+      if (!activeUserId) {
+        const newUser = [...(root.querySelectorAll?.(selectors.turn) || [])]
+          .filter((node) => !preExistingTurns.has(node) && isUserTurn(node))
+          .map((node) => messageIdentity(node)?.messageId)
+          .find((messageId) => messageId && !isTransientAssistantIdentity(messageId));
+        if (newUser) {
+          activeUserId = newUser;
+          forwardResult({ status: 'USER_BOUND', attemptId: identity?.attemptId, userMessageId: newUser, results: [] });
+        }
+      }
+      const allTurns = [...(root.querySelectorAll?.(selectors.turn) || [])];
+      let candidateNodes = null;
+      if (activeUserId) {
+        const anchorIndex = allTurns.findIndex((node) => isUserTurn(node)
+          && identityMatches(messageIdentity(node), { messageId: activeUserId }));
+        candidateNodes = [];
+        if (anchorIndex >= 0) {
+          for (let index = anchorIndex + 1; index < allTurns.length; index += 1) {
+            const candidate = allTurns[index];
+            if (isUserTurn(candidate)) break;
+            if (isAssistantTurn(candidate)) { candidateNodes.push(candidate); break; }
+          }
+        }
+      }
+      const candidates = [...(candidateNodes || root.querySelectorAll?.(selectors.assistant) || [])]
         .filter((node) => !preExisting.has(node) && !isUserTurn(node))
         .map((node) => ({ node, id: messageIdentity(node)?.messageId }))
         .filter((entry) => entry.id && !isTransientAssistantIdentity(entry.id)
@@ -143,7 +275,7 @@ export class ChatGPTAdapter {
       known.add(selected.id);
       activeAssistantId = selected.id;
       activeStop = this.observeAttempt(
-        { ...identity, assistantMessageId: selected.id },
+        { ...identity, userMessageId: activeUserId, assistantMessageId: selected.id },
         forwardResult,
         (error) => {
           // ChatGPT can replace a streaming turn or promote its temporary
@@ -172,7 +304,11 @@ export class ChatGPTAdapter {
     const root = this.findAssistant(identity); if (!root) { this.capturePaused = true; onError(Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' })); const stopped = () => {}; stopped.stop = stopped; return stopped; }
     let observer = null;
     let pollTimer = null;
+    let settleTimer = null;
+    const importingFingerprints = new Set();
     let generatingReported = false;
+    let grayShellSince = null;
+    let grayShellEscalated = false;
     let stopped = false;
     const halt = (error, report = true) => {
       if (stopped) return;
@@ -180,6 +316,8 @@ export class ChatGPTAdapter {
       this.capturePaused = true;
       if (pollTimer !== null) clearTimeout(pollTimer);
       pollTimer = null;
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = null;
       observer?.disconnect();
       if (report) onError(error);
     };
@@ -190,13 +328,51 @@ export class ChatGPTAdapter {
         emit();
       }, 500);
     };
+    const clearSettle = () => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = null;
+    };
+    const scheduleSettle = (result) => {
+      if (stopped || this.capturePaused || settleTimer !== null || importingFingerprints.size) return;
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        if (stopped || this.capturePaused) return;
+        try {
+          const latest = extractResultSet(root, identity);
+          const hasFresh = latest.results?.some((item) => !this.seenResultFingerprints.has(item.nodeFingerprint)
+            && !importingFingerprints.has(item.nodeFingerprint));
+          if (latest.status !== 'RESULT_READY' || Number(latest.pendingResultCount || 0) > 0 || hasFresh) {
+            emit();
+            return;
+          }
+          Promise.resolve(onResult({ ...result, ...latest, status: 'CAPTURE_COMPLETE', results: [] }))
+            .then(() => stop())
+            .catch(() => halt(null, false));
+        } catch (error) { halt(error); }
+      }, Math.max(0, this.resultSettleMs));
+    };
     const emit = () => {
       if (stopped || this.capturePaused) return;
       try {
         const result = extractResultSet(root, identity);
         if (result.status === 'UNBOUND_RESULT' || result.status === 'NEEDS_REVIEW') {
           halt(Object.assign(new Error(result.status), { code: result.status }));
+        } else if (result.status === 'RESULT_SHELL') {
+          if (grayShellSince === null) grayShellSince = this.now();
+          if (!generatingReported) {
+            generatingReported = true;
+            Promise.resolve(onResult({ ...result, status: 'GENERATING' })).catch(() => halt(null, false));
+          }
+          if (!grayShellEscalated && this.now() - grayShellSince >= this.grayShellStallMs) {
+            grayShellEscalated = true;
+            Promise.resolve(onResult({ ...result, status: 'RESULT_SHELL_STALLED' }))
+              .then(() => halt(null, false))
+              .catch(() => halt(null, false));
+            return;
+          }
+          schedulePoll();
         } else if (result.status === 'GENERATING') {
+          grayShellSince = null;
           if (!generatingReported) {
             generatingReported = true;
             Promise.resolve(onResult(result)).catch(() => halt(null, false));
@@ -205,11 +381,29 @@ export class ChatGPTAdapter {
         } else {
           if (pollTimer !== null) clearTimeout(pollTimer);
           pollTimer = null;
-          const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint));
+          if (Number(result.pendingResultCount || 0) > 0) clearSettle();
+          const fresh = result.results.filter((item) => !this.seenResultFingerprints.has(item.nodeFingerprint)
+            && !importingFingerprints.has(item.nodeFingerprint));
           if (fresh.length) {
+            clearSettle();
+            fresh.forEach((item) => importingFingerprints.add(item.nodeFingerprint));
             Promise.resolve(onResult({ ...result, results: fresh }))
-              .then(() => fresh.forEach((item) => this.seenResultFingerprints.add(item.nodeFingerprint)))
-              .catch(() => halt(null, false));
+              .then(() => {
+                fresh.forEach((item) => {
+                  importingFingerprints.delete(item.nodeFingerprint);
+                  this.seenResultFingerprints.add(item.nodeFingerprint);
+                });
+                if (stopped) return;
+                emit();
+              })
+              .catch(() => {
+                fresh.forEach((item) => importingFingerprints.delete(item.nodeFingerprint));
+                halt(null, false);
+              });
+          } else if (Number(result.pendingResultCount || 0) > 0) {
+            schedulePoll();
+          } else if (result.results.length && importingFingerprints.size === 0) {
+            scheduleSettle(result);
           }
         }
       } catch (error) { halt(error); }
@@ -224,6 +418,8 @@ export class ChatGPTAdapter {
       stopped = true;
       if (pollTimer !== null) clearTimeout(pollTimer);
       pollTimer = null;
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = null;
       observer?.disconnect();
     };
     stop.stop = stop; stop.root = root; return stop;

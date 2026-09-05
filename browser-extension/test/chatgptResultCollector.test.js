@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractResultSet } from '../src/sites/chatgpt/resultCollector.js';
 import { ChatGPTAdapter } from '../src/sites/chatgpt/adapter.js';
+import { captureResults, installChatGPTContentBridge } from '../src/sites/chatgpt/contentRuntime.js';
 
 function node(id, images = []) { return { dataset: { messageId: id }, getAttribute(name) { return name === 'data-message-id' ? id : null; }, querySelectorAll() { return images; } }; }
 function image(url) { return { currentSrc: url, src: url, dataset: {} }; }
@@ -27,6 +28,69 @@ test('collector recognizes current ChatGPT assistant turns and generated image n
   assert.equal(result.status, 'RESULT_READY');
   assert.equal(result.assistantMessageId, 'conversation-turn-2');
   assert.equal(result.results[0].sourceUrl, 'https://chatgpt.com/backend-api/estuary/content?id=generated');
+});
+
+test('collector prefers the stable ChatGPT turn id while retaining the render id as a recovery alias', () => {
+  const assistant = {
+    dataset: { turn: 'assistant' },
+    getAttribute(name) {
+      if (name === 'data-turn') return 'assistant';
+      if (name === 'data-turn-id') return 'request-conversation-1-5';
+      if (name === 'data-turn-id-container') return 'request-conversation-1-5';
+      if (name === 'data-testid') return 'conversation-turn-22';
+      return null;
+    },
+    querySelectorAll(selector) {
+      return selector === 'img' ? [image('https://chatgpt.com/backend-api/estuary/content?id=stable')] : [];
+    },
+  };
+  const doc = { querySelectorAll() { return [assistant]; } };
+  const adapter = new ChatGPTAdapter({ documentRef: doc });
+
+  const result = extractResultSet(assistant, {
+    attemptId: 'attempt-stable',
+    assistantMessageId: 'request-conversation-1-5',
+  });
+
+  assert.equal(result.status, 'RESULT_READY');
+  assert.equal(result.assistantMessageId, 'request-conversation-1-5');
+  assert.equal(adapter.findAssistant({ assistantMessageId: 'conversation-turn-22' }), assistant);
+});
+
+test('adapter blocks the conversation composer while the ChatGPT image editor is open and can close it', async () => {
+  let editorOpen = true;
+  const dialog = {
+    getAttribute(name) { return name === 'data-state' ? (editorOpen ? 'open' : 'closed') : null; },
+    querySelector(selector) { return selector.includes('关闭全屏') ? closeButton : null; },
+  };
+  const closeButton = {
+    hidden: false,
+    getClientRects() { return [{ width: 36, height: 36 }]; },
+    getAttribute() { return null; },
+    click() { editorOpen = false; },
+  };
+  const composer = (kind) => ({
+    hidden: false,
+    getClientRects() { return [{ width: 320, height: 40 }]; },
+    getAttribute() { return null; },
+    closest(selector) {
+      if (kind === 'editor' && selector.includes('[role="dialog"]') && editorOpen) return dialog;
+      return null;
+    },
+  });
+  const normalComposer = composer('normal');
+  const editorComposer = composer('editor');
+  const doc = {
+    querySelector() { return null; },
+    querySelectorAll(selector) { return selector.includes('prompt-textarea') || selector.includes('contenteditable') ? [normalComposer, editorComposer] : []; },
+  };
+  const adapter = new ChatGPTAdapter({ documentRef: doc });
+
+  assert.equal(adapter.pageMode(), 'image_editor');
+  assert.equal(adapter.isComposerReady(), false);
+  await adapter.closeImageEditor({ timeoutMs: 20, intervalMs: 0 });
+  assert.equal(editorOpen, false);
+  assert.equal(adapter.pageMode(), 'conversation');
 });
 
 test('adapter finds current ChatGPT assistant turn containers', () => {
@@ -71,6 +135,94 @@ test('adapter recovers the bound older assistant instead of stealing a later att
   adapter.recoverAttempt({ attemptId: 'attempt-1', assistantMessageId: 'conversation-turn-2' }, () => {});
 
   assert.equal(observed.assistantMessageId, 'conversation-turn-2');
+});
+
+test('adapter waits for the stable assistant turn to mount after a ChatGPT page reload', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const assistant = {
+      dataset: { turn: 'assistant' },
+      getAttribute(name) {
+        if (name === 'data-turn') return 'assistant';
+        if (name === 'data-turn-id') return 'request-conversation-1-5';
+        return null;
+      },
+    };
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const doc = {
+      body: root,
+      querySelector(selector) { return selector.includes('main') ? root : null; },
+      querySelectorAll() { return nodes; },
+    };
+    const adapter = new ChatGPTAdapter({ documentRef: doc, recoveryTimeoutMs: 1000 });
+    let observed;
+    const errors = [];
+    adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
+
+    const stop = adapter.recoverAttempt(
+      { attemptId: 'attempt-reload', assistantMessageId: 'request-conversation-1-5' },
+      () => {},
+      (error) => errors.push(error.code),
+    );
+    assert.equal(observed, undefined);
+    assert.deepEqual(errors, []);
+
+    nodes = [assistant];
+    discover();
+
+    assert.equal(observed.assistantMessageId, 'request-conversation-1-5');
+    assert.deepEqual(errors, []);
+    stop();
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('adapter recovers a promoted final assistant UUID from the bound user turn after reload', () => {
+  const user = {
+    getAttribute(name) {
+      if (name === 'data-turn') return 'user';
+      if (name === 'data-turn-id') return 'user-message-uuid';
+      if (name === 'data-testid') return 'conversation-turn-9';
+      return null;
+    },
+  };
+  const assistant = {
+    getAttribute(name) {
+      if (name === 'data-turn') return 'assistant';
+      if (name === 'data-turn-id') return 'assistant-final-uuid';
+      if (name === 'data-testid') return 'conversation-turn-10';
+      return null;
+    },
+  };
+  const ordered = [user, assistant];
+  const doc = {
+    body: { querySelectorAll() { return ordered; } },
+    querySelector(selector) { return selector.includes('main') ? this.body : null; },
+    querySelectorAll(selector) {
+      return selector.includes('data-turn="assistant"') ? [assistant] : ordered;
+    },
+  };
+  const adapter = new ChatGPTAdapter({ documentRef: doc, recoveryTimeoutMs: 0 });
+  let observed;
+  const errors = [];
+  adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
+
+  adapter.recoverAttempt({
+    attemptId: 'attempt-promoted-after-reload',
+    assistantMessageId: 'request-conversation-1-3',
+    userMessageId: 'user-message-uuid',
+  }, () => {}, (error) => errors.push(error.code));
+
+  assert.equal(observed.assistantMessageId, 'assistant-final-uuid');
+  assert.deepEqual(errors, []);
 });
 
 test('adapter pauses after capture failure instead of retrying forever', async () => {
@@ -248,6 +400,179 @@ test('collector treats blob placeholder images as still generating', () => {
   assert.deepEqual(generating.results, []);
 });
 
+test('collector distinguishes a semantically completed gray result shell from ordinary generation', () => {
+  const marker = {
+    getAttribute(name) { return name === 'aria-label' ? '已生成图片：等待实体图片挂载' : null; },
+  };
+  const assistant = {
+    dataset: { messageId: 'assistant-shell' },
+    getAttribute(name) { return name === 'data-message-id' ? 'assistant-shell' : null; },
+    querySelectorAll(selector) {
+      if (selector === 'img') return [];
+      if (selector.includes('aria-label')) return [marker];
+      return [];
+    },
+  };
+
+  const result = extractResultSet(assistant, {
+    attemptId: 'attempt-shell',
+    assistantMessageId: 'assistant-shell',
+  });
+
+  assert.equal(result.status, 'RESULT_SHELL');
+  assert.deepEqual(result.results, []);
+});
+
+test('adapter escalates a sustained gray result shell exactly once', async () => {
+  const previousObserver = globalThis.MutationObserver;
+  const previousTimeout = globalThis.setTimeout;
+  const previousClearTimeout = globalThis.clearTimeout;
+  let now = 0;
+  let poll;
+  const marker = { getAttribute(name) { return name === 'aria-label' ? 'Generated image' : null; } };
+  const assistant = {
+    dataset: { messageId: 'assistant-shell' },
+    getAttribute(name) { return name === 'data-message-id' ? 'assistant-shell' : null; },
+    querySelectorAll(selector) {
+      if (selector === 'img') return [];
+      if (selector.includes('aria-label')) return [marker];
+      return [];
+    },
+  };
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  globalThis.setTimeout = (callback) => { poll = callback; return 1; };
+  globalThis.clearTimeout = () => {};
+  try {
+    const adapter = new ChatGPTAdapter({
+      documentRef: { querySelectorAll() { return [assistant]; } },
+      now: () => now,
+      grayShellStallMs: 1000,
+    });
+    const statuses = [];
+    adapter.observeAttempt(
+      { attemptId: 'attempt-shell', assistantMessageId: 'assistant-shell' },
+      async (result) => { statuses.push(result.status); },
+    );
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING']);
+
+    now = 1001;
+    poll();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING', 'RESULT_SHELL_STALLED']);
+    poll?.();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING', 'RESULT_SHELL_STALLED']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+  }
+});
+
+test('capture runtime asks the background to reload a stalled gray result shell', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { sendMessage: async (message) => { messages.push(message); return { ok: true }; } } };
+  const adapter = { getConversationIdentity: () => ({ conversationId: 'conversation-1' }) };
+
+  await captureResults({
+    adapter,
+    chromeApi,
+    attempt: { attemptId: 'attempt-shell', assistantMessageId: 'request-conversation-1-5' },
+    resultSet: { status: 'RESULT_SHELL_STALLED', assistantMessageId: 'request-conversation-1-5', results: [] },
+  });
+
+  assert.deepEqual(messages, [{
+    action: 'recoverGrayShell',
+    payload: {
+      attemptId: 'attempt-shell',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'request-conversation-1-5',
+    },
+  }]);
+});
+
+test('capture runtime persists the submitted user UUID as a recovery anchor', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { sendMessage: async (message) => { messages.push(message); return { ok: true }; } } };
+
+  await captureResults({
+    adapter: {},
+    chromeApi,
+    attempt: { attemptId: 'attempt-user-anchor', conversationId: 'conversation-1' },
+    resultSet: { status: 'USER_BOUND', userMessageId: 'user-message-uuid', results: [] },
+  });
+
+  assert.deepEqual(messages, [{
+    action: 'attemptUserBound',
+    payload: {
+      attemptId: 'attempt-user-anchor',
+      conversationId: 'conversation-1',
+      userMessageId: 'user-message-uuid',
+    },
+  }]);
+});
+
+test('capture runtime retains persisted recovery state until the adapter settle signal', async () => {
+  const actions = [];
+  const chromeApi = { runtime: { sendMessage: async (message) => { actions.push(message.action); return { ok: true }; } } };
+  const adapter = {
+    getConversationIdentity: () => ({ conversationId: 'conversation-1' }),
+    fetchOriginal: async (result) => ({ bytes: Uint8Array.from([1]), mime: 'image/png', sourceUrl: result.sourceUrl }),
+  };
+
+  await captureResults({
+    adapter,
+    chromeApi,
+    attempt: { attemptId: 'attempt-complete' },
+    resultSet: {
+      status: 'RESULT_READY',
+      resultSetId: 'set-1',
+      assistantMessageId: 'request-conversation-1-6',
+      results: [{ resultIndex: 0, sourceUrl: 'https://chatgpt.com/result.png' }],
+    },
+  });
+
+  assert.deepEqual(actions, ['attemptBound', 'capturedResult']);
+
+  await captureResults({
+    adapter,
+    chromeApi,
+    attempt: { attemptId: 'attempt-complete' },
+    resultSet: { status: 'CAPTURE_COMPLETE', results: [] },
+  });
+  assert.deepEqual(actions, ['attemptBound', 'capturedResult', 'attemptCaptureComplete']);
+});
+
+test('content bridge exposes image-editor mode and closes it on request', async () => {
+  let listener;
+  let closed = 0;
+  const chromeApi = { runtime: { onMessage: { addListener(value) { listener = value; } } } };
+  const attributes = new Map();
+  const globalRef = {
+    document: { documentElement: {
+      hasAttribute(name) { return attributes.has(name); },
+      setAttribute(name, value) { attributes.set(name, value); },
+    } },
+  };
+  const adapter = {
+    pageMode: () => 'image_editor',
+    isComposerReady: () => false,
+    isSubmitReady: () => false,
+    closeImageEditor: async () => { closed += 1; return true; },
+  };
+  installChatGPTContentBridge({ chromeApi, adapter, globalRef });
+  const send = (message) => new Promise((resolve) => listener(message, {}, resolve));
+
+  const ready = await send({ action: 'ready' });
+  const exited = await send({ action: 'exitImageEditor' });
+
+  assert.deepEqual(ready, { ok: true, value: { composer: false, submit: false, mode: 'image_editor' } });
+  assert.deepEqual(exited, { ok: true, value: true });
+  assert.equal(closed, 1);
+});
+
 test('collector waits until an HTTP image node has actually loaded', () => {
   const pendingImage = image('https://chatgpt.com/backend-api/estuary/content?id=pending');
   pendingImage.complete = false;
@@ -324,12 +649,18 @@ test('adapter reports generating once and polls until an image finishes loading'
 
 test('collector keeps only http(s) sources when placeholders are mixed in', () => {
   const mixed = extractResultSet(
-    node('assistant-9', [image('blob:https://chatgpt.com/x'), image('https://chatgpt.com/backend-api/estuary/content?id=done')]),
+    node('assistant-9', [
+      image('blob:https://chatgpt.com/x'),
+      image('data:image/png;base64,pending'),
+      image('https://chatgpt.com/backend-api/estuary/content?id=done'),
+    ]),
     { attemptId: 'attempt-9', assistantMessageId: 'assistant-9', resultSetId: 'set-9' },
   );
   assert.equal(mixed.status, 'RESULT_READY');
   assert.equal(mixed.results.length, 1);
+  assert.equal(mixed.pendingResultCount, 2);
   assert.equal(mixed.results[0].sourceUrl, 'https://chatgpt.com/backend-api/estuary/content?id=done');
+  assert.equal(mixed.results[0].resultIndex, 2);
 });
 
 test('collector deduplicates repeated DOM image nodes that point to the same source', () => {
@@ -347,6 +678,27 @@ test('collector deduplicates repeated DOM image nodes that point to the same sou
     'https://chatgpt.com/backend-api/estuary/content?id=other-file',
   ]);
   assert.deepEqual(duplicate.results.map((result) => result.resultIndex), [0, 1]);
+});
+
+test('collector accepts a loaded responsive copy when an earlier node with the same URL is pending', () => {
+  const pendingCopy = image('https://chatgpt.com/backend-api/estuary/content?id=responsive-copy');
+  pendingCopy.complete = false;
+  pendingCopy.naturalWidth = 0;
+  const loadedCopy = image(pendingCopy.src);
+  loadedCopy.complete = true;
+  loadedCopy.naturalWidth = 1536;
+
+  const result = extractResultSet(
+    node('assistant-responsive', [pendingCopy, loadedCopy]),
+    { attemptId: 'attempt-responsive', assistantMessageId: 'assistant-responsive' },
+  );
+
+  assert.equal(result.status, 'RESULT_READY');
+  assert.equal(result.pendingResultCount, 0);
+  assert.deepEqual(result.results.map((item) => ({ index: item.resultIndex, url: item.sourceUrl })), [{
+    index: 0,
+    url: pendingCopy.src,
+  }]);
 });
 
 test('beginAttempt ignores assistant nodes that existed before submit even without identity', () => {
@@ -415,7 +767,179 @@ test('beginAttempt waits past transient request placeholders for the real assist
   }
 });
 
-test('beginAttempt never binds the freshly submitted user turn or imports its reference thumbnails', () => {
+test('beginAttempt binds the newly submitted user UUID before the assistant reply appears', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const user = {
+      getAttribute(name) {
+        if (name === 'data-turn') return 'user';
+        if (name === 'data-turn-id') return 'new-user-uuid';
+        if (name === 'data-testid') return 'conversation-turn-11';
+        return null;
+      },
+    };
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const results = [];
+
+    adapter.beginAttempt({ attemptId: 'attempt-user-anchor' }, (result) => results.push(result));
+    nodes = [user];
+    discover();
+
+    assert.deepEqual(results, [{
+      status: 'USER_BOUND',
+      attemptId: 'attempt-user-anchor',
+      userMessageId: 'new-user-uuid',
+      results: [],
+    }]);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('beginAttempt binds only the assistant immediately following its user anchor', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const turn = (role, id) => ({
+      getAttribute(name) {
+        if (name === 'data-turn') return role;
+        if (name === 'data-turn-id') return id;
+        return null;
+      },
+    });
+    const targetUser = turn('user', 'user-target');
+    const targetAssistant = turn('assistant', 'assistant-target');
+    const laterUser = turn('user', 'user-unrelated');
+    const laterAssistant = turn('assistant', 'assistant-unrelated');
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const observed = [];
+    adapter.observeAttempt = (identity) => { observed.push(identity.assistantMessageId); return () => {}; };
+
+    adapter.beginAttempt({ attemptId: 'attempt-adjacent' }, () => {});
+    nodes = [targetUser, targetAssistant, laterUser, laterAssistant];
+    discover();
+
+    assert.deepEqual(observed, ['assistant-target']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('adapter emits capture completion only after the result set settles', async () => {
+  const previousObserver = globalThis.MutationObserver;
+  const previousTimeout = globalThis.setTimeout;
+  const previousClearTimeout = globalThis.clearTimeout;
+  const timers = new Map();
+  let nextTimer = 1;
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  globalThis.setTimeout = (callback) => { const id = nextTimer++; timers.set(id, callback); return id; };
+  globalThis.clearTimeout = (id) => { timers.delete(id); };
+  try {
+    const assistant = node('assistant-settle', [image('https://chatgpt.com/backend-api/estuary/content?id=settled')]);
+    const adapter = new ChatGPTAdapter({
+      documentRef: { querySelectorAll() { return [assistant]; } },
+      resultSettleMs: 100,
+    });
+    const statuses = [];
+
+    adapter.observeAttempt(
+      { attemptId: 'attempt-settle', assistantMessageId: 'assistant-settle' },
+      async (result) => { statuses.push(result.status); },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['RESULT_READY']);
+    assert.equal(timers.size, 1);
+
+    [...timers.values()][0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['RESULT_READY', 'CAPTURE_COMPLETE']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+  }
+});
+
+test('adapter does not settle while another generated candidate is still loading', async () => {
+  const previousObserver = globalThis.MutationObserver;
+  const previousTimeout = globalThis.setTimeout;
+  const previousClearTimeout = globalThis.clearTimeout;
+  const timers = new Map();
+  let nextTimer = 1;
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  globalThis.setTimeout = (callback) => { const id = nextTimer++; timers.set(id, callback); return id; };
+  globalThis.clearTimeout = (id) => { timers.delete(id); };
+  try {
+    const first = image('https://chatgpt.com/backend-api/estuary/content?id=first-ready');
+    const second = image('blob:https://chatgpt.com/second-pending');
+    second.complete = false;
+    second.naturalWidth = 0;
+    const assistant = node('assistant-progressive', [first, second]);
+    const adapter = new ChatGPTAdapter({
+      documentRef: { querySelectorAll() { return [assistant]; } },
+      resultSettleMs: 100,
+    });
+    const batches = [];
+
+    adapter.observeAttempt(
+      { attemptId: 'attempt-progressive', assistantMessageId: 'assistant-progressive' },
+      async (result) => { batches.push({ status: result.status, indexes: result.results.map((item) => item.resultIndex) }); },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(batches, [{ status: 'RESULT_READY', indexes: [0] }]);
+
+    const pendingPoll = [...timers.entries()][0];
+    timers.delete(pendingPoll[0]);
+    pendingPoll[1]();
+    await Promise.resolve();
+    assert.equal(batches.some((item) => item.status === 'CAPTURE_COMPLETE'), false);
+
+    second.currentSrc = 'https://chatgpt.com/backend-api/estuary/content?id=second-ready';
+    second.src = second.currentSrc;
+    second.complete = true;
+    second.naturalWidth = 1536;
+    const readyPoll = [...timers.entries()][0];
+    timers.delete(readyPoll[0]);
+    readyPoll[1]();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(batches, [
+      { status: 'RESULT_READY', indexes: [0] },
+      { status: 'RESULT_READY', indexes: [1] },
+    ]);
+
+    const settle = [...timers.entries()][0];
+    timers.delete(settle[0]);
+    settle[1]();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(batches.at(-1).status, 'CAPTURE_COMPLETE');
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+  }
+});
+
+test('beginAttempt records the freshly submitted user turn but never imports its reference thumbnails', () => {
   const previousObserver = globalThis.MutationObserver;
   let discover;
   globalThis.MutationObserver = class {
@@ -462,7 +986,11 @@ test('beginAttempt never binds the freshly submitted user turn or imports its re
     assistantTurn.dataset.testid = 'conversation-turn-12';
     nodes = [userTurn, assistantTurn];
     discover();
-    assert.deepEqual(captured, ['conversation-turn-12', 'result:conversation-turn-12:RESULT_READY']);
+    assert.deepEqual(captured, [
+      'result:undefined:USER_BOUND',
+      'conversation-turn-12',
+      'result:conversation-turn-12:RESULT_READY',
+    ]);
     // the user turn must never surface its reference thumbnail as a result
     assert.ok(!captured.some((entry) => String(entry).includes('refthumb')));
   } finally {

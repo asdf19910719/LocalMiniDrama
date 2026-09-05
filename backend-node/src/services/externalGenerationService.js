@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const tasksService = require('./imageGenerationTaskService');
 
 function id() {
   return crypto.randomUUID();
@@ -181,7 +182,7 @@ function createGenerationAttempt(db, jobId, input = {}) {
 }
 
 function recordAttemptEvent(db, attemptId, event = {}) {
-  const attempt = db.prepare('SELECT id FROM external_generation_attempts WHERE id = ?').get(attemptId);
+  const attempt = db.prepare('SELECT id, status FROM external_generation_attempts WHERE id = ?').get(attemptId);
   if (!attempt) throw new Error(`Generation attempt not found: ${attemptId}`);
   const idempotencyKey = String(value(event, 'idempotencyKey', 'idempotency_key', '') || '').trim();
   if (!idempotencyKey) throw new Error('idempotencyKey is required');
@@ -205,13 +206,21 @@ function recordAttemptEvent(db, attemptId, event = {}) {
         (id, attempt_id, idempotency_key, sequence, event_type, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(eventId, attemptId, idempotencyKey, sequence, eventType, payloadJson, timestamp);
+    if (eventType === 'USER_BOUND') {
+      const userMessageId = value(payload, 'userMessageId', 'user_message_id');
+      if (!userMessageId) throw new Error('userMessageId is required');
+      const conversationId = value(event, 'conversationId', 'conversation_id');
+      db.prepare(`UPDATE external_generation_attempts SET user_message_id=?,
+        conversation_id=COALESCE(conversation_id, ?), updated_at=? WHERE id=?`)
+        .run(userMessageId, conversationId, timestamp, attemptId);
+    }
     if (eventType === 'ASSISTANT_BOUND') {
       const assistantMessageId = value(payload, 'assistantMessageId', 'assistant_message_id');
       if (!assistantMessageId) throw new Error('assistantMessageId is required');
       const conversationId = value(event, 'conversationId', 'conversation_id');
       db.prepare(`UPDATE external_generation_attempts SET assistant_message_id=?,
         conversation_id=COALESCE(conversation_id, ?), status='generating', updated_at=?
-        WHERE id=? AND status IN ('pending','ready_to_send','submitted','generating')`)
+        WHERE id=? AND status IN ('pending','ready_to_send','submitted','generating','needs_review')`)
         .run(assistantMessageId, conversationId, timestamp, attemptId);
     }
     const nextStatus = { SUBMITTED: 'submitted', GENERATING: 'generating', RESULT_READY: 'completed', COMPLETED: 'completed', ADAPTER_ERROR: 'needs_review' }[eventType];
@@ -232,6 +241,9 @@ function recordAttemptEvent(db, attemptId, event = {}) {
         db.prepare(`UPDATE external_generation_attempts SET
           status=CASE WHEN status='completed' THEN status ELSE 'needs_review' END,
           updated_at=? WHERE id=?`).run(timestamp, attemptId);
+      } else if (eventType === 'RESULT_READY' || eventType === 'COMPLETED') {
+        db.prepare('UPDATE external_generation_attempts SET status=?, completed_at=COALESCE(completed_at, ?), updated_at=? WHERE id=?')
+          .run(nextStatus, timestamp, timestamp, attemptId);
       } else {
         db.prepare('UPDATE external_generation_attempts SET status=?, updated_at=? WHERE id=?').run(nextStatus, timestamp, attemptId);
       }
@@ -252,6 +264,14 @@ function recordAttemptEvent(db, attemptId, event = {}) {
               error_code=?, error_message=?, updated_at=? WHERE id=?
               AND status IN ('preparing', 'submitted', 'generating')`)
             .run(errorCode, errorMessage, timestamp, linked.task_id);
+          const hasImportedCandidate = attempt.status !== 'completed'
+            && Boolean(db.prepare('SELECT 1 FROM external_generation_results WHERE attempt_id=? LIMIT 1').get(attemptId));
+          if (hasImportedCandidate) {
+            db.prepare(`UPDATE image_generation_tasks SET status='needs_review',
+                error_code=?, error_message=?, completed_at=NULL, updated_at=?
+                WHERE id=? AND status='completed'`)
+              .run(errorCode, errorMessage, timestamp, linked.task_id);
+          }
         } else if (eventType === 'GENERATING') {
           db.prepare(`UPDATE image_generation_tasks SET status='generating',
               error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
@@ -262,6 +282,29 @@ function recordAttemptEvent(db, attemptId, event = {}) {
             AND (status IN ('preparing','submitted','generating')
               OR (status='needs_review' AND COALESCE(error_code, '')<>'result_timeout'))`)
             .run(timestamp, linked.task_id);
+        } else if (eventType === 'COMPLETED') {
+          const selected = db.prepare(`SELECT result.image_generation_id
+            FROM external_generation_attempts attempt
+            JOIN external_generation_results result ON result.attempt_id=attempt.id
+            WHERE attempt.id=? AND result.selected=1 AND result.image_generation_id IS NOT NULL
+            ORDER BY result.created_at LIMIT 1`).get(attemptId);
+          const hasCandidate = Boolean(db.prepare(`SELECT 1 FROM external_generation_results
+            WHERE attempt_id=? AND status IN ('imported','bound') LIMIT 1`).get(attemptId));
+          const task = db.prepare('SELECT * FROM image_generation_tasks WHERE id=?').get(linked.task_id);
+          if (task && ['preparing', 'submitted', 'generating'].includes(task.status) && (selected?.image_generation_id || hasCandidate)) {
+            let activeTask = task;
+            if (activeTask.status === 'preparing') activeTask = tasksService.transitionTask(db, activeTask.id, 'submitted');
+            if (activeTask.status === 'submitted') activeTask = tasksService.transitionTask(db, activeTask.id, 'generating');
+            if (selected?.image_generation_id) {
+              tasksService.transitionTask(db, activeTask.id, 'completed', { imageGenerationId: selected.image_generation_id });
+            } else {
+              tasksService.transitionTask(db, activeTask.id, 'needs_review');
+            }
+          } else {
+            db.prepare(`UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
+              AND status IN ('preparing','submitted','generating')`)
+              .run(timestamp, linked.task_id);
+          }
         } else {
           db.prepare(`UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
             AND status IN ('preparing','submitted','generating')`)

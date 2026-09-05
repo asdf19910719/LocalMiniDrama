@@ -164,6 +164,28 @@ it('reserves timeout recovery only when no other ChatGPT task is active and can 
   db.close();
 });
 
+it('reserves recovery for a capture-only adapter error once an assistant is safely bound', () => {
+  const db = setup();
+  const recoverable = taskService.createTask(db, {
+    dramaId: 7, targetType: 'prop', targetId: 3, generationChannel: 'chatgpt_web',
+    promptSnapshot: 'already generated', status: 'submitted',
+  });
+  taskService.transitionTask(db, recoverable.id, 'needs_review', {
+    errorCode: 'UNBOUND_RESULT', errorMessage: 'UNBOUND_RESULT',
+  });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-recoverable', recoverable.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-recoverable', recoverable.id, 7);
+  db.prepare('INSERT INTO external_generation_attempts (id, job_id, status, assistant_message_id, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run('attempt-recoverable', 'job-recoverable', 'generating', 'assistant-final', new Date().toISOString());
+
+  const reserved = queue.beginResultRecovery(db, recoverable.id);
+
+  assert.equal(reserved.status, 'generating');
+  assert.equal(reserved.error_code, null);
+  assert.equal(reserved.error_message, null);
+  db.close();
+});
+
 it('refuses timeout recovery without a durable assistant identity after the queue has advanced', () => {
   const db = setup();
   const timedOut = taskService.createTask(db, {

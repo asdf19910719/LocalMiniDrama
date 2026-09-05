@@ -1,5 +1,43 @@
 export async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
   try {
+    if (resultSet.status === 'CAPTURE_COMPLETE') {
+      const response = await chromeApi.runtime.sendMessage({
+        action: 'attemptCaptureComplete',
+        payload: {
+          attemptId: attempt.attemptId,
+          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+        },
+      });
+      if (!response?.ok) throw new Error(response?.error || 'CAPTURE_COMPLETION_NOT_ACKNOWLEDGED');
+      return;
+    }
+    if (resultSet.status === 'USER_BOUND') {
+      const response = await chromeApi.runtime.sendMessage({
+        action: 'attemptUserBound',
+        payload: {
+          attemptId: attempt.attemptId,
+          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+          userMessageId: resultSet.userMessageId,
+        },
+      });
+      if (!response?.ok) throw new Error(response?.error || 'USER_IDENTITY_NOT_ACKNOWLEDGED');
+      return;
+    }
+    if (resultSet.status === 'RESULT_SHELL_STALLED') {
+      const response = await chromeApi.runtime.sendMessage({
+        action: 'recoverGrayShell',
+        payload: {
+          attemptId: attempt.attemptId,
+          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+        },
+      });
+      if (!response?.ok) {
+        const code = response?.error === 'RESULT_SHELL_STUCK' ? 'RESULT_SHELL_STUCK' : 'RESULT_SHELL_RECOVERY_FAILED';
+        throw Object.assign(new Error(response?.error || code), { code });
+      }
+      return;
+    }
     if (resultSet.status === 'GENERATING') {
       // Progress reporting is best-effort. A transient backend/status failure
       // must never tear down the observer that will later capture the image.
@@ -76,8 +114,10 @@ export function installChatGPTContentBridge({ chromeApi, adapter, globalRef = gl
           const composer = adapter.document?.querySelector?.('[contenteditable="true"], textarea#prompt-textarea, textarea[placeholder*="Message"], [role="textbox"][aria-label*="聊天"], [role="textbox"][aria-label*="Message"]');
           const composerReady = typeof adapter.isComposerReady === 'function' ? adapter.isComposerReady() : Boolean(composer);
           const submit = typeof adapter.isSubmitReady === 'function' ? adapter.isSubmitReady() : undefined;
-          return reply({ ok: true, value: { composer: composerReady, ...(submit === undefined ? {} : { submit }) } });
+          const mode = typeof adapter.pageMode === 'function' ? adapter.pageMode() : undefined;
+          return reply({ ok: true, value: { composer: composerReady, ...(submit === undefined ? {} : { submit }), ...(mode === undefined ? {} : { mode }) } });
         }
+        if (message.action === 'exitImageEditor') return reply({ ok: true, value: await adapter.closeImageEditor() });
         if (message.action === 'fill') return reply({ ok: true, value: adapter.fillPrompt(message.prompt) });
         if (message.action === 'upload') return reply({ ok: true, value: await adapter.uploadReferences(message.files || []) });
         if (message.action === 'submit') {

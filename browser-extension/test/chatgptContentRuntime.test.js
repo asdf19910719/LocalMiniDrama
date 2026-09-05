@@ -40,8 +40,11 @@ test('result capture binds the discovered assistant identity and waits for impor
   assert.equal(messages[1].action, 'capturedResult');
   assert.equal(messages[1].payload.assistantMessageId, 'assistant-9');
   acknowledge({ ok: true, result: { resultId: 'result-1' } });
+  await Promise.resolve();
+  await Promise.resolve();
   await pending;
   assert.equal(settled, true);
+  assert.deepEqual(messages.map((message) => message.action), ['attemptBound', 'capturedResult']);
 });
 
 test('result capture rejects a failed import acknowledgement so the adapter can retry', async () => {
@@ -134,6 +137,37 @@ test('result capture confirms the promoted assistant identity before importing',
 
   assert.deepEqual(messages.map((message) => message.action), ['attemptBound', 'capturedResult']);
   assert.equal(messages[0].payload.assistantMessageId, 'assistant-final');
+});
+
+test('capture completion is acknowledged only after the adapter settle signal', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) { messages.push(message); return { ok: true }; } } };
+
+  await captureResults({
+    adapter: {}, chromeApi,
+    attempt: { attemptId: 'attempt-settled' },
+    resultSet: { status: 'CAPTURE_COMPLETE', results: [] },
+  });
+
+  assert.deepEqual(messages, [{ action: 'attemptCaptureComplete', payload: { attemptId: 'attempt-settled', conversationId: null } }]);
+});
+
+test('gray shell exhaustion keeps its dedicated recoverable error code', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) {
+    messages.push(message);
+    if (message.action === 'recoverGrayShell') return { ok: false, error: 'RESULT_SHELL_STUCK' };
+    return { ok: true };
+  } } };
+
+  await assert.rejects(() => captureResults({
+    adapter: {}, chromeApi,
+    attempt: { attemptId: 'attempt-shell-stuck' },
+    resultSet: { status: 'RESULT_SHELL_STALLED', results: [] },
+  }), /RESULT_SHELL_STUCK/);
+
+  assert.equal(messages.at(-1).action, 'adapterError');
+  assert.equal(messages.at(-1).payload.code, 'RESULT_SHELL_STUCK');
 });
 
 test('provider bridge installs one runtime listener and never forwards page messages', () => {

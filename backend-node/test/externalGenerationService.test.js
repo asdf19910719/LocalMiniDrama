@@ -108,6 +108,41 @@ describe('external generation service', () => {
     assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-generating'").get().status, 'generating');
   });
 
+  it('persists the submitted ChatGPT user message as a reload recovery anchor', () => {
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'anchor' });
+    const attempt = createGenerationAttempt(db, job.id, { status: 'submitted' });
+
+    recordAttemptEvent(db, attempt.id, {
+      idempotencyKey: 'evt-user-bound-1',
+      eventType: 'USER_BOUND',
+      payload: { userMessageId: 'user-message-uuid' },
+    });
+
+    assert.deepEqual(
+      db.prepare('SELECT status, user_message_id FROM external_generation_attempts WHERE id=?').get(attempt.id),
+      { status: 'submitted', user_message_id: 'user-message-uuid' },
+    );
+  });
+
+  it('allows an explicitly rebound assistant UUID to revive a capture-only failure', () => {
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'recover' });
+    const attempt = createGenerationAttempt(db, job.id, {
+      status: 'needs_review',
+      assistantMessageId: 'request-temporary',
+    });
+
+    recordAttemptEvent(db, attempt.id, {
+      idempotencyKey: 'evt-recovery-assistant-bound',
+      eventType: 'ASSISTANT_BOUND',
+      payload: { assistantMessageId: 'assistant-final-uuid' },
+    });
+
+    assert.deepEqual(
+      db.prepare('SELECT status, assistant_message_id FROM external_generation_attempts WHERE id=?').get(attempt.id),
+      { status: 'generating', assistant_message_id: 'assistant-final-uuid' },
+    );
+  });
+
   it('keeps generating monotonic when it arrives before submitted and binds each attempt identity', () => {
     db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
     const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'ordered', imageGenerationTaskId: 'task-ordered' });
@@ -156,5 +191,29 @@ describe('external generation service', () => {
     assert.equal(row.status, 'completed');
     assert.equal(row.error_code, null);
     assert.equal(row.error_message, null);
+  });
+
+  it('surfaces a later candidate capture failure while the attempt is still open', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (
+      id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT,
+      updated_at TEXT, completed_at TEXT
+    )`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'progressive', imageGenerationTaskId: 'task-progressive' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status, completed_at) VALUES ('task-progressive', 'completed', '2026-09-05T00:00:00Z')").run();
+    const attempt = createGenerationAttempt(db, job.id, { status: 'generating', assistantMessageId: 'assistant-progressive' });
+    db.prepare(`INSERT INTO external_generation_results
+      (id, attempt_id, result_index, status, created_at, updated_at)
+      VALUES ('result-first', ?, 0, 'bound', 'now', 'now')`).run(attempt.id);
+
+    recordAttemptEvent(db, attempt.id, {
+      idempotencyKey: 'evt-progressive-candidate-failed',
+      eventType: 'ADAPTER_ERROR',
+      payload: { code: 'RESULT_CAPTURE_FAILED', message: 'candidate 2 download failed' },
+    });
+
+    assert.deepEqual(
+      db.prepare("SELECT status, error_code, error_message, completed_at FROM image_generation_tasks WHERE id='task-progressive'").get(),
+      { status: 'needs_review', error_code: 'RESULT_CAPTURE_FAILED', error_message: 'candidate 2 download failed', completed_at: null },
+    );
   });
 });

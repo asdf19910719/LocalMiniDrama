@@ -85,8 +85,13 @@ function beginResultRecovery(db, taskId) {
     const task = tasks.getTask(db, taskId);
     if (!task || task.generation_channel !== 'chatgpt_web') throw new Error('ChatGPT image generation task not found');
     const timedOut = task.status === 'needs_review' && task.error_code === 'result_timeout';
-    if (!['submitted', 'generating'].includes(task.status) && !timedOut) {
-      throw new Error('Only an active or timed-out ChatGPT image task can resume result capture');
+    const captureFailure = task.status === 'needs_review' && [
+      'UNBOUND_RESULT',
+      'RESULT_CAPTURE_FAILED',
+      'RESULT_SHELL_STUCK',
+    ].includes(task.error_code);
+    if (!['submitted', 'generating'].includes(task.status) && !timedOut && !captureFailure) {
+      throw new Error('Only an active, timed-out, or capture-failed ChatGPT image task can resume result capture');
     }
     const active = db.prepare(`SELECT id FROM image_generation_tasks
       WHERE generation_channel='chatgpt_web' AND status IN ('preparing','submitted','generating')
@@ -98,7 +103,7 @@ function beginResultRecovery(db, taskId) {
     if (!attempt?.assistant_message_id) {
       throw new Error('缺少已绑定的 ChatGPT 回复标识，无法安全恢复；请重新生成此图片');
     }
-    if (!timedOut) return task;
+    if (!timedOut && !captureFailure) return task;
     return tasks.transitionTask(db, task.id, 'generating');
   })();
 }
