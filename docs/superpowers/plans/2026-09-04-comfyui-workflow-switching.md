@@ -1,5 +1,7 @@
 # ComfyUI 同通道工作流切换 Implementation Plan
 
+> 后续新增、升级、配置和下线工作流，请使用：[ComfyUI 新增工作流注册与配置指南](../../ComfyUI新增工作流注册与配置指南.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 同一 ComfyUI 视频通道可保存多个注册表工作流并按次选择，同时让执行规则、实验状态、H3 草稿、快照和前端状态严格绑定实际工作流。
