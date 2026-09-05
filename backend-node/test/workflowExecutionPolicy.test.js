@@ -55,6 +55,8 @@ describe('workflow execution policy', () => {
       execution({ defaults: { ...execution().defaults, seed: null } }),
       execution({ references: { min: false, max: 3 } }),
       execution({ defaults: { ...execution().defaults, seed: ' ' } }),
+      execution({ references: { min: [], max: 3 } }),
+      execution({ defaults: { ...execution().defaults, seed: [1] } }),
     ]) {
       assert.throws(
         () => validateWorkflowExecution(invalidExecution, 'null-number'),
