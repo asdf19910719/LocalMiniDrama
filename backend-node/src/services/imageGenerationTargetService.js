@@ -43,7 +43,9 @@ function resolveTarget(db, task) {
     throw new Error(`Unsupported image generation target type: ${targetType}`);
   }
   if (targetType === 'character_variant') {
-    const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name FROM character_variants cv
+    const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name,
+      c.image_url AS character_image_url, c.local_path AS character_local_path
+      FROM character_variants cv
       JOIN characters c ON c.id = cv.character_id WHERE cv.id=? AND cv.deleted_at IS NULL`).get(targetId);
     if (!row) throw new Error(`Image generation ${targetType} target not found`);
     if (Number(row.drama_id) !== dramaId) throw new Error('Image generation target belongs to another drama');
@@ -125,6 +127,12 @@ function buildGenerationInput(db, task) {
     prompt = target.polished_prompt || target.appearance || target.description || target.name || '';
   } else if (target.target_type === 'character_variant') {
     prompt = target.image_prompt || target.appearance || target.description || target.name || '';
+    const identityUrl = addressableReferenceUrl(db, {
+      local_path: target.character_local_path,
+      image_url: target.character_image_url,
+    });
+    const identityReference = reference('character_identity', target.character_id, identityUrl);
+    if (identityReference) references.push(identityReference);
   } else if (target.target_type === 'scene') {
     prompt = target.polished_prompt_single || target.polished_prompt || target.prompt || target.location || '';
   } else if (target.target_type === 'prop') {

@@ -12,10 +12,12 @@ it('reports channel-specific image generation environment readiness without crea
   db.exec(`
     CREATE TABLE dramas (id INTEGER PRIMARY KEY, metadata TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
+    CREATE TABLE character_variants (id INTEGER PRIMARY KEY, character_id INTEGER, source_key TEXT, name TEXT, description TEXT, appearance TEXT, image_prompt TEXT, negative_prompt TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, is_default INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT);
     CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE ai_service_configs (id INTEGER PRIMARY KEY, service_type TEXT, provider TEXT, base_url TEXT, api_key TEXT, default_model TEXT, model TEXT, is_active INTEGER, is_default INTEGER, deleted_at TEXT);
     INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
-    INSERT INTO characters VALUES (1, 7, '角色', '外观', '提示词', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    INSERT INTO characters VALUES (1, 7, '角色', '外观', '提示词', NULL, NULL, 'characters/base.png', NULL, NULL, NULL, NULL);
+    INSERT INTO character_variants VALUES (2, 1, 'night', '夜间状态', NULL, '湿发白衬衫', '状态提示词', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL);
     INSERT INTO ai_service_configs VALUES (1, 'image', 'openai', 'https://api.test', 'key', 'img-1', '["img-1"]', 1, 1, NULL);
   `);
   const app = express(); app.use(express.json()); app.use('/api/v1', routes(db, console));
@@ -27,6 +29,9 @@ it('reports channel-specific image generation environment readiness without crea
     const chatgpt = (await (await fetch(`${base}/dramas/7/image-generation-environment?channel=chatgpt_web&targetType=character&targetId=1`)).json()).data;
     assert.equal(chatgpt.canProceed, true);
     assert.ok(chatgpt.checks.some((check) => check.key === 'chatgpt_web_enabled'));
+    const variant = (await (await fetch(`${base}/dramas/7/image-generation-environment?channel=chatgpt_web&targetType=character_variant&targetId=2`)).json()).data;
+    assert.equal(variant.canProceed, true);
+    assert.ok(variant.checks.some((check) => check.key === 'task_references' && check.message.includes('1 个参考图')));
     const missing = await fetch(`${base}/dramas/999/image-generation-environment?channel=api`);
     assert.equal(missing.status, 400);
   } finally { await new Promise((resolve) => server.close(resolve)); db.close(); }

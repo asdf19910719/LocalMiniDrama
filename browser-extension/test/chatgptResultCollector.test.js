@@ -225,6 +225,45 @@ test('adapter recovers a promoted final assistant UUID from the bound user turn 
   assert.deepEqual(errors, []);
 });
 
+test('adapter recovers from a bound user turn when no assistant id was captured', () => {
+  const user = {
+    getAttribute(name) {
+      if (name === 'data-turn') return 'user';
+      if (name === 'data-turn-id') return 'user-message-uuid';
+      if (name === 'data-testid') return 'conversation-turn-11';
+      return null;
+    },
+  };
+  const assistant = {
+    getAttribute(name) {
+      if (name === 'data-turn') return 'assistant';
+      if (name === 'data-turn-id') return 'request-conversation-1-0';
+      if (name === 'data-testid') return 'conversation-turn-12';
+      return null;
+    },
+  };
+  const ordered = [user, assistant];
+  const doc = {
+    body: { querySelectorAll() { return ordered; } },
+    querySelector(selector) { return selector.includes('main') ? this.body : null; },
+    querySelectorAll(selector) {
+      return selector.includes('data-turn="assistant"') ? [assistant] : ordered;
+    },
+  };
+  const adapter = new ChatGPTAdapter({ documentRef: doc, recoveryTimeoutMs: 0 });
+  let observed;
+  const errors = [];
+  adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
+
+  adapter.recoverAttempt({
+    attemptId: 'attempt-user-anchor-only',
+    userMessageId: 'user-message-uuid',
+  }, () => {}, (error) => errors.push(error.code));
+
+  assert.equal(observed.assistantMessageId, 'request-conversation-1-0');
+  assert.deepEqual(errors, []);
+});
+
 test('adapter pauses after capture failure instead of retrying forever', async () => {
   const assistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-4' : null; }, querySelectorAll() { return [image('https://chatgpt.com/result.png')]; } };
   const doc = { querySelector() { return null; }, querySelectorAll(selector) { return selector.includes('data-turn="assistant"') ? [assistant] : []; } };

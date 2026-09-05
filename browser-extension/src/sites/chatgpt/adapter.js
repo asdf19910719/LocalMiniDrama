@@ -143,7 +143,7 @@ export class ChatGPTAdapter {
     this.capturePaused = false;
     this.seenResultFingerprints.clear();
     const requested = identity?.assistantMessageId || identity?.messageId;
-    if (!requested) {
+    if (!requested && !identity?.userMessageId) {
       const error = Object.assign(new Error('UNBOUND_RESULT'), { code: 'UNBOUND_RESULT' });
       onError(error);
       return () => {};

@@ -154,7 +154,9 @@ describe('image generation target adapters and binding', () => {
 
     const generation = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 });
     assert.equal(generation.prompt, '状态生图提示词');
-    assert.deepEqual(generation.references, []);
+    assert.deepEqual(generation.references, [
+      { role: 'character_identity', sourceId: 1, url: '/static/old-char.png' },
+    ]);
 
     db.prepare('UPDATE character_variants SET image_prompt=NULL WHERE id=1').run();
     assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, '黑发束起');

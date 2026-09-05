@@ -29,6 +29,15 @@ test('ChatGPT execution prompt isolates every image task from conversation histo
   assert.match(prompt, /白发剑客，角色设定图/)
 })
 
+test('character variant prompt treats the attached base image as identity only and requires the requested state change', () => {
+  const prompt = buildChatGPTImageGenerationPrompt('湿发，白衬衫，酒店夜间状态', 'character_variant')
+
+  assert.match(prompt, /基础人物身份参考图/)
+  assert.match(prompt, /保留同一人物的脸部、年龄和体型/)
+  assert.match(prompt, /不要照搬参考图的服装、发型状态、姿势和版式/)
+  assert.match(prompt, /必须按照状态提示词改变造型/)
+})
+
 test('ChatGPT execution prompt does not invent content for an empty business prompt', () => {
   assert.equal(buildChatGPTImageGenerationPrompt('  ', 'prop'), '')
 })
