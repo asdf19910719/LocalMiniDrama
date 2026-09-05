@@ -246,6 +246,12 @@ async function generate() {
         newItem.status = 'completed'
       }
     } else {
+      const providerCapabilities = await videosAPI.capabilities()
+      if (providerCapabilities?.capabilities?.requiresStoryboardH3Draft) {
+        const unavailable = new Error('当前 H3 视频工作流必须从项目分镜生成，不能在自由创作中直接提交')
+        unavailable.code = 'H3_STORYBOARD_REQUIRED'
+        throw unavailable
+      }
       const body = {
         prompt: prompt.value,
         style: style.value || undefined,

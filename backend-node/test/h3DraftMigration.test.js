@@ -20,12 +20,16 @@ const H3_DRAFT_COLUMNS = [
   'manually_edited',
   'status',
   'validation_errors',
+  'workflow_id',
+  'coverage_manifest',
+  'semantic_review_status',
+  'semantic_review_confirmed',
   'created_at',
   'updated_at',
 ];
 
 describe('h3 prompt draft migration', () => {
-  it('creates storyboard_h3_prompt_drafts table with all 18 columns', () => {
+  it('creates storyboard_h3_prompt_drafts table with the complete semantic-review schema', () => {
     const db = new Database(':memory:');
     runMigrationsAndEnsure(db);
     assert.ok(
@@ -62,5 +66,44 @@ describe('h3 prompt draft migration', () => {
     assert.strictEqual(row.source_prompt, 'prompt text');
     assert.strictEqual(row.manually_edited, 0);
     assert.strictEqual(row.status, 'valid');
+  });
+
+  it('upgrades the legacy 18-column draft table without losing existing drafts', () => {
+    const db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE storyboard_h3_prompt_drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        storyboard_id INTEGER NOT NULL,
+        video_config_id TEXT,
+        source_prompt TEXT,
+        source_fingerprint TEXT,
+        ai_compiled_prompt TEXT,
+        final_compiled_prompt TEXT,
+        compiled_prompt_hash TEXT,
+        prompt_format TEXT,
+        skill_version TEXT,
+        skill_provenance TEXT,
+        reference_snapshot TEXT,
+        generation_params TEXT,
+        manually_edited INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'valid',
+        validation_errors TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      );
+      INSERT INTO storyboard_h3_prompt_drafts (
+        storyboard_id, video_config_id, source_prompt, created_at, updated_at
+      ) VALUES (1, '8', 'legacy prompt', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z');
+    `);
+
+    runMigrationsAndEnsure(db);
+
+    const cols = db.prepare('PRAGMA table_info(storyboard_h3_prompt_drafts)').all().map((c) => c.name);
+    const row = db.prepare('SELECT * FROM storyboard_h3_prompt_drafts WHERE storyboard_id = 1').get();
+    const workflowIndex = db.prepare("PRAGMA index_info('idx_h3_draft_workflow_lookup')").all().map((c) => c.name);
+    assert.ok(cols.includes('workflow_id'), 'legacy table should gain workflow_id');
+    assert.strictEqual(row.source_prompt, 'legacy prompt');
+    assert.strictEqual(row.workflow_id, null);
+    assert.deepStrictEqual(workflowIndex, ['storyboard_id', 'video_config_id', 'workflow_id', 'updated_at']);
   });
 });

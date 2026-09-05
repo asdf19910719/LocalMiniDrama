@@ -15,6 +15,22 @@ function textOf(value) {
   return value == null ? '' : String(value);
 }
 
+function hasColumn(db, table, column) {
+  try { return db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column); } catch (_) { return false; }
+}
+
+function parseVoiceAsset(value) {
+  if (!value) return null;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!parsed || typeof parsed !== 'object' || String(parsed.status || '').toLowerCase() !== 'active') return null;
+    const url = textOf(parsed.local_path || parsed.audio_url || parsed.url).trim();
+    return url ? { url, version: parsed.updated_at || parsed.version || null } : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /** 与图生链路一致:local_path 优先,其次 image_url;为空(含空白串)返回 null */
 function resolveImageUrl(localPath, imageUrl) {
   const local = textOf(localPath);
@@ -142,11 +158,16 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
       slotLinks = synthesized;
     }
   }
-  const selectVariantMeta = db.prepare('SELECT deleted_at, updated_at FROM character_variants WHERE id = ?');
+  const selectVariantMeta = db.prepare('SELECT deleted_at, updated_at, source_key, name FROM character_variants WHERE id = ?');
+  const selectCharacterVoice = hasColumn(db, 'characters', 'seedance2_voice_asset')
+    ? db.prepare('SELECT name, seedance2_voice_asset FROM characters WHERE id = ? AND deleted_at IS NULL')
+    : null;
   for (const link of slotLinks) {
     const variantMeta = link.variant_id != null ? selectVariantMeta.get(link.variant_id) : null;
     const variantDeleted = Boolean(variantMeta && variantMeta.deleted_at);
     const imageUrl = resolveImageUrl(link.local_path, link.image_url);
+    const characterVoice = selectCharacterVoice ? selectCharacterVoice.get(link.character_id) : null;
+    const voiceAsset = parseVoiceAsset(characterVoice?.seedance2_voice_asset);
     slots.push({
       index: slots.length + 1,
       type: 'character_variant',
@@ -160,6 +181,14 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
       image_url: imageUrl,
       image_available: !variantDeleted && Boolean(imageUrl),
       image_version: variantMeta?.updated_at ?? null,
+      audio_url: voiceAsset?.url ?? null,
+      audio_version: voiceAsset?.version ?? null,
+      variant: link.variant_id == null ? null : {
+        id: link.variant_id,
+        source_key: variantMeta?.source_key ?? null,
+        name: variantMeta?.name ?? link.variant_name ?? null,
+        updated_at: variantMeta?.updated_at ?? null,
+      },
     });
   }
 
@@ -189,6 +218,33 @@ function resolveStoryboardSlots(db, storyboardId, { maxSlots = DEFAULT_MAX_SLOTS
     });
   }
 
+  let audioIndex = 0;
+  for (const slot of slots) {
+    slot.entity_type = slot.type;
+    slot.entity_id = slot.asset_id;
+    slot.entity_name = slot.type === 'character_variant' && slot.name && slotLinks.length
+      ? (() => {
+          const match = slotLinks.find((item) => Number(item.variant_id) === Number(slot.variant_id));
+          const characterName = textOf(match?.character_name).trim();
+          const variantName = textOf(slot.name).trim();
+          return characterName && variantName && !variantName.startsWith(`${characterName}·`)
+            ? `${characterName}·${variantName}`
+            : (variantName || characterName || null);
+        })()
+      : slot.name;
+    if (slot.audio_url) {
+      audioIndex += 1;
+      slot.audio_index = audioIndex;
+      slot.audio_label = `Audio ${audioIndex}`;
+    } else {
+      slot.audio_index = null;
+      slot.audio_label = null;
+      slot.audio_url = null;
+      slot.audio_version = null;
+    }
+    if (slot.variant === undefined) slot.variant = null;
+  }
+
   const total = slots.length;
   const overflow = total > maxSlots ? slots.filter((s) => s.index > maxSlots) : [];
   return { slots, total, overflow };
@@ -206,8 +262,7 @@ function canonicalJson(value) {
 }
 
 /**
- * 槽位指纹:sha256(canonical JSON)。只取 [index, type, asset_id, variant_id,
- * image_url, image_version];同输入恒同输出,图片地址或版本变化则指纹变化。
+ * 槽位指纹覆盖引用的媒体和语义元数据；任何绑定含义变化都必须使草稿失效。
  */
 function slotsFingerprint(slots) {
   const list = Array.isArray(slots) ? slots : [];
@@ -216,8 +271,17 @@ function slotsFingerprint(slots) {
     type: s.type,
     asset_id: s.asset_id === undefined ? null : s.asset_id,
     variant_id: s.variant_id === undefined ? null : s.variant_id,
-    image_url: s.image_url === undefined ? null : s.image_url,
+    image_url: s.image_url == null ? null : String(s.image_url).trim().split('?')[0],
     image_version: s.image_version === undefined ? null : s.image_version,
+    entity_type: s.entity_type ?? s.type ?? null,
+    entity_id: s.entity_id ?? s.asset_id ?? null,
+    entity_name: s.entity_name ?? s.name ?? null,
+    reference_role: s.reference_role ?? null,
+    framing_note: s.framing_note ?? null,
+    variant: s.variant ?? null,
+    audio_index: s.audio_index ?? null,
+    audio_url: s.audio_url == null ? null : String(s.audio_url).trim().split('?')[0],
+    audio_version: s.audio_version ?? null,
   }));
   return crypto.createHash('sha256').update(JSON.stringify(canonicalJson(picked))).digest('hex');
 }

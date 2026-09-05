@@ -10,6 +10,7 @@ const FRESHNESS_REASON_LABELS = Object.freeze({
   params: '时长/画幅/音频已变化',
   config: '视频配置已变化',
   skill: 'H3 技能版本已变化',
+  context: '分镜音频/语义上下文已变化',
 })
 
 const IMAGE_REF_RE = /@图片\s*(\d+)/g
@@ -32,11 +33,14 @@ export function deriveH3DraftUiState({ draft, freshness, saving, structureValid 
   const reasons = Array.isArray(freshness?.reasons) ? freshness.reasons.map(String) : []
   let chip
   if (String(draft.status) === 'invalid') chip = 'invalid'
+  else if (String(draft.status) === 'needs_review') chip = draft.semantic_review_confirmed ? 'reviewed' : 'needs_review'
   else if (stale) chip = 'stale'
   else if (Boolean(draft.manually_edited)) chip = 'edited'
   else chip = 'ai'
+  const acceptedStatus = String(draft.status) === 'valid'
+    || (String(draft.status) === 'needs_review' && Number(draft.semantic_review_confirmed) === 1)
   const canGenerate = Boolean(draft)
-    && String(draft.status) === 'valid'
+    && acceptedStatus
     && !stale
     && !saving
     && structureValid !== false

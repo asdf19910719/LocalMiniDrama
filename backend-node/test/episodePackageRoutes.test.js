@@ -27,6 +27,8 @@ function createDb() {
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT
+      ,audio_plan TEXT
+      ,production_profile TEXT
     );
     CREATE TABLE storyboards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +57,13 @@ function createDb() {
       source_key TEXT,
       audio_description TEXT,
       transition TEXT,
+      production_metadata TEXT,
+      emotion TEXT,
+      emotion_intensity INTEGER,
+      is_primary INTEGER DEFAULT 0,
+      lighting_style TEXT,
+      depth_of_field TEXT,
+      continuity_snapshot TEXT,
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT
@@ -65,6 +74,8 @@ function createDb() {
       name TEXT NOT NULL DEFAULT '',
       description TEXT,
       appearance TEXT,
+      voice_style TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
       source_key TEXT,
@@ -84,6 +95,8 @@ function createDb() {
       location TEXT,
       state TEXT,
       prompt TEXT,
+      atmosphere TEXT,
+      negative_prompt TEXT,
       source_key TEXT,
       created_at TEXT,
       updated_at TEXT,
@@ -96,6 +109,7 @@ function createDb() {
       name TEXT NOT NULL DEFAULT '',
       description TEXT,
       prompt TEXT,
+      negative_prompt TEXT,
       source_key TEXT,
       created_at TEXT,
       updated_at TEXT,

@@ -468,7 +468,7 @@ function stubH3DraftService(db) {
   return {
     getDraftById: (_db, id) => ({
       id: Number(id),
-      storyboard_id: null,
+      storyboard_id: 1,
       video_config_id: String(configId),
       source_prompt: 'raw',
       final_compiled_prompt: finalPrompt,
@@ -486,6 +486,7 @@ function stubH3DraftService(db) {
 describe('unified video generation: reference count limit unification', () => {
   it('H3 config with plan build rejects more than 9 refs with VIDEO_REFERENCE_COUNT_INVALID', async () => {
     const db = createServiceDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (1, 5)').run();
     seedVideoConfig(db, {
       provider: 'comfyui',
       model: JSON.stringify(['h3-continuity-v1']),
@@ -504,6 +505,7 @@ describe('unified video generation: reference count limit unification', () => {
     await assert.rejects(
       service.createVideoGeneration({
         prompt: 'a woman walks',
+        storyboard_id: 1,
         duration: 5,
         h3_prompt_draft_id: 1,
         reference_image_urls: Array.from({ length: 10 }, (_, i) => `/static/ref${i}.png`),
@@ -515,6 +517,7 @@ describe('unified video generation: reference count limit unification', () => {
 
   it('H3 config with 9 refs passes the limit check and persists all refs', async () => {
     const db = createServiceDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (1, 5)').run();
     seedVideoConfig(db, {
       provider: 'comfyui',
       model: JSON.stringify(['h3-continuity-v1']),
@@ -532,6 +535,7 @@ describe('unified video generation: reference count limit unification', () => {
 
     const created = await service.createVideoGeneration({
       prompt: 'a woman walks',
+      storyboard_id: 1,
       duration: 5,
       h3_prompt_draft_id: 1,
       reference_image_urls: Array.from({ length: 9 }, (_, i) => `/static/ref${i}.png`),

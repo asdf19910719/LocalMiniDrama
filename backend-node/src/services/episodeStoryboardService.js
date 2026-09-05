@@ -7,6 +7,16 @@ const safeJson = require('../utils/safeJson');
 const { safeParseAIJSON, extractJsonCandidate, repairTruncatedJsonArray, extractFirstArray } = safeJson;
 const loadConfig = require('../config').loadConfig;
 const angleService = require('./angleService');
+const {
+  normalizeEpisodeAudioPlan,
+  normalizeStoryboardAudioDescription,
+  normalizeStoryboardTransition,
+} = require('./storyboardAvContractService');
+const {
+  projectStoryboardRow,
+  saveCanonicalStoryboard,
+  patchStoryboard,
+} = require('./storyboardCanonicalRepository');
 
 /**
  * 分镜专用 generateText 包装：
@@ -25,6 +35,77 @@ function normalizeStoryboardShotNumber(rawOrSb) {
       : rawOrSb;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function isExplicitNoBgm(value) {
+  const text = String(value == null ? '' : value).trim().toLowerCase();
+  return !text || /^(no\s*bgm|none|mute|无背景音乐|禁bgm|不要背景音乐)$/.test(text);
+}
+
+/** Map a storyboard AI response into the shared audiovisual persistence contract. */
+function mapAiStoryboardToCanonical(aiStoryboard = {}, context = {}) {
+  const episodeAudioPlan = normalizeEpisodeAudioPlan(context.episodeAudioPlan);
+  const bgmMode = episodeAudioPlan.bgm.mode;
+  const rawBgm = aiStoryboard.bgm_prompt;
+  const hasLegacyBgm = !isExplicitNoBgm(rawBgm);
+  let audioInput = aiStoryboard.audio_description;
+
+  if (audioInput == null) {
+    audioInput = {
+      sound_effects: aiStoryboard.sound_effects ?? aiStoryboard.sound_effect,
+      music_cue: bgmMode === 'per_segment'
+        ? {
+            mode: hasLegacyBgm ? 'override' : 'inherit',
+            prompt: hasLegacyBgm ? String(rawBgm).trim() : null,
+          }
+        : { mode: 'mute', prompt: null, intensity: 0 },
+    };
+  } else {
+    const structured = typeof audioInput === 'object' && !Array.isArray(audioInput)
+      ? { ...audioInput }
+      : { raw_description: audioInput };
+    if (structured.sound_effects == null && structured.sound_effect == null
+      && (aiStoryboard.sound_effects != null || aiStoryboard.sound_effect != null)) {
+      structured.sound_effects = aiStoryboard.sound_effects ?? aiStoryboard.sound_effect;
+    }
+    if (bgmMode !== 'per_segment') {
+      structured.music_cue = { mode: 'mute', prompt: null, intensity: 0 };
+    } else if (hasLegacyBgm && structured.non_diegetic_music == null
+      && (!structured.music_cue || structured.music_cue.prompt == null)) {
+      structured.music_cue = {
+        ...(structured.music_cue || {}),
+        mode: 'override',
+        prompt: String(rawBgm).trim(),
+      };
+    }
+    audioInput = structured;
+  }
+
+  const canonical = {
+    ...aiStoryboard,
+    storyboard_number: normalizeStoryboardShotNumber(aiStoryboard),
+    layout_description: aiStoryboard.layout_description ?? aiStoryboard.composition ?? null,
+    audio_description: normalizeStoryboardAudioDescription(audioInput, {
+      source: context.source || 'story_ai',
+      bgmMode,
+    }),
+    transition: aiStoryboard.transition == null
+      ? null
+      : normalizeStoryboardTransition(aiStoryboard.transition),
+    emotion: aiStoryboard.emotion ?? null,
+    emotion_intensity: aiStoryboard.emotion_intensity == null || aiStoryboard.emotion_intensity === ''
+      ? null
+      : Number(aiStoryboard.emotion_intensity),
+    is_primary: aiStoryboard.is_primary === true || Number(aiStoryboard.is_primary) === 1,
+    lighting_style: aiStoryboard.lighting_style ?? null,
+    depth_of_field: aiStoryboard.depth_of_field ?? null,
+  };
+  delete canonical.shot_number;
+  delete canonical.bgm_prompt;
+  delete canonical.sound_effect;
+  delete canonical.sound_effects;
+  delete canonical.composition;
+  return canonical;
 }
 
 /** 同集相同 storyboard_number 多行时保留 id 最大的一条（通常为最新入库） */
@@ -227,7 +308,7 @@ function getStoryboardsForEpisode(db, episodeId) {
   const rows = dedupeStoryboardRowsByNumber(
     db.prepare(
       'SELECT * FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL ORDER BY storyboard_number ASC, id ASC'
-    ).all(episodeId)
+  ).all(episodeId)
   );
   return rows.map((r) => {
     let background = null;
@@ -236,44 +317,8 @@ function getStoryboardsForEpisode(db, episodeId) {
       if (sceneRow) background = rowToScene(sceneRow);
     }
     return {
-      id: r.id,
-      episode_id: r.episode_id,
-      scene_id: r.scene_id,
-      storyboard_number: r.storyboard_number,
-      title: r.title,
-      description: r.description,
-      location: r.location,
-      time: r.time,
+      ...projectStoryboardRow(r),
       duration: normalizeDuration(r.duration),
-      dialogue: r.dialogue,
-      narration: r.narration ?? null,
-      action: r.action,
-      result: r.result,
-      atmosphere: r.atmosphere,
-      image_prompt: r.image_prompt,
-      video_prompt: r.video_prompt,
-      shot_type: r.shot_type,
-      angle: r.angle,
-      angle_h: r.angle_h ?? null,
-      angle_v: r.angle_v ?? null,
-      angle_s: r.angle_s ?? null,
-      movement: r.movement,
-      segment_index: r.segment_index ?? 0,
-      segment_title: r.segment_title ?? null,
-      creation_mode: r.creation_mode === 'universal' ? 'universal' : 'classic',
-      universal_segment_text: r.universal_segment_text ?? null,
-      characters: (() => {
-        if (!r.characters) return [];
-        if (typeof r.characters !== 'string') return Array.isArray(r.characters) ? r.characters : [];
-        try { return JSON.parse(r.characters); } catch (_) { return []; }
-      })(),
-      composed_image: r.composed_image,
-      video_url: r.video_url,
-      audio_local_path: r.audio_local_path ?? null,
-      narration_audio_local_path: r.narration_audio_local_path ?? null,
-      status: r.status || 'pending',
-      created_at: r.created_at,
-      updated_at: r.updated_at,
       background,
     };
   });
@@ -378,6 +423,10 @@ function generateVideoPrompt(sb, style, videoRatio) {
  * 会就地写入 sb.location / sb.time（由 scene_description 拆分）。
  */
 function deriveStoryboardFieldsFromAi(sb, style, videoRatio, opts = {}) {
+  sb = mapAiStoryboardToCanonical(sb, {
+    episodeAudioPlan: opts.episodeAudioPlan,
+    source: 'story_ai',
+  });
   const universalOmni = !!opts.universalOmni;
   const angleValFn = (x) => x.angle ?? x.camera_angle ?? null;
   const shotNumber = normalizeStoryboardShotNumber(sb);
@@ -472,52 +521,53 @@ function deriveStoryboardFieldsFromAi(sb, style, videoRatio, opts = {}) {
     propIds,
     creationMode,
     universalSegmentText,
+    canonical: sb,
+  };
+}
+
+function buildCanonicalPersistenceInput(sb, derived) {
+  const canonical = derived.canonical || sb;
+  return {
+    ...canonical,
+    storyboard_number: derived.shotNumber,
+    scene_id: derived.sceneId,
+    title: derived.title || null,
+    description: derived.description,
+    location: canonical.location ?? null,
+    time: canonical.time ?? null,
+    duration: canonical.duration ?? 5,
+    dialogue: derived.dialogue || null,
+    narration: derived.narration || null,
+    action: derived.action || null,
+    result: derived.result || null,
+    atmosphere: canonical.atmosphere ?? null,
+    image_prompt: derived.imagePrompt,
+    video_prompt: derived.videoPrompt,
+    characters: Array.isArray(canonical.characters) ? canonical.characters : [],
+    shot_type: derived.shotType || null,
+    angle: derived.angle,
+    angle_h: derived.angleH,
+    angle_v: derived.angleV,
+    angle_s: derived.angleS,
+    movement: derived.movement || null,
+    lighting_style: derived.lightingStyle,
+    depth_of_field: derived.depthOfField,
+    segment_index: derived.segmentIndex,
+    segment_title: derived.segmentTitle,
+    creation_mode: derived.creationMode || 'classic',
+    universal_segment_text: derived.universalSegmentText,
+    status: 'pending',
   };
 }
 
 /** 用最终解析的分镜对象覆盖已存在的行（修正流式增量先入库时缺 narration 等字段的问题） */
 function updateStoryboardRowFromDerived(db, existingId, episodeIdNum, d, sb, now) {
-  db.prepare(
-    `UPDATE storyboards SET
-      scene_id = ?, title = ?, description = ?, location = ?, time = ?, duration = ?,
-      dialogue = ?, narration = ?, action = ?, result = ?, atmosphere = ?,
-      image_prompt = ?, video_prompt = ?, characters = ?,
-      shot_type = ?, angle = ?, angle_h = ?, angle_v = ?, angle_s = ?, movement = ?,
-      lighting_style = ?, depth_of_field = ?, segment_index = ?, segment_title = ?,
-      creation_mode = ?, universal_segment_text = ?,
-      updated_at = ?
-     WHERE id = ? AND episode_id = ? AND deleted_at IS NULL`
-  ).run(
-    d.sceneId,
-    d.title || null,
-    d.description,
-    sb.location ?? null,
-    sb.time ?? null,
-    sb.duration ?? 5,
-    d.dialogue || null,
-    d.narration || null,
-    d.action || null,
-    d.result || null,
-    sb.atmosphere ?? null,
-    d.imagePrompt,
-    d.videoPrompt,
-    d.charactersJson,
-    d.shotType || null,
-    d.angle,
-    d.angleH,
-    d.angleV,
-    d.angleS,
-    d.movement || null,
-    d.lightingStyle,
-    d.depthOfField,
-    d.segmentIndex,
-    d.segmentTitle,
-    d.creationMode || 'classic',
-    d.universalSegmentText != null ? d.universalSegmentText : null,
+  patchStoryboard(db, existingId, buildCanonicalPersistenceInput(sb, d), {
+    source: 'story_ai',
+    lock: false,
+    respectLocks: true,
     now,
-    existingId,
-    episodeIdNum
-  );
+  });
   try {
     db.prepare('DELETE FROM storyboard_props WHERE storyboard_id = ?').run(existingId);
     if (d.propIds.length > 0) {
@@ -535,21 +585,20 @@ function insertOneStoryboard(db, episodeIdNum, sb, style, videoRatio, now, deriv
   const d = deriveStoryboardFieldsFromAi(sb, style, videoRatio, deriveOpts);
   const shotNumber = d.shotNumber;
   try {
-    db.prepare(
-      `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, narration, action, result, atmosphere, image_prompt, video_prompt, characters, shot_type, angle, angle_h, angle_v, angle_s, movement, lighting_style, depth_of_field, segment_index, segment_title, creation_mode, universal_segment_text, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-    ).run(
-      episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-      sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-      d.dialogue || null, d.narration || null, d.action || null, d.result || null, sb.atmosphere ?? null,
-      d.imagePrompt, d.videoPrompt, d.charactersJson,
-      d.shotType || null, d.angle, d.angleH, d.angleV, d.angleS,
-      d.movement || null, d.lightingStyle, d.depthOfField, d.segmentIndex, d.segmentTitle,
-      d.creationMode || 'classic',
-      d.universalSegmentText != null ? d.universalSegmentText : null,
-      now, now
-    );
-    const newId = db.prepare('SELECT last_insert_rowid() as id').get().id;
+    const sourceKey = d.canonical?.source_key ?? sb?.source_key ?? null;
+    const existing = sourceKey
+      ? db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND source_key = ? AND deleted_at IS NULL ORDER BY id LIMIT 1').get(episodeIdNum, sourceKey)
+      : db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND storyboard_number = ? AND deleted_at IS NULL ORDER BY id LIMIT 1').get(episodeIdNum, shotNumber);
+    if (existing) {
+      updateStoryboardRowFromDerived(db, existing.id, episodeIdNum, d, sb, now);
+      return Number(existing.id);
+    }
+    const saved = saveCanonicalStoryboard(db, episodeIdNum, buildCanonicalPersistenceInput(sb, d), {
+      source: 'story_ai',
+      lock: false,
+      now,
+    });
+    const newId = saved.id;
     if (d.propIds.length > 0) {
       try {
         const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
@@ -625,14 +674,6 @@ function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, sk
   const videoRatio = cfg?.style?.default_video_ratio || '16:9';
   const now = new Date().toISOString();
 
-  // 仅在非增量模式下才删除旧数据（增量模式时已在流式开始前删除）
-  if (skipShotNumbers === null) {
-    const existing = db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(episodeIdNum);
-    if (existing.length > 0) {
-      db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ?').run(now, episodeIdNum);
-    }
-  }
-
   const saved = [];
   const processedInSave = new Set();
   for (const sb of storyboards) {
@@ -666,36 +707,7 @@ function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, sk
           const propLinks = db.prepare('SELECT prop_id FROM storyboard_props WHERE storyboard_id = ?').all(refreshed.id);
           propIds = propLinks.map((p) => p.prop_id);
         } catch (_) {}
-        saved.push({
-          id: refreshed.id,
-          episode_id: episodeIdNum,
-          scene_id: refreshed.scene_id,
-          storyboard_number: shotNumber,
-          title: refreshed.title,
-          description: refreshed.description,
-          location: refreshed.location,
-          time: refreshed.time,
-          duration: refreshed.duration,
-          dialogue: refreshed.dialogue,
-          narration: refreshed.narration ?? null,
-          action: refreshed.action,
-          result: refreshed.result,
-          atmosphere: refreshed.atmosphere,
-          image_prompt: refreshed.image_prompt,
-          video_prompt: refreshed.video_prompt,
-          shot_type: refreshed.shot_type,
-          angle: refreshed.angle,
-          movement: refreshed.movement,
-          segment_index: refreshed.segment_index ?? 0,
-          segment_title: refreshed.segment_title ?? null,
-          creation_mode: refreshed.creation_mode === 'universal' ? 'universal' : 'classic',
-          universal_segment_text: refreshed.universal_segment_text ?? null,
-          characters: (() => { try { return JSON.parse(refreshed.characters || '[]'); } catch (_) { return []; } })(),
-          prop_ids: propIds,
-          status: refreshed.status,
-          created_at: refreshed.created_at,
-          updated_at: refreshed.updated_at,
-        });
+        saved.push({ ...projectStoryboardRow(refreshed), prop_ids: propIds });
         if (shotNumber > 0) processedInSave.add(shotNumber);
         continue;
       }
@@ -711,77 +723,38 @@ function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, sk
 
     const d = deriveStoryboardFieldsFromAi(sb, style, videoRatio, deriveOpts);
 
-    try {
-      db.prepare(
-        `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, narration, action, result, atmosphere, image_prompt, video_prompt, characters, shot_type, angle, angle_h, angle_v, angle_s, movement, lighting_style, depth_of_field, segment_index, segment_title, creation_mode, universal_segment_text, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-      ).run(
-        episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-        sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-        d.dialogue || null, d.narration || null, d.action || null, d.result || null, sb.atmosphere ?? null,
-        d.imagePrompt, d.videoPrompt, d.charactersJson,
-        d.shotType || null, d.angle, d.angleH, d.angleV, d.angleS,
-        d.movement || null, d.lightingStyle, d.depthOfField, d.segmentIndex, d.segmentTitle,
-        d.creationMode || 'classic',
-        d.universalSegmentText != null ? d.universalSegmentText : null,
-        now, now
-      );
-    } catch (e) {
-      if ((e.message || '').includes('shot_type') || (e.message || '').includes('angle') || (e.message || '').includes('movement') || (e.message || '').includes('result') || (e.message || '').includes('segment') || (e.message || '').includes('narration')) {
-        db.prepare(
-          `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, action, atmosphere, image_prompt, video_prompt, characters, creation_mode, universal_segment_text, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-        ).run(
-          episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-          sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-          d.dialogue || null, d.action || null, sb.atmosphere ?? null,
-          d.imagePrompt, d.videoPrompt, d.charactersJson,
-          d.creationMode || 'classic',
-          d.universalSegmentText != null ? d.universalSegmentText : null,
-          now, now
-        );
-      } else {
-        throw e;
-      }
+    const sourceKey = d.canonical?.source_key ?? sb?.source_key ?? null;
+    const existing = sourceKey
+      ? db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND source_key = ? AND deleted_at IS NULL ORDER BY id LIMIT 1').get(episodeIdNum, sourceKey)
+      : db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND storyboard_number = ? AND deleted_at IS NULL ORDER BY id LIMIT 1').get(episodeIdNum, shotNumber);
+    if (existing) {
+      updateStoryboardRowFromDerived(db, existing.id, episodeIdNum, d, sb, now);
+      const refreshed = db.prepare('SELECT * FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(existing.id);
+      saved.push({ ...projectStoryboardRow(refreshed), prop_ids: d.propIds });
+      if (shotNumber > 0) processedInSave.add(shotNumber);
+      continue;
     }
-    const id = db.prepare('SELECT last_insert_rowid() as id').get().id;
+
+    const inserted = saveCanonicalStoryboard(db, episodeIdNum, buildCanonicalPersistenceInput(sb, d), {
+      source: 'story_ai',
+      lock: false,
+      now,
+    });
+    const id = inserted.id;
     if (d.propIds.length > 0) {
       try {
         const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
         for (const pid of d.propIds) insProp.run(id, pid);
       } catch (_) {}
     }
-    saved.push({
-      id,
-      episode_id: episodeIdNum,
-      scene_id: d.sceneId,
-      storyboard_number: shotNumber,
-      title: d.title || null,
-      description: d.description,
-      location: sb.location ?? null,
-      time: sb.time ?? null,
-      duration: sb.duration ?? 5,
-      dialogue: d.dialogue || null,
-      narration: d.narration || null,
-      action: d.action || null,
-      result: d.result || null,
-      atmosphere: sb.atmosphere ?? null,
-      image_prompt: d.imagePrompt,
-      video_prompt: d.videoPrompt,
-      shot_type: d.shotType || null,
-      angle: d.angle,
-      movement: d.movement || null,
-      segment_index: d.segmentIndex,
-      segment_title: d.segmentTitle,
-      creation_mode: d.creationMode || 'classic',
-      universal_segment_text: d.universalSegmentText != null ? d.universalSegmentText : null,
-      characters: Array.isArray(sb.characters) ? sb.characters : [],
-      prop_ids: d.propIds,
-      status: 'pending',
-      created_at: now,
-      updated_at: now,
-    });
+    saved.push({ ...inserted, prop_ids: d.propIds });
     if (shotNumber > 0) processedInSave.add(shotNumber);
+  }
+  const savedIds = new Set(saved.map((row) => Number(row.id)));
+  for (const row of db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(episodeIdNum)) {
+    if (!savedIds.has(Number(row.id))) {
+      db.prepare('UPDATE storyboards SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, row.id);
+    }
   }
   log.info('Storyboards saved', { episode_id: episodeId, count: saved.length });
   return saved;
@@ -846,9 +819,13 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
   const streamSavedNums = new Set();
   const streamStyle = (style && String(style).trim()) || cfg?.style?.default_style || '';
   const streamVideoRatio = cfg?.style?.default_video_ratio || '16:9';
+  const episodeAudioPlan = normalizeEpisodeAudioPlan(
+    db.prepare('SELECT audio_plan FROM episodes WHERE id = ?').get(episodeIdNum)?.audio_plan,
+  );
   const deriveOpts = {
     universalOmni: !!universalOmni,
     targetClipDuration: targetClipDurationSec != null && Number(targetClipDurationSec) > 0 ? Number(targetClipDurationSec) : null,
+    episodeAudioPlan,
   };
   let streamThrottle = 0;
 
@@ -861,10 +838,6 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
       user_prompt_head: userPrompt ? userPrompt.slice(0, 200) : '',
     });
     logDebugStoryboardPrompts(log, `task-${taskId}-initial`, userPrompt, systemPrompt);
-
-    // 提前删除旧分镜，为增量流式保存腾出位置
-    const deleteNow = new Date().toISOString();
-    db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ? AND deleted_at IS NULL').run(deleteNow, episodeIdNum);
 
     // 不使用 json_mode：response_format:json_object 要求返回 JSON 对象而非数组，会导致模型包装成
     // {"storyboards":[...]} 或产生乱码 key，改由 extractFirstArray 统一处理任意包装格式。
@@ -1038,7 +1011,7 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
     taskService.updateTaskStatus(db, taskId, 'processing', 70, '正在保存分镜头...');
 
     // 传入 streamSavedNums：已增量保存的项目直接从 DB 读取，跳过重复 INSERT
-    const saved = saveStoryboards(db, log, episodeId, storyboards, cfg, style, streamSavedNums, deriveOpts);
+    let saved = saveStoryboards(db, log, episodeId, storyboards, cfg, style, streamSavedNums, deriveOpts);
 
     // ── 分镜角色补全（字符串匹配，无 AI，极快）──────────────────────────────────
     taskService.updateTaskStatus(db, taskId, 'processing', 75, '正在校验分镜角色关联...');
@@ -1050,6 +1023,13 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
     }
     if (totalCharAdded > 0) {
       log.info('[分镜] 角色补全完成', { episode_id: episodeId, total_added: totalCharAdded });
+    }
+
+    if (episodeAudioPlan.bgm.mode === 'per_segment' && episodeAudioPlan.bgm.planning === 'ai') {
+      taskService.updateTaskStatus(db, taskId, 'processing', 82, '正在规划整集背景音乐与分镜音频...');
+      const { ensureEpisodeAudioPlan } = require('./episodeAudioPlanService');
+      await ensureEpisodeAudioPlan(db, log, { episodeId: episodeIdNum, force: false });
+      saved = getStoryboardsForEpisode(db, episodeIdNum);
     }
 
     taskService.updateTaskStatus(db, taskId, 'processing', 90, '正在更新剧集时长...');
@@ -1099,7 +1079,7 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
 function generateStoryboard(db, log, episodeId, model, style, storyboardCount, videoDuration, aspectRatio, includeNarration, universalOmni) {
   const cfg = loadConfig();
   const episode = db.prepare(
-    'SELECT id, script_content, description, drama_id FROM episodes WHERE id = ? AND deleted_at IS NULL'
+    'SELECT id, script_content, description, drama_id, audio_plan, production_profile FROM episodes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(episodeId));
   if (!episode) {
     throw new Error('剧集不存在或无权限访问');
@@ -1149,28 +1129,47 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
   }
 
   const characters = db.prepare(
-    'SELECT id, name FROM characters WHERE drama_id = ? AND deleted_at IS NULL ORDER BY name ASC'
+    'SELECT id, name, role, description, appearance, personality, voice_style, negative_prompt, identity_anchors FROM characters WHERE drama_id = ? AND deleted_at IS NULL ORDER BY name ASC'
   ).all(episode.drama_id);
   let characterList = '无角色';
   if (characters.length > 0) {
-    characterList = '[' + characters.map((c) => `{"id": ${c.id}, "name": "${(c.name || '').replace(/"/g, '\\"')}"}`).join(', ') + ']';
+    const enrichedCharacters = characters.map((character) => ({
+      ...character,
+      identity_anchors: (() => { try { return JSON.parse(character.identity_anchors || 'null'); } catch (_) { return character.identity_anchors || null; } })(),
+      variants: db.prepare(
+        'SELECT id, source_key, name, description, appearance, negative_prompt, is_default FROM character_variants WHERE character_id = ? AND deleted_at IS NULL ORDER BY id ASC',
+      ).all(character.id),
+    }));
+    characterList = JSON.stringify(enrichedCharacters);
   }
 
   const scenes = db.prepare(
-    'SELECT id, location, time FROM scenes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY location ASC, time ASC'
+    'SELECT id, location, time, prompt, atmosphere, negative_prompt FROM scenes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY location ASC, time ASC'
   ).all(episode.drama_id);
   let sceneList = '无场景';
   if (scenes.length > 0) {
-    sceneList = '[' + scenes.map((s) => `{"id": ${s.id}, "location": "${(s.location || '').replace(/"/g, '\\"')}", "time": "${(s.time || '').replace(/"/g, '\\"')}"}`).join(', ') + ']';
+    sceneList = JSON.stringify(scenes);
   }
 
   const props = db.prepare(
-    'SELECT id, name, type FROM props WHERE drama_id = ? AND deleted_at IS NULL ORDER BY id ASC'
+    'SELECT id, name, type, description, prompt, negative_prompt FROM props WHERE drama_id = ? AND deleted_at IS NULL ORDER BY id ASC'
   ).all(episode.drama_id);
   let propList = '无道具';
   if (props.length > 0) {
-    propList = '[' + props.map((p) => `{"id": ${p.id}, "name": "${(p.name || '').replace(/"/g, '\\"')}"${p.type ? `, "type": "${p.type.replace(/"/g, '\\"')}"` : ''}}`).join(', ') + ']';
+    propList = JSON.stringify(props);
   }
+
+  const episodeAudioPlan = normalizeEpisodeAudioPlan(episode.audio_plan);
+  let productionProfile = {};
+  try { productionProfile = JSON.parse(episode.production_profile || '{}'); } catch (_) {}
+  const previousShot = db.prepare(
+    'SELECT storyboard_number, result, continuity_snapshot FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL ORDER BY storyboard_number DESC, id DESC LIMIT 1',
+  ).get(Number(episodeId));
+  const productionContext = JSON.stringify({
+    production_profile: productionProfile,
+    audio_plan: episodeAudioPlan,
+    previous_shot_ending_state: previousShot || null,
+  });
 
   const scriptLabel = promptI18n.formatUserPrompt(cfg, 'script_content_label');
   const taskLabel = promptI18n.formatUserPrompt(cfg, 'task_label');
@@ -1229,7 +1228,7 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
   const suffix = promptI18n.getStoryboardUserPromptSuffix(cfg, effectiveShotDuration);
 
   let userPrompt =
-    `${scriptLabel}\n${scriptContent}\n\n${taskLabel}\n${taskInstruction}${extraConstraint}\n\n${charListLabel}\n${characterList}\n\n${charConstraint}\n\n${sceneListLabel}\n${sceneList}\n\n${sceneConstraint}\n\n${propListLabel}\n${propList}\n\n${propConstraint}\n\n${suffix}`;
+    `${scriptLabel}\n${scriptContent}\n\n${taskLabel}\n${taskInstruction}${extraConstraint}\n\n${charListLabel}\n${characterList}\n\n${charConstraint}\n\n${sceneListLabel}\n${sceneList}\n\n${sceneConstraint}\n\n${propListLabel}\n${propList}\n\n${propConstraint}\n\n【制作上下文】\n${productionContext}\n\n${suffix}`;
 
   const wantNarration = includeNarration === true || includeNarration === 1 || String(includeNarration).toLowerCase() === 'true';
   if (wantNarration) {
@@ -1237,6 +1236,7 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
   }
 
   let systemPrompt = promptI18n.getStoryboardSystemPrompt(cfg);
+  systemPrompt += promptI18n.getStoryboardAudioPlanInstructions(cfg, episodeAudioPlan);
 
   // 当用户指定了分镜数量时，在系统提示词后追加最高优先级覆盖指令，
   // 使"目标数量"优先于默认的"一动作一镜头、禁止合并"原则
@@ -1475,69 +1475,47 @@ function buildSplitPlansFromStoryboard(row) {
 }
 
 function persistSplitStoryboardRow(db, episodeId, storyboardNumber, baseRow, plan, now) {
-  const info = db.prepare(
-    `INSERT INTO storyboards (
-      episode_id, scene_id, storyboard_number, title, description, layout_description,
-      location, time, duration, dialogue, narration, action, result, atmosphere,
-      image_prompt, characters, shot_type, angle, angle_h, angle_v, angle_s,
-      movement, lighting_style, depth_of_field, segment_index, segment_title,
-      creation_mode, universal_segment_text, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-  ).run(
-    episodeId,
-    baseRow.scene_id ?? null,
-    storyboardNumber,
-    plan.title,
-    baseRow.description ?? null,
-    baseRow.layout_description ?? null,
-    baseRow.location ?? null,
-    baseRow.time ?? null,
-    plan.duration,
-    plan.dialogue,
-    plan.narration,
-    plan.action,
-    plan.result,
-    baseRow.atmosphere ?? null,
-    baseRow.image_prompt ?? null,
-    baseRow.characters ?? null,
-    plan.shot_type ?? baseRow.shot_type ?? null,
-    baseRow.angle ?? null,
-    baseRow.angle_h ?? null,
-    baseRow.angle_v ?? null,
-    baseRow.angle_s ?? null,
-    plan.movement ?? baseRow.movement ?? null,
-    baseRow.lighting_style ?? null,
-    baseRow.depth_of_field ?? null,
-    baseRow.segment_index ?? null,
-    baseRow.segment_title ?? null,
-    baseRow.creation_mode === 'universal' ? 'universal' : 'classic',
-    null,
-    now,
-    now
-  );
-  return info.lastInsertRowid;
+  const base = projectStoryboardRow(baseRow);
+  const saved = saveCanonicalStoryboard(db, episodeId, {
+    ...base,
+    id: undefined,
+    storyboard_number: storyboardNumber,
+    title: plan.title,
+    duration: plan.duration,
+    dialogue: plan.dialogue,
+    narration: plan.narration,
+    action: plan.action,
+    result: plan.result,
+    shot_type: plan.shot_type ?? base.shot_type ?? null,
+    movement: plan.movement ?? base.movement ?? null,
+    universal_segment_text: null,
+    video_prompt: null,
+    video_url: null,
+    audio_local_path: null,
+    narration_audio_local_path: null,
+    is_primary: false,
+    status: 'pending',
+  }, { source: 'split', lock: false, now });
+  return saved.id;
 }
 
 function updateStoryboardAsSplitSegment(db, sbId, baseRow, plan, now) {
-  db.prepare(
-    `UPDATE storyboards SET
-      title = ?, duration = ?, dialogue = ?, narration = ?, action = ?, result = ?,
-      shot_type = ?, movement = ?, universal_segment_text = NULL,
-      video_prompt = NULL, video_url = NULL, audio_local_path = NULL,
-      narration_audio_local_path = NULL, status = 'pending', updated_at = ?
-     WHERE id = ? AND deleted_at IS NULL`
-  ).run(
-    plan.title,
-    plan.duration,
-    plan.dialogue,
-    plan.narration,
-    plan.action,
-    plan.result,
-    plan.shot_type ?? baseRow.shot_type ?? null,
-    plan.movement ?? baseRow.movement ?? null,
-    now,
-    sbId
-  );
+  patchStoryboard(db, sbId, {
+    title: plan.title,
+    duration: plan.duration,
+    dialogue: plan.dialogue,
+    narration: plan.narration,
+    action: plan.action,
+    result: plan.result,
+    shot_type: plan.shot_type ?? baseRow.shot_type ?? null,
+    movement: plan.movement ?? baseRow.movement ?? null,
+    universal_segment_text: null,
+    video_prompt: null,
+    video_url: null,
+    audio_local_path: null,
+    narration_audio_local_path: null,
+    status: 'pending',
+  }, { source: 'split', lock: false, now });
 }
 
 /**
@@ -1598,6 +1576,8 @@ function splitStoryboardByAudio(db, log, storyboardId) {
 
 module.exports = {
   normalizeStoryboardShotNumber,
+  mapAiStoryboardToCanonical,
+  saveStoryboards,
   dedupeStoryboardRowsByNumber,
   getStoryboardsForEpisode,
   generateStoryboard,

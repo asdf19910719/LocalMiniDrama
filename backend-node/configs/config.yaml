@@ -23,6 +23,24 @@ storage:
 # 异步视频任务轮询总超时（分钟）；省略或 ≤0 时默认 30
 video:
   generation_timeout_minutes: 30
+video_upscale:
+  enabled: true
+  provider: zealman
+  base_url: https://uu1119133-7885b7b94296.bjb2.seetacloud.com:8443
+  default_method: flash
+  workflows:
+    flash: M20-视频高清放大-FlashVSR-2倍-分段工作节点
+    seed: M19-视频高清放大-SeedVR2-2倍-分段工作节点
+  expected_source_width: 1312
+  expected_source_height: 736
+  scale: 2
+  segment_frame_cap: 240
+  overlap_frames: 4
+  auto_start_comfy: true
+  offline_wait_hours: 24
+  max_poll_hours: 8
+  poll_interval_seconds: 5
+  tls_verify: true
 ai:
   default_text_provider: openai
   default_image_provider: openai

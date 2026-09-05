@@ -59,6 +59,19 @@
             <span>整集合成</span><el-tag size="small" :type="mergeTagType(progress.merge.status)" effect="plain">{{ mergeLabel(progress.merge.status) }}</el-tag>
             <span v-if="progress.merge.progress > 0">{{ progress.merge.progress }}%</span>
           </div>
+          <div v-if="progress.merge?.upscale" class="upscale-status-card">
+            <div class="upscale-status-title">
+              <span>云端 2× 超分 · {{ progress.merge.upscale.method === 'seed' ? 'SeedVR2' : 'FlashVSR' }}</span>
+              <el-tag size="small" effect="plain" :type="upscaleTagType(progress.merge.upscale.status)">{{ upscaleLabel(progress.merge.upscale.status) }}</el-tag>
+            </div>
+            <el-progress :percentage="Math.max(0, Math.min(100, Number(progress.merge.upscale.progress) || 0))" />
+            <small v-if="progress.merge.upscale.error_message" class="upscale-error">{{ progress.merge.upscale.error_message }}<template v-if="progress.merge.upscale.error_code">（{{ progress.merge.upscale.error_code }}）</template></small>
+            <div class="upscale-actions">
+              <el-button v-if="progress.merge.upscale.allowed_actions?.retry" size="small" type="primary" plain :loading="actionLoading === 'retry'" @click="runUpscaleAction('retry')">重试超分</el-button>
+              <el-button v-if="progress.merge.upscale.allowed_actions?.skip" size="small" :loading="actionLoading === 'skip'" @click="runUpscaleAction('skip')">跳过超分并继续</el-button>
+              <el-button v-if="progress.merge.upscale.allowed_actions?.cancel" size="small" type="danger" plain :loading="actionLoading === 'cancel'" @click="runUpscaleAction('cancel')">取消超分</el-button>
+            </div>
+          </div>
         </div>
       </div>
       <small class="progress-updated-at">更新于 {{ formatTime(progress.generated_at) }}</small>
@@ -68,20 +81,52 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Loading } from '@element-plus/icons-vue'
 import ImageGenerationEnvironmentStatus from '@/components/imageGeneration/ImageGenerationEnvironmentStatus.vue'
 import { useEpisodeGenerationProgress, progressBucketLabel } from '@/composables/useEpisodeGenerationProgress'
+import { videoUpscaleAPI } from '@/api/videoUpscale'
 
 const props = defineProps({ episodeId: { type: [Number, String], default: null }, environment: { type: Object, default: null } })
 const emit = defineEmits(['open-video', 'check-environment'])
 const { progress, loading, error, refresh } = useEpisodeGenerationProgress(() => props.episodeId)
+const actionLoading = ref('')
 
 function formatTime(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString()
 }
 function mergeLabel(status) {
-  return { pending: '等待中', queued: '排队中', processing: '合成中', running: '合成中', completed: '已完成', failed: '失败' }[status] || status || '未知'
+  return { pending: '等待中', queued: '排队中', processing: '合成中', running: '合成中', waiting_upscale: '等待超分', completed: '已完成', failed: '失败' }[status] || status || '未知'
+}
+function upscaleLabel(status) {
+  return { pending: '等待中', waiting_provider: '等待云端设备', starting_provider: '启动云端', uploading: '上传中', queued: '排队中', running: '处理中', downloading: '下载中', stitching: '拼接中', validating: '校验中', completed: '已完成', failed: '失败', skipped: '已跳过', cancelled: '已取消' }[status] || status || '未知'
+}
+function upscaleTagType(status) {
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'waiting_provider') return 'warning'
+  return 'info'
+}
+async function runUpscaleAction(action) {
+  const jobId = progress.value?.merge?.upscale?.id
+  if (!jobId || actionLoading.value) return
+  if (action === 'skip') {
+    try {
+      await ElMessageBox.confirm('跳过后将以基础分辨率视频继续字幕、水印和混音，确定继续吗？', '跳过云端超分', { type: 'warning' })
+    } catch (_) { return }
+  }
+  actionLoading.value = action
+  try {
+    await videoUpscaleAPI[action](jobId)
+    ElMessage.success(action === 'retry' ? '已重新检查云端超分' : action === 'skip' ? '已跳过超分并继续成片' : '已取消超分')
+    await refresh()
+  } catch (actionError) {
+    ElMessage.error(actionError?.message || '超分操作失败')
+  } finally {
+    actionLoading.value = ''
+  }
 }
 function mergeTagType(status) {
   if (status === 'completed') return 'success'
@@ -110,6 +155,11 @@ function mergeTagType(status) {
 .video-active-row:hover { color: var(--el-color-primary); }
 .merge-status-row { gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--el-border-color-lighter); font-size: 12px; }
 .merge-status-row span:last-child { margin-left: auto; color: var(--el-text-color-secondary); }
+.upscale-status-card { margin-top: 10px; padding: 10px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; display: grid; gap: 8px; }
+.upscale-status-title, .upscale-actions { display: flex; align-items: center; gap: 8px; }
+.upscale-status-title { justify-content: space-between; font-size: 12px; }
+.upscale-actions { flex-wrap: wrap; }
+.upscale-error { color: var(--el-color-danger); overflow-wrap: anywhere; }
 .progress-empty, .episode-progress-loading { color: var(--el-text-color-secondary); font-size: 13px; padding: 12px 0; }
 .episode-progress-error { margin-bottom: 12px; }
 @media (max-width: 760px) { .episode-progress-overview, .episode-progress-columns { grid-template-columns: 1fr; } .episode-progress-header { align-items: flex-start; } }

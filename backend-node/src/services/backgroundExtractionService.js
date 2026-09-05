@@ -142,6 +142,7 @@ async function processBackgroundExtraction(db, cfg, log, taskID, episodeId, mode
       location: bg.location,
       time: bg.time,
       prompt: bg.prompt,
+      atmosphere: bg.atmosphere ?? null,
     });
     if (scene) {
       scenes.push(scene);

@@ -4,6 +4,10 @@ const storageLayout = require('./storageLayout');
 const { resolveStylePreset } = require('../constants/generationStylePresets');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
 const { listStoryboardVariantLinks } = require('./storyboardVariantService');
+const {
+  projectStoryboardRow,
+  projectEpisodeRow,
+} = require('./storyboardCanonicalRepository');
 
 /**
  * 清理 image_url：如果数据库中存储的是 base64 data URL，则返回 null。
@@ -331,20 +335,7 @@ function rowToDrama(r) {
 }
 
 function rowToEpisode(r) {
-  return {
-    id: r.id,
-    drama_id: r.drama_id,
-    episode_number: r.episode_number,
-    title: r.title,
-    script_content: r.script_content,
-    description: r.description,
-    duration: r.duration ?? 0,
-    status: r.status || 'draft',
-    video_url: r.video_url,
-    thumbnail: r.thumbnail,
-    created_at: r.created_at,
-    updated_at: r.updated_at,
-  };
+  return projectEpisodeRow(r);
 }
 
 function parseStoryboardCharacters(charactersStr) {
@@ -359,54 +350,7 @@ function parseStoryboardCharacters(charactersStr) {
 }
 
 function rowToStoryboard(r) {
-  return {
-    id: r.id,
-    episode_id: r.episode_id,
-    scene_id: r.scene_id,
-    storyboard_number: r.storyboard_number,
-    title: r.title,
-    description: r.description,
-    location: r.location,
-    time: r.time,
-    duration: r.duration ?? 0,
-    dialogue: r.dialogue,
-    narration: r.narration ?? null,
-    action: r.action,
-    result: r.result ?? null,
-    atmosphere: r.atmosphere,
-    image_prompt: r.image_prompt,
-    polished_prompt: r.polished_prompt ?? null,
-    continuity_snapshot: r.continuity_snapshot ?? null,
-    video_prompt: r.video_prompt,
-      shot_type: r.shot_type ?? null,
-      angle: r.angle ?? null,
-      angle_h: r.angle_h ?? null,
-      angle_v: r.angle_v ?? null,
-      angle_s: r.angle_s ?? null,
-      movement: r.movement ?? null,
-      lighting_style: r.lighting_style ?? null,
-      depth_of_field: r.depth_of_field ?? null,
-      segment_index: r.segment_index ?? 0,
-      segment_title: r.segment_title ?? null,
-      creation_mode: r.creation_mode === 'universal' ? 'universal' : 'classic',
-      universal_segment_text: r.universal_segment_text ?? null,
-      first_frame_image_id: r.first_frame_image_id ?? null,
-      last_frame_image_id: r.last_frame_image_id ?? null,
-      last_frame_image_url: sanitizeImageUrl(r.last_frame_image_url),
-      last_frame_local_path: r.last_frame_local_path ?? null,
-      characters: parseStoryboardCharacters(r.characters),
-      composed_image: r.composed_image,
-      image_url: sanitizeImageUrl(r.image_url),
-      local_path: r.local_path ?? null,
-      main_panel_idx: r.main_panel_idx != null ? Number(r.main_panel_idx) : null,
-      video_url: r.video_url,
-      audio_local_path: r.audio_local_path ?? null,
-      narration_audio_local_path: r.narration_audio_local_path ?? null,
-      status: r.status || 'pending',
-      error_msg: r.error_msg,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    };
+  return projectStoryboardRow(r);
 }
 
 function rowToCharacter(r) {
@@ -445,6 +389,7 @@ function rowToScene(r) {
     location: r.location,
     time: r.time,
     prompt: r.prompt,
+    atmosphere: r.atmosphere ?? null,
     polished_prompt: r.polished_prompt || null,
     negative_prompt: r.negative_prompt || null,
     storyboard_count: r.storyboard_count ?? 1,
@@ -677,19 +622,25 @@ function saveEpisodes(db, log, dramaId, req) {
     keptNumbers.add(num);
     // 查找已有的（包含软删除的，以防重新激活）
     const existing = db.prepare(
-      'SELECT id FROM episodes WHERE drama_id = ? AND episode_number = ? ORDER BY deleted_at IS NOT NULL ASC, id ASC LIMIT 1'
+      'SELECT id, audio_plan, production_profile FROM episodes WHERE drama_id = ? AND episode_number = ? ORDER BY deleted_at IS NOT NULL ASC, id ASC LIMIT 1'
     ).get(did, num);
+    const audioPlanValue = ep.audio_plan === undefined
+      ? existing?.audio_plan ?? null
+      : (typeof ep.audio_plan === 'string' ? ep.audio_plan : JSON.stringify(ep.audio_plan));
+    const productionProfileValue = ep.production_profile === undefined
+      ? existing?.production_profile ?? null
+      : (typeof ep.production_profile === 'string' ? ep.production_profile : JSON.stringify(ep.production_profile));
     if (existing) {
       // 更新已有分集，保留 id
       db.prepare(
-        `UPDATE episodes SET title = ?, script_content = ?, description = ?, duration = ?, deleted_at = NULL, updated_at = ? WHERE id = ?`
-      ).run(ep.title || '', ep.script_content ?? null, ep.description ?? null, ep.duration ?? 0, now, existing.id);
+        `UPDATE episodes SET title = ?, script_content = ?, description = ?, duration = ?, audio_plan = ?, production_profile = ?, deleted_at = NULL, updated_at = ? WHERE id = ?`
+      ).run(ep.title || '', ep.script_content ?? null, ep.description ?? null, ep.duration ?? 0, audioPlanValue, productionProfileValue, now, existing.id);
     } else {
       // 新增
       db.prepare(
-        `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, duration, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
-      ).run(did, num, ep.title || '', ep.script_content ?? null, ep.description ?? null, ep.duration ?? 0, now, now);
+        `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, duration, audio_plan, production_profile, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+      ).run(did, num, ep.title || '', ep.script_content ?? null, ep.description ?? null, ep.duration ?? 0, audioPlanValue, productionProfileValue, now, now);
     }
   }
 
@@ -845,6 +796,7 @@ function finalizeEpisode(db, log, episodeId, baseUrl, body = {}) {
       watermark_text: (body && body.watermark_text != null)
         ? String(body.watermark_text).trim().slice(0, 200)
         : '',
+      upscale: videoMergeService.normalizeUpscaleOptions(body && body.upscale),
     },
   };
   const created = videoMergeService.create(db, log, mergeReq);

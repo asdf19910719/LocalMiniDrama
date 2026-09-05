@@ -11,12 +11,25 @@ import { assetImageUrl } from '../utils/mediaUrl.js'
 
 // H3 草稿文本防抖自动保存间隔(spec §11.3,Task 17)
 const H3_DRAFT_SAVE_DEBOUNCE_MS = 800
+export const H3_OFFICIAL_WORKFLOW_ID = 'minimax_h3_director_r2v'
+export const H3_TE_SPEED_WORKFLOW_ID = 'minimax_h3_director_r2v_te_speed'
+
+export function workflowIdForTESpeed(enabled) {
+  return enabled ? H3_TE_SPEED_WORKFLOW_ID : H3_OFFICIAL_WORKFLOW_ID
+}
+
+function isSwitchableH3WorkflowId(value) {
+  return [H3_OFFICIAL_WORKFLOW_ID, H3_TE_SPEED_WORKFLOW_ID].includes(trimmed(value))
+}
 // 候选生成 409 门禁错误码(Task 16):命中时刷新草稿 + freshness 后再由 chip 呈现原因
 const H3_DRAFT_GATE_ERROR_CODES = new Set([
   'H3_DRAFT_STALE',
   'H3_DRAFT_INVALID',
   'H3_DRAFT_HASH_MISMATCH',
   'H3_DRAFT_CONFIG_MISMATCH',
+  'H3_DRAFT_WORKFLOW_MISMATCH',
+  'H3_SEMANTIC_REVIEW_REQUIRED',
+  'H3_REFERENCE_SEMANTICS_INVALID',
 ])
 
 const VIDEO_ACTIONS = Object.freeze([
@@ -62,7 +75,10 @@ const ERROR_SUMMARIES = Object.freeze({
   H3_DRAFT_INVALID: '提示词草稿未通过结构校验，请修正文本后再生成候选。',
   H3_DRAFT_HASH_MISMATCH: '提示词草稿哈希校验失败，请重新生成 H3 提示词。',
   H3_DRAFT_CONFIG_MISMATCH: '提示词草稿与当前视频配置不一致，请重新生成 H3 提示词。',
+  H3_DRAFT_WORKFLOW_MISMATCH: '提示词草稿与当前 H3 加速开关不一致，请重新生成 H3 提示词。',
   H3_DRAFT_STORYBOARD_MISMATCH: '提示词草稿属于其他分镜，请重新生成 H3 提示词。',
+  H3_SEMANTIC_REVIEW_REQUIRED: 'H3 音频语义覆盖需要人工复核并确认。',
+  H3_REFERENCE_SEMANTICS_INVALID: 'H3 参考图或参考音频标签与实际资产顺序不一致。',
   VIDEO_CONFIG_DEFAULT_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
   VIDEO_CONFIG_DEFAULT_MULTIPLE: '检测到多个默认视频服务，请在 API 配置中仅保留一个。',
   VIDEO_CONFIG_MISSING: '尚未设置默认视频服务，请先前往 API 配置完成设置。',
@@ -281,7 +297,7 @@ export function buildVideoCandidateRequest(form = {}, overrides = {}) {
     frameRate: positiveNumber(form.frameRate ?? 24, '帧率'),
     seed: nonNegativeInteger(form.seed ?? 42, '随机种子'),
     continuityMode: trimmed(form.continuityMode) || 'none',
-    workflowId: trimmed(form.workflowId) || 'minimax_h3_director_r2v',
+    workflowId: trimmed(form.workflowId) || H3_TE_SPEED_WORKFLOW_ID,
     generationMode: trimmed(form.generationMode) || 'single_reference',
   }
   const optional = {
@@ -362,7 +378,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     candidateCount: 1,
     continuityMode: 'none',
     useVoiceReference: false,
-    workflowId: 'minimax_h3_director_r2v',
+    workflowId: H3_TE_SPEED_WORKFLOW_ID,
     generationMode: 'single_reference',
     anchorId: '',
     sourceArtifactId: '',
@@ -417,6 +433,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   const h3Saving = ref(false)
   const h3Compiling = ref(false)
   const h3DraftLoading = ref(false)
+  const h3Confirming = ref(false)
   const h3UserEdited = ref(false)
   const h3Slots = ref([])
   const h3SlotsLoaded = ref(false)
@@ -474,11 +491,18 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       || trimmed(Array.isArray(defaultConfig.value?.model) ? defaultConfig.value.model[0] : defaultConfig.value?.model)
       || '由默认配置决定'
   ))
+  const teSpeedEnabled = computed(() => form.workflowId === H3_TE_SPEED_WORKFLOW_ID)
+  const workflowLabel = computed(() => {
+    if (teSpeedEnabled.value) return '官方多参考图（Sage + TE-Speed 实验）'
+    if (form.workflowId === H3_OFFICIAL_WORKFLOW_ID) return '官方多参考图（Sage）'
+    return trimmed(capabilities.value?.workflow?.label) || '官方多参考图（Sage）'
+  })
+  const approximateAcceleration = computed(() => teSpeedEnabled.value)
   const isH3Config = computed(() => {
     const cfg = defaultConfig.value || {}
     const provider = String(cfg.provider || '').toLowerCase()
     const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model === 'minimax_h3_director_r2v' || model.includes('minimax-h3') || model.includes('minimaxh3'))
+    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimax-h3') || model.includes('minimaxh3'))
   })
   const h3UiState = computed(() => deriveH3DraftUiState({
     draft: h3Draft.value,
@@ -488,6 +512,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   }))
   const h3FreshnessLabels = computed(() => mapFreshnessReasons(h3Freshness.value?.reasons))
   const h3ValidationLines = computed(() => formatH3ValidationErrors(h3Draft.value?.validation_errors))
+  const h3CoverageEvents = computed(() => {
+    const manifest = h3Draft.value?.coverage_manifest
+    return Array.isArray(manifest?.events) ? manifest.events : []
+  })
   // spec §12.2:@图片N 与当前槽位语义不符时只警告不阻塞(简化口径:引用编号 > 槽位总数)
   const h3RefDrift = computed(() => checkImageRefDrift(h3DraftText.value, h3Slots.value))
 
@@ -515,6 +543,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Saving.value = false
     h3Compiling.value = false
     h3DraftLoading.value = false
+    h3Confirming.value = false
     h3Slots.value = []
     h3SlotsLoaded.value = false
   }
@@ -526,7 +555,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     const requestVersion = ++h3DraftVersion
     h3DraftLoading.value = true
     try {
-      const result = await videosAPI.getH3Draft(requestStoryboardId, configId)
+      const result = await videosAPI.getH3Draft(requestStoryboardId, configId, form.workflowId)
       if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
     } catch (caught) {
@@ -561,7 +590,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Compiling.value = true
     setError(null)
     try {
-      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId)
+      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId, form.workflowId)
       if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
       await loadReferenceSlots()
@@ -605,6 +634,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     if (h3Dirty && h3Draft.value) await saveH3DraftText()
   }
 
+  async function setTESpeedEnabled(enabled) {
+    const nextWorkflowId = workflowIdForTESpeed(Boolean(enabled))
+    if (form.workflowId === nextWorkflowId) return true
+    await flushH3DraftSave()
+    if (h3Dirty) return false
+    form.workflowId = nextWorkflowId
+    resetH3DraftState()
+    await loadH3Draft()
+    return true
+  }
+
   async function saveH3DraftText() {
     const draft = h3Draft.value
     if (!draft || draft.id == null || typeof videosAPI.saveH3Draft !== 'function') return
@@ -630,6 +670,26 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       }
     } finally {
       if (requestVersion === h3DraftVersion) h3Saving.value = false
+    }
+  }
+
+  async function confirmH3SemanticReview() {
+    const draft = h3Draft.value
+    if (!draft?.id || !draft?.compiled_prompt_hash || typeof videosAPI.confirmH3SemanticReview !== 'function') return
+    h3Confirming.value = true
+    setError(null)
+    try {
+      const result = await videosAPI.confirmH3SemanticReview(
+        draft.storyboard_id ?? props.storyboardId,
+        draft.id,
+        draft.compiled_prompt_hash,
+      )
+      applyH3Draft(result?.draft ?? draft, result?.freshness, { replaceText: false })
+    } catch (caught) {
+      setError(caught)
+      await loadH3Draft()
+    } finally {
+      h3Confirming.value = false
     }
   }
 
@@ -735,7 +795,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (typeof videosAPI.capabilities === 'function' && trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui') {
         capabilities.value = await videosAPI.capabilities()
         const workflow = capabilities.value?.workflow
-        if (workflow?.id) form.workflowId = workflow.id
+        if (workflow?.id && !isSwitchableH3WorkflowId(workflow.id)) form.workflowId = workflow.id
         const mode = capabilities.value?.capabilities?.modes?.[0]
         if (mode) form.generationMode = mode
         if (capabilities.value?.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
@@ -1094,6 +1154,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configStatus,
     providerName,
     modelName,
+    workflowLabel,
+    teSpeedEnabled,
+    setTESpeedEnabled,
+    approximateAcceleration,
     isH3Config,
     loading,
     creating,
@@ -1121,10 +1185,12 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Freshness,
     h3FreshnessLabels,
     h3ValidationLines,
+    h3CoverageEvents,
     h3RefDrift,
     h3Saving,
     h3Compiling,
     h3DraftLoading,
+    h3Confirming,
     h3UiState,
     h3Slots,
     refresh,
@@ -1135,6 +1201,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     onH3DraftTextInput,
     scheduleH3DraftSave,
     flushH3DraftSave,
+    confirmH3SemanticReview,
     cancelCandidate,
     retryCandidate,
     analyzeCandidate,

@@ -9,7 +9,7 @@ export function videoModelNameFromConfig(cfg) {
 export function isH3ComfyUiConfig(cfg) {
   const provider = String(cfg?.provider || '').trim().toLowerCase()
   const model = videoModelNameFromConfig(cfg).toLowerCase()
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.includes('minimaxh3') || model.includes('minimax-h3'))
+  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimaxh3') || model.includes('minimax-h3'))
 }
 
 export function universalVideoCompatibility(cfg) {

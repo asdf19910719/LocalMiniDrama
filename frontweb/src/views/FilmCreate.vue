@@ -451,6 +451,21 @@
         @check-environment="onEpisodeProgressEnvironmentCheck"
         @open-video="onEpisodeProgressOpenVideo"
       />
+      <AudioPlanPanel
+        :episode-id="currentEpisodeId"
+        :audio-plan="currentEpisode?.audio_plan"
+        :storyboards="storyboards"
+        @updated="onEpisodeAudioPlanUpdated"
+        @h3-stale="onEpisodeAudioPlanStale"
+        @edit-shot="(shot) => scrollToAnchor('sb-' + shot.id)"
+      />
+      <el-alert
+        v-if="episodeAudioH3Stale"
+        type="warning"
+        :closable="false"
+        title="音频策略或分镜声音已变化，现有 H3 草稿来源已过期；下次生成会自动重新编译。"
+        show-icon
+      />
 
       <section class="section card resource-panel">
         <div class="collapse-header" @click="resourcePanelCollapsed = !resourcePanelCollapsed">
@@ -1665,6 +1680,16 @@
               <span v-if="videoSubtitle" class="video-option-hint">开启后，合成整集时会检测解说旁白：若有文案则自动生成 SRT、按分镜时长合成旁白语音（过长加速 / 过短补静音）、与成片对齐后烧录字幕并混音。</span>
             </div>
           </el-form-item>
+          <el-form-item label="云端超分">
+            <div class="video-option-row video-upscale-option">
+              <el-switch v-model="videoUpscale" />
+              <el-select v-if="videoUpscale" v-model="videoUpscaleMethod" style="width: 190px">
+                <el-option label="FlashVSR（推荐/较快）" value="flash" />
+                <el-option label="SeedVR2（更慢/偏质量）" value="seed" />
+              </el-select>
+              <span v-if="videoUpscale" class="video-option-hint">在镜头合并后、字幕和水印前执行 2× 超分：1312×736 → 2624×1472。云端关机时会保留基础视频并等待恢复。</span>
+            </div>
+          </el-form-item>
           <el-form-item label="对白烧录">
             <div class="video-option-row">
               <el-switch v-model="videoBurnDialogue" />
@@ -2802,6 +2827,7 @@ import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGen
 import CharacterVariantStudio from '@/components/CharacterVariantStudio.vue'
 import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
+import AudioPlanPanel from '@/components/episode/AudioPlanPanel.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -2972,6 +2998,8 @@ const videoMusic = ref('')
 const videoSfx = ref('')
 const videoQuality = ref('high')
 const videoSubtitle = ref(false)
+const videoUpscale = ref(false)
+const videoUpscaleMethod = ref('flash')
 /** 合成整集时把各镜对白 TTS（audio_local_path）按分镜时长对齐并混入成片 */
 const videoBurnDialogue = ref(false)
 const videoWatermark = ref(false)
@@ -2985,6 +3013,15 @@ const props = computed(() => store.props)
 const storyboards = computed(() => store.storyboards)
 const currentEpisode = computed(() => store.currentEpisode)
 const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
+const episodeAudioH3Stale = ref(false)
+function onEpisodeAudioPlanUpdated(payload) {
+  if (payload?.episode && store.currentEpisode) Object.assign(store.currentEpisode, payload.episode)
+  if (Array.isArray(payload?.storyboards) && store.currentEpisode) store.currentEpisode.storyboards = payload.storyboards
+}
+function onEpisodeAudioPlanStale() {
+  episodeAudioH3Stale.value = true
+  ElMessage.warning('音频策略已变化；下次生成视频时会重新准备 H3 提示词草稿')
+}
 const videoProgress = computed(() => store.videoProgress)
 const videoStatus = computed(() => store.videoStatus)
 
@@ -7027,7 +7064,7 @@ async function onGenerateSbVideo(sb) {
       referenceUrls = [...referenceUrls, vLast]
     }
     const preferClassicPrompt = universal && !universalOmniApi
-    const res = await videosAPI.create({
+    const res = await videosAPI.prepareAndCreate({
       drama_id: dramaId.value,
       storyboard_id: sb.id,
       prompt: buildSbVideoPromptForApi(sb, { preferClassicPrompt }),
@@ -7481,7 +7518,7 @@ async function startBatchVideoGeneration() {
           if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
             refUrls = [...refUrls, vLast]
           }
-          const res = await videosAPI.create({
+          const res = await videosAPI.prepareAndCreate({
             drama_id: dramaId.value,
             storyboard_id: sb.id,
             prompt: buildSbVideoPromptForApi(sb),
@@ -7541,6 +7578,11 @@ function getFinalizeMergeOptions() {
     burn_narration_subtitles: !!videoSubtitle.value,
     burn_dialogue_audio: !!videoBurnDialogue.value,
     watermark_text: videoWatermark.value ? String(videoWatermarkText.value || '').trim().slice(0, 200) : '',
+    upscale: {
+      enabled: !!videoUpscale.value,
+      method: videoUpscaleMethod.value,
+      failure_policy: 'wait_for_action',
+    },
   }
 }
 
@@ -8179,7 +8221,7 @@ async function runOneClickPipeline(textOnly = false) {
             if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
               refUrls = [...refUrls, vLast]
             }
-            const res = await videosAPI.create({
+            const res = await videosAPI.prepareAndCreate({
               drama_id: dramaIdVal,
               storyboard_id: sb.id,
               prompt: buildSbVideoPromptForApi(sb),
@@ -8521,7 +8563,7 @@ async function runRepairPipeline() {
             if (!universal && vLast && refUrls && !refUrls.includes(vLast)) {
               refUrls = [...refUrls, vLast]
             }
-            const res = await videosAPI.create({
+            const res = await videosAPI.prepareAndCreate({
               drama_id: dramaIdVal,
               storyboard_id: sb.id,
               prompt: buildSbVideoPromptForApi(sb),

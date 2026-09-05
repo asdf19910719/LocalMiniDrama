@@ -128,6 +128,8 @@ function ensureAllColumns(database) {
     { name: 'created_at',     type: 'TEXT' },
     { name: 'updated_at',     type: 'TEXT' },
     { name: 'deleted_at',     type: 'TEXT' },
+    { name: 'audio_plan',     type: 'TEXT' },
+    { name: 'production_profile', type: 'TEXT' },
   ]);
 
   // --- storyboards ---
@@ -181,6 +183,8 @@ function ensureAllColumns(database) {
     { name: 'source_key',        type: 'TEXT' },               // 单集制作包导入:包内分镜来源 key
     { name: 'audio_description', type: 'TEXT' },               // 画面声音描述(环境音/音效等)
     { name: 'transition',        type: 'TEXT' },               // 转场方式(切/溶/淡入淡出等)
+    { name: 'is_primary',        type: 'INTEGER DEFAULT 0' },
+    { name: 'production_metadata', type: 'TEXT' },
     { name: 'status',            type: 'TEXT DEFAULT \'draft\'' },
     { name: 'created_at',        type: 'TEXT' },
     { name: 'updated_at',        type: 'TEXT' },
@@ -236,6 +240,7 @@ function ensureAllColumns(database) {
     { name: 'error_msg',        type: 'TEXT' },
     { name: 'source_key',       type: 'TEXT' },     // 单集制作包导入:包内场景来源 key
     { name: 'state',            type: 'TEXT' },     // 场景状态(如 day/night)
+    { name: 'atmosphere',       type: 'TEXT' },
     { name: 'status',           type: 'TEXT DEFAULT \'draft\'' },
     { name: 'created_at',       type: 'TEXT' },
     { name: 'updated_at',       type: 'TEXT' },
@@ -668,11 +673,93 @@ function ensureAllColumns(database) {
       manually_edited INTEGER DEFAULT 0,
       status TEXT DEFAULT 'valid',
       validation_errors TEXT,
+      workflow_id TEXT,
       created_at TEXT,
       updated_at TEXT
     )`);
+    ensureColumns(database, 'storyboard_h3_prompt_drafts', [
+      { name: 'workflow_id', type: 'TEXT' },
+      { name: 'coverage_manifest', type: 'TEXT' },
+      { name: 'semantic_review_status', type: 'TEXT' },
+      { name: 'semantic_review_confirmed', type: 'INTEGER DEFAULT 0' },
+    ]);
     database.exec('CREATE INDEX IF NOT EXISTS idx_h3_draft_lookup ON storyboard_h3_prompt_drafts(storyboard_id, video_config_id, updated_at DESC)');
+    database.exec('CREATE INDEX IF NOT EXISTS idx_h3_draft_workflow_lookup ON storyboard_h3_prompt_drafts(storyboard_id, video_config_id, workflow_id, updated_at DESC)');
   } catch (_) {}
+
+  // --- 云端视频超分作业 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS video_upscale_jobs (
+      id TEXT PRIMARY KEY,
+      episode_id INTEGER,
+      video_merge_id INTEGER,
+      async_task_id TEXT,
+      provider TEXT NOT NULL DEFAULT 'zealman',
+      method TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      config_snapshot_json TEXT,
+      source_path TEXT NOT NULL,
+      source_fingerprint TEXT,
+      source_width INTEGER,
+      source_height INTEGER,
+      source_fps_num INTEGER,
+      source_fps_den INTEGER,
+      source_frame_count INTEGER,
+      source_has_audio INTEGER DEFAULT 0,
+      target_width INTEGER,
+      target_height INTEGER,
+      output_path TEXT,
+      remote_input_name TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      progress INTEGER NOT NULL DEFAULT 0,
+      current_stage TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      next_retry_at TEXT,
+      waiting_since TEXT,
+      cancel_requested_at TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL
+    )`);
+    database.exec(`CREATE TABLE IF NOT EXISTS video_upscale_segments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL,
+      segment_index INTEGER NOT NULL,
+      start_frame INTEGER NOT NULL,
+      requested_frame_count INTEGER NOT NULL,
+      overlap_frames INTEGER NOT NULL DEFAULT 0,
+      remote_input_name TEXT,
+      client_id TEXT,
+      prompt_id TEXT,
+      filename_prefix TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      progress INTEGER NOT NULL DEFAULT 0,
+      remote_result_json TEXT,
+      local_output_path TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      submitted_at TEXT,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE(job_id, segment_index),
+      FOREIGN KEY(job_id) REFERENCES video_upscale_jobs(id) ON DELETE CASCADE
+    )`);
+    ensureColumns(database, 'video_merges', [
+      { name: 'upscale_job_id', type: 'TEXT' },
+      { name: 'base_merged_url', type: 'TEXT' },
+    ]);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_video_upscale_jobs_due ON video_upscale_jobs(status, next_retry_at)');
+    database.exec('CREATE INDEX IF NOT EXISTS idx_video_upscale_jobs_merge ON video_upscale_jobs(video_merge_id, created_at DESC)');
+    database.exec('CREATE INDEX IF NOT EXISTS idx_video_upscale_segments_prompt ON video_upscale_segments(prompt_id)');
+    database.exec('CREATE INDEX IF NOT EXISTS idx_video_upscale_segments_status ON video_upscale_segments(job_id, status, segment_index)');
+  } catch (error) {
+    console.warn('ensure video upscale tables failed:', error.message);
+  }
 }
 
 /** 对已打开的 database 执行迁移与兜底补列（供 app 启动时调用） */

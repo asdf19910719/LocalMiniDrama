@@ -102,4 +102,39 @@ describe('H3 prompt compiler', () => {
     assert.equal(calls[0].durationSeconds, 7);
     assert.match(calls[0].sourceBundle, /REFERENCE_ASSETS: \/ref\.png/);
   });
+
+  it('passes complete AV and reference semantics from Generation Context to the skill agent', async () => {
+    const calls = [];
+    const contextualPrompt = [
+      'subject_definitions:',
+      '<Subject 1> is Lin Xia in <Picture 1>, used as character identity.',
+      '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).',
+      'summary:',
+      '[reference generation + audio reference] Lin Xia opens a door.',
+      'retention_analysis:',
+      '<Subject 1>: fully_preserved - identity retained.',
+      '<Audio 1>: reference - voice timbre retained.',
+      'detailed_description:',
+      '[Shot 1] <Subject 1> from <Picture 1> opens the door while rain remains audible; <Audio 1> anchors the owned voice timbre.',
+      'overall_soundscape: Rain and a metal door scrape.',
+      'non_diegetic_music: N/A',
+    ].join('\n');
+    const compiler = createH3PromptCompiler({
+      skillAgent: { run: async (_db, _log, request) => { calls.push(request); return { prompt: contextualPrompt, provenance: {} }; } },
+    });
+    const context = {
+      audio_enabled: true,
+      storyboard: { visual_prompt: 'Lin Xia opens the door', duration: 6 },
+      episode: { audio_plan: { bgm: { mode: 'none' }, speech: { dialogue_owner: 'none', narration_owner: 'none' } } },
+      audio: { ambience: ['rain'], sound_effects: ['metal door scrape'], music_cue: { mode: 'mute' } },
+      transition: { type: 'cut' },
+      references: [{ slot: 1, entity_name: 'Lin Xia', reference_role: 'character_identity', image_url: '/lin.png', audio_label: 'Audio 1', audio_url: '/lin.wav' }],
+    };
+    const result = await compiler.compile({}, {}, { context, prompt: 'legacy fallback' });
+    assert.equal(result.promptFormat, 'Ref2VA');
+    assert.match(calls[0].sourceBundle, /AUDIO_PLAN:/);
+    assert.match(calls[0].sourceBundle, /metal door scrape/);
+    assert.match(calls[0].sourceBundle, /<Audio 1>/);
+    assert.equal(result.compiledPrompt, contextualPrompt);
+  });
 });

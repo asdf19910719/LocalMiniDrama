@@ -461,7 +461,7 @@ function getStoryboardUserPromptSuffix(cfg, shotDuration) {
 
 **Audio rule**: bgm_prompt MUST be an empty string or "No BGM". Do not design background music per shot. Put only diegetic ambience, foley, and voice/timbre details in sound_effect, so audio remains consistent across clips.
 
-**Output**: JSON with "storyboards" array. Each item: shot_number, segment_index, segment_title, title, shot_type, angle, time, location, scene_id, movement, action, dialogue, result, atmosphere, emotion, duration, bgm_prompt, sound_effect, characters (array of IDs), props (array of prop IDs), is_primary. Return ONLY valid JSON, no markdown.`;
+**Output**: JSON with "storyboards" array. Each item: shot_number, segment_index, segment_title, title, shot_type, angle, time, location, scene_id, movement, action, dialogue, narration, result, atmosphere, emotion, emotion_intensity, duration, bgm_prompt, sound_effect, characters (array of IDs), props (array of prop IDs), is_primary, layout_description, lighting_style, depth_of_field, transition. Return ONLY valid JSON, no markdown.`;
   }
   const _sbUserLocked = `\n\n【输出格式】请以JSON格式输出，包含 "storyboards" 数组。每个镜头包含：shot_number, segment_index, segment_title, title, shot_type, angle, time, location, scene_id, movement, action, dialogue, result, atmosphere, emotion, duration, bgm_prompt, sound_effect, characters（角色ID数组）, props（道具ID数组）, is_primary, **layout_description（画面布局与人物站位描述，必填，最高优先级空间合同）**。**必须只返回纯JSON，不要markdown。**`;
   const _sbUserOverride = _overrideCache['storyboard_user_suffix'];
@@ -501,7 +501,26 @@ function getStoryboardUserPromptSuffix(cfg, shotDuration) {
 **duration时长**：${durationInstruction}。
 **声音一致性**：所有镜头默认无BGM；若有对白/旁白，sound_effect 必须补充音色与情绪强度，并与动作节奏、环境声保持一致。
 
-【输出格式】请以JSON格式输出，包含 "storyboards" 数组。每个镜头包含：shot_number, segment_index, segment_title, title, shot_type, angle, time, location, scene_id, movement, action, dialogue, result, atmosphere, emotion, duration, bgm_prompt, sound_effect, characters（角色ID数组）, props（道具ID数组）, is_primary。**必须只返回纯JSON，不要markdown。**`;
+【输出格式】请以JSON格式输出，包含 "storyboards" 数组。每个镜头包含：shot_number, segment_index, segment_title, title, shot_type, angle, time, location, scene_id, movement, action, dialogue, narration, result, atmosphere, emotion, emotion_intensity, duration, bgm_prompt, sound_effect, characters（角色ID数组）, props（道具ID数组）, is_primary, layout_description, lighting_style, depth_of_field, transition。**必须只返回纯JSON，不要markdown。**`;
+}
+
+function getStoryboardAudioPlanInstructions(cfg, value) {
+  const plan = value && typeof value === 'object' ? value : {};
+  const bgm = plan.bgm && typeof plan.bgm === 'object' ? plan.bgm : {};
+  const mode = bgm.mode || 'none';
+  if (mode === 'per_segment') {
+    return isEnglish(cfg)
+      ? '\n\n[HIGHEST PRIORITY AUDIO STRATEGY — PER SEGMENT BGM]\nEvery shot is an independent video segment and may receive its own generated BGM. Provide a concrete bgm_prompt for each musical shot; use "No BGM" only for deliberate silence. Keep sound_effect strictly diegetic. The episode-wide audio planner will validate continuity after storyboard persistence.'
+      : '\n\n【最高优先级声音策略——每段独立生成BGM】\n每个分镜都是独立视频片段，可分别生成背景音乐。需要音乐的镜头必须填写具体、可执行的 bgm_prompt；只有刻意静默的镜头才填“无背景音乐”。sound_effect 仅写现场环境声、拟音和声音表演要求。分镜保存后由整集音频规划器统一校验主题连续性。';
+  }
+  if (mode === 'episode_track') {
+    return isEnglish(cfg)
+      ? `\n\n[HIGHEST PRIORITY AUDIO STRATEGY — EPISODE TRACK]\nOne shared episode BGM is owned outside individual clips${bgm.prompt ? `: ${bgm.prompt}` : ''}. Set every bgm_prompt to "No BGM"; keep only diegetic audio in sound_effect.`
+      : `\n\n【最高优先级声音策略——整集单轨BGM】\n背景音乐由整集共享音轨负责${bgm.prompt ? `：${bgm.prompt}` : ''}。每个分镜的 bgm_prompt 均填“无背景音乐”，sound_effect 只写现场声与拟音。`;
+  }
+  return isEnglish(cfg)
+    ? '\n\n[HIGHEST PRIORITY AUDIO STRATEGY — NO BGM]\nThis episode has explicitly disabled non-diegetic music. Set every bgm_prompt to "No BGM" and never infer music from emotion.'
+    : '\n\n【最高优先级声音策略——禁用BGM】\n本集明确禁用非叙事背景音乐。每个分镜的 bgm_prompt 均填“无背景音乐”，严禁根据情绪自行推断并开启音乐。';
 }
 
 /**
@@ -963,8 +982,20 @@ function buildStoryExpansionUserPrompt(cfg, premise, style, type, episodeCount) 
  * 返回指定提示词 key 的可编辑默认正文（中文，不含动态锁定部分）。
  * promptOverrides.js 调用此函数，确保 UI 展示的内容与 promptI18n.js 始终一致。
  */
+const CLASSIC_VIDEO_POLISH_BODY = `你是专业的 AI 视频提示词导演。请把当前分镜资料润色为一段可直接用于视频生成的中文提示词。
+
+必须做到信息保真：完整保留场景、主体身份、动作起点与结果、构图站位、景别、机位、运镜、光线、景深、对白、现场环境声、动作音效、情绪及强度、时长和上下镜衔接；不得凭空增加人物、道具、剧情、对白或背景音乐。首帧必须与给定首帧参考图的主体数量、外貌、服装、位置和朝向一致，随后只描述本镜真实发生的连续动作。若音频策略禁止 BGM，必须明确写无背景音乐；对白与旁白严格服从系统给出的声音归属，避免 H3 原生语音与后期 TTS 重复。输出紧凑但具体，内部多切镜按时间顺序写清楚，每一次切换都保持空间、动作和声音连续。`;
+
+const CLASSIC_VIDEO_POLISH_SUFFIX = `\n\n【锁定输出规则】只输出一段润色后的完整提示词，不要解释、标题、Markdown 或 JSON。保留输入中所有非空信息点；结尾必须且只能保留一个画幅标记，格式为 =VideoRatio:16:9（系统会按项目比例替换数值）。`;
+
+function getClassicVideoPromptPolishPrompt() {
+  return (_overrideCache.classic_video_polish || CLASSIC_VIDEO_POLISH_BODY) + CLASSIC_VIDEO_POLISH_SUFFIX;
+}
+
 function getDefaultPromptBody(key) {
   switch (key) {
+    case 'classic_video_polish':
+      return CLASSIC_VIDEO_POLISH_BODY;
     case 'story_expansion_system':
       return '你是一位专业的编剧。你的任务是根据用户提供的故事梗概，创作 ${n} 集完整的短片剧本。\n\n要求：\n1. 用中文写作，叙事清晰流畅，适合后续拆分为分镜。\n2. 可以包含场景描述、角色动作与对话，但不要输出分镜格式、镜头编号或「内景/外景」等场次标记。\n3. 每集约 800 字。如有多集，剧情必须前后衔接——每集从上一集结尾处推进，确保整体故事连贯。\n4. 每集有清晰的起承转合，结尾留有悬念或转折，吸引观众看下一集。';
 
@@ -1002,6 +1033,8 @@ function getDefaultPromptBody(key) {
  */
 function getLockedSuffix(key) {
   switch (key) {
+    case 'classic_video_polish':
+      return CLASSIC_VIDEO_POLISH_SUFFIX;
     case 'story_expansion_system':
       return null;
     case 'storyboard_system':
@@ -1595,6 +1628,7 @@ module.exports = {
   getUniversalOmniMultiBeatFormatSpec,
   getStoryboardUniversalOmniModeSuffix,
   getStoryboardUserPromptSuffix,
+  getStoryboardAudioPlanInstructions,
   getStoryboardNarrationExtraInstructions,
   getStoryExpansionSystemPrompt,
   buildStoryExpansionUserPrompt,
@@ -1617,4 +1651,5 @@ module.exports = {
   getLockedSuffix,
   getRegenerateLayoutDescriptionPrompt,
   getRealisticPhysicalScaleContract,
+  getClassicVideoPromptPolishPrompt,
 };

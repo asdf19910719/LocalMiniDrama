@@ -6,6 +6,11 @@ const { randomUUID } = require('crypto');
 const storageLayout = require('./storageLayout');
 const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
 
+function toJsonText(value) {
+  if (value == null || value === '') return null;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
   return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
@@ -225,9 +230,20 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
   const episodeIdList = []; // 按顺序保存新集 id
   for (const ep of (data.episodes || [])) {
     const epInfo = db.prepare(
-      `INSERT INTO episodes (drama_id, episode_number, title, description, script_content, duration, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, ep.episode_number || 1, ep.title || `第${ep.episode_number || 1}集`, ep.description || null, ep.script_content || null, ep.duration || 0, now, now);
+      `INSERT INTO episodes (drama_id, episode_number, title, description, script_content, duration, audio_plan, production_profile, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      dramaId,
+      ep.episode_number || 1,
+      ep.title || `第${ep.episode_number || 1}集`,
+      ep.description || null,
+      ep.script_content || null,
+      ep.duration || 0,
+      toJsonText(ep.audio_plan),
+      toJsonText(ep.production_profile),
+      now,
+      now,
+    );
     episodeIdList.push(epInfo.lastInsertRowid);
   }
 
@@ -260,9 +276,24 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'scenes', files, s.image_file, 'scene_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'scenes', files, s.extra_image_files, 'scene_extra_imp');
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, source_key, state, local_path, extra_images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, epId, s.location || '', s.time || '', s.prompt || '', s.polished_prompt || null, s.source_key || null, s.state || null, localPath, extraImagesJson, now, now);
+      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, source_key, state, atmosphere, negative_prompt, local_path, extra_images, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      dramaId,
+      epId,
+      s.location || '',
+      s.time || '',
+      s.prompt || '',
+      s.polished_prompt || null,
+      s.source_key || null,
+      s.state || null,
+      s.atmosphere || null,
+      s.negative_prompt || null,
+      localPath,
+      extraImagesJson,
+      now,
+      now,
+    );
     sceneNewIds.push(info.lastInsertRowid);
     sceneDedupeMap.set(dedupeKey, info.lastInsertRowid);
   }
@@ -278,9 +309,9 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'props', files, p.image_file, 'prop_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'props', files, p.extra_image_files, 'prop_extra_imp');
     const pInfo = db.prepare(
-      `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, source_key, local_path, extra_images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, epId, p.name, p.type || null, p.description || null, p.prompt || null, p.source_key || null, localPath, extraImagesJson, now, now);
+      `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, source_key, negative_prompt, local_path, extra_images, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(dramaId, epId, p.name, p.type || null, p.description || null, p.prompt || null, p.source_key || null, p.negative_prompt || null, localPath, extraImagesJson, now, now);
     propNewIds.push(pInfo.lastInsertRowid);
   }
 
@@ -319,7 +350,7 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
         'dialogue', 'narration', 'action', 'atmosphere', 'result', 'shot_type', 'angle', 'angle_h', 'angle_v', 'angle_s',
         'movement', 'lighting_style', 'depth_of_field', 'image_prompt', 'polished_prompt', 'video_prompt', 'duration',
         'emotion', 'emotion_intensity', 'segment_index', 'segment_title', 'continuity_snapshot', 'creation_mode',
-        'universal_segment_text', 'layout_description', 'source_key', 'audio_description', 'transition',
+        'universal_segment_text', 'layout_description', 'source_key', 'audio_description', 'transition', 'is_primary', 'production_metadata',
         'first_frame_image_id', 'last_frame_image_id',
         'last_frame_image_url', 'last_frame_local_path', 'image_url', 'local_path', 'characters',
         'audio_local_path', 'narration_audio_local_path', 'created_at', 'updated_at'
@@ -360,6 +391,8 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
         sb.source_key || null,
         sb.audio_description || null,
         sb.transition || null,
+        sb.is_primary ? 1 : 0,
+        toJsonText(sb.production_metadata),
         null, // first_frame_image_id 后设
         null, // last_frame_image_id 后设
         sb.last_frame_image_url || null,

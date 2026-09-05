@@ -14,6 +14,7 @@ function probeFor(artifact) {
   try { return JSON.parse(artifact.ffprobe_json || '{}'); } catch (_) { return {}; }
 }
 function videoStream(probe) { return (probe.streams || []).find((stream) => stream.codec_type === 'video') || probe.streams?.[0] || {}; }
+function audioStream(probe) { return (probe.streams || []).find((stream) => stream.codec_type === 'audio') || null; }
 function selectedArtifact(db, artifactId) {
   const artifact = db.prepare('SELECT * FROM director_artifacts WHERE id = ?').get(artifactId);
   if (!artifact || artifact.status !== 'ready') throw new Error(`Artifact ${artifactId} is not ready`);
@@ -88,6 +89,7 @@ function validateTimeline(db, {
       sourceOffset: clip.sourceOffset,
       sourceDuration: clip.sourceDuration,
       transition: clip.transition || null,
+      hasAudio: Boolean(audioStream(probeFor(artifact))),
     });
   }
   normalized.forEach((clip, index) => {
@@ -136,34 +138,44 @@ function buildFfmpegCommand(timeline, { ffmpegPath = 'ffmpeg', outputPath }) {
   timeline.clips.forEach((clip, index) => {
     args.push('-i', clip.artifactPath);
     filters.push(`[${index}:v]trim=start=${clip.sourceOffset}:duration=${clip.duration},setpts=PTS-STARTPTS[v${index}]`);
+    if (clip.hasAudio) {
+      filters.push(`[${index}:a]atrim=start=${clip.sourceOffset}:duration=${clip.duration},asetpts=PTS-STARTPTS[a${index}]`);
+    } else {
+      filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${clip.duration},asetpts=PTS-STARTPTS[a${index}]`);
+    }
   });
   const hasTimedTransition = timeline.clips.slice(0, -1)
     .some((clip) => clip.transition && clip.transition.type !== 'cut' && clip.transition.duration > 0);
   if (!hasTimedTransition) {
-    const concatInputs = timeline.clips.map((_, index) => `[v${index}]`).join('');
-    filters.push(`${concatInputs}concat=n=${timeline.clips.length}:v=1:a=0[vout]`);
+    const concatInputs = timeline.clips.map((_, index) => `[v${index}][a${index}]`).join('');
+    filters.push(`${concatInputs}concat=n=${timeline.clips.length}:v=1:a=1[vout][aout]`);
   } else {
     let currentLabel = 'v0';
+    let currentAudioLabel = 'a0';
     let currentDuration = timeline.clips[0].duration;
     for (let index = 1; index < timeline.clips.length; index += 1) {
       const transition = timeline.clips[index - 1].transition || { type: 'cut', duration: 0 };
       const outputLabel = index === timeline.clips.length - 1 ? 'vout' : `vchain${index}`;
+      const audioOutputLabel = index === timeline.clips.length - 1 ? 'aout' : `achain${index}`;
       if (transition.type === 'cut' || transition.duration === 0) {
         filters.push(`[${currentLabel}][v${index}]concat=n=2:v=1:a=0[${outputLabel}]`);
+        filters.push(`[${currentAudioLabel}][a${index}]concat=n=2:v=0:a=1[${audioOutputLabel}]`);
         currentDuration += timeline.clips[index].duration;
       } else {
         const ffmpegTransition = transition.type === 'fade' ? 'fadeblack' : 'fade';
         const offset = Number((currentDuration - transition.duration).toFixed(6));
         filters.push(`[${currentLabel}][v${index}]xfade=transition=${ffmpegTransition}:duration=${transition.duration}:offset=${offset}[${outputLabel}]`);
+        filters.push(`[${currentAudioLabel}][a${index}]acrossfade=d=${transition.duration}:c1=tri:c2=tri[${audioOutputLabel}]`);
         currentDuration += timeline.clips[index].duration - transition.duration;
       }
       currentLabel = outputLabel;
+      currentAudioLabel = audioOutputLabel;
     }
   }
   args.push('-filter_complex', filters.join(';'));
-  args.push('-map', '[vout]', '-r', String(timeline.output.fps), '-s', `${timeline.output.width}x${timeline.output.height}`);
+  args.push('-map', '[vout]', '-map', '[aout]', '-r', String(timeline.output.fps), '-s', `${timeline.output.width}x${timeline.output.height}`);
   if (timeline.output.pixelFormat) args.push('-pix_fmt', timeline.output.pixelFormat);
-  args.push('-c:v', 'libx264', outputPath);
+  args.push('-c:v', 'libx264', '-c:a', 'aac', outputPath);
   const command = [shellQuote(ffmpegPath), ...args.map((arg) => String(arg).startsWith('-') ? String(arg) : shellQuote(arg))].join(' ');
   return { args, command };
 }

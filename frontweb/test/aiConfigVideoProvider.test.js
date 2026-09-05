@@ -20,6 +20,19 @@ test('supplies ComfyUI local defaults with a workflow selector and 32-aligned nu
   assert.equal(isApiKeyRequired({ service_type: 'video', provider: 'comfyui' }), false)
 })
 
+test('prefers the verified TE-Speed H3 workflow for new ComfyUI video configs', () => {
+  assert.deepEqual(comfyuiConfigDefaults([
+    'minimax_h3_director_r2v',
+    'minimax_h3_director_r2v_te_speed',
+  ]), {
+    base_url: 'http://127.0.0.1:8188',
+    modelText: 'minimax_h3_director_r2v_te_speed',
+    default_model: 'minimax_h3_director_r2v_te_speed',
+    width: 1312,
+    height: 736,
+  })
+})
+
 test('serializes ComfyUI width and height as numbers and rejects dimensions outside the 32-pixel grid', () => {
   assert.equal(
     serializeVideoProviderSettings({ provider: 'comfyui', width: '1280', height: '704' }),

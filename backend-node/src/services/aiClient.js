@@ -3,6 +3,7 @@ const aiConfigService = require('./aiConfigService');
 const { applyDeepSeekChatOptions, isDeepSeekOfficialConfig } = require('./deepseekConfig');
 const https = require('https');
 const http = require('http');
+const { StringDecoder } = require('node:string_decoder');
 
 /**
  * 非流式 POST，发送 JSON body，等待完整 HTTP 响应后返回。
@@ -166,13 +167,14 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
       let reasoningChars = 0;
       let finishReason = null;
       let sseBuffer = '';
+      const utf8Decoder = new StringDecoder('utf8');
       let firstToken = true;
       let firstReasoning = true;
       resetSilenceTimer();
 
       res.on('data', (chunk) => {
         resetSilenceTimer();
-        sseBuffer += chunk.toString('utf-8');
+        sseBuffer += utf8Decoder.write(chunk);
         // 按行解析 SSE
         const lines = sseBuffer.split('\n');
         sseBuffer = lines.pop(); // 保留不完整的最后一行
@@ -210,6 +212,7 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
 
       res.on('end', () => {
         clearTimeout(silenceTimer);
+        sseBuffer += utf8Decoder.end();
         resolve({ status: statusCode, body: accumulated, reasoningChars, finishReason });
       });
       res.on('error', (e) => { clearTimeout(silenceTimer); reject(e); });

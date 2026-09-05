@@ -1,6 +1,34 @@
 // 分镜：create, update, delete；帧提示词 get/save
 
-const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
+const { syncStoryboardVariantLinks, listStoryboardVariantLinks } = require('./storyboardVariantService');
+const fs = require('node:fs');
+const path = require('node:path');
+const {
+  saveCanonicalStoryboard,
+  patchStoryboard,
+  projectStoryboardRow,
+} = require('./storyboardCanonicalRepository');
+
+function validateAudioStoragePath(value) {
+  if (value == null || String(value).trim() === '') return;
+  const raw = String(value).trim();
+  const error = () => {
+    const issue = new Error('音频本地路径必须位于项目 storage 根目录内');
+    issue.code = 'AUDIO_PATH_OUTSIDE_STORAGE';
+    return issue;
+  };
+  if (path.isAbsolute(raw)) throw error();
+  const cfg = require('../config').loadConfig();
+  const configured = cfg.storage?.local_path || './data/storage';
+  const root = path.resolve(configured);
+  const candidate = path.resolve(root, raw.replace(/^[/\\]+/, ''));
+  const relative = path.relative(root, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw error();
+  if (fs.existsSync(candidate)) {
+    const realRelative = path.relative(fs.realpathSync(root), fs.realpathSync(candidate));
+    if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) throw error();
+  }
+}
 
 /**
  * 将分镜勾选的角色（dramas.characters 表 id）同步到 storyboard_characters（角色库 id），
@@ -72,62 +100,50 @@ function syncStoryboardCharacterLinks(db, storyboardId, dramaCharacterIds) {
 }
 
 function createStoryboard(db, log, req) {
-  const now = new Date().toISOString();
+  validateAudioStoragePath(req.audio_local_path);
+  validateAudioStoragePath(req.narration_audio_local_path);
   const episodeId = Number(req.episode_id);
-  const num = Number(req.storyboard_number ?? 0) || 0;
-  const info = db.prepare(
-    `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, action, result, atmosphere, image_prompt, video_prompt, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-  ).run(
-    episodeId,
-    req.scene_id ?? null,
-    num,
-    req.title ?? null,
-    req.description ?? null,
-    req.location ?? null,
-    req.time ?? null,
-    req.duration ?? 0,
-    req.dialogue ?? null,
-    req.action ?? null,
-    req.result ?? null,
-    req.atmosphere ?? null,
-    req.image_prompt ?? null,
-    req.video_prompt ?? null,
-    now,
-    now
-  );
-  log.info('Storyboard created', { id: info.lastInsertRowid, episode_id: episodeId });
-  return getStoryboardById(db, info.lastInsertRowid);
+  const charactersValue = req.character_ids !== undefined ? req.character_ids : req.characters;
+  const created = saveCanonicalStoryboard(db, episodeId, {
+    ...req,
+    ...(charactersValue !== undefined ? { characters: charactersValue } : {}),
+  }, { source: 'manual', lock: true });
+  if (charactersValue !== undefined) {
+    syncStoryboardCharacterLinks(db, created.id, parseDramaCharacterIds(charactersValue) ?? []);
+  }
+  if (req.character_variant_links !== undefined) {
+    syncStoryboardVariantLinks(db, created.id, parseVariantLinks(req.character_variant_links));
+  }
+  if (req.prop_ids !== undefined) {
+    const ins = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
+    for (const propId of Array.isArray(req.prop_ids) ? req.prop_ids : []) ins.run(created.id, Number(propId));
+  }
+  log.info('Storyboard created', { id: created.id, episode_id: episodeId });
+  return getStoryboardById(db, created.id);
 }
 
 function updateStoryboard(db, log, id, req) {
   const row = db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(Number(id));
   if (!row) return null;
-  const allowed = ['title', 'description', 'location', 'time', 'duration', 'dialogue', 'narration', 'action', 'result', 'atmosphere', 'image_prompt', 'polished_prompt', 'video_prompt', 'scene_id', 'characters', 'composed_image', 'image_url', 'local_path', 'main_panel_idx', 'video_url', 'audio_local_path', 'narration_audio_local_path', 'status', 'shot_type', 'angle', 'angle_h', 'angle_v', 'angle_s', 'movement', 'segment_index', 'segment_title', 'creation_mode', 'universal_segment_text', 'layout_description', 'first_frame_image_id', 'last_frame_image_id', 'last_frame_image_url', 'last_frame_local_path'];
-  const updates = [];
-  const params = [];
+  validateAudioStoragePath(req.audio_local_path);
+  validateAudioStoragePath(req.narration_audio_local_path);
   // 前端可能传 character_ids，与 characters 统一：存为 JSON 字符串
   const charactersValue = req.character_ids !== undefined ? req.character_ids : req.characters;
   let parsedDramaCharIdsForSync = null;
+  const canonicalPatch = { ...req };
+  delete canonicalPatch.character_ids;
+  delete canonicalPatch.prop_ids;
+  delete canonicalPatch.character_variant_links;
   if (charactersValue !== undefined) {
-    updates.push('characters = ?');
-    const jsonStr = Array.isArray(charactersValue) ? JSON.stringify(charactersValue) : (typeof charactersValue === 'string' ? charactersValue : '[]');
-    params.push(jsonStr);
+    canonicalPatch.characters = charactersValue;
     parsedDramaCharIdsForSync = parseDramaCharacterIds(charactersValue) ?? [];
   }
-  for (const key of allowed) {
-    if (key === 'characters') continue;
-    if (req[key] !== undefined) {
-      updates.push(key + ' = ?');
-      const val = req[key];
-      params.push(val);
-    }
-  }
-  if (updates.length === 0 && req.prop_ids === undefined && req.character_variant_links === undefined) return getStoryboardById(db, id);
-  if (updates.length > 0) {
-    params.push(new Date().toISOString(), id);
-    db.prepare('UPDATE storyboards SET ' + updates.join(', ') + ', updated_at = ? WHERE id = ?').run(...params);
-  }
+  patchStoryboard(db, id, canonicalPatch, {
+    source: 'manual',
+    lock: true,
+    clearFields: req.clear_fields,
+    unlockFields: req.unlock_fields,
+  });
   // 角色勾选变更：只同步 storyboard_characters，不删除 frame_prompts。
   // 用户手动保存的首/尾帧提示词应保留；图生时 framePromptSanitize 会按当前勾选剔除未出场角色名。
   if (parsedDramaCharIdsForSync !== null) {
@@ -167,62 +183,16 @@ function deleteStoryboard(db, log, id) {
 function getStoryboardById(db, id) {
   const r = db.prepare('SELECT * FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(Number(id));
   if (!r) return null;
-  let characters = [];
-  if (r.characters) {
-    if (typeof r.characters === 'string') {
-      try { characters = JSON.parse(r.characters); } catch (_) {}
-    } else if (Array.isArray(r.characters)) characters = r.characters;
-  }
   let propIds = [];
   try {
     const propLinks = db.prepare('SELECT prop_id FROM storyboard_props WHERE storyboard_id = ?').all(Number(id));
     propIds = propLinks.map((p) => p.prop_id);
   } catch (_) {}
+  let links = [];
+  try { links = listStoryboardVariantLinks(db, Number(id)); } catch (_) {}
   return {
-    id: r.id,
-    episode_id: r.episode_id,
-    scene_id: r.scene_id,
-    storyboard_number: r.storyboard_number,
-    title: r.title,
-    description: r.description,
-    location: r.location,
-    time: r.time,
-    duration: r.duration ?? 0,
-    dialogue: r.dialogue,
-    narration: r.narration ?? null,
-    action: r.action,
-    result: r.result ?? null,
-    atmosphere: r.atmosphere,
-    image_prompt: r.image_prompt,
-    polished_prompt: r.polished_prompt ?? null,
-    video_prompt: r.video_prompt,
-    shot_type: r.shot_type,
-    angle: r.angle,
-    angle_h: r.angle_h ?? null,
-    angle_v: r.angle_v ?? null,
-    angle_s: r.angle_s ?? null,
-    movement: r.movement,
-    segment_index: r.segment_index ?? 0,
-    segment_title: r.segment_title ?? null,
-    creation_mode: r.creation_mode === 'universal' ? 'universal' : 'classic',
-    universal_segment_text: r.universal_segment_text ?? null,
-    layout_description: r.layout_description ?? null,
-    first_frame_image_id: r.first_frame_image_id ?? null,
-    last_frame_image_id: r.last_frame_image_id ?? null,
-    last_frame_image_url: r.last_frame_image_url ?? null,
-    last_frame_local_path: r.last_frame_local_path ?? null,
-    characters,
+    ...projectStoryboardRow(r, links),
     prop_ids: propIds,
-    composed_image: r.composed_image,
-    image_url: r.image_url ?? null,
-    local_path: r.local_path ?? null,
-    main_panel_idx: r.main_panel_idx != null ? Number(r.main_panel_idx) : null,
-    video_url: r.video_url,
-    audio_local_path: r.audio_local_path ?? null,
-    narration_audio_local_path: r.narration_audio_local_path ?? null,
-    status: r.status || 'pending',
-    created_at: r.created_at,
-    updated_at: r.updated_at,
   };
 }
 
@@ -292,4 +262,5 @@ module.exports = {
   getStoryboardById,
   getFramePrompts,
   saveFramePrompt,
+  validateAudioStoragePath,
 };

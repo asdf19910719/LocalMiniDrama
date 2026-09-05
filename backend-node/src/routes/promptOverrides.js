@@ -35,6 +35,11 @@ const PROMPT_META = [
     description: '追加在分镜拆解用户提示词末尾的详细要素说明（JSON 输出格式已锁定）',
   },
   {
+    key: 'classic_video_polish',
+    label: '经典视频提示词润色',
+    description: '控制经典分镜视频提示词的信息保真、首帧一致性与输出格式',
+  },
+  {
     key: 'first_frame_prompt',
     label: '首帧图像提示词',
     description: '控制 AI 如何生成分镜首帧（动作前静态画面）的图像提示词（风格/比例和 JSON 格式已锁定）',

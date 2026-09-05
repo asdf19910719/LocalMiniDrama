@@ -66,11 +66,22 @@ async function generateStory(db, log, body) {
   }
 
   if (episodeList && episodeList.length > 0) {
-    const result = episodeList.map((ep, i) => ({
-      episode: Number(ep.episode ?? i + 1),
-      title: (ep.title || `第${Number(ep.episode ?? i + 1)}集`).trim(),
-      content: (ep.content || ep.script || ep.text || ep.body || '').trim(),
-    })).filter(ep => ep.content.length > 0);
+    const result = episodeList.map((ep, i) => {
+      const knownContentKeys = new Set(['episode', 'episode_number', 'title', 'content', 'script', 'text', 'body', 'audio_plan']);
+      const extensions = Object.fromEntries(Object.entries(ep).filter(([key]) => !knownContentKeys.has(key)));
+      return {
+        episode: Number(ep.episode ?? ep.episode_number ?? i + 1),
+        title: (ep.title || `第${Number(ep.episode ?? ep.episode_number ?? i + 1)}集`).trim(),
+        content: (ep.content || ep.script || ep.text || ep.body || '').trim(),
+        ...(ep.audio_plan !== undefined ? { audio_plan: ep.audio_plan } : {}),
+        ...(Object.keys(extensions).length ? {
+          production_profile: {
+            source: 'story_ai',
+            extensions,
+          },
+        } : {}),
+      };
+    }).filter(ep => ep.content.length > 0);
 
     if (result.length > 0) {
       log && log.info && log.info('Story episodes parsed', { count: result.length });
@@ -110,6 +121,8 @@ async function processStoryGeneration(db, log, taskId, req) {
         episode_number: ep.episode ?? i + 1,
         title: ep.title || `第${ep.episode ?? i + 1}集`,
         script_content: ep.content || '',
+        production_profile: ep.production_profile,
+        audio_plan: ep.audio_plan || req.audio_plan,
       })),
     });
     if (!saved) {

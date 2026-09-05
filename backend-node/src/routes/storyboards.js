@@ -12,6 +12,7 @@ const { normalizeUniversalSegmentShotDurations } = require('../services/universa
 const referenceSlotService = require('../services/referenceSlotService');
 const { createH3PromptDraftService } = require('../services/h3PromptDraftService');
 const { isH3VideoConfig } = require('../services/unifiedVideoGenerationService');
+const { ensureEpisodeAudioPlan } = require('../services/episodeAudioPlanService');
 
 function parseJsonObjectOrNull(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
@@ -27,9 +28,12 @@ function parseJsonObjectOrNull(value) {
 /** 草稿行序列化:validation_errors 解析为对象透传给前端(GET/PUT/compile 共用)。 */
 function serializeH3Draft(draft) {
   if (!draft) return null;
-  if (draft.validation_errors == null) return draft;
-  const parsed = parseJsonObjectOrNull(draft.validation_errors);
-  return parsed ? { ...draft, validation_errors: parsed } : draft;
+  const out = { ...draft };
+  for (const field of ['validation_errors', 'coverage_manifest']) {
+    const parsed = parseJsonObjectOrNull(out[field]);
+    if (parsed) out[field] = parsed;
+  }
+  return out;
 }
 
 /** 润色接口：邻镜结构化摘要（含全能片段与其它提示词字段） */
@@ -282,6 +286,20 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
     return Boolean(db.prepare('SELECT id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(sid));
   };
 
+  const ensureStoryboardEpisodeAudioPlan = async (storyboardId) => {
+    const row = db.prepare(
+      `SELECT e.id AS episode_id, e.audio_plan
+       FROM storyboards s JOIN episodes e ON e.id = s.episode_id
+       WHERE s.id = ? AND s.deleted_at IS NULL AND e.deleted_at IS NULL`,
+    ).get(Number(storyboardId));
+    if (!row) return;
+    let plan = null;
+    try { plan = row.audio_plan ? JSON.parse(row.audio_plan) : null; } catch (_) {}
+    if (plan?.bgm?.mode === 'per_segment' && plan?.bgm?.planning === 'ai' && !plan?.provenance?.planned_at) {
+      await ensureEpisodeAudioPlan(db, log, { episodeId: row.episode_id, force: false });
+    }
+  };
+
   return {
     create: (req, res) => {
       try {
@@ -319,6 +337,9 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
         response.success(res, sb);
       } catch (err) {
         log.error('storyboards update', { error: err.message });
+        if (err.code === 'STORYBOARD_PATCH_INVALID' || err.code === 'AUDIO_PLAN_INVALID' || err.code === 'AUDIO_PATH_OUTSIDE_STORAGE') {
+          return response.error(res, 400, err.code, err.message);
+        }
         response.internalError(res, err.message);
       }
     },
@@ -598,6 +619,7 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
     generateUniversalSegmentPrompt: async (req, res) => {
       try {
         const sbId = Number(req.params.id);
+        await ensureStoryboardEpisodeAudioPlan(sbId);
         const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {
           fieldOverrides: universalFieldOverridesOf(req.body),
         });
@@ -637,6 +659,12 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
     /** 全能模式：与 generateUniversalSegmentPrompt 相同逻辑，NDJSON 流式（delta + done） */
     generateUniversalSegmentStream: async (req, res) => {
       const sbId = Number(req.params.id);
+      try {
+        await ensureStoryboardEpisodeAudioPlan(sbId);
+      } catch (err) {
+        log.error('storyboards ensure audio plan', { error: err.message, id: sbId });
+        return response.badRequest(res, err.message);
+      }
       const built = buildUniversalSegmentUserPromptBundle(db, sbId, req.body || {}, {
         fieldOverrides: universalFieldOverridesOf(req.body),
       });
@@ -702,6 +730,12 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
      */
     polishUniversalSegmentStream: async (req, res) => {
       const sbId = Number(req.params.id);
+      try {
+        await ensureStoryboardEpisodeAudioPlan(sbId);
+      } catch (err) {
+        log.error('storyboards ensure audio plan', { error: err.message, id: sbId });
+        return response.badRequest(res, err.message);
+      }
       const draftRaw =
         req.body && req.body.draft_universal_segment_text != null
           ? String(req.body.draft_universal_segment_text)
@@ -1187,7 +1221,8 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
         if (videoConfigId == null || String(videoConfigId).trim() === '') {
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法定位 H3 提示词草稿');
         }
-        const draft = h3Drafts.getLatestDraft(db, req.params.id, String(videoConfigId));
+        const workflowId = req.query.workflow_id || req.query.workflowId || null;
+        const draft = h3Drafts.getLatestDraft(db, req.params.id, String(videoConfigId), workflowId);
         const freshness = draft ? h3Drafts.evaluateDraftFreshness(db, draft) : { stale: false, reasons: [] };
         response.success(res, { draft: serializeH3Draft(draft), freshness });
       } catch (err) {
@@ -1205,13 +1240,25 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法编译 H3 提示词');
         }
         // 非 H3 配置入口把关(交接③):旧配置不产 H3 草稿,直接 400。
-        const runtime = h3Drafts.resolveVideoRuntime(db, body.video_config_id);
+        const workflowId = body.workflow_id || body.workflowId || null;
+        const runtime = h3Drafts.resolveVideoRuntime(db, body.video_config_id, { workflowId });
         if (!isH3VideoConfig(runtime)) {
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '当前视频配置不是 H3 工作流,无需生成 H3 提示词草稿');
+        }
+        const episode = db.prepare(
+          'SELECT episode_id FROM storyboards WHERE id = ? AND deleted_at IS NULL',
+        ).get(Number(req.params.id));
+        if (episode?.episode_id != null) {
+          try {
+            await ensureEpisodeAudioPlan(db, log, { episodeId: episode.episode_id, force: false });
+          } catch (error) {
+            if (!/no such table|no such column/i.test(String(error.message || ''))) throw error;
+          }
         }
         const draft = await h3Drafts.compileDraft(db, {}, log, {
           storyboardId: Number(req.params.id),
           videoConfigId: body.video_config_id,
+          workflowId,
         });
         // 编译刚落行、源未变,freshness 恒为 false/空。
         response.success(res, { draft: serializeH3Draft(draft), freshness: { stale: false, reasons: [] } });
@@ -1225,9 +1272,15 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           REFERENCE_COUNT_INVALID: 400,
           REFERENCE_COUNT_OVERFLOW: 400,
           H3_PROMPT_FORMAT_INVALID: 400,
+          H3_AUDIO_POLICY_MISMATCH: 400,
+          H3_REFERENCE_SEMANTICS_INVALID: 400,
+          H3_DIALOGUE_MISMATCH: 400,
+          H3_SPEECH_OWNERSHIP_MISMATCH: 400,
+          H3_TIMELINE_INVALID: 400,
           WORKFLOW_NOT_FOUND: 400,
           WORKFLOW_INVALID: 400,
           WORKFLOW_EXPERIMENTAL_REQUIRED: 400,
+          VIDEO_WORKFLOW_NOT_ALLOWED: 400,
         };
         if (err.code && statusByCode[err.code] != null) {
           return response.error(res, statusByCode[err.code], err.code, err.message, err.details);
@@ -1262,6 +1315,34 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
       } catch (err) {
         log.error('storyboards h3 draft save', { code: err.code, error: err.message });
         if (err.code === 'DRAFT_NOT_FOUND') return response.error(res, 404, 'DRAFT_NOT_FOUND', err.message);
+        response.internalError(res, err.message);
+      }
+    },
+
+    // POST /storyboards/:id/h3-prompt-draft/confirm-semantic-review
+    // body { draft_id, compiled_prompt_hash }；确认只绑定当前终文哈希。
+    h3PromptDraftConfirmSemanticReview: (req, res) => {
+      try {
+        if (!storyboardExists(req.params.id)) return response.notFound(res, '分镜不存在');
+        const body = req.body || {};
+        const existing = h3Drafts.getDraftById(db, body.draft_id);
+        if (!existing || Number(existing.storyboard_id) !== Number(req.params.id)) {
+          return response.error(res, 404, 'DRAFT_NOT_FOUND', 'H3 提示词草稿不存在');
+        }
+        const freshness = h3Drafts.evaluateDraftFreshness(db, existing);
+        if (freshness.stale) {
+          return response.error(res, 409, 'H3_DRAFT_STALE', '提示词来源已变化，请重新生成 H3 提示词', freshness);
+        }
+        const draft = h3Drafts.confirmSemanticReview(db, {
+          draftId: body.draft_id,
+          promptHash: body.compiled_prompt_hash,
+        });
+        response.success(res, { draft: serializeH3Draft(draft), freshness });
+      } catch (err) {
+        log.error('storyboards h3 semantic review confirm', { code: err.code, error: err.message });
+        if (err.code === 'H3_SEMANTIC_REVIEW_REQUIRED') {
+          return response.error(res, 409, err.code, err.message, err.details);
+        }
         response.internalError(res, err.message);
       }
     },

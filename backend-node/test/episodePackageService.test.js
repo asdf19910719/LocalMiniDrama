@@ -44,6 +44,8 @@ function createDb() {
       script_content TEXT,
       description TEXT,
       duration INTEGER DEFAULT 0,
+      audio_plan TEXT,
+      production_profile TEXT,
       status TEXT DEFAULT 'draft',
       created_at TEXT,
       updated_at TEXT,
@@ -54,7 +56,10 @@ function createDb() {
       drama_id INTEGER NOT NULL,
       name TEXT NOT NULL DEFAULT '',
       description TEXT,
+      voice_style TEXT,
       appearance TEXT,
+      polished_prompt TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
       source_key TEXT,
@@ -74,6 +79,8 @@ function createDb() {
       location TEXT,
       time TEXT,
       prompt TEXT,
+      atmosphere TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
       status TEXT DEFAULT 'draft',
@@ -94,6 +101,7 @@ function createDb() {
       type TEXT,
       description TEXT,
       prompt TEXT,
+      negative_prompt TEXT,
       image_url TEXT,
       local_path TEXT,
       source_key TEXT,
@@ -130,6 +138,8 @@ function createDb() {
       source_key TEXT,
       audio_description TEXT,
       transition TEXT,
+      is_primary INTEGER DEFAULT 0,
+      production_metadata TEXT,
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT
@@ -263,6 +273,10 @@ function buildMinimalPackage() {
         source_key: 'char_a',
         name: '人物甲',
         description: '测试人物',
+        appearance: 'sharp eyes',
+        image_prompt: 'cinematic portrait',
+        negative_prompt: 'blurry face',
+        voice_profile: 'calm low voice',
         variants: [
           {
             source_key: 'char_a_default',
@@ -444,6 +458,10 @@ describe('episodePackageService', () => {
     const char = db.prepare('SELECT * FROM characters').get();
     assert.equal(char.name, '人物甲');
     assert.equal(char.description, '测试人物');
+    assert.equal(char.appearance, 'sharp eyes');
+    assert.equal(char.polished_prompt, 'cinematic portrait');
+    assert.equal(char.negative_prompt, 'blurry face');
+    assert.equal(char.voice_style, 'calm low voice');
     assert.equal(char.source_key, 'char_a');
     assert.equal(char.drama_id, 1);
 
@@ -505,8 +523,9 @@ describe('episodePackageService', () => {
     assert.equal(sb1.narration, '旁白一');
     assert.equal(sb1.image_prompt, 'sb1-image-prompt');
     assert.equal(sb1.universal_segment_text, '@图片1 是场景,@图片2 是人物,@图片3 是道具');
-    assert.equal(sb1.audio_description, JSON.stringify({ ambient: '雨声' }));
-    assert.equal(sb1.transition, JSON.stringify({ to_next: '硬切' }));
+    assert.deepEqual(JSON.parse(sb1.audio_description).ambience, ['雨声']);
+    assert.equal(JSON.parse(sb1.audio_description).music_cue.mode, 'mute');
+    assert.equal(JSON.parse(sb1.transition).type, 'cut');
     assert.equal(sb1.creation_mode, 'universal');
     assert.equal(sb1.status, 'draft');
     assert.equal(sb1.source_key, 'sb_01');

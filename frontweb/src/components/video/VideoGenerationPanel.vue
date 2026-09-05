@@ -52,6 +52,17 @@
       </el-form-item>
 
       <template v-if="isH3Config">
+        <el-form-item label="TE-Speed 加速">
+          <div class="voice-ref-row">
+            <el-switch
+              :model-value="teSpeedEnabled"
+              active-text="开启"
+              inactive-text="关闭"
+              @change="setTESpeedEnabled"
+            />
+            <small class="voice-ref-hint">默认开启；关闭后严格切回官方 + Sage 工作流。</small>
+          </div>
+        </el-form-item>
         <el-form-item label="角色音色参考">
           <div class="voice-ref-row">
             <el-switch v-model="form.useVoiceReference" />
@@ -59,9 +70,17 @@
           </div>
         </el-form-item>
         <div class="h3-workflow-meta">
-          <el-tag size="small" effect="plain">工作流：官方多参考图（Sage 加速）</el-tag>
+          <el-tag size="small" effect="plain">工作流：{{ workflowLabel }}</el-tag>
           <el-tag size="small" effect="plain">生成模式：单段多参考图</el-tag>
         </div>
+        <el-alert
+          v-if="approximateAcceleration"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          title="当前启用 TE-Speed 近似加速（实验）：速度更快，但结果不会与官方工作流逐像素一致。"
+        />
         <div class="h3-preview-actions">
           <el-button size="small" :loading="h3Compiling" :disabled="!defaultConfig" @click="compileH3Draft">生成 H3 提示词</el-button>
           <el-tag v-if="h3DraftLoading" size="small" type="info" effect="plain">草稿读取中</el-tag>
@@ -69,6 +88,8 @@
           <el-tag v-else-if="h3UiState.chip === 'edited'" size="small" effect="plain">已人工修改</el-tag>
           <el-tag v-else-if="h3UiState.chip === 'stale'" size="small" type="warning" effect="plain">来源已变化</el-tag>
           <el-tag v-else-if="h3UiState.chip === 'invalid'" size="small" type="danger" effect="plain">结构校验失败</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'needs_review'" size="small" type="warning" effect="plain">音频语义待确认</el-tag>
+          <el-tag v-else-if="h3UiState.chip === 'reviewed'" size="small" type="success" effect="plain">音频语义已确认</el-tag>
         </div>
         <el-alert
           v-if="h3UiState.chip === 'stale'"
@@ -87,6 +108,25 @@
           title="H3 提示词结构校验失败，请修正文本后重试"
         >
           <div v-for="(line, index) in h3ValidationLines" :key="index" class="h3-validation-line">{{ line }}</div>
+        </el-alert>
+        <el-alert
+          v-if="h3UiState.chip === 'needs_review' || h3UiState.chip === 'reviewed'"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="h3-draft-alert"
+          title="请核对 H3 英文提示词是否完整覆盖下列原始音频事件"
+        >
+          <div v-for="event in h3CoverageEvents" :key="event.id" class="h3-validation-line">
+            {{ event.source_text || event.id }} · {{ event.status }}<span v-if="event.evidence"> · {{ event.evidence }}</span>
+          </div>
+          <el-button
+            v-if="h3UiState.chip === 'needs_review'"
+            size="small"
+            type="warning"
+            :loading="h3Confirming"
+            @click="confirmH3SemanticReview"
+          >确认当前语义覆盖</el-button>
         </el-alert>
         <el-alert
           v-if="h3RefDrift.drift"
@@ -384,6 +424,7 @@ const panelAPI = {
   getH3Draft: h3DraftAPI.getDraft,
   compileH3Draft: h3DraftAPI.compileDraft,
   saveH3Draft: h3DraftAPI.saveDraft,
+  confirmH3SemanticReview: h3DraftAPI.confirmSemanticReview,
   getReferenceSlots: storyboardsAPI.getReferenceSlots,
 }
 
@@ -397,6 +438,10 @@ const {
   configStatus,
   providerName,
   modelName,
+  workflowLabel,
+  teSpeedEnabled,
+  setTESpeedEnabled,
+  approximateAcceleration,
   isH3Config,
   loading,
   creating,
@@ -423,13 +468,16 @@ const {
   h3UiState,
   h3FreshnessLabels,
   h3ValidationLines,
+  h3CoverageEvents,
   h3RefDrift,
   h3Compiling,
   h3DraftLoading,
+  h3Confirming,
   refresh,
   generateCandidates,
   compileH3Draft,
   onH3DraftTextInput,
+  confirmH3SemanticReview,
   cancelCandidate,
   retryCandidate,
   analyzeCandidate,

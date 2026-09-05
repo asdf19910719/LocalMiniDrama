@@ -14,7 +14,7 @@ function sendLifecycleError(res, error) {
   response.error(res, status, code, message, error?.details);
 }
 
-function routes(db, log, { providerRegistry, lifecycleService } = {}) {
+function routes(db, log, { providerRegistry, lifecycleService, preparedService = null } = {}) {
   const lifecycle = lifecycleService || createUnifiedVideoGenerationService({ db, log, providerRegistry });
 
   return {
@@ -35,6 +35,29 @@ function routes(db, log, { providerRegistry, lifecycleService } = {}) {
         response.created(res, item);
       } catch (error) {
         log.error('videos create', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
+    preparedCreate: async (req, res) => {
+      try {
+        if (!preparedService) throw new Error('VIDEO_PREPARATION_UNAVAILABLE');
+        const result = await preparedService.prepareAndCreateVideoGeneration(req.body || {});
+        response.created(res, result);
+      } catch (error) {
+        log.error('videos prepared create', { code: error.code, error: error.message });
+        sendLifecycleError(res, error);
+      }
+    },
+
+    preparedBatch: async (req, res) => {
+      try {
+        if (!preparedService) throw new Error('VIDEO_PREPARATION_UNAVAILABLE');
+        const inputs = Array.isArray(req.body) ? req.body : req.body?.inputs;
+        if (!Array.isArray(inputs)) return response.badRequest(res, 'inputs 必须为数组');
+        response.success(res, await preparedService.prepareAndCreateMany(inputs));
+      } catch (error) {
+        log.error('videos prepared batch', { code: error.code, error: error.message });
         sendLifecycleError(res, error);
       }
     },

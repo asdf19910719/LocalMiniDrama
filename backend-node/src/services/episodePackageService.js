@@ -36,6 +36,16 @@ const {
 } = require('./episodePackageValidator');
 const { createVariant } = require('./characterVariantsService');
 const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
+const {
+  normalizeEpisodeAudioPlan,
+  normalizeStoryboardAudioDescription,
+  normalizeStoryboardTransition,
+  serializeCanonicalJson,
+} = require('./storyboardAvContractService');
+const {
+  saveCanonicalStoryboard,
+  projectStoryboardRow,
+} = require('./storyboardCanonicalRepository');
 
 const NOW = () => new Date().toISOString();
 
@@ -147,6 +157,69 @@ function buildNormalizedPackage(pkg) {
     }
   }
   return normalized;
+}
+
+function hasExplicitShotMusic(audioDescription) {
+  if (!audioDescription || typeof audioDescription !== 'object' || Array.isArray(audioDescription)) return false;
+  if (audioDescription.non_diegetic_music != null && String(audioDescription.non_diegetic_music).trim()) return true;
+  const mode = audioDescription.music_cue && audioDescription.music_cue.mode;
+  return ['inherit', 'override', 'stinger'].includes(mode);
+}
+
+function derivePackageAudioPolicy(pkg) {
+  const shots = Array.isArray(pkg.storyboards) ? pkg.storyboards : [];
+  const explicitMusic = shots.map((shot) => hasExplicitShotMusic(shot && shot.audio_description));
+  const legacyMusicCompatibility = pkg.audio_plan == null && explicitMusic.some(Boolean);
+  const rawPlan = pkg.audio_plan == null
+    ? {
+        bgm: {
+          mode: legacyMusicCompatibility ? 'per_segment' : 'none',
+          planning: 'external',
+          source_type: legacyMusicCompatibility ? 'generated' : 'none',
+        },
+      }
+    : {
+        ...pkg.audio_plan,
+        bgm: {
+          ...(pkg.audio_plan.bgm || {}),
+          planning: pkg.audio_plan.bgm?.planning || 'external',
+        },
+      };
+  const audioPlan = normalizeEpisodeAudioPlan(rawPlan, { source: 'package_import' });
+  const shotAudioDescriptions = shots.map((shot, index) => {
+    const source = shot && shot.audio_description;
+    let normalized = source == null
+      ? null
+      : normalizeStoryboardAudioDescription(source, {
+          source: 'package_import',
+          bgmMode: audioPlan.bgm.mode,
+        });
+    if (legacyMusicCompatibility && !explicitMusic[index]) {
+      normalized = normalized || normalizeStoryboardAudioDescription({}, {
+        source: 'package_import',
+        bgmMode: 'none',
+      });
+      normalized.music_cue = {
+        ...normalized.music_cue,
+        mode: 'mute',
+        prompt: null,
+        intensity: 0,
+      };
+    }
+    return normalized;
+  });
+  return {
+    audioPlan,
+    shotAudioDescriptions,
+    report: legacyMusicCompatibility
+      ? [{
+          path: 'storyboards[].audio_description.non_diegetic_music',
+          action: 'legacy_music_to_per_segment',
+          severity: 'info',
+          message: '检测到制作包逐镜明确配乐，已确定性转换为 per_segment；未声明配乐的镜头保持静音。',
+        }]
+      : [],
+  };
 }
 
 // —— 资产匹配(dramaId 范围内) ——
@@ -336,12 +409,23 @@ function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId 
 // —— 正式导入(§8.4) ——
 
 function insertCharacterRow(db, dramaId, item) {
-  const info = db
-    .prepare(
-      `INSERT INTO characters (drama_id, name, description, source_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    )
-    .run(dramaId, item.name ?? null, item.description ?? null, item.source_key ?? null, NOW(), NOW());
+  const available = new Set(db.prepare('PRAGMA table_info(characters)').all().map((column) => column.name));
+  const candidate = {
+    drama_id: dramaId,
+    name: item.name ?? null,
+    description: item.description ?? null,
+    appearance: item.appearance ?? null,
+    polished_prompt: item.image_prompt ?? null,
+    negative_prompt: item.negative_prompt ?? null,
+    voice_style: item.voice_profile ?? null,
+    source_key: item.source_key ?? null,
+    created_at: NOW(),
+    updated_at: NOW(),
+  };
+  const fields = Object.keys(candidate).filter((field) => available.has(field));
+  const info = db.prepare(
+    `INSERT INTO characters (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`
+  ).run(...fields.map((field) => candidate[field]));
   return Number(info.lastInsertRowid);
 }
 
@@ -373,20 +457,31 @@ function insertSceneRow(db, dramaId, episodeId, item) {
   const prompt = description ? `${description}${separator}${item.image_prompt}` : item.image_prompt;
   const info = db
     .prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, state, prompt, source_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, state, prompt, atmosphere, negative_prompt, source_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(dramaId, episodeId, item.name ?? null, item.state ?? null, prompt, item.source_key ?? null, NOW(), NOW());
+    .run(
+      dramaId,
+      episodeId,
+      item.name ?? null,
+      item.state ?? null,
+      prompt,
+      item.atmosphere ?? null,
+      item.negative_prompt ?? null,
+      item.source_key ?? null,
+      NOW(),
+      NOW(),
+    );
   return Number(info.lastInsertRowid);
 }
 
 function insertPropRow(db, dramaId, episodeId, item) {
   const info = db
     .prepare(
-      `INSERT INTO props (drama_id, episode_id, name, description, prompt, source_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO props (drama_id, episode_id, name, description, prompt, negative_prompt, source_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(dramaId, episodeId, item.name ?? null, item.description ?? null, item.image_prompt ?? null, item.source_key ?? null, NOW(), NOW());
+    .run(dramaId, episodeId, item.name ?? null, item.description ?? null, item.image_prompt ?? null, item.negative_prompt ?? null, item.source_key ?? null, NOW(), NOW());
   return Number(info.lastInsertRowid);
 }
 
@@ -439,6 +534,16 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
 
     const stats = zeroStats();
     const warnings = validateBusinessRules(pkg).warnings;
+    const audioPolicy = derivePackageAudioPolicy(pkg);
+    warnings.push(...audioPolicy.report);
+    const productionProfile = {
+      version: 1,
+      generation_profile: pkg.generation_profile || {},
+      duration_target_seconds: pkg.episode?.duration_target_seconds ?? null,
+      notes: pkg.episode?.notes ?? null,
+      generator: pkg.generator || null,
+      provenance: { source: 'package_import' },
+    };
 
     // 3. 剧集:填充空白集(集号不变)或新建集(episode_number = max+1)
     let episodeId;
@@ -458,8 +563,16 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       : generateScriptFromStoryboards(storyboardsForScript);
     if (episodeRow) {
       db.prepare(
-        'UPDATE episodes SET title = ?, description = ?, script_content = ?, updated_at = ? WHERE id = ?'
-      ).run(episode.title ?? episodeRow.title, episode.summary ?? episodeRow.description, scriptContent, NOW(), episodeRow.id);
+        'UPDATE episodes SET title = ?, description = ?, script_content = ?, audio_plan = ?, production_profile = ?, updated_at = ? WHERE id = ?'
+      ).run(
+        episode.title ?? episodeRow.title,
+        episode.summary ?? episodeRow.description,
+        scriptContent,
+        serializeCanonicalJson(audioPolicy.audioPlan),
+        serializeCanonicalJson(productionProfile),
+        NOW(),
+        episodeRow.id,
+      );
       episodeId = episodeRow.id;
     } else {
       const maxRow = db
@@ -468,21 +581,34 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       const episodeNumber = (maxRow && typeof maxRow.m === 'number' ? maxRow.m : 0) + 1;
       episodeId = Number(
         db.prepare(
-          `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`
-        ).run(effectiveDramaId, episodeNumber, episode.title ?? '', scriptContent, episode.summary ?? null, NOW(), NOW()).lastInsertRowid
+          `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, audio_plan, production_profile, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+        ).run(
+          effectiveDramaId,
+          episodeNumber,
+          episode.title ?? '',
+          scriptContent,
+          episode.summary ?? null,
+          serializeCanonicalJson(audioPolicy.audioPlan),
+          serializeCanonicalJson(productionProfile),
+          NOW(),
+          NOW(),
+        ).lastInsertRowid
       );
     }
 
     // 4. 人物:按决策建或复用(复用不覆盖)
     const characterIdByKey = new Map();
+    const createdCharacterChecks = [];
     for (const entry of plan.characters) {
       const key = entry.item.source_key;
       if (entry.decision === 'reuse') {
         characterIdByKey.set(key, entry.existingId);
         stats.characters_reused += 1;
       } else {
-        characterIdByKey.set(key, insertCharacterRow(db, effectiveDramaId, entry.item));
+        const characterId = insertCharacterRow(db, effectiveDramaId, entry.item);
+        characterIdByKey.set(key, characterId);
+        createdCharacterChecks.push({ id: characterId, item: entry.item });
         stats.characters_created += 1;
       }
     }
@@ -547,48 +673,38 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       const sceneRow = db.prepare('SELECT location FROM scenes WHERE id = ?').get(sceneId);
       sceneNameByKey.set(key, sceneRow ? sceneRow.location : null);
     }
-    for (const storyboard of storyboards) {
+    const importedStoryboardIds = [];
+    for (let storyboardIndex = 0; storyboardIndex < storyboards.length; storyboardIndex += 1) {
+        const storyboard = storyboards[storyboardIndex];
         const sceneId = sceneIdByKey.get(storyboard.scene_ref);
         if (!sceneId) {
           throwCode('PACKAGE_INVALID', `分镜 ${storyboard.source_key} 的 scene_ref "${storyboard.scene_ref}" 无法解析为场景`);
         }
-        const sbId = Number(
-          db.prepare(
-            `INSERT INTO storyboards (
-               episode_id, scene_id, storyboard_number, title, description, duration, location,
-               dialogue, action, image_prompt, narration, layout_description,
-               universal_segment_text, shot_type, angle, movement,
-               creation_mode, status, source_key, audio_description, transition,
-               created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'universal', 'draft', ?, ?, ?, ?, ?)`
-          ).run(
-            episodeId,
-            sceneId,
-            storyboard.storyboard_number ?? 0,
-            storyboard.title ?? null,
-            storyboard.description ?? null,
-            storyboard.duration_seconds ?? null,
-            sceneNameByKey.get(storyboard.scene_ref) ?? null,
-            renderDialogue(storyboard.dialogue),
-            renderAction(storyboard.action),
-            storyboard.image_prompt ?? null,
-            storyboard.narration ?? null,
-            storyboard.composition ?? null,
-            storyboard.universal_segment_text ?? null,
-            storyboard.shot_type ?? null,
-            storyboard.camera_angle ?? null,
-            storyboard.camera_movement ?? null,
-            storyboard.source_key ?? null,
-            storyboard.audio_description !== undefined && storyboard.audio_description !== null
-              ? JSON.stringify(storyboard.audio_description)
-              : null,
-            storyboard.transition !== undefined && storyboard.transition !== null
-              ? JSON.stringify(storyboard.transition)
-              : null,
-            NOW(),
-            NOW()
-          ).lastInsertRowid
-        );
+        const createdStoryboard = saveCanonicalStoryboard(db, episodeId, {
+          scene_id: sceneId,
+          storyboard_number: storyboard.storyboard_number ?? 0,
+          title: storyboard.title ?? null,
+          description: storyboard.description ?? null,
+          duration: storyboard.duration_seconds ?? null,
+          location: sceneNameByKey.get(storyboard.scene_ref) ?? null,
+          dialogue: renderDialogue(storyboard.dialogue),
+          action: renderAction(storyboard.action),
+          image_prompt: storyboard.image_prompt ?? null,
+          narration: storyboard.narration ?? null,
+          layout_description: storyboard.composition ?? null,
+          universal_segment_text: storyboard.universal_segment_text ?? null,
+          shot_type: storyboard.shot_type ?? null,
+          angle: storyboard.camera_angle ?? null,
+          movement: storyboard.camera_movement ?? null,
+          creation_mode: 'universal',
+          status: 'draft',
+          source_key: storyboard.source_key ?? null,
+          audio_description: audioPolicy.shotAudioDescriptions[storyboardIndex],
+          transition: storyboard.transition ?? null,
+          is_primary: storyboard.is_primary === true,
+        }, { source: 'package_import', lock: false });
+        const sbId = Number(createdStoryboard.id);
+        importedStoryboardIds.push(sbId);
       stats.storyboards_created += 1;
 
       // storyboard_props(经 props.source_key 解析,按参考图顺序)
@@ -618,6 +734,73 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
         });
       }
       syncStoryboardVariantLinks(db, sbId, links);
+    }
+
+    const projectedRows = importedStoryboardIds.map((id) => {
+      const row = db.prepare('SELECT * FROM storyboards WHERE id = ?').get(id);
+      return projectStoryboardRow(row);
+    });
+    const projectionMismatch = projectedRows.length !== storyboards.length
+      || projectedRows.some((row, index) => {
+        const source = storyboards[index];
+        const expectedAudio = audioPolicy.shotAudioDescriptions[index];
+        const expectedTransition = source.transition == null ? null : normalizeStoryboardTransition(source.transition);
+        return row.storyboard_number !== source.storyboard_number
+          || row.source_key !== (source.source_key ?? null)
+          || row.scene_id !== sceneIdByKey.get(source.scene_ref)
+          || row.title !== (source.title ?? null)
+          || row.description !== (source.description ?? null)
+          || row.dialogue !== renderDialogue(source.dialogue)
+          || row.action !== renderAction(source.action)
+          || row.image_prompt !== (source.image_prompt ?? null)
+          || row.narration !== (source.narration ?? null)
+          || row.layout_description !== (source.composition ?? null)
+          || row.universal_segment_text !== (source.universal_segment_text ?? null)
+          || row.shot_type !== (source.shot_type ?? null)
+          || row.angle !== (source.camera_angle ?? null)
+          || row.movement !== (source.camera_movement ?? null)
+          || row.is_primary !== (source.is_primary === true)
+          || serializeCanonicalJson(row.audio_description) !== serializeCanonicalJson(expectedAudio)
+          || serializeCanonicalJson(row.transition) !== serializeCanonicalJson(expectedTransition);
+      });
+    const characterColumns = new Set(db.prepare('PRAGMA table_info(characters)').all().map((column) => column.name));
+    const characterProjectionMismatch = createdCharacterChecks.some(({ id, item }) => {
+      const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
+      if (!row) return true;
+      const expected = {
+        name: item.name ?? null,
+        description: item.description ?? null,
+        appearance: item.appearance ?? null,
+        polished_prompt: item.image_prompt ?? null,
+        negative_prompt: item.negative_prompt ?? null,
+        voice_style: item.voice_profile ?? null,
+        source_key: item.source_key ?? null,
+      };
+      return Object.entries(expected).some(([field, value]) => characterColumns.has(field) && row[field] !== value);
+    });
+    const referenceProjectionMismatch = importedStoryboardIds.some((storyboardId, index) => {
+      const source = storyboards[index];
+      const expectedProps = (source.prop_refs || []).map((key) => propIdByKey.get(key)).filter(Boolean).sort((a, b) => a - b);
+      const actualProps = db.prepare('SELECT prop_id FROM storyboard_props WHERE storyboard_id = ? ORDER BY prop_id').all(storyboardId).map((row) => row.prop_id);
+      if (serializeCanonicalJson(actualProps) !== serializeCanonicalJson(expectedProps)) return true;
+      const expectedLinks = (source.character_refs || [])
+        .filter((ref) => characterIdByKey.get(ref.character_ref) && variantIdByRef.get(`${ref.character_ref}/${ref.variant_ref}`))
+        .slice()
+        .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
+        .map((ref) => ({
+          character_id: characterIdByKey.get(ref.character_ref),
+          variant_id: variantIdByRef.get(`${ref.character_ref}/${ref.variant_ref}`),
+          reference_role: ref.reference_role ?? null,
+          sort_order: ref.sort_order ?? null,
+          framing_note: ref.framing_note ?? null,
+        }));
+      const actualLinks = db.prepare(
+        'SELECT character_id, variant_id, reference_role, sort_order, framing_note FROM storyboard_character_variants WHERE storyboard_id = ? ORDER BY sort_order, id'
+      ).all(storyboardId);
+      return serializeCanonicalJson(actualLinks) !== serializeCanonicalJson(expectedLinks);
+    });
+    if (projectionMismatch || characterProjectionMismatch || referenceProjectionMismatch) {
+      throwCode('PACKAGE_PROJECTION_MISMATCH', '制作包资产或分镜在规范化回读时发生字段丢失');
     }
 
     // 10. episode_imports 审计快照(normalized_json 存渲染后的归一化包)

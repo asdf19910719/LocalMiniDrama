@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
 
-const EXPORT_VERSION = '1.5';  // 1.5: 导出人物状态（character_variants）、source_key 与分镜人物状态关联（character_variant_refs），ZIP 往返无损；1.4: 完整导出分镜图片历史（含首尾帧 first/last 绑定）、frame_prompts、layout_description 等，支持导入后恢复首尾帧模式数据
+const EXPORT_VERSION = '1.6';  // 1.6: 保留剧集音频策略、制作画像、场景氛围与分镜生产元数据；1.5: 人物状态与 source_key 往返
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -241,6 +241,8 @@ function exportDrama(db, cfg, log, dramaId) {
         description: ep.description,
         script_content: ep.script_content,
         duration: ep.duration,
+        audio_plan: ep.audio_plan || null,
+        production_profile: ep.production_profile || null,
         storyboards: sbs.map(sb => {
           const igsForThis = allImagesBySb[sb.id] || [];
           // 兼容：仍提供 image_file（指向首帧或最新一张），旧版导入器可继续工作
@@ -335,6 +337,8 @@ function exportDrama(db, cfg, log, dramaId) {
             source_key: sb.source_key || null,
             audio_description: sb.audio_description || null,
             transition: sb.transition || null,
+            is_primary: Number(sb.is_primary) === 1,
+            production_metadata: sb.production_metadata || null,
             character_variant_refs: sbVariantRefs,
             image_file: sbImageFile,
             video_file: sbVideoFile,
@@ -426,6 +430,8 @@ function exportDrama(db, cfg, log, dramaId) {
         polished_prompt: s.polished_prompt || null,
         source_key: s.source_key || null,
         state: s.state || null,
+        atmosphere: s.atmosphere || null,
+        negative_prompt: s.negative_prompt || null,
         episode_index: epIdx >= 0 ? epIdx : null,
         image_file: s.local_path ? `media/scenes/scene_${s.id}${extOf(s.local_path)}` : null,
         extra_image_files: extraFiles,
@@ -445,6 +451,7 @@ function exportDrama(db, cfg, log, dramaId) {
         description: p.description,
         prompt: p.prompt,
         source_key: p.source_key || null,
+        negative_prompt: p.negative_prompt || null,
         episode_index: epIdx >= 0 ? epIdx : null,
         image_file: p.local_path ? `media/props/prop_${p.id}${extOf(p.local_path)}` : null,
         extra_image_files: extraFiles,

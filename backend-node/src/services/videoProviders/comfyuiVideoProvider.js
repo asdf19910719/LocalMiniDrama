@@ -44,6 +44,7 @@ function contextInput(context) {
     height: input.height ?? settings.height,
     frameRate: input.frameRate ?? input.frame_rate ?? settings.frame_rate,
     seed: input.seed ?? settings.seed,
+    audioEnabled: input.audioEnabled ?? input.audio_enabled ?? settings.audio_enabled ?? true,
     continuityMode: continuityMode === false || continuityMode === 0 || continuityMode === '0' || continuityMode === '0.0'
       ? 'none' : continuityMode,
   };
@@ -99,7 +100,7 @@ function safeSubmitInputs(input = {}, stagedAssets = []) {
   const scalarKeys = [
     'prompt', 'negativePrompt', 'negative_prompt', 'width', 'height',
     'frameRate', 'frame_rate', 'durationSeconds', 'duration', 'seed',
-    'continuityMode', 'continuity_mode',
+    'continuityMode', 'continuity_mode', 'audioEnabled', 'audio_enabled',
   ];
   const safe = {};
   for (const key of scalarKeys) {
@@ -301,6 +302,12 @@ function createComfyUIVideoProvider({
     return normalized(providerTaskId, 'cancelled', 100);
   }
 
+  function releaseLocalLease(context = {}) {
+    const providerTaskId = String(context?.providerTaskId || context?.promptId || '').trim();
+    if (!providerTaskId) return false;
+    return releaseLease(providerTaskId);
+  }
+
   async function recover(context = {}) {
     return query(context);
   }
@@ -345,7 +352,7 @@ function createComfyUIVideoProvider({
     });
   }
 
-  return { submit, query, cancel, recover, testConnection };
+  return { submit, query, cancel, recover, releaseLocalLease, testConnection };
 }
 
 module.exports = { createComfyUIVideoProvider };

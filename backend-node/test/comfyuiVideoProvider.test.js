@@ -199,6 +199,19 @@ describe('ComfyUI video provider adapter', () => {
     await assert.rejects(() => provider.submit({ ...context(), taskId: 'video-2' }), /GPU_BUSY/);
   });
 
+  test('can release an abandoned local lease without cancelling the upstream task', async (t) => {
+    const fixture = createWorkflowFixture();
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+    const fake = createFakeClient();
+    const gpuMutex = createGpuMutex();
+    const provider = createComfyUIVideoProvider({ registry: fixture.registry, comfyClient: fake, gpuMutex });
+    await provider.submit(context());
+
+    assert.equal(provider.releaseLocalLease({ providerTaskId: 'prompt-1' }), true);
+    await assert.doesNotReject(() => provider.submit({ ...context(), taskId: 'video-2' }));
+    assert.equal(fake.calls.some((call) => call.method === 'cancel'), false);
+  });
+
   test('releases the GPU lease when completed artifact finalization fails', async (t) => {
     const fixture = createWorkflowFixture();
     t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));

@@ -6,7 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 
 const videoService = require('../src/services/videoService');
-const { createUnifiedVideoGenerationService } = require('../src/services/unifiedVideoGenerationService');
+const {
+  createUnifiedVideoGenerationService,
+  isSwitchableH3WorkflowPair,
+} = require('../src/services/unifiedVideoGenerationService');
 const { createH3PromptCompiler } = require('../src/services/h3PromptCompiler');
 
 function createTestDb() {
@@ -156,7 +159,7 @@ function replaceDefaultConfig(db) {
 function createHarness({ submit = [], query = [], recover = [] } = {}) {
   const jobs = [];
   const delays = [];
-  const calls = { submit: [], query: [], recover: [], cancel: [] };
+  const calls = { submit: [], query: [], recover: [], cancel: [], releaseLocalLease: [] };
   const queues = {
     submit: [...submit],
     query: [...query],
@@ -184,6 +187,9 @@ function createHarness({ submit = [], query = [], recover = [] } = {}) {
     async cancel(context) {
       calls.cancel.push(context);
       return { providerTaskId: context.providerTaskId, status: 'cancelled', progress: 100 };
+    },
+    async releaseLocalLease(context) {
+      calls.releaseLocalLease.push(context);
     },
   };
   const registry = {
@@ -226,6 +232,19 @@ function buildService(db, harness, overrides = {}) {
 }
 
 describe('unified video generation lifecycle', () => {
+  it('allows only the official and TE-Speed H3 workflows to switch in either direction', () => {
+    assert.equal(isSwitchableH3WorkflowPair(
+      'minimax_h3_director_r2v',
+      'minimax_h3_director_r2v_te_speed',
+    ), true);
+    assert.equal(isSwitchableH3WorkflowPair(
+      'minimax_h3_director_r2v_te_speed',
+      'minimax_h3_director_r2v',
+    ), true);
+    assert.equal(isSwitchableH3WorkflowPair('minimax_h3_director_r2v', 'unknown-workflow'), false);
+    assert.equal(isSwitchableH3WorkflowPair('h3-continuity-v1', 'minimax_h3_director_r2v_te_speed'), false);
+  });
+
   it('uses the skill-agent compiler for H3 prompt previews', async () => {
     const db = createTestDb();
     seedDefaultConfig(db, {
@@ -266,6 +285,7 @@ describe('unified video generation lifecycle', () => {
 
   it('persists and exposes H3 skill provenance from the consumed draft on generated rows', async () => {
     const db = createTestDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (9, 5)').run();
     const configId = seedDefaultConfig(db, {
       provider: 'comfyui',
       model: JSON.stringify(['h3-continuity-v1']),
@@ -275,7 +295,7 @@ describe('unified video generation lifecycle', () => {
     // H3 候选生成消费草稿(spec §11.4):不再内部编译,provenance/prompt 均取自草稿列。
     const draft = {
       id: 11,
-      storyboard_id: null,
+      storyboard_id: 9,
       video_config_id: String(configId),
       source_prompt: 'a woman walks',
       final_compiled_prompt: validPrompt,
@@ -299,12 +319,50 @@ describe('unified video generation lifecycle', () => {
     const harness = createHarness();
     harness.registry = { has(name) { return name === 'comfyui'; }, get(name) { assert.equal(name, 'comfyui'); return provider; } };
     const service = buildService(db, harness, { h3PromptDraftService: stubDraftService });
-    const created = await service.createVideoGeneration({ prompt: 'a woman walks', duration: 5, h3_prompt_draft_id: draft.id });
+    const created = await service.createVideoGeneration({ prompt: 'a woman walks', storyboard_id: 9, duration: 5, h3_prompt_draft_id: draft.id });
     const row = db.prepare('SELECT h3_skill_name, h3_skill_sha256, h3_skill_provenance, prompt FROM video_generations WHERE id = ?').get(created.id);
     assert.equal(row.h3_skill_name, 'h3-prompt-writing');
     assert.equal(row.h3_skill_sha256, 'a'.repeat(64));
     assert.equal(row.prompt, validPrompt);
     assert.deepEqual(service.getVideoGeneration(created.id).skillProvenance.skillResources, ['SKILL.md', 'references/base-en.txt']);
+    db.close();
+  });
+
+  it('rejects an official-workflow draft when the request switches to TE-Speed', async () => {
+    const db = createTestDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (9, 5)').run();
+    const configId = seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['minimax_h3_director_r2v']),
+      default_model: 'minimax_h3_director_r2v',
+    });
+    const compiledPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
+    const draft = {
+      id: 12,
+      storyboard_id: 9,
+      video_config_id: String(configId),
+      workflow_id: 'minimax_h3_director_r2v',
+      final_compiled_prompt: compiledPrompt,
+      compiled_prompt_hash: require('node:crypto').createHash('sha256').update(compiledPrompt).digest('hex'),
+      status: 'valid',
+    };
+    const service = buildService(db, createHarness(), {
+      h3PromptDraftService: {
+        getDraftById: () => draft,
+        evaluateDraftFreshness: () => ({ stale: false, reasons: [] }),
+      },
+    });
+
+    await assert.rejects(
+      service.createVideoGeneration({
+        prompt: 'a woman walks',
+        storyboard_id: 9,
+        duration: 5,
+        workflow_id: 'minimax_h3_director_r2v_te_speed',
+        h3_prompt_draft_id: draft.id,
+      }),
+      (error) => error.code === 'H3_DRAFT_WORKFLOW_MISMATCH' && error.status === 409,
+    );
     db.close();
   });
 
@@ -320,7 +378,7 @@ describe('unified video generation lifecycle', () => {
     await harness.runNext();
 
     const waiting = service.getVideoGeneration(created.id);
-    assert.equal(waiting.status, 'queued');
+    assert.equal(waiting.status, 'waiting');
     assert.equal(waiting.error_msg, null);
     assert.equal(harness.calls.submit.length, 1);
     assert.equal(harness.jobs.length, 1);
@@ -331,6 +389,250 @@ describe('unified video generation lifecycle', () => {
     assert.equal(submitted.status, 'running');
     assert.equal(db.prepare('SELECT provider_task_id FROM video_generations WHERE id = ?').get(created.id).provider_task_id, 'prompt-after-wait');
     assert.equal(harness.calls.submit.length, 2);
+    db.close();
+  });
+
+  it('recovers a locally GPU-blocked submission after restart', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const firstHarness = createHarness({ submit: [new Error('GPU_BUSY')] });
+    firstHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return firstHarness.provider; },
+    };
+    const firstService = buildService(db, firstHarness, { gpuBusyRetryDelayMs: 1 });
+
+    const created = await firstService.createVideoGeneration({ prompt: 'wait across restart' });
+    await firstHarness.runNext();
+
+    assert.equal(firstService.getVideoGeneration(created.id).status, 'waiting');
+    firstHarness.jobs.length = 0;
+
+    const restartedHarness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'prompt-after-restart', progress: 0 }],
+    });
+    restartedHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return restartedHarness.provider; },
+    };
+    const restartedService = buildService(db, restartedHarness);
+
+    await restartedService.recoverVideoGenerations();
+    await restartedHarness.runNext();
+
+    assert.equal(restartedService.getVideoGeneration(created.id).status, 'running');
+    assert.equal(restartedHarness.calls.submit.length, 1);
+    db.close();
+  });
+
+  it('waits to recover an existing upstream task while another task owns the local GPU lease', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const firstHarness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'existing-upstream-task', progress: 20 }],
+    });
+    firstHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return firstHarness.provider; },
+    };
+    const firstService = buildService(db, firstHarness);
+    const created = await firstService.createVideoGeneration({ prompt: 'recover behind another lease' });
+    await firstHarness.runNext();
+    firstHarness.jobs.length = 0;
+
+    const recoveryHarness = createHarness({
+      recover: [
+        new Error('GPU_BUSY'),
+        {
+          status: 'completed', providerTaskId: 'existing-upstream-task', progress: 100,
+          output: { videoUrl: 'https://cdn.example.test/recovered-after-gpu-wait.mp4' },
+        },
+      ],
+    });
+    recoveryHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return recoveryHarness.provider; },
+    };
+    const recoveryService = buildService(db, recoveryHarness, { gpuBusyRetryDelayMs: 1 });
+
+    await recoveryService.recoverVideoGenerations();
+    await recoveryHarness.runNext();
+
+    assert.equal(recoveryService.getVideoGeneration(created.id).status, 'running');
+    assert.equal(recoveryHarness.jobs.length, 1);
+
+    await recoveryHarness.runNext();
+
+    assert.equal(recoveryService.getVideoGeneration(created.id).status, 'review');
+    assert.equal(recoveryHarness.calls.recover.length, 2);
+    db.close();
+  });
+
+  it('retries a transient ComfyUI HTTP query failure without stranding the batch', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const http500 = Object.assign(new Error('ComfyUI returned HTTP 500'), {
+      code: 'COMFYUI_HTTP_ERROR',
+      details: { status: 500 },
+    });
+    const harness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'prompt-with-transient-query', progress: 0 }],
+      query: [
+        http500,
+        {
+          status: 'completed',
+          providerTaskId: 'prompt-with-transient-query',
+          progress: 100,
+          output: { videoUrl: 'https://cdn.example.test/recovered-after-500.mp4' },
+        },
+      ],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return harness.provider; },
+    };
+    const service = buildService(db, harness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 2,
+    });
+
+    const created = await service.createVideoGeneration({ prompt: 'temporary query failure' });
+    await harness.runNext();
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'running');
+    assert.equal(harness.jobs.length, 1);
+
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'review');
+    assert.equal(harness.calls.query.length, 2);
+    db.close();
+  });
+
+  it('preserves the transient ComfyUI query retry limit across restart', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const firstHarness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'query-retry-across-restart', progress: 0 }],
+      query: [Object.assign(new Error('ComfyUI returned HTTP 500'), {
+        code: 'COMFYUI_HTTP_ERROR', details: { status: 500 },
+      })],
+    });
+    firstHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return firstHarness.provider; },
+    };
+    const firstService = buildService(db, firstHarness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 1,
+    });
+
+    const created = await firstService.createVideoGeneration({ prompt: 'bounded query retry after restart' });
+    await firstHarness.runNext();
+    await firstHarness.runNext();
+    assert.equal(firstService.getVideoGeneration(created.id).status, 'running');
+    firstHarness.jobs.length = 0;
+
+    const restartedHarness = createHarness({
+      recover: [Object.assign(new Error('ComfyUI returned HTTP 500'), {
+        code: 'COMFYUI_HTTP_ERROR', details: { status: 500 },
+      })],
+    });
+    restartedHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return restartedHarness.provider; },
+    };
+    const restartedService = buildService(db, restartedHarness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 1,
+    });
+
+    await restartedService.recoverVideoGenerations();
+    await restartedHarness.runNext();
+
+    assert.equal(restartedService.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(restartedHarness.jobs.length, 0);
+    assert.equal(restartedHarness.calls.releaseLocalLease.length, 1);
+    db.close();
+  });
+
+  it('preserves the consumed query retry budget through GPU busy and restart', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const http500 = () => Object.assign(new Error('ComfyUI returned HTTP 500'), {
+      code: 'COMFYUI_HTTP_ERROR', details: { status: 500 },
+    });
+    const firstHarness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'query-retry-then-gpu-busy', progress: 0 }],
+      query: [http500(), new Error('GPU_BUSY')],
+    });
+    firstHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return firstHarness.provider; },
+    };
+    const firstService = buildService(db, firstHarness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 1,
+      gpuBusyRetryDelayMs: 1,
+    });
+
+    const created = await firstService.createVideoGeneration({ prompt: 'query retry survives GPU busy' });
+    await firstHarness.runNext();
+    await firstHarness.runNext();
+    await firstHarness.runNext();
+    assert.equal(firstService.getVideoGeneration(created.id).status, 'running');
+    firstHarness.jobs.length = 0;
+
+    const restartedHarness = createHarness({ recover: [http500()] });
+    restartedHarness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return restartedHarness.provider; },
+    };
+    const restartedService = buildService(db, restartedHarness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 1,
+    });
+
+    await restartedService.recoverVideoGenerations();
+    await restartedHarness.runNext();
+
+    assert.equal(restartedService.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(restartedHarness.jobs.length, 0);
+    assert.equal(restartedHarness.calls.releaseLocalLease.length, 1);
+    db.close();
+  });
+
+  it('releases the local ComfyUI lease when transient query retries are exhausted', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, { provider: 'comfyui' });
+    const first500 = Object.assign(new Error('ComfyUI returned HTTP 500'), {
+      code: 'COMFYUI_HTTP_ERROR', details: { status: 500 },
+    });
+    const second500 = Object.assign(new Error('ComfyUI returned HTTP 500'), {
+      code: 'COMFYUI_HTTP_ERROR', details: { status: 500 },
+    });
+    const harness = createHarness({
+      submit: [{ status: 'running', providerTaskId: 'prompt-that-cannot-be-queried', progress: 0 }],
+      query: [first500, second500],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get() { return harness.provider; },
+    };
+    const service = buildService(db, harness, {
+      queryRetryDelayMs: 1,
+      queryRetryLimit: 1,
+    });
+
+    const created = await service.createVideoGeneration({ prompt: 'persistent query failure' });
+    await harness.runNext();
+    await harness.runNext();
+    await harness.runNext();
+
+    assert.equal(service.getVideoGeneration(created.id).status, 'failed');
+    assert.equal(harness.calls.releaseLocalLease.length, 1);
+    assert.equal(harness.calls.releaseLocalLease[0].providerTaskId, 'prompt-that-cannot-be-queried');
     db.close();
   });
 

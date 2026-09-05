@@ -1,7 +1,7 @@
 'use strict';
 
 const ADAPTER_ID = 'h3_director_r2v';
-const ADAPTER_VERSION = 'v1';
+const ADAPTER_VERSION = 'v2';
 const MAX_REFERENCES = 9;
 
 function fail(message, code = 'ADAPTER_INPUT_INVALID') {
@@ -13,6 +13,19 @@ function fail(message, code = 'ADAPTER_INPUT_INVALID') {
 
 function classTypes(workflow) {
   return new Set(Object.values(workflow?.prompt || {}).map((node) => node?.class_type).filter(Boolean));
+}
+
+function entriesByType(workflow, type) {
+  return Object.entries(workflow?.prompt || {}).filter(([, node]) => node?.class_type === type);
+}
+
+function modelSource(node) {
+  const source = node?.inputs?.model;
+  return Array.isArray(source) && source.length === 2 ? [String(source[0]), Number(source[1])] : null;
+}
+
+function sameSource(actual, nodeId) {
+  return Array.isArray(actual) && actual[0] === String(nodeId) && actual[1] === 0;
 }
 
 function stagedReferences(input = {}, stagedAssets) {
@@ -45,19 +58,38 @@ function validateWorkflow(workflow) {
     fail('H3 Director R2V adapter requires an API-format workflow', 'ADAPTER_WORKFLOW_INVALID');
   }
   const types = classTypes(workflow);
+  if ([...types].some((type) => /spectrum/i.test(String(type)))) {
+    fail('H3 Director R2V workflow cannot combine Spectrum with TE-Speed', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  }
   for (const required of ['MiniMaxH3Director', 'PathchSageAttentionKJ']) {
     if (!types.has(required)) fail(`H3 Director R2V workflow is missing ${required}`, 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
-  const director = Object.values(workflow.prompt).find((node) => node?.class_type === 'MiniMaxH3Director');
-  const unet = Object.values(workflow.prompt).find((node) => node?.class_type === 'UNETLoader');
+  const [directorEntry] = entriesByType(workflow, 'MiniMaxH3Director');
+  const [unetEntry] = entriesByType(workflow, 'UNETLoader');
+  const [sageEntry] = entriesByType(workflow, 'PathchSageAttentionKJ');
+  const teEntries = entriesByType(workflow, 'TESpeedMiniMaxH3');
+  const director = directorEntry?.[1];
+  const unet = unetEntry?.[1];
   if (!String(unet?.inputs?.unet_name || '').toLowerCase().includes('ref2va')) {
     fail('H3 Director R2V workflow must use a ref2va UNET', 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
-  const sage = Object.values(workflow.prompt).find((node) => node?.class_type === 'PathchSageAttentionKJ');
+  const sage = sageEntry?.[1];
   if (sage?.inputs?.sage_attention !== 'auto' || sage?.inputs?.allow_compile !== false) {
     fail('H3 Director R2V workflow must configure SageAttention auto with compile disabled', 'ADAPTER_WORKFLOW_UNSUPPORTED');
   }
   if (!director) fail('H3 Director R2V workflow is missing MiniMaxH3Director', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  if (teEntries.length > 1) fail('H3 Director R2V workflow must contain exactly one TE-Speed node', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+  if (teEntries.length === 1) {
+    const [teId, te] = teEntries[0];
+    const [sageId] = sageEntry;
+    const [unetId] = unetEntry;
+    const chainValid = sameSource(modelSource(sage), unetId)
+      && sameSource(modelSource(te), sageId)
+      && sameSource(modelSource(director), teId);
+    if (!chainValid) {
+      fail('H3 Director R2V TE-Speed chain must be UNET -> Sage -> TE-Speed -> Director', 'ADAPTER_WORKFLOW_UNSUPPORTED');
+    }
+  }
 }
 
 function validate(input = {}, workflow, stagedAssets) {
@@ -74,7 +106,15 @@ function validate(input = {}, workflow, stagedAssets) {
     fail('H3 Director R2V V1 requires exactly one segment');
   }
   if (workflow) validateWorkflow(workflow);
-  return { prompt, stagedAssets: refs };
+  const referenceAudios = input.referenceAudios ?? input.reference_audios ?? [];
+  const audios = Array.isArray(referenceAudios) ? referenceAudios : [referenceAudios];
+  const labels = [...prompt.matchAll(/<Audio\s+(\d+)>/gi)].map((match) => Number(match[1]));
+  const uniqueLabels = [...new Set(labels)].sort((a, b) => a - b);
+  const expected = audios.filter(Boolean).map((_, index) => index + 1);
+  if (JSON.stringify(uniqueLabels) !== JSON.stringify(expected)) {
+    fail('H3 reference-audio labels do not match the submitted ordered audio assets', 'H3_REFERENCE_SEMANTICS_INVALID');
+  }
+  return { prompt, stagedAssets: refs, referenceAudios: audios.filter(Boolean) };
 }
 
 function buildPrompt(template, input = {}, stagedAssets = []) {
@@ -95,7 +135,13 @@ function buildPrompt(template, input = {}, stagedAssets = []) {
   let timeline;
   try { timeline = JSON.parse(String(director.inputs.timeline_data || '{}')); } catch { timeline = {}; }
   timeline.output = { ...(timeline.output || {}), continuityEnabled: false, continuityOverlapFrames: 0 };
-  timeline.global = { ...(timeline.global || {}), taskType: 'r2v', refs: normalized.stagedAssets.map((asset, index) => ({ index, imageFile: asset.comfyFilename, role: asset.role })) };
+  timeline.output.audioMode = input.audioEnabled === false ? 'disabled' : 'generate';
+  timeline.global = {
+    ...(timeline.global || {}),
+    taskType: 'r2v',
+    refs: normalized.stagedAssets.map((asset, index) => ({ index, imageFile: asset.comfyFilename, role: asset.role })),
+    refAudios: normalized.referenceAudios,
+  };
   timeline.segments = [{
     ...(timeline.segments?.[0] || {}),
     id: 's0',
@@ -105,6 +151,7 @@ function buildPrompt(template, input = {}, stagedAssets = []) {
     durationSec: Number(input.durationSeconds || 5),
     taskType: 'r2v',
     refs: timeline.global.refs,
+    refAudios: normalized.referenceAudios,
     continuityFromPrev: false,
   }];
   director.inputs.timeline_data = JSON.stringify(timeline);
@@ -113,12 +160,15 @@ function buildPrompt(template, input = {}, stagedAssets = []) {
 
 function describeCapabilities(workflow) {
   if (workflow) validateWorkflow(workflow);
+  const supportsTESpeed = entriesByType(workflow, 'TESpeedMiniMaxH3').length === 1;
   return {
     modes: ['single_reference'],
     maxReferenceImages: MAX_REFERENCES,
     supportsContinuity: false,
     supportsAudio: true,
     supportsSage: true,
+    supportsTESpeed,
+    approximateAcceleration: supportsTESpeed,
   };
 }
 

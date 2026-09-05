@@ -129,4 +129,31 @@ describe('episode generation progress aggregation', () => {
     assert.throws(() => service.getEpisodeGenerationProgress(db, 999), (error) => error.code === 'EPISODE_NOT_FOUND');
     db.close();
   });
+
+  test('exposes durable cloud upscale stage and allowed recovery actions', () => {
+    const db = createDb();
+    db.exec(`
+      ALTER TABLE video_merges ADD COLUMN upscale_job_id TEXT;
+      CREATE TABLE video_upscale_jobs (
+        id TEXT PRIMARY KEY, status TEXT, progress INTEGER, current_stage TEXT,
+        method TEXT, error_code TEXT, error_message TEXT, next_retry_at TEXT
+      );
+    `);
+    db.prepare(`INSERT INTO async_tasks VALUES
+      ('merge-upscale', 'video_merge', 'processing', 35, '等待云端设备', NULL, '10', '2026-01-02', '2026-01-02', NULL, NULL)`).run();
+    db.prepare(`INSERT INTO video_merges
+      (id, episode_id, drama_id, status, task_id, created_at, upscale_job_id)
+      VALUES (42, 10, 1, 'waiting_upscale', 'merge-upscale', '2026-01-02', 'upscale-1')`).run();
+    db.prepare(`INSERT INTO video_upscale_jobs VALUES
+      ('upscale-1', 'waiting_provider', 35, 'waiting_provider', 'flash', 'PROVIDER_UNAVAILABLE', 'offline', '2026-01-03')`).run();
+
+    const result = service.getEpisodeGenerationProgress(db, 10);
+
+    assert.equal(result.merge.status, 'waiting_upscale');
+    assert.equal(result.merge.upscale.id, 'upscale-1');
+    assert.equal(result.merge.upscale.method, 'flash');
+    assert.equal(result.merge.upscale.allowed_actions.retry, true);
+    assert.equal(result.merge.upscale.allowed_actions.skip, true);
+    db.close();
+  });
 });
