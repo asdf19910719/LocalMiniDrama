@@ -9,6 +9,28 @@ function isUserTurn(node) {
   return node?.getAttribute?.('data-turn') === 'user' || node?.getAttribute?.('data-message-author-role') === 'user';
 }
 
+function isVisibleControl(element, documentRef) {
+  if (!element || element.hidden || element.getAttribute?.('aria-hidden') === 'true') return false;
+  if (element.closest?.('[aria-hidden="true"]')) return false;
+  if (typeof element.getClientRects === 'function' && element.getClientRects().length === 0) return false;
+  const view = documentRef?.defaultView;
+  const style = view?.getComputedStyle?.(element) || globalThis.getComputedStyle?.(element);
+  return !style || (style.display !== 'none' && style.visibility !== 'hidden');
+}
+
+function visibleControl(documentRef, selector) {
+  const candidates = typeof documentRef?.querySelectorAll === 'function'
+    ? [...documentRef.querySelectorAll(selector)]
+    : [];
+  if (candidates.length) return candidates.find((element) => isVisibleControl(element, documentRef)) || null;
+  const fallback = documentRef?.querySelector?.(selector) || null;
+  return isVisibleControl(fallback, documentRef) ? fallback : null;
+}
+
+function isTransientAssistantIdentity(messageId) {
+  return /^request-placeholder-/i.test(String(messageId || ''));
+}
+
 function asFile(input) {
   if (typeof File !== 'undefined' && input instanceof File) return input;
   const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes || []);
@@ -21,14 +43,16 @@ export class ChatGPTAdapter {
   }
   matches(url = this.location?.href || '') { return /^https:\/\/(www\.)?chatgpt\.com\//.test(url); }
   getConversationIdentity() { return conversationIdentity(this.location?.href); }
-  isComposerReady() { return Boolean(this.document?.querySelector?.(selectors.composer)); }
+  composer() { return visibleControl(this.document, selectors.composer); }
+  sendButton() { return visibleControl(this.document, selectors.send); }
+  isComposerReady() { return Boolean(this.composer()); }
   isSubmitReady() {
     const composer = this.isComposerReady();
-    const button = this.document?.querySelector?.(selectors.send);
+    const button = this.sendButton();
     return composer && Boolean(button && !button.disabled);
   }
   fillPrompt(prompt) {
-    const element = this.document?.querySelector(selectors.composer); if (!element) throw new Error('ADAPTER_BROKEN');
+    const element = this.composer(); if (!element) throw new Error('ADAPTER_BROKEN');
     element.focus?.();
     if ('value' in element) element.value = prompt;
     else {
@@ -48,7 +72,7 @@ export class ChatGPTAdapter {
   }
   submit() {
     if (!this.referencesReady && this.document?.querySelector(selectors.file)?.files?.length) this.referencesReady = true;
-    const button = this.document?.querySelector(selectors.send); if (!button || button.disabled) throw new Error('NOT_READY');
+    const button = this.sendButton(); if (!button || button.disabled) throw new Error('NOT_READY');
     button.click(); this.referencesReady = false;
     return { submittedAt: new Date().toISOString() };
   }
@@ -111,7 +135,8 @@ export class ChatGPTAdapter {
       const candidates = [...(root.querySelectorAll?.(selectors.assistant) || [])]
         .filter((node) => !preExisting.has(node) && !isUserTurn(node))
         .map((node) => ({ node, id: messageIdentity(node)?.messageId }))
-        .filter((entry) => entry.id && (!known.has(entry.id) || (entry.id === activeAssistantId && entry.node !== activeStop?.root)));
+        .filter((entry) => entry.id && !isTransientAssistantIdentity(entry.id)
+          && (!known.has(entry.id) || (entry.id === activeAssistantId && entry.node !== activeStop?.root)));
       if (!candidates.length) return;
       const selected = candidates[candidates.length - 1];
       activeStop?.();

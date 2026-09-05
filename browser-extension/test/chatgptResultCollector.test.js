@@ -205,6 +205,43 @@ test('adapter fills a ProseMirror contenteditable composer with an input event',
   globalThis.document = previousDocument;
 });
 
+test('adapter ignores hidden stale composers and submits through the visible ChatGPT composer', () => {
+  const previousDocument = globalThis.document;
+  const events = [];
+  const makeComposer = (visible) => ({
+    textContent: '',
+    focus() { this.focused = true; },
+    dispatchEvent(event) { events.push([visible, event.type]); },
+    getClientRects() { return visible ? [{ width: 320, height: 40 }] : []; },
+    getAttribute(name) { return name === 'contenteditable' ? 'true' : null; },
+  });
+  const hiddenComposer = makeComposer(false);
+  const visibleComposer = makeComposer(true);
+  const hiddenButton = { disabled: false, click() { this.clicked = true; }, getClientRects() { return []; }, getAttribute() { return null; } };
+  const visibleButton = { disabled: false, click() { this.clicked = true; }, getClientRects() { return [{ width: 32, height: 32 }]; }, getAttribute() { return null; } };
+  const doc = {
+    querySelector(selector) { return selector.includes('send') ? hiddenButton : hiddenComposer; },
+    querySelectorAll(selector) { return selector.includes('send') ? [hiddenButton, visibleButton] : [hiddenComposer, visibleComposer]; },
+    execCommand(command, _showUi, value) {
+      if (command === 'insertText') visibleComposer.textContent = value;
+      return true;
+    },
+  };
+  globalThis.InputEvent = class InputEvent { constructor(type) { this.type = type; } };
+  try {
+    const adapter = new ChatGPTAdapter({ documentRef: doc, locationRef: { href: 'https://chatgpt.com/' } });
+    adapter.fillPrompt('只进入可见输入框');
+    adapter.submit();
+    assert.equal(hiddenComposer.textContent, '');
+    assert.equal(visibleComposer.textContent, '只进入可见输入框');
+    assert.equal(hiddenButton.clicked, undefined);
+    assert.equal(visibleButton.clicked, true);
+    assert.deepEqual(events, [[true, 'input']]);
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
 test('collector treats blob placeholder images as still generating', () => {
   const generating = extractResultSet(node('assistant-9', [image('blob:https://chatgpt.com/abc')]), { attemptId: 'attempt-9', assistantMessageId: 'assistant-9', resultSetId: 'set-9' });
   assert.equal(generating.status, 'GENERATING');
@@ -336,6 +373,43 @@ test('beginAttempt ignores assistant nodes that existed before submit even witho
     discover();
     assert.equal(observed.assistantMessageId, 'conversation-turn-12');
     assert.equal(observed.attemptId, 'attempt-9');
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('beginAttempt waits past transient request placeholders for the real assistant turn', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const makeTurn = (testid) => ({
+      dataset: { turn: 'assistant' },
+      getAttribute(name) {
+        if (name === 'data-turn') return 'assistant';
+        if (name === 'data-testid') return testid;
+        return null;
+      },
+    });
+    const placeholder = makeTurn('request-placeholder-request-conversation-1-1');
+    const completed = makeTurn('conversation-turn-12');
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const observed = [];
+    adapter.observeAttempt = (identity) => { observed.push(identity.assistantMessageId); return () => {}; };
+
+    adapter.beginAttempt({ attemptId: 'attempt-placeholder' }, () => {});
+    nodes = [placeholder];
+    discover();
+    assert.deepEqual(observed, []);
+    nodes = [placeholder, completed];
+    discover();
+    assert.deepEqual(observed, ['conversation-turn-12']);
   } finally {
     globalThis.MutationObserver = previousObserver;
   }

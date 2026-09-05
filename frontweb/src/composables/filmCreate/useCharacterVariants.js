@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { buildVariantPrimaryPatch } from '../../utils/characterVariantStudio.js'
 
 /**
  * 由「分镜已勾选角色 + 各自选择的人物状态」组装 links payload（纯函数，供测试与保存复用）。
@@ -64,6 +65,7 @@ export function useCharacterVariants(deps) {
   /** 正在生成图片的状态 id（非 null 时禁用全部状态生图按钮，防并发重复生图） */
   const generatingVariantId = ref(null)
   const variantDefaultSettingId = ref(null)
+  const variantCandidateSettingId = ref(null)
 
   // ── 状态编辑弹窗 ──────────────────────────────────────
   const showVariantEditor = ref(false)
@@ -118,6 +120,12 @@ export function useCharacterVariants(deps) {
   /** 模板读取某角色的状态列表（未加载时返回空数组，不触发请求） */
   function getVariantsForCharacter(characterId) {
     return variantsByCharacterId.value.get(Number(characterId)) || []
+  }
+
+  /** ChatGPT 异步任务完成后刷新所有已经进入过工作台的人物状态缓存。 */
+  async function refreshLoadedVariants() {
+    const characterIds = [...variantsByCharacterId.value.keys()]
+    await Promise.all(characterIds.map((characterId) => loadVariants(characterId, { force: true })))
   }
 
   /** 角色默认状态 id（is_default 优先，否则第一个），无状态返回 null */
@@ -259,6 +267,26 @@ export function useCharacterVariants(deps) {
     }
   }
 
+  /** 从状态自己的历史候选中切换当前图；基础人物图不参与候选。 */
+  async function selectVariantCandidate(variant, candidatePath) {
+    if (!variant?.id || variantCandidateSettingId.value != null) return
+    variantCandidateSettingId.value = variant.id
+    try {
+      const payload = buildVariantPrimaryPatch(variant, candidatePath)
+      const updated = await characterAPI.updateVariant(variant.id, payload)
+      await loadVariants(variant.character_id, { force: true })
+      const authoritative = updated?.id ? updated : { ...variant, ...payload }
+      const key = Number(variant.character_id)
+      const current = getVariantsForCharacter(key)
+      variantsByCharacterId.value.set(key, current.map((item) => Number(item.id) === Number(variant.id) ? authoritative : item))
+      notify.success('已设为当前状态图，旧图保留在候选历史')
+    } catch (e) {
+      notify.error(e?.message || '切换状态图失败')
+    } finally {
+      variantCandidateSettingId.value = null
+    }
+  }
+
   // ── 分镜人物状态选择 ──────────────────────────────────
   function hydrateSbVariantLinks(storyboards, { replace = true } = {}) {
     const nextSelections = replace ? {} : { ...sbVariantSelections.value }
@@ -363,7 +391,9 @@ export function useCharacterVariants(deps) {
     variantsByCharacterId,
     generatingVariantId,
     variantDefaultSettingId,
+    variantCandidateSettingId,
     loadVariants,
+    refreshLoadedVariants,
     getVariantsForCharacter,
     defaultVariantIdFor,
     variantOptionLabel,
@@ -381,6 +411,7 @@ export function useCharacterVariants(deps) {
     removeVariant,
     generateVariantImage,
     setVariantDefault,
+    selectVariantCandidate,
     // 分镜状态选择
     sbVariantSelections,
     sbVariantLinksByStoryboardId,

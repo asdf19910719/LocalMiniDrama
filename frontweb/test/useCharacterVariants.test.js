@@ -60,8 +60,8 @@ function createDeferred() {
   return { promise, resolve }
 }
 
-function buildDeps({ listVariants, getSbCharacterIds = () => [] }) {
-  const calls = { updateVariantLinks: [] }
+function buildDeps({ listVariants, getSbCharacterIds = () => [], updateVariant = async () => ({}) }) {
+  const calls = { updateVariantLinks: [], updateVariant: [] }
   const toasts = []
   const notify = {
     error: (m) => toasts.push(String(m)),
@@ -75,9 +75,78 @@ function buildDeps({ listVariants, getSbCharacterIds = () => [] }) {
       return {}
     },
   }
-  const api = useCharacterVariants({ characterAPI: { listVariants }, storyboardsAPI, getSbCharacterIds, notify })
+  const characterAPI = {
+    listVariants,
+    updateVariant: async (variantId, payload) => {
+      calls.updateVariant.push({ variantId, payload })
+      return updateVariant(variantId, payload)
+    },
+  }
+  const api = useCharacterVariants({ characterAPI, storyboardsAPI, getSbCharacterIds, notify })
   return { api, calls, toasts }
 }
+
+test('refreshLoadedVariants 只强制刷新已经打开过的人物状态缓存', async () => {
+  const reads = []
+  const { api } = buildDeps({
+    listVariants: async (id) => {
+      reads.push(Number(id))
+      return [{ id: Number(id) * 10, character_id: Number(id), name: '默认', is_default: 1 }]
+    },
+  })
+  await api.loadVariants(1)
+  await api.loadVariants(2)
+  reads.length = 0
+
+  await api.refreshLoadedVariants()
+
+  assert.deepEqual(reads, [1, 2])
+})
+
+test('selectVariantCandidate 保存候选为当前图并立即刷新对应人物状态', async () => {
+  let revision = 0
+  const { api, calls } = buildDeps({
+    listVariants: async () => [{
+      id: 11,
+      character_id: 1,
+      name: '夜间',
+      local_path: revision === 0 ? 'old.png' : 'picked.png',
+      image_url: '',
+      extra_images: revision === 0 ? ['picked.png'] : ['old.png'],
+    }],
+    updateVariant: async () => { revision += 1 },
+  })
+  await api.loadVariants(1)
+  const variant = api.getVariantsForCharacter(1)[0]
+
+  await api.selectVariantCandidate(variant, 'picked.png')
+
+  assert.deepEqual(calls.updateVariant, [{
+    variantId: 11,
+    payload: { image_url: '', local_path: 'picked.png', extra_images: ['old.png'] },
+  }])
+  assert.equal(api.getVariantsForCharacter(1)[0].local_path, 'picked.png')
+})
+
+test('selectVariantCandidate 优先用更新响应覆盖缓存，避免随后列表请求仍返回旧图时界面不刷新', async () => {
+  const staleVariant = {
+    id: 11,
+    character_id: 1,
+    name: '夜间',
+    local_path: 'old.png',
+    image_url: '',
+    extra_images: ['picked.png'],
+  }
+  const { api } = buildDeps({
+    listVariants: async () => [staleVariant],
+    updateVariant: async (_id, payload) => ({ ...staleVariant, ...payload }),
+  })
+  await api.loadVariants(1)
+
+  await api.selectVariantCandidate(staleVariant, 'picked.png')
+
+  assert.equal(api.getVariantsForCharacter(1)[0].local_path, 'picked.png')
+})
 
 test('hydrateSbVariantLinks 恢复显式选择并在状态列表加载前提供正确缩略图记录', () => {
   const { api } = buildDeps({ listVariants: async () => [] })
