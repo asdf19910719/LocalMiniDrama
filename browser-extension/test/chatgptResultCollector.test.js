@@ -47,15 +47,30 @@ test('adapter recognizes ChatGPT conversation turns when author roles are omitte
   assert.equal(adapter.findAssistant({ assistantMessageId: 'conversation-turn-2' }), assistant);
 });
 
-test('adapter recovers the latest assistant turn after the content script reloads', () => {
+test('adapter refuses unbound recovery instead of stealing the latest assistant turn', () => {
   const oldAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-2' : null; } };
   const latestAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-4' : null; } };
   const doc = { querySelector() { return null; }, querySelectorAll(selector) { return selector.includes('data-turn="assistant"') ? [oldAssistant, latestAssistant] : []; } };
   const adapter = new ChatGPTAdapter({ documentRef: doc });
   let observed;
+  let error;
   adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
-  adapter.recoverAttempt({ attemptId: 'attempt-1', conversationId: 'conversation-1' }, () => {});
-  assert.deepEqual(observed, { attemptId: 'attempt-1', conversationId: 'conversation-1', assistantMessageId: 'conversation-turn-4' });
+  adapter.recoverAttempt({ attemptId: 'attempt-1', conversationId: 'conversation-1' }, () => {}, (value) => { error = value; });
+  assert.equal(observed, undefined);
+  assert.equal(error.code, 'UNBOUND_RESULT');
+});
+
+test('adapter recovers the bound older assistant instead of stealing a later attempt result', () => {
+  const firstAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-2' : null; } };
+  const secondAssistant = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-4' : null; } };
+  const doc = { querySelectorAll() { return [firstAssistant, secondAssistant]; } };
+  const adapter = new ChatGPTAdapter({ documentRef: doc });
+  let observed;
+  adapter.observeAttempt = (identity) => { observed = identity; return () => {}; };
+
+  adapter.recoverAttempt({ attemptId: 'attempt-1', assistantMessageId: 'conversation-turn-2' }, () => {});
+
+  assert.equal(observed.assistantMessageId, 'conversation-turn-2');
 });
 
 test('adapter pauses after capture failure instead of retrying forever', async () => {
@@ -114,6 +129,39 @@ test('adapter reattaches capture when ChatGPT replaces an assistant turn node wi
   }
 });
 
+test('beginAttempt reports generating once across assistant node replacement', async () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const shell = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-6' : null; } };
+    const replacement = { dataset: { turn: 'assistant' }, getAttribute(name) { return name === 'data-testid' ? 'conversation-turn-6' : null; } };
+    let assistants = [];
+    const root = { querySelectorAll() { return assistants; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    adapter.observeAttempt = (identity, onResult) => {
+      onResult({ status: 'GENERATING', assistantMessageId: identity.assistantMessageId, results: [] });
+      const stop = () => {};
+      stop.root = assistants.at(-1);
+      return stop;
+    };
+    const statuses = [];
+    adapter.beginAttempt({ attemptId: 'attempt-replaced' }, (result) => statuses.push(result.status));
+    assistants = [shell];
+    discover();
+    assistants = [replacement];
+    discover();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
 test('adapter uploads byte references through DataTransfer and exposes authenticated original fetch', async () => {
   const fileInput = { files: [], dispatchEvent() {} }; const button = { disabled: false, click() { this.clicked = true; } };
   const doc = { querySelector(selector) { if (selector.includes('file')) return fileInput; if (selector.includes('send')) return button; return null; }, querySelectorAll() { return []; } };
@@ -161,6 +209,62 @@ test('collector treats blob placeholder images as still generating', () => {
   const generating = extractResultSet(node('assistant-9', [image('blob:https://chatgpt.com/abc')]), { attemptId: 'attempt-9', assistantMessageId: 'assistant-9', resultSetId: 'set-9' });
   assert.equal(generating.status, 'GENERATING');
   assert.deepEqual(generating.results, []);
+});
+
+test('collector waits until an HTTP image node has actually loaded', () => {
+  const pendingImage = image('https://chatgpt.com/backend-api/estuary/content?id=pending');
+  pendingImage.complete = false;
+  pendingImage.naturalWidth = 0;
+  const generating = extractResultSet(
+    node('assistant-pending', [pendingImage]),
+    { attemptId: 'attempt-pending', assistantMessageId: 'assistant-pending', resultSetId: 'set-pending' },
+  );
+  assert.equal(generating.status, 'GENERATING');
+  assert.deepEqual(generating.results, []);
+});
+
+test('adapter reports generating once and polls until an image finishes loading', async () => {
+  const previousObserver = globalThis.MutationObserver;
+  const previousTimeout = globalThis.setTimeout;
+  const previousClearTimeout = globalThis.clearTimeout;
+  const pendingImage = image('https://chatgpt.com/backend-api/estuary/content?id=eventual');
+  pendingImage.complete = false;
+  pendingImage.naturalWidth = 0;
+  const assistant = {
+    dataset: { turn: 'assistant' },
+    getAttribute(name) {
+      if (name === 'data-turn') return 'assistant';
+      if (name === 'data-testid') return 'conversation-turn-10';
+      return null;
+    },
+    querySelectorAll() { return [pendingImage]; },
+  };
+  let poll;
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  globalThis.setTimeout = (callback) => { poll = callback; return 1; };
+  globalThis.clearTimeout = () => {};
+  try {
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelectorAll() { return [assistant]; } } });
+    const statuses = [];
+    adapter.observeAttempt(
+      { attemptId: 'attempt-eventual', assistantMessageId: 'conversation-turn-10' },
+      async (result) => { statuses.push(result.status); },
+    );
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING']);
+    assert.equal(typeof poll, 'function');
+
+    pendingImage.complete = true;
+    pendingImage.naturalWidth = 1536;
+    poll();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(statuses, ['GENERATING', 'RESULT_READY']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+  }
 });
 
 test('collector keeps only http(s) sources when placeholders are mixed in', () => {

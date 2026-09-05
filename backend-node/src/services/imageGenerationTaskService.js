@@ -28,7 +28,7 @@ const TRANSITIONS = {
   preparing: new Set(['queued', 'submitted', 'generating', 'failed', 'cancelled']),
   submitted: new Set(['generating', 'needs_review', 'completed', 'failed', 'cancelled']),
   generating: new Set(['needs_review', 'completed', 'failed', 'cancelled']),
-  needs_review: new Set(['completed', 'failed', 'cancelled']),
+  needs_review: new Set(['generating', 'completed', 'failed', 'cancelled']),
   failed: new Set(['queued', 'preparing', 'cancelled']),
   completed: new Set(),
   cancelled: new Set(),

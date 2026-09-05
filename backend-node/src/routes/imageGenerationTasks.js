@@ -119,6 +119,10 @@ module.exports = (db, log = console) => {
     handle(res, () => queue.skipTask(db, req.params.taskId)));
   router.post('/image-generation-tasks/:taskId/cancel', (req, res) =>
     handle(res, () => queue.cancelTask(db, req.params.taskId)));
+  router.post('/image-generation-tasks/:taskId/begin-result-recovery', (req, res) =>
+    handle(res, () => queue.beginResultRecovery(db, req.params.taskId)));
+  router.post('/image-generation-tasks/:taskId/release-result-recovery', (req, res) =>
+    handle(res, () => queue.releaseResultRecovery(db, req.params.taskId, req.body?.message)));
 
   router.post('/image-generation-tasks/claim-next', (req, res) => handle(res, () => queue.claimNextChatgptTask(db)));
 
@@ -178,14 +182,18 @@ module.exports = (db, log = console) => {
 
   router.post('/image-generation-tasks/:taskId/acknowledge', (req, res) => handle(res, () => db.transaction(() => {
     const task = tasks.getTask(db, req.params.taskId);
-    if (!task || task.status !== 'preparing') throw new Error('Image generation task is not awaiting acknowledgement');
+    if (!task || !['preparing', 'submitted', 'generating'].includes(task.status)) throw new Error('Image generation task is not awaiting acknowledgement');
     const attempt = db.prepare(`SELECT attempt.* FROM external_generation_attempts attempt
       JOIN external_generation_jobs job ON job.id=attempt.job_id
       WHERE attempt.id=? AND job.image_generation_task_id=?`).get(req.body?.attemptId, task.id);
     if (!attempt) throw new Error('Generation attempt does not belong to this task');
-    db.prepare("UPDATE external_generation_attempts SET status='submitted', updated_at=? WHERE id=?")
-      .run(new Date().toISOString(), attempt.id);
-    return tasks.transitionTask(db, task.id, 'submitted');
+    if (attempt.status === 'generating') {
+      return task.status === 'preparing' ? tasks.transitionTask(db, task.id, 'generating') : task;
+    }
+    db.prepare(`UPDATE external_generation_attempts SET
+      status=CASE WHEN status IN ('pending','ready_to_send','submitted') THEN 'submitted' ELSE status END,
+      updated_at=? WHERE id=?`).run(new Date().toISOString(), attempt.id);
+    return task.status === 'preparing' ? tasks.transitionTask(db, task.id, 'submitted') : task;
   })()));
 
   router.post('/image-generation-tasks/:taskId/select-result', (req, res) => handle(res, () => {

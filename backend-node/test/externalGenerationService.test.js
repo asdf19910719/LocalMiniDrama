@@ -90,6 +90,61 @@ describe('external generation service', () => {
     assert.equal(cleared.error_code, null);
   });
 
+  it('mirrors a generating attempt event onto the unified task', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'generating', imageGenerationTaskId: 'task-generating' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status) VALUES ('task-generating', 'submitted')").run();
+    const attempt = createGenerationAttempt(db, job.id);
+
+    recordAttemptEvent(db, attempt.id, {
+      idempotencyKey: 'evt-generating-1',
+      eventType: 'GENERATING',
+      payload: { assistantMessageId: 'assistant-12' },
+    });
+
+    const generating = db.prepare('SELECT status, assistant_message_id FROM external_generation_attempts WHERE id=?').get(attempt.id);
+    assert.equal(generating.status, 'generating');
+    assert.equal(generating.assistant_message_id, 'assistant-12');
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-generating'").get().status, 'generating');
+  });
+
+  it('keeps generating monotonic when it arrives before submitted and binds each attempt identity', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'ordered', imageGenerationTaskId: 'task-ordered' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status) VALUES ('task-ordered', 'preparing')").run();
+    const first = createGenerationAttempt(db, job.id, { status: 'ready_to_send' });
+    const second = createGenerationAttempt(db, job.id, { status: 'ready_to_send' });
+
+    recordAttemptEvent(db, first.id, { idempotencyKey: 'evt-first-generating', eventType: 'GENERATING', payload: { assistantMessageId: 'assistant-first' } });
+    recordAttemptEvent(db, first.id, { idempotencyKey: 'evt-first-submitted-late', eventType: 'SUBMITTED', payload: {} });
+    recordAttemptEvent(db, first.id, { idempotencyKey: 'evt-first-promoted', eventType: 'ASSISTANT_BOUND', payload: { assistantMessageId: 'assistant-first-final' } });
+    recordAttemptEvent(db, second.id, { idempotencyKey: 'evt-second-generating', eventType: 'GENERATING', payload: { assistantMessageId: 'assistant-second' } });
+
+    assert.deepEqual(
+      db.prepare('SELECT status, assistant_message_id FROM external_generation_attempts WHERE id IN (?, ?) ORDER BY sequence').all(first.id, second.id),
+      [
+        { status: 'generating', assistant_message_id: 'assistant-first-final' },
+        { status: 'generating', assistant_message_id: 'assistant-second' },
+      ],
+    );
+    assert.equal(db.prepare("SELECT status FROM image_generation_tasks WHERE id='task-ordered'").get().status, 'generating');
+  });
+
+  it('does not erase a timeout recovery marker when submitted arrives late', () => {
+    db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
+    const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'late submit', imageGenerationTaskId: 'task-timeout' });
+    db.prepare("INSERT INTO image_generation_tasks (id, status, error_code, error_message) VALUES ('task-timeout', 'needs_review', 'result_timeout', '等待超时')").run();
+    const attempt = createGenerationAttempt(db, job.id, { status: 'generating' });
+
+    recordAttemptEvent(db, attempt.id, { idempotencyKey: 'evt-timeout-late-submit', eventType: 'SUBMITTED', payload: {} });
+
+    assert.deepEqual(
+      db.prepare("SELECT status, error_code, error_message FROM image_generation_tasks WHERE id='task-timeout'").get(),
+      { status: 'needs_review', error_code: 'result_timeout', error_message: '等待超时' },
+    );
+    assert.equal(db.prepare('SELECT status FROM external_generation_attempts WHERE id=?').get(attempt.id).status, 'generating');
+  });
+
   it('does not stamp adapter errors onto an already completed task', () => {
     db.exec(`CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, status TEXT, error_code TEXT, error_message TEXT, updated_at TEXT)`);
     const job = createExternalJob(db, { dramaId: 3, site: 'chatgpt', promptSnapshot: 'late-error', imageGenerationTaskId: 'task-done' });

@@ -20,7 +20,12 @@ export function extractResultSet(node, attempt = {}) {
     const sourceUrl = img.currentSrc || img.src || img.getAttribute?.('src');
     // blob:/data: entries are transient placeholders while ChatGPT materializes
     // the original; fetching them fails the allowlist and must not fail the attempt.
-    if (!sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
+    // ChatGPT also assigns the final HTTP URL before the image response is
+    // readable. Starting fetch at that point can hang indefinitely, so an
+    // explicitly incomplete browser image remains a generating placeholder.
+    const pendingLoad = img.complete === false
+      || (typeof img.naturalWidth === 'number' && img.naturalWidth <= 0);
+    if (pendingLoad || !sourceUrl || !/^https?:/i.test(sourceUrl) || seenSources.has(sourceUrl)) return null;
     seenSources.add(sourceUrl);
     const resultIndex = seenSources.size - 1;
     return { resultIndex, sourceUrl, sourceMime: img.dataset?.mime || null, nodeFingerprint: fingerprint(node, actual.messageId, resultIndex, sourceUrl) };

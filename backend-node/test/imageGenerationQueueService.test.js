@@ -10,7 +10,7 @@ function setup() {
     CREATE TABLE image_generation_batches (id TEXT PRIMARY KEY, drama_id INTEGER, resource_scope TEXT, generation_channel TEXT, status TEXT, total_count INTEGER, completed_count INTEGER DEFAULT 0, review_count INTEGER DEFAULT 0, failed_count INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT);
     CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, drama_id INTEGER, target_type TEXT, target_id INTEGER, generation_channel TEXT, provider TEXT, model TEXT, prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT, status TEXT, batch_id TEXT, queue_position INTEGER, image_generation_id INTEGER, external_job_id TEXT, error_code TEXT, error_message TEXT, created_at TEXT, updated_at TEXT, completed_at TEXT);
     CREATE TABLE external_generation_jobs (id TEXT PRIMARY KEY, image_generation_task_id TEXT, drama_id INTEGER);
-    CREATE TABLE external_generation_attempts (id TEXT PRIMARY KEY, job_id TEXT, status TEXT, updated_at TEXT);
+    CREATE TABLE external_generation_attempts (id TEXT PRIMARY KEY, job_id TEXT, status TEXT, assistant_message_id TEXT, updated_at TEXT);
     INSERT INTO dramas VALUES (7, '{"default_image_generation_channel":"chatgpt_web"}', NULL, NULL);`);
   return db;
 }
@@ -96,6 +96,91 @@ it('fails stale preparing tasks and keeps fresh ones active', () => {
   assert.equal(taskService.getTask(db, stale.id).status, 'failed');
   assert.equal(taskService.getTask(db, stale.id).error_code, 'send_timeout');
   assert.equal(result.claimed, false);
+  db.close();
+});
+
+it('releases stale submitted and generating tasks for review before claiming the next queued task', () => {
+  for (const status of ['submitted', 'generating']) {
+    const db = setup();
+    const stale = taskService.createTask(db, {
+      dramaId: 7,
+      targetType: 'character',
+      targetId: 1,
+      generationChannel: 'chatgpt_web',
+      promptSnapshot: status,
+      status,
+      now: '2026-08-28T00:00:00.000Z',
+    });
+    const next = taskService.createTask(db, {
+      dramaId: 7,
+      targetType: 'prop',
+      targetId: 2,
+      generationChannel: 'chatgpt_web',
+      promptSnapshot: 'next',
+      status: 'queued',
+      now: '2026-08-28T00:01:00.000Z',
+    });
+
+    const result = queue.claimNextChatgptTask(db, {
+      now: () => new Date('2026-08-28T00:16:00.001Z'),
+    });
+
+    const expired = taskService.getTask(db, stale.id);
+    assert.equal(expired.status, 'needs_review', `${status} task should release the queue without becoming resendable`);
+    assert.equal(expired.error_code, 'result_timeout');
+    assert.equal(result.claimed, true);
+    assert.equal(result.task.id, next.id);
+    db.close();
+  }
+});
+
+it('reserves timeout recovery only when no other ChatGPT task is active and can release it', () => {
+  const db = setup();
+  const timedOut = taskService.createTask(db, {
+    dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web',
+    promptSnapshot: 'timed out', status: 'submitted',
+  });
+  taskService.transitionTask(db, timedOut.id, 'needs_review', {
+    errorCode: 'result_timeout', errorMessage: '等待超时',
+  });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-timeout', timedOut.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-timeout', timedOut.id, 7);
+  db.prepare('INSERT INTO external_generation_attempts (id, job_id, status, assistant_message_id, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run('attempt-timeout', 'job-timeout', 'generating', 'assistant-timeout', new Date().toISOString());
+  const active = taskService.createTask(db, {
+    dramaId: 7, targetType: 'prop', targetId: 2, generationChannel: 'chatgpt_web',
+    promptSnapshot: 'active', status: 'preparing',
+  });
+
+  assert.throws(() => queue.beginResultRecovery(db, timedOut.id), /已有其他 ChatGPT 生图任务正在执行/);
+  taskService.transitionTask(db, active.id, 'failed');
+
+  const reserved = queue.beginResultRecovery(db, timedOut.id);
+  assert.equal(reserved.status, 'generating');
+  const released = queue.releaseResultRecovery(db, timedOut.id, '恢复捕获失败');
+  assert.equal(released.status, 'needs_review');
+  assert.equal(released.error_code, 'result_timeout');
+  assert.equal(released.error_message, '恢复捕获失败');
+  db.close();
+});
+
+it('refuses timeout recovery without a durable assistant identity after the queue has advanced', () => {
+  const db = setup();
+  const timedOut = taskService.createTask(db, {
+    dramaId: 7, targetType: 'character', targetId: 1, generationChannel: 'chatgpt_web',
+    promptSnapshot: 'unbound', status: 'submitted',
+  });
+  db.prepare('UPDATE image_generation_tasks SET external_job_id=? WHERE id=?').run('job-unbound', timedOut.id);
+  db.prepare('INSERT INTO external_generation_jobs (id, image_generation_task_id, drama_id) VALUES (?, ?, ?)').run('job-unbound', timedOut.id, 7);
+  db.prepare('INSERT INTO external_generation_attempts (id, job_id, status, assistant_message_id, updated_at) VALUES (?, ?, ?, NULL, ?)')
+    .run('attempt-unbound', 'job-unbound', 'generating', new Date().toISOString());
+
+  assert.throws(() => queue.beginResultRecovery(db, timedOut.id), /缺少已绑定的 ChatGPT 回复标识/);
+  taskService.transitionTask(db, timedOut.id, 'needs_review', {
+    errorCode: 'result_timeout', errorMessage: '等待超时',
+  });
+  assert.throws(() => queue.beginResultRecovery(db, timedOut.id), /缺少已绑定的 ChatGPT 回复标识/);
+  assert.equal(taskService.getTask(db, timedOut.id).status, 'needs_review');
   db.close();
 });
 

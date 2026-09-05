@@ -160,8 +160,15 @@
       </div>
       <div class="dimension-presets" aria-label="尺寸快捷值">
         <span>尺寸快捷值</span>
-        <el-button size="small" plain @click="setDimensions(864, 480)">864 × 480</el-button>
-        <el-button size="small" plain @click="setDimensions(1280, 704)">1280 × 704</el-button>
+        <el-button
+          v-for="preset in dimensionPresets"
+          :key="`${preset.width}x${preset.height}`"
+          size="small"
+          plain
+          @click="setDimensions(preset)"
+        >
+          {{ preset.width }} × {{ preset.height }}
+        </el-button>
       </div>
 
       <el-form-item label="连续性方式">
@@ -401,6 +408,8 @@ const panelAPI = {
 
 const {
   form,
+  dimensionPresets,
+  setDimensions,
   generationMode,
   defaultConfig,
   workflowOptions,
@@ -468,11 +477,6 @@ const generationModeLabel = computed(() => ({
   classic: '传统首尾帧模式',
 }[generationMode.value] || '默认模式'))
 const isUniversalStoryboard = computed(() => props.storyboard?.creation_mode === 'universal')
-
-function setDimensions(width, height) {
-  form.width = width
-  form.height = height
-}
 
 function clearAnchor() {
   form.anchorId = ''

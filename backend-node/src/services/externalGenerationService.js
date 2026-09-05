@@ -205,8 +205,37 @@ function recordAttemptEvent(db, attemptId, event = {}) {
         (id, attempt_id, idempotency_key, sequence, event_type, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(eventId, attemptId, idempotencyKey, sequence, eventType, payloadJson, timestamp);
+    if (eventType === 'ASSISTANT_BOUND') {
+      const assistantMessageId = value(payload, 'assistantMessageId', 'assistant_message_id');
+      if (!assistantMessageId) throw new Error('assistantMessageId is required');
+      const conversationId = value(event, 'conversationId', 'conversation_id');
+      db.prepare(`UPDATE external_generation_attempts SET assistant_message_id=?,
+        conversation_id=COALESCE(conversation_id, ?), status='generating', updated_at=?
+        WHERE id=? AND status IN ('pending','ready_to_send','submitted','generating')`)
+        .run(assistantMessageId, conversationId, timestamp, attemptId);
+    }
     const nextStatus = { SUBMITTED: 'submitted', GENERATING: 'generating', RESULT_READY: 'completed', COMPLETED: 'completed', ADAPTER_ERROR: 'needs_review' }[eventType];
-    if (nextStatus) db.prepare('UPDATE external_generation_attempts SET status=?, updated_at=? WHERE id=?').run(nextStatus, timestamp, attemptId);
+    if (nextStatus) {
+      if (eventType === 'SUBMITTED') {
+        db.prepare(`UPDATE external_generation_attempts SET
+          status=CASE WHEN status IN ('pending','ready_to_send','submitted') THEN 'submitted' ELSE status END,
+          updated_at=? WHERE id=?`).run(timestamp, attemptId);
+      } else if (eventType === 'GENERATING') {
+        const assistantMessageId = value(payload, 'assistantMessageId', 'assistant_message_id');
+        const conversationId = value(event, 'conversationId', 'conversation_id');
+        db.prepare(`UPDATE external_generation_attempts SET
+          status=CASE WHEN status IN ('pending','ready_to_send','submitted','generating') THEN 'generating' ELSE status END,
+          assistant_message_id=COALESCE(assistant_message_id, ?),
+          conversation_id=COALESCE(conversation_id, ?), updated_at=? WHERE id=?`)
+          .run(assistantMessageId, conversationId, timestamp, attemptId);
+      } else if (eventType === 'ADAPTER_ERROR') {
+        db.prepare(`UPDATE external_generation_attempts SET
+          status=CASE WHEN status='completed' THEN status ELSE 'needs_review' END,
+          updated_at=? WHERE id=?`).run(timestamp, attemptId);
+      } else {
+        db.prepare('UPDATE external_generation_attempts SET status=?, updated_at=? WHERE id=?').run(nextStatus, timestamp, attemptId);
+      }
+    }
     // Surface capture errors on the unified task so the workbench drawer can
     // show them; healthy lifecycle events clear any previously stored error.
     if (nextStatus) {
@@ -223,8 +252,19 @@ function recordAttemptEvent(db, attemptId, event = {}) {
               error_code=?, error_message=?, updated_at=? WHERE id=?
               AND status IN ('preparing', 'submitted', 'generating')`)
             .run(errorCode, errorMessage, timestamp, linked.task_id);
+        } else if (eventType === 'GENERATING') {
+          db.prepare(`UPDATE image_generation_tasks SET status='generating',
+              error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
+              AND status IN ('preparing','submitted','generating')`)
+            .run(timestamp, linked.task_id);
+        } else if (eventType === 'SUBMITTED') {
+          db.prepare(`UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
+            AND (status IN ('preparing','submitted','generating')
+              OR (status='needs_review' AND COALESCE(error_code, '')<>'result_timeout'))`)
+            .run(timestamp, linked.task_id);
         } else {
-          db.prepare('UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?')
+          db.prepare(`UPDATE image_generation_tasks SET error_code=NULL, error_message=NULL, updated_at=? WHERE id=?
+            AND status IN ('preparing','submitted','generating')`)
             .run(timestamp, linked.task_id);
         }
       }

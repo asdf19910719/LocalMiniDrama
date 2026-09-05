@@ -18,7 +18,7 @@
       <el-alert v-if="task.status === 'queued'" type="info" title="已加入队列，将自动依次发送" show-icon />
       <el-alert v-if="task.status === 'submitted' || task.status === 'generating'" type="info" title="ChatGPT 已接收任务，正在等待生成结果" show-icon />
       <el-button
-        v-if="task.status === 'submitted' || task.status === 'generating'"
+        v-if="canRecover"
         :loading="sending"
         @click="$emit('recover', task)"
       >
@@ -44,14 +44,20 @@
 import { computed, onMounted } from 'vue'
 import ImageGenerationEnvironmentStatus from './ImageGenerationEnvironmentStatus.vue'
 import { useImageGenerationStore } from '@/stores/imageGenerationStore'
+import { shouldRecoverImageGenerationTask } from '@/utils/imageGenerationTaskState'
 const props = defineProps({ visible: Boolean, task: Object, results: { type: Array, default: () => [] }, sending: Boolean, environment: { type: Object, default: null }, environmentChecking: Boolean })
 defineEmits(['close', 'send', 'recover', 'requeue', 'select', 'check-environment'])
 const store = useImageGenerationStore()
 const autoSelect = computed(() => store.autoSelect)
+const canRecover = computed(() => shouldRecoverImageGenerationTask(props.task))
 onMounted(() => { store.loadAutoSelect().catch(() => {}) })
 function onAutoSelect(value) { store.setAutoSelect(value).catch(() => {}) }
 const labels = { draft: '待确认', queued: '排队中', preparing: '准备中', submitted: '已发送', generating: '生成中', needs_review: '请选择图片', completed: '已完成', failed: '失败', cancelled: '已取消' }
-const statusText = computed(() => labels[props.task?.status] || props.task?.status || '')
+const statusText = computed(() => (
+  props.task?.status === 'needs_review' && props.task?.error_code === 'result_timeout'
+    ? '等待恢复'
+    : labels[props.task?.status] || props.task?.status || ''
+))
 </script>
 
 <style scoped>

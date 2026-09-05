@@ -1,5 +1,27 @@
 export async function captureResults({ adapter, chromeApi, attempt, resultSet }) {
   try {
+    if (resultSet.status === 'GENERATING') {
+      // Progress reporting is best-effort. A transient backend/status failure
+      // must never tear down the observer that will later capture the image.
+      try {
+        await chromeApi.runtime.sendMessage({
+          action: 'attemptGenerating',
+          payload: {
+            attemptId: attempt.attemptId,
+            conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
+            assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+          },
+        });
+      } catch (_) {}
+      return;
+    }
+    const assistantMessageId = resultSet.assistantMessageId || attempt.assistantMessageId || null;
+    const conversationId = attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null;
+    const bound = await chromeApi.runtime.sendMessage({
+      action: 'attemptBound',
+      payload: { attemptId: attempt.attemptId, conversationId, assistantMessageId },
+    });
+    if (!bound?.ok) throw new Error(bound?.error || 'ATTEMPT_IDENTITY_NOT_ACKNOWLEDGED');
     for (const result of resultSet.results || []) {
       const original = await adapter.fetchOriginal(result);
       const response = await chromeApi.runtime.sendMessage({
@@ -8,8 +30,8 @@ export async function captureResults({ adapter, chromeApi, attempt, resultSet })
           ...result,
           attemptId: attempt.attemptId,
           resultSetId: resultSet.resultSetId,
-          conversationId: attempt.conversationId || adapter.getConversationIdentity?.()?.conversationId || null,
-          assistantMessageId: resultSet.assistantMessageId || attempt.assistantMessageId || null,
+          conversationId,
+          assistantMessageId,
           sourceMime: original.mime,
           bytes: original.bytes,
         },

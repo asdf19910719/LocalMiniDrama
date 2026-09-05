@@ -32,7 +32,13 @@ test('result capture binds the discovered assistant identity and waits for impor
 
   await Promise.resolve();
   assert.equal(settled, false);
+  assert.equal(messages[0].action, 'attemptBound');
   assert.equal(messages[0].payload.assistantMessageId, 'assistant-9');
+  acknowledge({ ok: true });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(messages[1].action, 'capturedResult');
+  assert.equal(messages[1].payload.assistantMessageId, 'assistant-9');
   acknowledge({ ok: true, result: { resultId: 'result-1' } });
   await pending;
   assert.equal(settled, true);
@@ -77,6 +83,57 @@ test('result capture reports source or import failures to the background', async
   assert.equal(messages.at(-1).action, 'adapterError');
   assert.equal(messages.at(-1).payload.attemptId, 'attempt-3');
   assert.match(messages.at(-1).payload.message, /ORIGINAL_FETCH_FAILED:403/);
+});
+
+test('result capture reports the generating state before an image is ready', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) { messages.push(message); return { ok: true }; } } };
+  await captureResults({
+    adapter: {},
+    chromeApi,
+    attempt: { attemptId: 'attempt-generating', conversationId: 'conversation-1' },
+    resultSet: { status: 'GENERATING', assistantMessageId: 'assistant-12', results: [] },
+  });
+  assert.deepEqual(messages, [{
+    action: 'attemptGenerating',
+    payload: {
+      attemptId: 'attempt-generating',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'assistant-12',
+    },
+  }]);
+});
+
+test('a rejected generating status update does not abort later result capture', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) { messages.push(message); return { ok: false, error: 'backend unavailable' }; } } };
+  await captureResults({
+    adapter: {},
+    chromeApi,
+    attempt: { attemptId: 'attempt-progress-failure', conversationId: 'conversation-1' },
+    resultSet: { status: 'GENERATING', assistantMessageId: 'assistant-13', results: [] },
+  });
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'attemptGenerating');
+});
+
+test('result capture confirms the promoted assistant identity before importing', async () => {
+  const messages = [];
+  const chromeApi = { runtime: { async sendMessage(message) { messages.push(message); return { ok: true }; } } };
+  const adapter = { async fetchOriginal() { return { bytes: Uint8Array.from([1]), mime: 'image/png' }; } };
+
+  await captureResults({
+    adapter,
+    chromeApi,
+    attempt: { attemptId: 'attempt-promoted', assistantMessageId: 'assistant-temp' },
+    resultSet: {
+      status: 'RESULT_READY', resultSetId: 'set-promoted', assistantMessageId: 'assistant-final',
+      results: [{ resultIndex: 0, sourceUrl: 'https://chatgpt.com/final.png' }],
+    },
+  });
+
+  assert.deepEqual(messages.map((message) => message.action), ['attemptBound', 'capturedResult']);
+  assert.equal(messages[0].payload.assistantMessageId, 'assistant-final');
 });
 
 test('provider bridge installs one runtime listener and never forwards page messages', () => {

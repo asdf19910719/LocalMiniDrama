@@ -8,6 +8,7 @@ import {
   resolveChatGPTPrepareAction,
   shouldPollImageGenerationTask,
   shouldReattachImageGenerationTask,
+  shouldRecoverImageGenerationTask,
 } from '../src/utils/imageGenerationTaskState.js'
 import { clearImageGenerationEnvironmentCache, runImageGenerationEnvironmentCheck } from '../src/utils/imageGenerationEnvironment.js'
 
@@ -26,11 +27,20 @@ test('flattens imported external results into drawer candidates', () => {
   assert.deepEqual(task.candidates.map((item) => item.id), ['result-1', 'result-2'])
 })
 
-test('polls only ChatGPT tasks waiting for an imported result', () => {
+test('polls only active ChatGPT tasks waiting for a result', () => {
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'submitted' }), true)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'generating' }), true)
+  assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'result_timeout' }), false)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review' }), false)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'api', status: 'submitted' }), false)
+})
+
+test('offers result recovery for active and timed-out ChatGPT tasks only', () => {
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'submitted' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'generating' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'result_timeout' }), true)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review' }), false)
+  assert.equal(shouldRecoverImageGenerationTask({ generation_channel: 'api', status: 'submitted' }), false)
 })
 
 test('summary refresh cannot replace a task that was just created by the user', () => {

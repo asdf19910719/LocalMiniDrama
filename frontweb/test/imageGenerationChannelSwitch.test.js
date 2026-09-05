@@ -28,7 +28,8 @@ test('views persist the selected default channel', () => {
 test('store exposes setDefaultChannel through the api', () => {
   const store = fs.readFileSync(path.join(root, 'src/stores/imageGenerationStore.js'), 'utf8')
   assert.match(store, /async function setDefaultChannel\(channel\)/)
-  assert.match(store, /imageGenerationTaskAPI\.setDefault\(dramaId\.value, channel\)/)
+  assert.match(store, /const requestedChannel = normalizeImageGenerationChannel\(channel\)/)
+  assert.match(store, /imageGenerationTaskAPI\.setDefault\(dramaId\.value, requestedChannel\)/)
   const api = fs.readFileSync(path.join(root, 'src/api/imageGenerationTasks.js'), 'utf8')
   assert.match(api, /setDefault\(dramaId, channel\)/)
 })

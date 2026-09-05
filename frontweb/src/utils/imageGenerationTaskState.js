@@ -14,6 +14,13 @@ export function shouldPollImageGenerationTask(task) {
   return task?.generation_channel === 'chatgpt_web' && POLLING_STATUSES.has(task?.status)
 }
 
+export function shouldRecoverImageGenerationTask(task) {
+  return task?.generation_channel === 'chatgpt_web' && (
+    POLLING_STATUSES.has(task?.status)
+    || (task?.status === 'needs_review' && task?.error_code === 'result_timeout')
+  )
+}
+
 export function shouldReattachImageGenerationTask({ currentTaskId, activeTaskId, allowReattach = true }) {
   return Boolean(allowReattach && activeTaskId && currentTaskId !== activeTaskId)
 }
