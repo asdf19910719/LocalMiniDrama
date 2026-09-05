@@ -806,6 +806,53 @@ test('beginAttempt waits past transient request placeholders for the real assist
   }
 });
 
+test('beginAttempt skips the duplicate wrapper for its anchored user and binds the following assistant', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const turn = (role, id, images = []) => ({
+      getAttribute(name) {
+        if (name === 'data-turn') return role;
+        if (name === 'data-turn-id') return id;
+        return null;
+      },
+      querySelectorAll(selector) { return selector === 'img' ? images : []; },
+    });
+    const generated = image('https://chatgpt.com/backend-api/estuary/content?id=completed-transient');
+    generated.complete = true;
+    generated.naturalWidth = 1024;
+    generated.naturalHeight = 1536;
+    const user = turn('user', 'user-anchor');
+    const duplicateUserWrapper = {
+      getAttribute(name) {
+        if (name === 'data-message-author-role') return 'user';
+        if (name === 'data-message-id') return 'user-anchor';
+        return null;
+      },
+      querySelectorAll() { return []; },
+    };
+    const assistant = turn('assistant', 'request-conversation-1-0', [generated]);
+    let nodes = [];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const observed = [];
+    adapter.observeAttempt = (identity) => { observed.push(identity.assistantMessageId); return () => {}; };
+
+    adapter.beginAttempt({ attemptId: 'attempt-completed-transient' }, () => {});
+    nodes = [user, duplicateUserWrapper, assistant];
+    discover();
+
+    assert.deepEqual(observed, ['request-conversation-1-0']);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
 test('beginAttempt binds the newly submitted user UUID before the assistant reply appears', () => {
   const previousObserver = globalThis.MutationObserver;
   let discover;
@@ -838,6 +885,37 @@ test('beginAttempt binds the newly submitted user UUID before the assistant repl
       userMessageId: 'new-user-uuid',
       results: [],
     }]);
+  } finally {
+    globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('beginAttempt ignores rerendered historical users when binding the newly submitted user', () => {
+  const previousObserver = globalThis.MutationObserver;
+  let discover;
+  globalThis.MutationObserver = class {
+    constructor(callback) { discover = callback; }
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    const user = (id) => ({
+      getAttribute(name) {
+        if (name === 'data-turn') return 'user';
+        if (name === 'data-turn-id') return id;
+        return null;
+      },
+    });
+    let nodes = [user('historical-user')];
+    const root = { querySelectorAll() { return nodes; } };
+    const adapter = new ChatGPTAdapter({ documentRef: { querySelector() { return root; } } });
+    const results = [];
+
+    adapter.beginAttempt({ attemptId: 'attempt-rerender' }, (result) => results.push(result));
+    nodes = [user('historical-user'), user('fresh-user')];
+    discover();
+
+    assert.equal(results[0]?.userMessageId, 'fresh-user');
   } finally {
     globalThis.MutationObserver = previousObserver;
   }

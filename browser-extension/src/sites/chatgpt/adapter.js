@@ -224,6 +224,8 @@ export class ChatGPTAdapter {
     const existingTurns = [...(root?.querySelectorAll?.(selectors.turn) || [])];
     const known = new Set(existingNodes
       .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
+    const preExistingTurnIds = new Set(existingTurns
+      .map((node) => messageIdentity(node)?.messageId).filter(Boolean));
     const preExisting = new WeakSet(existingNodes);
     const preExistingTurns = new WeakSet(existingTurns);
     if (identity?.assistantMessageId) return this.observeAttempt(identity, onResult, onError);
@@ -242,7 +244,8 @@ export class ChatGPTAdapter {
     const discover = () => {
       if (!activeUserId) {
         const newUser = [...(root.querySelectorAll?.(selectors.turn) || [])]
-          .filter((node) => !preExistingTurns.has(node) && isUserTurn(node))
+          .filter((node) => !preExistingTurns.has(node) && isUserTurn(node)
+            && !preExistingTurnIds.has(messageIdentity(node)?.messageId))
           .map((node) => messageIdentity(node)?.messageId)
           .find((messageId) => messageId && !isTransientAssistantIdentity(messageId));
         if (newUser) {
@@ -259,7 +262,10 @@ export class ChatGPTAdapter {
         if (anchorIndex >= 0) {
           for (let index = anchorIndex + 1; index < allTurns.length; index += 1) {
             const candidate = allTurns[index];
-            if (isUserTurn(candidate)) break;
+            if (isUserTurn(candidate)) {
+              if (identityMatches(messageIdentity(candidate), { messageId: activeUserId })) continue;
+              break;
+            }
             if (isAssistantTurn(candidate)) { candidateNodes.push(candidate); break; }
           }
         }
