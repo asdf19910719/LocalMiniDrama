@@ -84,6 +84,18 @@ function registryFor(workflowPath, workflowSha256) {
 }
 
 describe('Director workflow registry', () => {
+  it('hashes equivalent JSON identically across LF and CRLF checkouts', () => {
+    const { sha256File } = loadSut();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aistory-registry-newlines-'));
+    const lfPath = path.join(root, 'workflow-lf.json');
+    const crlfPath = path.join(root, 'workflow-crlf.json');
+    const lines = ['{', '  "prompt": {}', '}', ''];
+    fs.writeFileSync(lfPath, lines.join('\n'));
+    fs.writeFileSync(crlfPath, lines.join('\r\n'));
+
+    assert.equal(sha256File(crlfPath), sha256File(lfPath));
+  });
+
   it('selects verified workflows and rejects configured by default', () => {
     const { selectWorkflow } = loadSut();
     const { workflowPath } = writeWorkflowFixture();

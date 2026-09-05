@@ -4,7 +4,7 @@
 
 **Goal:** Make local `main` contain the latest verified production code while deliberately excluding all `comfyui-workflow-switching*` and `dreamina-cli-image-provider` branches.
 
-**Architecture:** Preserve the dirty source checkout by committing only product source, tests, migrations, configuration, and required documentation on `codex/cloud-video-upscale`. Integrate from a separate `main` worktree, then add the isolated ChatGPT image fix and Director default-workflow fix. Treat patch-equivalent H3 Skill Agent history as already integrated and verify H3 TE-Speed behavior on the final tree.
+**Architecture:** Preserve the dirty source checkout by committing only product source, tests, migrations, configuration, and required documentation on `codex/cloud-video-upscale`. Integrate from a separate `main` worktree. Where a newer consolidated commit already contains an older branch's behavior, verify that behavior and use an `ours` merge to record ancestry without replacing the newer implementation or importing benchmark artifacts.
 
 **Tech Stack:** Git worktrees, Node.js 22 test runner, Vue 3/Vite, JSON Schema/AJV.
 
@@ -28,7 +28,7 @@
 - Commit: current AV/upscale/TE-Speed plans, specifications, runbook, and changelog.
 - Exclude: `.tmp-*`, `.worktree-deps-*`, `data/`, `exports/`, `frontweb/*.log`, benchmark image/report directories, and root scratch files.
 
-- [ ] **Step 1: Audit candidate files for credentials and machine-only output**
+- [x] **Step 1: Audit candidate files for credentials and machine-only output**
 
 Run:
 
@@ -37,7 +37,7 @@ git diff -- backend-node/configs/config.yaml
 git status --short --untracked-files=normal
 ```
 
-- [ ] **Step 2: Stage only the product paths and inspect the index**
+- [x] **Step 2: Stage only the product paths and inspect the index**
 
 Run:
 
@@ -47,7 +47,7 @@ git diff --cached --name-status
 git diff --cached --check
 ```
 
-- [ ] **Step 3: Run both test suites and the frontend build**
+- [x] **Step 3: Run both test suites and the frontend build**
 
 Run:
 
@@ -57,7 +57,7 @@ cd ../frontweb; npx -y node@22 --test test/*.test.js
 npm run build
 ```
 
-- [ ] **Step 4: Commit the captured implementation**
+- [x] **Step 4: Commit the captured implementation**
 
 ```powershell
 git commit -m "feat: integrate production video and AV pipelines"
@@ -70,14 +70,14 @@ git commit -m "feat: integrate production video and AV pipelines"
 - Modify: `frontweb/src/utils/directorPersistence.js`
 - Modify: `frontweb/test/directorPersistence.test.js`
 
-- [ ] **Step 1: Run the focused test in the existing worktree**
+- [x] **Step 1: Run the focused test in the existing worktree**
 
 ```powershell
 cd E:/AI/references/LocalMiniDrama/.worktrees/external-web-single-session/frontweb
 npx -y node@22 --test test/directorPersistence.test.js
 ```
 
-- [ ] **Step 2: Commit the two-file fallback fix**
+- [x] **Step 2: Commit the two-file fallback fix**
 
 ```powershell
 git add -- frontweb/src/utils/directorPersistence.js frontweb/test/directorPersistence.test.js
@@ -88,32 +88,43 @@ git commit -m "fix: default blank Director workflow selection"
 
 **Files:** Git history and conflict resolutions only.
 
-- [ ] **Step 1: Verify `.worktrees` is ignored and create the main worktree**
+- [x] **Step 1: Verify `.worktrees` is ignored and create the main worktree**
 
 ```powershell
 git check-ignore .worktrees
 git worktree add .worktrees/main-integration main
 ```
 
-- [ ] **Step 2: Merge the current production branch**
+- [x] **Step 2: Merge the current production branch**
 
 ```powershell
 git -C .worktrees/main-integration merge --no-ff codex/cloud-video-upscale
 ```
 
-- [ ] **Step 3: Cherry-pick the unified ChatGPT image fix**
+- [x] **Step 3: Verify and record the superseded unified ChatGPT image fix**
 
 ```powershell
-git -C .worktrees/main-integration cherry-pick 15a5424
+cd .worktrees/main-integration/frontweb
+npx -y node@22 --test test/imageGenerationUi.test.js test/imageGenerationStore.test.js test/imageGenerationTaskState.test.js
+git -C .. merge -s ours --no-ff feat/unified-chatgpt-image-generation
 ```
 
-- [ ] **Step 4: Cherry-pick the Director fallback fix from Task 2**
+- [x] **Step 4: Verify and record the Director fallback fix from Task 2**
 
 ```powershell
-git -C .worktrees/main-integration cherry-pick feature/external-web-single-session
+cd .worktrees/main-integration/frontweb
+npx -y node@22 --test test/directorPersistence.test.js
+git -C .. merge -s ours --no-ff local-external/external-web-single-session
 ```
 
-- [ ] **Step 5: Confirm excluded branches are not ancestors of main**
+- [x] **Step 5: Record the integrated H3 histories without replacing the consolidated tree**
+
+```powershell
+git -C .worktrees/main-integration merge -s ours --no-ff codex/h3-te-speed
+git -C .worktrees/main-integration merge -s ours --no-ff feature/h3-skill-agent
+```
+
+- [x] **Step 6: Confirm excluded branches are not ancestors of main**
 
 ```powershell
 git -C .worktrees/main-integration merge-base --is-ancestor codex/comfyui-workflow-switching-v2 main
@@ -127,14 +138,14 @@ Each command must return nonzero.
 
 **Files:** Update this plan status only after verification.
 
-- [ ] **Step 1: Run complete backend tests on final main**
+- [x] **Step 1: Run complete backend tests on final main**
 
 ```powershell
 cd .worktrees/main-integration/backend-node
 npx -y node@22 --test test/*.test.js
 ```
 
-- [ ] **Step 2: Run complete frontend tests and build on final main**
+- [x] **Step 2: Run complete frontend tests and build on final main**
 
 ```powershell
 cd ../frontweb
@@ -142,7 +153,7 @@ npx -y node@22 --test test/*.test.js
 npm run build
 ```
 
-- [ ] **Step 3: Validate repository state and branch containment**
+- [x] **Step 3: Validate repository state and branch containment**
 
 ```powershell
 git diff --check
@@ -151,6 +162,16 @@ git branch --no-merged main
 git log --oneline --decorate -10 main
 ```
 
-- [ ] **Step 4: Record final commit IDs and keep all user-owned worktrees intact**
+- [x] **Step 4: Record final commit IDs and keep all user-owned worktrees intact**
 
 No worktree or branch is deleted by this plan.
+
+## Completion Record
+
+- Production snapshot: `93f022a feat: integrate production video and AV pipelines`
+- Production merge into `main`: `599b580 Merge branch 'codex/cloud-video-upscale'`
+- Superseded histories recorded with tree-preserving `ours` merges: unified ChatGPT image generation, H3 TE-Speed, H3 Skill Agent, and the external Director fallback fix.
+- Final verification discovered and fixed a Windows worktree regression: workflow SHA-256 validation now normalizes line endings before hashing, with an LF/CRLF regression test.
+- Final backend tests, frontend tests, and `npm run build` passed on local `main` using Node.js 22 for the test suites.
+- `git branch -a --no-merged main` contains only the three deliberately excluded branches: `codex/comfyui-workflow-switching-v2`, `feat/comfyui-workflow-switching`, and `feature/dreamina-cli-image-provider`.
+- Local runtime data, exports, dependency mirrors, logs, benchmark artifacts, other worktrees, and all existing branches were preserved.

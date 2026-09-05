@@ -6,7 +6,7 @@
       "label": "官方多参考图（Sage）",
       "status": "verified",
       "workflowPath": "workflows/minimax_h3_director_r2v.json",
-      "workflowSha256": "sha256:ccefbbb04b9c856475b4fac7a2bcb2c058829d9568eacadf01486c8c44c55d6e",
+      "workflowSha256": "sha256:641b607a469a14f5e067a5dc793b13fbc6979d5a89486f92dc72c55521121cf7",
       "family": "h3_director",
       "adapter": "h3_director_r2v",
       "adapterVersion": "v2",
@@ -279,7 +279,7 @@
       "id": "h3-continuity-v1",
       "status": "verified",
       "workflowPath": "E:/AI/h3_director_test/workflow_api.json",
-      "workflowSha256": "sha256:1c9943678306bf50b29fe1171b6623058c9d70ecab37b90a7e20907d24779352",
+      "workflowSha256": "sha256:a600285c3bac9c65da2e1cec7b90ce88a0840470fbfce987d8a62ff945c8a8de",
       "requiredNodes": [
         "UNETLoader",
         "CLIPLoader",

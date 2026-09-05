@@ -26,7 +26,8 @@ class WorkflowRegistryError extends Error {
 }
 
 function sha256File(filePath) {
-  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
+  const normalized = fs.readFileSync(filePath, 'utf8').replace(/\r\n?/g, '\n');
+  return `sha256:${crypto.createHash('sha256').update(normalized, 'utf8').digest('hex')}`;
 }
 
 function normalizeHash(value) {
