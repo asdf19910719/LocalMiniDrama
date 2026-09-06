@@ -20,6 +20,9 @@ describe('episode package migration', () => {
     assert.ok(cols('storyboards').includes('is_primary'));
     assert.ok(cols('storyboards').includes('production_metadata'));
     assert.ok(cols('scenes').includes('atmosphere'));
+    assert.ok(cols('scenes').includes('description'));
+    assert.ok(cols('episode_imports').includes('import_report'));
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_episode_imports_episode_time'").get());
     assert.ok(cols('storyboard_h3_prompt_drafts').includes('coverage_manifest'));
     assert.ok(cols('storyboard_h3_prompt_drafts').includes('semantic_review_status'));
     assert.ok(cols('storyboard_h3_prompt_drafts').includes('semantic_review_confirmed'));

@@ -229,6 +229,7 @@ function ensureAllColumns(database) {
     { name: 'episode_id',       type: 'INTEGER' },
     { name: 'location',         type: 'TEXT' },
     { name: 'time',             type: 'TEXT' },
+    { name: 'description',      type: 'TEXT' },
     { name: 'prompt',           type: 'TEXT' },
     { name: 'polished_prompt',  type: 'TEXT' },  // 文字AI润色后的完整四视图图片提示词，生图时直接使用
     { name: 'image_url',        type: 'TEXT' },
@@ -650,8 +651,13 @@ function ensureAllColumns(database) {
       normalized_json TEXT,
       match_decisions TEXT,
       generator_metadata TEXT,
+      import_report TEXT,
       imported_at TEXT
     )`);
+    ensureColumns(database, 'episode_imports', [
+      { name: 'import_report', type: 'TEXT' },
+    ]);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_episode_imports_episode_time ON episode_imports(episode_id, imported_at DESC, id DESC)');
   } catch (_) {}
 
   // --- 单集制作包导入:H3 提示词草稿表 ---
