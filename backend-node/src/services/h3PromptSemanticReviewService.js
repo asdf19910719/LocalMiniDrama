@@ -2,26 +2,41 @@ const aiClient = require('./aiClient');
 const { safeParseAIJSON } = require('../utils/safeJson');
 
 function buildCoverageEvents(context = {}) {
-  if (Array.isArray(context.audio?.events) && context.audio.events.length) {
-    return context.audio.events.map((event, index) => ({
+  const explicitEvents = Array.isArray(context.audio?.events) && context.audio.events.length
+    ? context.audio.events.map((event, index) => ({
       id: event.id || `audio_${index + 1}`,
       source_text: String(event.source_text || ''),
       target_shot: Number(event.target_shot || 1),
       target_field: event.target_field || 'detailed_description',
-    }));
+    }))
+    : null;
+  const events = explicitEvents || [];
+  const eventIds = new Set(events.map((event) => String(event.id)));
+  const appendUnique = (event) => {
+    const eventId = String(event.id);
+    if (eventIds.has(eventId)) return;
+    eventIds.add(eventId);
+    events.push(event);
+  };
+
+  if (!explicitEvents) {
+    for (const [index, value] of (context.audio?.ambience || []).entries()) {
+      appendUnique({ id: `ambience_${index + 1}`, source_text: String(value), target_shot: 1, target_field: 'overall_soundscape' });
+    }
+    for (const [index, value] of (context.audio?.sound_effects || []).entries()) {
+      appendUnique({ id: `sfx_${index + 1}`, source_text: String(value), target_shot: 1, target_field: 'detailed_description+overall_soundscape' });
+    }
+    if (context.audio?.diegetic_music) {
+      appendUnique({ id: 'diegetic_music_1', source_text: JSON.stringify(context.audio.diegetic_music), target_shot: 1, target_field: 'detailed_description' });
+    }
   }
-  const events = [];
-  for (const [index, value] of (context.audio?.ambience || []).entries()) {
-    events.push({ id: `ambience_${index + 1}`, source_text: String(value), target_shot: 1, target_field: 'overall_soundscape' });
-  }
-  for (const [index, value] of (context.audio?.sound_effects || []).entries()) {
-    events.push({ id: `sfx_${index + 1}`, source_text: String(value), target_shot: 1, target_field: 'detailed_description+overall_soundscape' });
-  }
-  if (context.audio?.diegetic_music) {
-    events.push({ id: 'diegetic_music_1', source_text: JSON.stringify(context.audio.diegetic_music), target_shot: 1, target_field: 'detailed_description' });
-  }
-  if (context.transition?.audio_bridge && context.transition.audio_bridge.mode !== 'none') {
-    events.push({ id: 'transition_audio_bridge_1', source_text: JSON.stringify(context.transition.audio_bridge), target_shot: 1, target_field: 'detailed_description' });
+  const audioBridge = context.transition?.audio_bridge;
+  const audioBridgeMode = String(audioBridge?.mode || 'none').trim().toLowerCase();
+  const bridgeDurationMs = Number(audioBridge?.duration_ms);
+  const hasBridgeDuration = Number.isFinite(bridgeDurationMs) && bridgeDurationMs > 0;
+  const hasBridgeDescription = Boolean(String(audioBridge?.description || '').trim());
+  if (audioBridge && audioBridgeMode !== 'none' && (hasBridgeDuration || hasBridgeDescription)) {
+    appendUnique({ id: 'transition_audio_bridge_1', source_text: JSON.stringify(audioBridge), target_shot: 1, target_field: 'detailed_description' });
   }
   const plan = context.episode?.audio_plan || {};
   const cue = context.audio?.music_cue || {};
@@ -30,7 +45,7 @@ function buildCoverageEvents(context = {}) {
       ? cue.prompt
       : plan.bgm.prompt;
     if (prompt) {
-      events.push({
+      appendUnique({
         id: 'non_diegetic_music_1',
         source_text: String(prompt),
         target_shot: 1,

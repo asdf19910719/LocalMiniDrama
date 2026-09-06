@@ -2,7 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { validateH3PromptSemantics } = require('../src/services/h3PromptSemanticValidator');
-const { createH3PromptSemanticReviewService } = require('../src/services/h3PromptSemanticReviewService');
+const {
+  buildCoverageEvents,
+  createH3PromptSemanticReviewService,
+} = require('../src/services/h3PromptSemanticReviewService');
+const { normalizeStoryboardTransition } = require('../src/services/storyboardAvContractService');
 
 function makeContext({
   bgmMode = 'none',
@@ -158,6 +162,65 @@ test('per-segment music intent participates in cross-language coverage review', 
   assert.equal(review.manifest.events[0].target_field, 'non_diegetic_music');
 });
 
+test('zero-duration default transition bridge does not require H3 semantic coverage', () => {
+  const context = makeContext();
+  context.transition = normalizeStoryboardTransition('硬切');
+
+  assert.deepEqual(buildCoverageEvents(context), []);
+});
+
+test('positive-duration transition bridge remains an H3 semantic coverage event', () => {
+  const context = makeContext();
+  context.transition = {
+    audio_bridge: { mode: 'carry', duration_ms: 300 },
+  };
+
+  assert.equal(
+    buildCoverageEvents(context).some((event) => event.id === 'transition_audio_bridge_1'),
+    true,
+  );
+});
+
+test('positive-duration transition bridge remains covered beside structured audio events', () => {
+  const context = makeContext({
+    sounds: [{ id: 'sfx_1', source_text: '三下敲门声', target_shot: 1 }],
+  });
+  context.transition = {
+    audio_bridge: { mode: 'carry', duration_ms: 300 },
+  };
+
+  assert.deepEqual(
+    buildCoverageEvents(context).map((event) => event.id),
+    ['sfx_1', 'transition_audio_bridge_1'],
+  );
+});
+
+test('derived transition bridge does not duplicate an explicit event with the same id', () => {
+  const context = makeContext({
+    sounds: [{ id: 'transition_audio_bridge_1', source_text: '房间底噪延续', target_shot: 1 }],
+  });
+  context.transition = {
+    audio_bridge: { mode: 'carry', duration_ms: 300 },
+  };
+
+  assert.equal(
+    buildCoverageEvents(context).filter((event) => event.id === 'transition_audio_bridge_1').length,
+    1,
+  );
+});
+
+test('case-insensitive none transition bridge never creates a coverage event', () => {
+  const context = makeContext();
+  context.transition = {
+    audio_bridge: { mode: ' NONE ', duration_ms: 300 },
+  };
+
+  assert.equal(
+    buildCoverageEvents(context).some((event) => event.id === 'transition_audio_bridge_1'),
+    false,
+  );
+});
+
 test('reference labels must be supplied and appear in definitions plus body', () => {
   const context = makeContext({
     references: [{ slot: 1, entity_name: 'Lin Xia', reference_role: 'character_identity', image_url: '/lin.png' }],
@@ -169,6 +232,25 @@ test('reference labels must be supplied and appear in definitions plus body', ()
   const result = validateH3PromptSemantics(dangling, context);
   assert.equal(result.ok, false);
   assert.match(JSON.stringify(result.errors), /Video 9.*no matching provided reference asset/);
+});
+
+test('reference labels remain valid when Chinese metadata is described semantically in English', () => {
+  const context = makeContext({
+    references: [{
+      slot: 1,
+      entity_name: '酒店走廊·凌晨安静状态',
+      reference_role: '环境定性参考',
+      image_url: '/hotel-corridor.png',
+    }],
+  });
+  const prompt = validH3Prompt({
+    body: '[Shot 1] <Picture 1> anchors the dim hotel corridor environment and warm wall lighting.',
+  }).replace(
+    '<Subject 1> is a doorway.',
+    '<Subject 1> is the dim hotel corridor environment defined by <Picture 1>.',
+  );
+
+  assert.equal(validateH3PromptSemantics(prompt, context).ok, true);
 });
 
 test('semantic review cannot claim coverage from the wrong section', async () => {

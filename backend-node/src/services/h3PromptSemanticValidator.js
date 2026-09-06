@@ -102,16 +102,6 @@ function validateH3PromptSemantics(compiledPrompt, context = {}, options = {}) {
       const pictureLabel = `<Picture ${reference.slot}>`;
       if (!definitions.includes(pictureLabel)) referenceProblems.push(`${pictureLabel} is missing from subject_definitions`);
       if (!referenceBody.includes(pictureLabel)) referenceProblems.push(`${pictureLabel} is missing from the prompt body`);
-      const entityNames = String(reference.entity_name || '')
-        .split(/[·｜|]/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-      if (entityNames.length && !entityNames.some((name) => prompt.toLowerCase().includes(name.toLowerCase()))) {
-        referenceProblems.push(`${pictureLabel} does not identify ${reference.entity_name}`);
-      }
-      if (reference.reference_role && !prompt.toLowerCase().includes(String(reference.reference_role).toLowerCase().replace(/_/g, ' '))) {
-        referenceProblems.push(`${pictureLabel} omits role ${reference.reference_role}`);
-      }
     }
     if (reference.audio_url && reference.audio_label) {
       const audioLabel = `<${reference.audio_label}>`;
