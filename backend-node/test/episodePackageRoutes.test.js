@@ -72,8 +72,11 @@ function createDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,
       name TEXT NOT NULL DEFAULT '',
+      role TEXT,
       description TEXT,
+      personality TEXT,
       appearance TEXT,
+      polished_prompt TEXT,
       voice_style TEXT,
       negative_prompt TEXT,
       image_url TEXT,
@@ -94,6 +97,7 @@ function createDb() {
       episode_id INTEGER,
       location TEXT,
       state TEXT,
+      description TEXT,
       prompt TEXT,
       atmosphere TEXT,
       negative_prompt TEXT,
@@ -107,6 +111,7 @@ function createDb() {
       drama_id INTEGER NOT NULL,
       episode_id INTEGER,
       name TEXT NOT NULL DEFAULT '',
+      type TEXT,
       description TEXT,
       prompt TEXT,
       negative_prompt TEXT,
@@ -160,6 +165,7 @@ function createDb() {
       normalized_json TEXT,
       match_decisions TEXT,
       generator_metadata TEXT,
+      import_report TEXT,
       imported_at TEXT
     );
   `);

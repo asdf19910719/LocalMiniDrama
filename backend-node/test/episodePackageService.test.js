@@ -55,7 +55,9 @@ function createDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,
       name TEXT NOT NULL DEFAULT '',
+      role TEXT,
       description TEXT,
+      personality TEXT,
       voice_style TEXT,
       appearance TEXT,
       polished_prompt TEXT,
@@ -78,6 +80,7 @@ function createDb() {
       episode_id INTEGER,
       location TEXT,
       time TEXT,
+      description TEXT,
       prompt TEXT,
       atmosphere TEXT,
       negative_prompt TEXT,
@@ -189,6 +192,7 @@ function createDb() {
       normalized_json TEXT,
       match_decisions TEXT,
       generator_metadata TEXT,
+      import_report TEXT,
       imported_at TEXT
     );
   `);
@@ -272,10 +276,9 @@ function buildMinimalPackage() {
       {
         source_key: 'char_a',
         name: '人物甲',
+        role: 'lead',
         description: '测试人物',
-        appearance: 'sharp eyes',
-        image_prompt: 'cinematic portrait',
-        negative_prompt: 'blurry face',
+        personality: '冷静而敏锐',
         voice_profile: 'calm low voice',
         variants: [
           {
@@ -303,6 +306,7 @@ function buildMinimalPackage() {
       {
         source_key: 'prop_a',
         name: '道具甲',
+        type: 'handheld',
         description: '道具描述',
         image_prompt: 'prop-prompt',
       },
@@ -336,6 +340,7 @@ function buildMinimalPackage() {
         transition: { to_next: '硬切' },
         image_prompt: 'sb1-image-prompt',
         universal_segment_text: '@图片1 是场景,@图片2 是人物,@图片3 是道具',
+        notes: '保持人物视线连续',
       },
       {
         source_key: 'sb_02',
@@ -457,10 +462,13 @@ describe('episodePackageService', () => {
     // characters
     const char = db.prepare('SELECT * FROM characters').get();
     assert.equal(char.name, '人物甲');
+    assert.equal(char.role, 'lead');
     assert.equal(char.description, '测试人物');
-    assert.equal(char.appearance, 'sharp eyes');
-    assert.equal(char.polished_prompt, 'cinematic portrait');
-    assert.equal(char.negative_prompt, 'blurry face');
+    assert.equal(char.personality, '冷静而敏锐');
+    // 1.0 兼容策略：主角色缺少视觉字段时，从默认状态确定性投影
+    assert.equal(char.appearance, '黑色短发');
+    assert.equal(char.polished_prompt, 'variant-prompt');
+    assert.equal(char.negative_prompt, 'np');
     assert.equal(char.voice_style, 'calm low voice');
     assert.equal(char.source_key, 'char_a');
     assert.equal(char.drama_id, 1);
@@ -482,11 +490,12 @@ describe('episodePackageService', () => {
     assert.equal(ecLinks[0].episode_id, result.episode_id);
     assert.equal(ecLinks[0].character_id, char.id);
 
-    // scenes:name→location、state→state、prompt 拼接 description 前缀
+    // scenes:语义说明与生图提示词独立保存，不再拼接污染
     const scene = db.prepare('SELECT * FROM scenes').get();
     assert.equal(scene.location, '场景甲');
     assert.equal(scene.state, '白天');
-    assert.equal(scene.prompt, '场景描述。scene-prompt');
+    assert.equal(scene.description, '场景描述');
+    assert.equal(scene.prompt, 'scene-prompt');
     assert.equal(scene.source_key, 'scene_a');
     assert.equal(scene.drama_id, 1);
     assert.equal(scene.episode_id, result.episode_id);
@@ -494,6 +503,7 @@ describe('episodePackageService', () => {
     // props
     const prop = db.prepare('SELECT * FROM props').get();
     assert.equal(prop.name, '道具甲');
+    assert.equal(prop.type, 'handheld');
     assert.equal(prop.description, '道具描述');
     assert.equal(prop.prompt, 'prop-prompt');
     assert.equal(prop.source_key, 'prop_a');
@@ -529,6 +539,7 @@ describe('episodePackageService', () => {
     assert.equal(sb1.creation_mode, 'universal');
     assert.equal(sb1.status, 'draft');
     assert.equal(sb1.source_key, 'sb_01');
+    assert.equal(JSON.parse(sb1.production_metadata).import_notes, '保持人物视线连续');
     // storyboards.characters 投影为人物 ID 数组 JSON
     assert.equal(sb1.characters, JSON.stringify([char.id]));
 
@@ -568,10 +579,15 @@ describe('episodePackageService', () => {
     assert.equal(normalized.storyboards[0].dialogue, '『人物甲』（平静地）：台词一');
     assert.deepEqual(JSON.parse(imp.match_decisions), CREATE_ALL_DECISIONS);
     assert.deepEqual(JSON.parse(imp.generator_metadata), pkg.generator);
+    const importReport = JSON.parse(imp.import_report);
+    assert.ok(importReport.derived_fields.some((item) => item.target === 'characters[0].appearance'));
+    assert.equal(importReport.projection.status, 'verified');
+    assert.equal(result.import_report.projection.status, 'verified');
+    assert.equal(JSON.parse(ep.production_profile).source_key, 'ep_test_01');
   });
 
-  // 用例 1b:场景 description 自带句末标点时,prompt 不出现双句号
-  it('1b. 场景 description 以句号结尾时 prompt 拼接不产生双句号', () => {
+  // 用例 1b:场景说明与提示词始终独立
+  it('1b. 场景 description 自带句号时仍与 prompt 独立保存', () => {
     const pkg = buildMinimalPackage();
     pkg.scenes[0].description = '场景描述。';
     const rawText = JSON.stringify(pkg);
@@ -582,9 +598,9 @@ describe('episodePackageService', () => {
       filename: 'test.json',
       decisions: CREATE_ALL_DECISIONS,
     });
-    const scene = db.prepare('SELECT prompt FROM scenes').get();
-    assert.equal(scene.prompt, '场景描述。scene-prompt');
-    assert.ok(!scene.prompt.includes('。。'));
+    const scene = db.prepare('SELECT description, prompt FROM scenes').get();
+    assert.equal(scene.description, '场景描述。');
+    assert.equal(scene.prompt, 'scene-prompt');
   });
 
   // 用例 2:填充空白集,集号不变
@@ -730,6 +746,8 @@ describe('episodePackageService', () => {
     assert.equal(preview.normalized_package.storyboards[0].action, '开始：开始动作\n推进：推进动作\n结束：结束动作');
     assert.equal(preview.normalized_package.storyboards[0].dialogue, '『人物甲』（平静地）：台词一');
     assert.equal(preview.normalized_package.storyboards[1].action, '直接动作文本');
+    assert.equal(preview.normalized_package.characters[0].appearance, '黑色短发');
+    assert.ok(preview.import_report.derived_fields.some((item) => item.target === 'characters[0].appearance'));
     // 原始包对象不被改动
     assert.equal(typeof pkg.storyboards[0].action, 'object');
 

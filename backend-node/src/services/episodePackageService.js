@@ -25,9 +25,10 @@ const crypto = require('crypto');
 
 const {
   PACKAGE_SCHEMA_NAME,
-  PACKAGE_SCHEMA_VERSION,
   validatePackageStructure,
 } = require('./episodePackageSchema');
+const { normalizePackageForProjection } = require('./episodePackageProjection');
+const { sanitizeSourceFilename } = require('./episodeImportProvenanceService');
 const {
   validateBusinessRules,
   renderAction,
@@ -147,8 +148,8 @@ function validatePackage(pkg) {
  * 其余字段不动。同时被 preview 与 episode_imports.normalized_json 使用(§14.1 同一输入
  * 逐字节相同)。
  */
-function buildNormalizedPackage(pkg) {
-  const normalized = JSON.parse(JSON.stringify(pkg));
+function buildNormalizedProjection(pkg) {
+  const { normalizedPackage: normalized, report } = normalizePackageForProjection(pkg);
   if (normalized && Array.isArray(normalized.storyboards)) {
     for (const storyboard of normalized.storyboards) {
       if (!storyboard || typeof storyboard !== 'object' || Array.isArray(storyboard)) continue;
@@ -156,7 +157,11 @@ function buildNormalizedPackage(pkg) {
       storyboard.dialogue = renderDialogue(storyboard.dialogue);
     }
   }
-  return normalized;
+  return { normalizedPackage: normalized, report };
+}
+
+function buildNormalizedPackage(pkg) {
+  return buildNormalizedProjection(pkg).normalizedPackage;
 }
 
 function hasExplicitShotMusic(audioDescription) {
@@ -392,8 +397,9 @@ function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId 
     effectiveDramaId = row ? row.drama_id : null;
   }
 
-  const matches = pkg ? computeAssetMatches(db, pkg, effectiveDramaId) : [];
-  const normalized = pkg ? buildNormalizedPackage(pkg) : null;
+  const projection = pkg ? buildNormalizedProjection(pkg) : { normalizedPackage: null, report: null };
+  const normalized = projection.normalizedPackage;
+  const matches = normalized ? computeAssetMatches(db, normalized, effectiveDramaId) : [];
 
   return {
     normalized_package: normalized,
@@ -401,8 +407,9 @@ function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId 
     target_status: targetStatus,
     asset_matches: matches,
     errors: [...parseErrors, ...validation.errors],
-    warnings: validation.warnings,
-    stats: computePreviewStats(db, pkg, matches),
+    warnings: [...validation.warnings, ...(projection.report?.warnings || [])],
+    stats: computePreviewStats(db, normalized, matches),
+    import_report: projection.report,
   };
 }
 
@@ -413,7 +420,9 @@ function insertCharacterRow(db, dramaId, item) {
   const candidate = {
     drama_id: dramaId,
     name: item.name ?? null,
+    role: item.role ?? null,
     description: item.description ?? null,
+    personality: item.personality ?? null,
     appearance: item.appearance ?? null,
     polished_prompt: item.image_prompt ?? null,
     negative_prompt: item.negative_prompt ?? null,
@@ -449,23 +458,18 @@ function ensureVariant(db, characterId, item) {
 }
 
 function insertSceneRow(db, dramaId, episodeId, item) {
-  const description = hasText(item.description) ? item.description : '';
-  // spec §6.3:description 非空时拼接为 "{description}。{image_prompt}",为空只写 image_prompt;
-  // description 已带句末标点时不重复加,避免"…。。"双句号进生图提示词
-  const endsWithPunctuation = /[。.!?！？~]$/.test(description);
-  const separator = description && !endsWithPunctuation ? '。' : '';
-  const prompt = description ? `${description}${separator}${item.image_prompt}` : item.image_prompt;
   const info = db
     .prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, state, prompt, atmosphere, negative_prompt, source_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, state, description, prompt, atmosphere, negative_prompt, source_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       dramaId,
       episodeId,
       item.name ?? null,
       item.state ?? null,
-      prompt,
+      item.description ?? null,
+      item.image_prompt ?? null,
       item.atmosphere ?? null,
       item.negative_prompt ?? null,
       item.source_key ?? null,
@@ -478,10 +482,10 @@ function insertSceneRow(db, dramaId, episodeId, item) {
 function insertPropRow(db, dramaId, episodeId, item) {
   const info = db
     .prepare(
-      `INSERT INTO props (drama_id, episode_id, name, description, prompt, negative_prompt, source_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO props (drama_id, episode_id, name, type, description, prompt, negative_prompt, source_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(dramaId, episodeId, item.name ?? null, item.description ?? null, item.image_prompt ?? null, item.negative_prompt ?? null, item.source_key ?? null, NOW(), NOW());
+    .run(dramaId, episodeId, item.name ?? null, item.type ?? null, item.description ?? null, item.image_prompt ?? null, item.negative_prompt ?? null, item.source_key ?? null, NOW(), NOW());
   return Number(info.lastInsertRowid);
 }
 
@@ -505,6 +509,9 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       const first = errors.slice(0, 5).map((e) => `${e.path || '(root)'}: ${e.message}`).join('; ');
       throwCode('PACKAGE_INVALID', `制作包校验失败(${errors.length} 个错误):${first}`);
     }
+    const projection = buildNormalizedProjection(pkg);
+    pkg = projection.normalizedPackage;
+    const importReport = projection.report;
 
     // 哈希一致性
     if (sha256Text(rawText) !== sourceSha256) {
@@ -533,7 +540,7 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
     const plan = planAssetDecisions(db, pkg, effectiveDramaId, decisions || {});
 
     const stats = zeroStats();
-    const warnings = validateBusinessRules(pkg).warnings;
+    const warnings = [...validateBusinessRules(pkg).warnings, ...importReport.warnings];
     const audioPolicy = derivePackageAudioPolicy(pkg);
     warnings.push(...audioPolicy.report);
     const productionProfile = {
@@ -542,6 +549,7 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       duration_target_seconds: pkg.episode?.duration_target_seconds ?? null,
       notes: pkg.episode?.notes ?? null,
       generator: pkg.generator || null,
+      source_key: pkg.episode?.source_key ?? null,
       provenance: { source: 'package_import' },
     };
 
@@ -605,11 +613,13 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       if (entry.decision === 'reuse') {
         characterIdByKey.set(key, entry.existingId);
         stats.characters_reused += 1;
+        importReport.reused.push({ type: 'character', source_key: key, id: entry.existingId });
       } else {
         const characterId = insertCharacterRow(db, effectiveDramaId, entry.item);
         characterIdByKey.set(key, characterId);
         createdCharacterChecks.push({ id: characterId, item: entry.item });
         stats.characters_created += 1;
+        importReport.created.push({ type: 'character', source_key: key, id: characterId });
       }
     }
 
@@ -634,34 +644,47 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
         if (before) {
           variantIdByRef.set(refKey, Number(before.id));
           stats.variants_reused += 1;
+          importReport.reused.push({ type: 'variant', source_key: variant.source_key ?? null, id: Number(before.id) });
         } else {
-          variantIdByRef.set(refKey, ensureVariant(db, characterId, variant));
+          const variantId = ensureVariant(db, characterId, variant);
+          variantIdByRef.set(refKey, variantId);
           stats.variants_created += 1;
+          importReport.created.push({ type: 'variant', source_key: variant.source_key ?? null, id: variantId });
         }
       }
     }
 
     // 6. 场景与道具:按决策建或复用(复用不覆盖)
     const sceneIdByKey = new Map();
+    const createdSceneChecks = [];
     for (const entry of plan.scenes) {
       const key = entry.item.source_key;
       if (entry.decision === 'reuse') {
         sceneIdByKey.set(key, entry.existingId);
         stats.scenes_reused += 1;
+        importReport.reused.push({ type: 'scene', source_key: key, id: entry.existingId });
       } else {
-        sceneIdByKey.set(key, insertSceneRow(db, effectiveDramaId, episodeId, entry.item));
+        const sceneId = insertSceneRow(db, effectiveDramaId, episodeId, entry.item);
+        sceneIdByKey.set(key, sceneId);
+        createdSceneChecks.push({ id: sceneId, item: entry.item });
         stats.scenes_created += 1;
+        importReport.created.push({ type: 'scene', source_key: key, id: sceneId });
       }
     }
     const propIdByKey = new Map();
+    const createdPropChecks = [];
     for (const entry of plan.props) {
       const key = entry.item.source_key;
       if (entry.decision === 'reuse') {
         propIdByKey.set(key, entry.existingId);
         stats.props_reused += 1;
+        importReport.reused.push({ type: 'prop', source_key: key, id: entry.existingId });
       } else {
-        propIdByKey.set(key, insertPropRow(db, effectiveDramaId, episodeId, entry.item));
+        const propId = insertPropRow(db, effectiveDramaId, episodeId, entry.item);
+        propIdByKey.set(key, propId);
+        createdPropChecks.push({ id: propId, item: entry.item });
         stats.props_created += 1;
+        importReport.created.push({ type: 'prop', source_key: key, id: propId });
       }
     }
 
@@ -702,6 +725,7 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
           audio_description: audioPolicy.shotAudioDescriptions[storyboardIndex],
           transition: storyboard.transition ?? null,
           is_primary: storyboard.is_primary === true,
+          production_metadata: storyboard.notes == null ? null : { import_notes: storyboard.notes },
         }, { source: 'package_import', lock: false });
         const sbId = Number(createdStoryboard.id);
         importedStoryboardIds.push(sbId);
@@ -769,7 +793,9 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       if (!row) return true;
       const expected = {
         name: item.name ?? null,
+        role: item.role ?? null,
         description: item.description ?? null,
+        personality: item.personality ?? null,
         appearance: item.appearance ?? null,
         polished_prompt: item.image_prompt ?? null,
         negative_prompt: item.negative_prompt ?? null,
@@ -777,6 +803,27 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
         source_key: item.source_key ?? null,
       };
       return Object.entries(expected).some(([field, value]) => characterColumns.has(field) && row[field] !== value);
+    });
+    const sceneProjectionMismatch = createdSceneChecks.some(({ id, item }) => {
+      const row = db.prepare('SELECT * FROM scenes WHERE id = ?').get(id);
+      return !row
+        || row.location !== (item.name ?? null)
+        || row.state !== (item.state ?? null)
+        || row.description !== (item.description ?? null)
+        || row.prompt !== (item.image_prompt ?? null)
+        || row.atmosphere !== (item.atmosphere ?? null)
+        || row.negative_prompt !== (item.negative_prompt ?? null)
+        || row.source_key !== (item.source_key ?? null);
+    });
+    const propProjectionMismatch = createdPropChecks.some(({ id, item }) => {
+      const row = db.prepare('SELECT * FROM props WHERE id = ?').get(id);
+      return !row
+        || row.name !== (item.name ?? null)
+        || row.type !== (item.type ?? null)
+        || row.description !== (item.description ?? null)
+        || row.prompt !== (item.image_prompt ?? null)
+        || row.negative_prompt !== (item.negative_prompt ?? null)
+        || row.source_key !== (item.source_key ?? null);
     });
     const referenceProjectionMismatch = importedStoryboardIds.some((storyboardId, index) => {
       const source = storyboards[index];
@@ -799,30 +846,32 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       ).all(storyboardId);
       return serializeCanonicalJson(actualLinks) !== serializeCanonicalJson(expectedLinks);
     });
-    if (projectionMismatch || characterProjectionMismatch || referenceProjectionMismatch) {
+    if (projectionMismatch || characterProjectionMismatch || sceneProjectionMismatch || propProjectionMismatch || referenceProjectionMismatch) {
       throwCode('PACKAGE_PROJECTION_MISMATCH', '制作包资产或分镜在规范化回读时发生字段丢失');
     }
+    importReport.projection = { status: 'verified', verified_at: NOW() };
 
     // 10. episode_imports 审计快照(normalized_json 存渲染后的归一化包)
     db.prepare(
       `INSERT INTO episode_imports (
          episode_id, schema_name, schema_version, source_filename, source_sha256,
-         raw_json, normalized_json, match_decisions, generator_metadata, imported_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         raw_json, normalized_json, match_decisions, generator_metadata, import_report, imported_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       episodeId,
       PACKAGE_SCHEMA_NAME,
-      PACKAGE_SCHEMA_VERSION,
-      filename ?? null,
+      pkg.version,
+      sanitizeSourceFilename(filename),
       sha256Text(rawText),
       String(rawText),
       JSON.stringify(buildNormalizedPackage(pkg)),
       JSON.stringify(decisions || {}),
       pkg.generator !== undefined ? JSON.stringify(pkg.generator) : null,
+      JSON.stringify(importReport),
       NOW()
     );
 
-    return { episode_id: episodeId, stats, warnings };
+    return { episode_id: episodeId, stats, warnings, import_report: importReport };
   });
 
   return run();
