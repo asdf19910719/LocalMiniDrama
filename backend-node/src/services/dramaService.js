@@ -4,6 +4,7 @@ const storageLayout = require('./storageLayout');
 const { resolveStylePreset } = require('../constants/generationStylePresets');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
 const { listStoryboardVariantLinks } = require('./storyboardVariantService');
+const { getEpisodeImportSummaries } = require('./episodeImportProvenanceService');
 const {
   projectStoryboardRow,
   projectEpisodeRow,
@@ -87,6 +88,12 @@ function getDrama(db, dramaId, baseUrl) {
     'SELECT * FROM episodes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY episode_number ASC'
   ).all(drama.id);
   drama.episodes = episodes.map((e) => rowToEpisode(e));
+  try {
+    const importSummaries = getEpisodeImportSummaries(db, drama.episodes.map((episode) => episode.id));
+    for (const episode of drama.episodes) episode.import_source = importSummaries.get(episode.id) || null;
+  } catch (_) {
+    for (const episode of drama.episodes) episode.import_source = null;
+  }
   const { dedupeStoryboardRowsByNumber } = require('./episodeStoryboardService');
   for (const ep of drama.episodes) {
     const storyboards = dedupeStoryboardRowsByNumber(
@@ -388,6 +395,8 @@ function rowToScene(r) {
     drama_id: r.drama_id,
     location: r.location,
     time: r.time,
+    state: r.state ?? null,
+    description: r.description ?? null,
     prompt: r.prompt,
     atmosphere: r.atmosphere ?? null,
     polished_prompt: r.polished_prompt || null,

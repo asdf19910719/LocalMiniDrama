@@ -370,6 +370,12 @@ describe('Episode package routes', () => {
       const imported = db.prepare('SELECT * FROM episode_imports').get();
       assert.equal(imported.episode_id, data.episode_id);
       assert.equal(imported.source_sha256, sha256Text(EXAMPLE_RAW));
+
+      const sourceRes = callRoute(routes, { method: 'GET', url: `/episodes/${data.episode_id}/import-source` });
+      assert.equal(sourceRes.statusCode, 200);
+      assert.equal(sourceRes.body.data.raw_json_text, EXAMPLE_RAW);
+      assert.equal(sourceRes.body.data.source_filename, 'example.json');
+      assert.equal(sourceRes.body.data.import_report.projection.status, 'verified');
       const firstSb = db.prepare('SELECT * FROM storyboards WHERE source_key = ?').get('sb_01');
       assert.equal(firstSb.creation_mode, 'universal');
       assert.deepEqual(JSON.parse(firstSb.characters), [character.id]);
@@ -457,6 +463,15 @@ describe('Episode package routes', () => {
       assert.equal(res.statusCode, 400);
       assert.equal(res.body.success, false);
       assert.equal(res.body.error.code, 'PACKAGE_INVALID');
+    });
+  });
+
+  describe('GET /episodes/:id/import-source', () => {
+    it('未导入的剧集返回 404', () => {
+      const episodeId = insertEpisode(db, { episode_number: 9 });
+      const res = callRoute(routes, { method: 'GET', url: `/episodes/${episodeId}/import-source` });
+      assert.equal(res.statusCode, 404);
+      assert.equal(res.body.error.code, 'NOT_FOUND');
     });
   });
 

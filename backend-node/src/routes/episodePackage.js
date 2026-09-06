@@ -10,6 +10,7 @@ const {
 const {
   syncStoryboardVariantLinks,
 } = require('../services/storyboardVariantService');
+const { getEpisodeImportSource } = require('../services/episodeImportProvenanceService');
 
 // 语义冲突映射 409;其余业务错误(PACKAGE_INVALID / PACKAGE_DECISION_INVALID /
 // CONFLICT_UNRESOLVED / VARIANT_CHARACTER_MISMATCH / VARIANT_SORT_ORDER_DUPLICATE)一律 400
@@ -146,9 +147,25 @@ function saveVariantLinks(db, log) {
   };
 }
 
+function showImportSource(db, log) {
+  return (req, res) => {
+    const episodeId = Number(req.params.id);
+    if (!Number.isInteger(episodeId) || episodeId <= 0) return response.badRequest(res, '无效的剧集 ID');
+    try {
+      const source = getEpisodeImportSource(db, episodeId);
+      if (!source) return response.notFound(res, '该剧集没有外部 JSON 导入记录');
+      return response.success(res, source);
+    } catch (err) {
+      log.error('episode import source failed', { episode_id: episodeId, error: err.message });
+      return response.internalError(res, err.message || '服务器错误');
+    }
+  };
+}
+
 module.exports = function episodePackageRoutes(db, cfg, log) {
   const r = express.Router();
   r.get('/dramas/:dramaId/blank-episodes', listBlankEpisodes(db, log));
+  r.get('/episodes/:id/import-source', showImportSource(db, log));
   r.post('/episodes/import-package/preview', previewImport(db, log));
   r.post('/episodes/import-package', importPackage(db, log));
   r.put('/storyboards/:id/character-variant-links', saveVariantLinks(db, log));
