@@ -314,10 +314,11 @@ function updateCharacter(db, log, characterId, req) {
   const updates = [];
   const params = [];
   if (req.name != null) { updates.push('name = ?'); params.push(req.name); }
-  if (req.role != null) { updates.push('role = ?'); params.push(req.role); }
-  if (req.appearance != null) { updates.push('appearance = ?'); params.push(req.appearance); }
-  if (req.personality != null) { updates.push('personality = ?'); params.push(req.personality); }
-  if (req.description != null) { updates.push('description = ?'); params.push(req.description); }
+  if (req.role !== undefined) { updates.push('role = ?'); params.push(req.role ?? null); }
+  if (req.appearance !== undefined) { updates.push('appearance = ?'); params.push(req.appearance ?? null); }
+  if (req.personality !== undefined) { updates.push('personality = ?'); params.push(req.personality ?? null); }
+  if (req.description !== undefined) { updates.push('description = ?'); params.push(req.description ?? null); }
+  if (req.voice_style !== undefined) { updates.push('voice_style = ?'); params.push(req.voice_style ?? null); }
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
   if (req.local_path != null) { updates.push('local_path = ?'); params.push(req.local_path); }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }

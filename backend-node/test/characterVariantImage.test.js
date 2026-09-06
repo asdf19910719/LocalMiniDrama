@@ -34,6 +34,7 @@ function createDb() {
       appearance TEXT,
       personality TEXT,
       description TEXT,
+      voice_style TEXT,
       image_url TEXT,
       local_path TEXT,
       polished_prompt TEXT,
@@ -102,6 +103,24 @@ describe('character stages deprecation', () => {
     const row = db.prepare('SELECT name, stages FROM characters WHERE id = ?').get(charId);
     assert.equal(row.name, '改名后的张三');
     assert.equal(row.stages, '[{"legacy":true}]');
+  });
+
+  it('updateCharacter 可保存并清空导入角色字段', () => {
+    const db = createDb();
+    insertDrama(db);
+    const charId = insertCharacter(db);
+    characterLibraryService.updateCharacter(db, log, charId, {
+      role: 'lead', personality: '冷静', voice_style: '低沉', appearance: '黑色短发',
+    });
+    assert.deepEqual(db.prepare('SELECT role, personality, voice_style, appearance FROM characters WHERE id = ?').get(charId), {
+      role: 'lead', personality: '冷静', voice_style: '低沉', appearance: '黑色短发',
+    });
+    characterLibraryService.updateCharacter(db, log, charId, {
+      role: null, personality: null, voice_style: null,
+    });
+    assert.deepEqual(db.prepare('SELECT role, personality, voice_style FROM characters WHERE id = ?').get(charId), {
+      role: null, personality: null, voice_style: null,
+    });
   });
 });
 

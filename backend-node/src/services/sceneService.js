@@ -24,8 +24,11 @@ function updateScene(db, log, sceneId, req) {
   const params = [];
   if (req.location != null) { updates.push('location = ?'); params.push(req.location); }
   if (req.time != null) { updates.push('time = ?'); params.push(req.time); }
+  if (req.state !== undefined) { updates.push('state = ?'); params.push(req.state ?? null); }
+  if (req.description !== undefined) { updates.push('description = ?'); params.push(req.description ?? null); }
   if (req.prompt != null) { updates.push('prompt = ?'); params.push(req.prompt); }
   if (req.atmosphere !== undefined) { updates.push('atmosphere = ?'); params.push(req.atmosphere ?? null); }
+  if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt ?? null); }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   if (req.polished_prompt_single != null) { updates.push('polished_prompt_single = ?'); params.push(req.polished_prompt_single); }
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
@@ -116,11 +119,13 @@ function listByDramaId(db, dramaId) {
     episode_id: row.episode_id,
     location: row.location,
     time: row.time,
+    state: row.state ?? null,
     prompt: row.prompt,
     atmosphere: row.atmosphere ?? null,
     polished_prompt: row.polished_prompt || null,
     polished_prompt_single: row.polished_prompt_single || null,
     description: row.description || null,
+    negative_prompt: row.negative_prompt || null,
     image_url: row.image_url,
     local_path: row.local_path,
     extra_images: row.extra_images || null,
@@ -137,10 +142,13 @@ function getSceneById(db, id) {
     drama_id: row.drama_id,
     location: row.location,
     time: row.time,
+    state: row.state ?? null,
+    description: row.description || null,
     prompt: row.prompt,
     atmosphere: row.atmosphere ?? null,
     polished_prompt: row.polished_prompt || null,
     polished_prompt_single: row.polished_prompt_single || null,
+    negative_prompt: row.negative_prompt || null,
     image_url: row.image_url,
     local_path: row.local_path,
     extra_images: row.extra_images || null,
