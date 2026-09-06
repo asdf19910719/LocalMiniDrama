@@ -140,7 +140,9 @@ export function useCharacters(deps) {
       appearance: '',
       personality: '',
       description: '',
-      polished_prompt: ''
+      polished_prompt: '',
+      voice_style: '',
+      negative_prompt: ''
     }
     showEditCharacter.value = true
   }
@@ -162,6 +164,8 @@ export function useCharacters(deps) {
       personality: char.personality || '',
       description: char.description || '',
       polished_prompt: char.polished_prompt || '',
+      voice_style: char.voice_style || '',
+      negative_prompt: char.negative_prompt || '',
       image_url: char.image_url || '',
       local_path: char.local_path || '',
       ref_image: char.ref_image || '',
@@ -215,11 +219,13 @@ export function useCharacters(deps) {
       if (form.id) {
         await characterAPI.update(form.id, {
           name: form.name.trim(),
-          role: form.role || undefined,
-          appearance: form.appearance || undefined,
-          personality: form.personality || undefined,
-          description: form.description || undefined,
-          polished_prompt: form.polished_prompt || undefined,
+          role: form.role || null,
+          appearance: form.appearance || null,
+          personality: form.personality || null,
+          description: form.description || null,
+          polished_prompt: form.polished_prompt || null,
+          voice_style: form.voice_style || null,
+          negative_prompt: form.negative_prompt || null,
         })
         await saveCharRefImageIfAny(form.id)
         ElMessage.success('角色已保存')

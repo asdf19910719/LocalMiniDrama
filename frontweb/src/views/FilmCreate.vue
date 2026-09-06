@@ -26,6 +26,13 @@
             :value="ep.id"
           />
         </el-select>
+        <el-button
+          v-if="currentEpisode?.import_source"
+          link
+          type="primary"
+          class="header-import-source"
+          @click="importSourceVisible = true"
+        >外部 JSON</el-button>
         <el-button v-if="dramaId" class="btn-back-drama" @click="router.push('/drama/' + dramaId)">
           <el-icon><ArrowLeft /></el-icon>
           返回剧集
@@ -1833,8 +1840,17 @@
         <el-form-item label="外貌描述">
           <el-input v-model="editCharacterForm.appearance" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" placeholder="用于 AI 生成图像的外貌描述，尽量详细" />
         </el-form-item>
+        <el-form-item label="性格说明">
+          <el-input v-model="editCharacterForm.personality" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" placeholder="源文件未提供时保持为空" />
+        </el-form-item>
+        <el-form-item label="音色风格">
+          <el-input v-model="editCharacterForm.voice_style" placeholder="如：冷静低沉" />
+        </el-form-item>
         <el-form-item label="简介">
           <el-input v-model="editCharacterForm.description" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" placeholder="角色背景简介，供剧本生成参考" />
+        </el-form-item>
+        <el-form-item v-if="editCharacterForm.id" label="负面提示词">
+          <el-input v-model="editCharacterForm.negative_prompt" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" />
         </el-form-item>
         <el-form-item v-if="editCharacterForm.id">
           <template #label>
@@ -2042,8 +2058,20 @@
         <el-form-item label="时间">
           <el-input v-model="editSceneForm.time" placeholder="如：白天、傍晚" />
         </el-form-item>
-        <el-form-item label="场景描述">
-          <el-input v-model="editSceneForm.prompt" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" placeholder="场景的简要描述，供 AI 生成四视图时参考" />
+        <el-form-item label="状态">
+          <el-input v-model="editSceneForm.state" placeholder="如：night、rainy" />
+        </el-form-item>
+        <el-form-item label="场景说明">
+          <el-input v-model="editSceneForm.description" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" placeholder="语义说明，与图片提示词独立保存" />
+        </el-form-item>
+        <el-form-item label="氛围">
+          <el-input v-model="editSceneForm.atmosphere" placeholder="如：冷清、压抑" />
+        </el-form-item>
+        <el-form-item label="图片提示词">
+          <el-input v-model="editSceneForm.prompt" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" placeholder="供 AI 生图使用的提示词" />
+        </el-form-item>
+        <el-form-item label="负面提示词">
+          <el-input v-model="editSceneForm.negative_prompt" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" />
         </el-form-item>
         <el-form-item v-if="editSceneForm.id">
           <template #label>
@@ -2760,6 +2788,11 @@
       @regenerate="onVariantStudioRegenerate"
       @select-channel="onSelectImageChannel"
     />
+    <EpisodeImportSourceDialog
+      v-model="importSourceVisible"
+      :episode-id="currentEpisodeId"
+      :episode-label="currentEpisode?.title || ''"
+    />
     <ImageGenerationDrawer
       :visible="imageGenerationDrawerVisible"
       :task="imageGenerationTask"
@@ -2828,6 +2861,7 @@ import CharacterVariantStudio from '@/components/CharacterVariantStudio.vue'
 import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
 import AudioPlanPanel from '@/components/episode/AudioPlanPanel.vue'
+import EpisodeImportSourceDialog from '@/components/EpisodeImportSourceDialog.vue'
 import {
   generationStyleOptions,
   getStylePromptEn,
@@ -3013,6 +3047,7 @@ const props = computed(() => store.props)
 const storyboards = computed(() => store.storyboards)
 const currentEpisode = computed(() => store.currentEpisode)
 const currentEpisodeId = computed(() => store.currentEpisode?.id ?? null)
+const importSourceVisible = ref(false)
 const episodeAudioH3Stale = ref(false)
 function onEpisodeAudioPlanUpdated(payload) {
   if (payload?.episode && store.currentEpisode) Object.assign(store.currentEpisode, payload.episode)

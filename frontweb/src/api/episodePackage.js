@@ -20,5 +20,9 @@ export const episodePackageAPI = {
   /** 某剧的空白剧集列表(填充模式下拉数据源):[{ id, episode_number, title }] */
   listBlankEpisodes(dramaId) {
     return request.get(`/dramas/${dramaId}/blank-episodes`)
+  },
+  /** 读取该集最近一次外部制作包的原文、规范化快照和导入报告。 */
+  getImportSource(episodeId) {
+    return request.get(`/episodes/${encodeURIComponent(episodeId)}/import-source`)
   }
 }

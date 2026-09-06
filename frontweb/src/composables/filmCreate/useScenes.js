@@ -121,7 +121,7 @@ export function useScenes(deps) {
   }
 
   function openAddScene() {
-    editSceneForm.value = { location: '', time: '', prompt: '' }
+    editSceneForm.value = { location: '', time: '', state: '', description: '', atmosphere: '', prompt: '', negative_prompt: '' }
     showEditScene.value = true
   }
 
@@ -135,7 +135,11 @@ export function useScenes(deps) {
       id: scene.id,
       location: scene.location || '',
       time: scene.time || '',
+      state: scene.state || '',
+      description: scene.description || '',
+      atmosphere: scene.atmosphere || '',
       prompt: scene.prompt || '',
+      negative_prompt: scene.negative_prompt || '',
       polished_prompt: scene.polished_prompt || '',
       polished_prompt_single: scene.polished_prompt_single || '',
       image_url: scene.image_url || '',
@@ -253,8 +257,12 @@ export function useScenes(deps) {
       if (form.id) {
         await sceneAPI.update(form.id, {
           location: form.location.trim(),
-          time: form.time || undefined,
-          prompt: form.prompt || undefined,
+          time: form.time || null,
+          state: form.state || null,
+          description: form.description || null,
+          atmosphere: form.atmosphere || null,
+          prompt: form.prompt || null,
+          negative_prompt: form.negative_prompt || null,
           polished_prompt: form.polished_prompt || undefined,
           polished_prompt_single: form.polished_prompt_single || undefined
         })
@@ -266,7 +274,11 @@ export function useScenes(deps) {
           episode_id: currentEpisodeId.value || undefined,
           location: form.location.trim(),
           time: form.time || undefined,
-          prompt: form.prompt || undefined
+          state: form.state || undefined,
+          description: form.description || undefined,
+          atmosphere: form.atmosphere || undefined,
+          prompt: form.prompt || undefined,
+          negative_prompt: form.negative_prompt || undefined
         })
         await loadDrama()
         if (addSceneRefImage.value) {

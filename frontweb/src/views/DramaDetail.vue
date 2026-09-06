@@ -87,6 +87,11 @@
           </el-button>
         </div>
         <EpisodePackageImportDialog v-model="packageImportVisible" :drama-id="dramaId" @imported="onPackageImported" />
+        <EpisodeImportSourceDialog
+          v-model="importSourceVisible"
+          :episode-id="importSourceEpisodeId"
+          :episode-label="importSourceEpisodeLabel"
+        />
         <div v-if="episodes.length === 0" class="empty-tip">暂无分集，点击「新增一集」开始创作</div>
         <div v-else class="episode-grid">
           <div
@@ -109,6 +114,10 @@
               />
             </div>
             <div class="episode-title">{{ ep.title || '未命名' }}</div>
+            <div v-if="hasImportSource(ep)" class="episode-import-source">
+              <el-tag size="small" type="info" effect="plain">外部导入</el-tag>
+              <el-button link type="primary" size="small" @click.stop="openImportSource(ep)">查看来源 JSON</el-button>
+            </div>
             <div class="episode-preview">{{ (ep.script_content || '').slice(0, 20) || '暂无剧本' }}</div>
             <div class="episode-stats">
               <span class="ep-stat">
@@ -324,7 +333,7 @@
         </el-form-item>
         <el-form-item label="名称"><el-input v-model="editDramaCharForm.name" /></el-form-item>
         <el-form-item label="角色类型">
-          <el-select v-model="editDramaCharForm.role" style="width:100%">
+          <el-select v-model="editDramaCharForm.role" clearable placeholder="源文件未提供" style="width:100%">
             <el-option label="主角" value="main" />
             <el-option label="配角" value="supporting" />
             <el-option label="次要角色" value="minor" />
@@ -333,6 +342,9 @@
         <el-form-item label="描述"><el-input v-model="editDramaCharForm.description" type="textarea" :rows="3" placeholder="角色背景描述" /></el-form-item>
         <el-form-item label="性格"><el-input v-model="editDramaCharForm.personality" placeholder="性格特征" /></el-form-item>
         <el-form-item label="外貌"><el-input v-model="editDramaCharForm.appearance" type="textarea" :rows="2" placeholder="外貌特征（影响图片生成）" /></el-form-item>
+        <el-form-item label="音色风格"><el-input v-model="editDramaCharForm.voice_style" placeholder="如：冷静低沉" /></el-form-item>
+        <el-form-item label="图片提示词"><el-input v-model="editDramaCharForm.polished_prompt" type="textarea" :rows="3" placeholder="外部导入或 AI 润色后的图片提示词" /></el-form-item>
+        <el-form-item label="负面提示词"><el-input v-model="editDramaCharForm.negative_prompt" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDramaCharVisible = false">取消</el-button>
@@ -358,8 +370,11 @@
         </el-form-item>
         <el-form-item label="地点"><el-input v-model="editDramaSceneForm.location" /></el-form-item>
         <el-form-item label="时间"><el-input v-model="editDramaSceneForm.time" placeholder="如：浅色/夜晚" /></el-form-item>
+        <el-form-item label="状态"><el-input v-model="editDramaSceneForm.state" placeholder="如：night、rainy" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="editDramaSceneForm.description" type="textarea" :rows="3" placeholder="场景描述" /></el-form-item>
+        <el-form-item label="氛围"><el-input v-model="editDramaSceneForm.atmosphere" placeholder="场景氛围" /></el-form-item>
         <el-form-item label="图片提示词"><el-input v-model="editDramaSceneForm.prompt" type="textarea" :rows="2" placeholder="图片生成用的详细提示词" /></el-form-item>
+        <el-form-item label="负面提示词"><el-input v-model="editDramaSceneForm.negative_prompt" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDramaSceneVisible = false">取消</el-button>
@@ -555,6 +570,7 @@ import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGen
 import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid, Upload } from '@element-plus/icons-vue'
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
 import EpisodePackageImportDialog from '@/components/EpisodePackageImportDialog.vue'
+import EpisodeImportSourceDialog from '@/components/EpisodeImportSourceDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import { useTheme } from '@/composables/useTheme'
 import { dramaAPI } from '@/api/drama'
@@ -570,6 +586,7 @@ import { propAPI } from '@/api/props'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
+import { hasImportSource } from '@/utils/episodeImportSource'
 import {
   generationStyleOptions,
   stylePromptMetadataForSave,
@@ -726,9 +743,10 @@ async function doGenerateLibImg(form, prompt, api, reloadFn) {
 
 function openEditDramaChar(item) {
   editDramaCharForm.value = {
-    id: item.id, name: item.name ?? '', role: item.role ?? 'minor',
+    id: item.id, name: item.name ?? '', role: item.role ?? '',
     description: item.description ?? '', personality: item.personality ?? '',
-    appearance: item.appearance ?? '',
+    appearance: item.appearance ?? '', voice_style: item.voice_style ?? '',
+    polished_prompt: item.polished_prompt ?? '', negative_prompt: item.negative_prompt ?? '',
     image_url: item.image_url ?? '', local_path: item.local_path ?? null,
     imgUploading: false, imgGenerating: false
   }
@@ -744,6 +762,9 @@ async function saveDramaChar() {
       description: editDramaCharForm.value.description || null,
       personality: editDramaCharForm.value.personality || null,
       appearance: editDramaCharForm.value.appearance || null,
+      voice_style: editDramaCharForm.value.voice_style || null,
+      polished_prompt: editDramaCharForm.value.polished_prompt || null,
+      negative_prompt: editDramaCharForm.value.negative_prompt || null,
     })
     ElMessage.success('已保存')
     editDramaCharVisible.value = false
@@ -799,7 +820,8 @@ async function generateDramaCharImg() {
 function openEditDramaScene(item) {
   editDramaSceneForm.value = {
     id: item.id, location: item.location ?? '', time: item.time ?? '',
-    description: item.description ?? '', prompt: item.prompt ?? '',
+    state: item.state ?? '', description: item.description ?? '', atmosphere: item.atmosphere ?? '',
+    prompt: item.prompt ?? '', negative_prompt: item.negative_prompt ?? '',
     image_url: item.image_url ?? '', local_path: item.local_path ?? null,
     imgUploading: false, imgGenerating: false
   }
@@ -812,8 +834,11 @@ async function saveDramaScene() {
     await sceneAPI.update(editDramaSceneForm.value.id, {
       location: editDramaSceneForm.value.location,
       time: editDramaSceneForm.value.time || null,
+      state: editDramaSceneForm.value.state || null,
       description: editDramaSceneForm.value.description || null,
+      atmosphere: editDramaSceneForm.value.atmosphere || null,
       prompt: editDramaSceneForm.value.prompt || null,
+      negative_prompt: editDramaSceneForm.value.negative_prompt || null,
     })
     ElMessage.success('已保存')
     editDramaSceneVisible.value = false
@@ -1040,6 +1065,14 @@ const deletingEpisodeId = ref(null)
 
 // ---------- 单集制作包导入 ----------
 const packageImportVisible = ref(false)
+const importSourceVisible = ref(false)
+const importSourceEpisodeId = ref(null)
+const importSourceEpisodeLabel = ref('')
+function openImportSource(ep) {
+  importSourceEpisodeId.value = ep.id
+  importSourceEpisodeLabel.value = `第 ${ep.episode_number ?? '?'} 集「${ep.title || '未命名'}」`
+  importSourceVisible.value = true
+}
 function onPackageImported() {
   // 导入成功(新建或填充空白集)后刷新分集列表
   loadDrama()
@@ -1476,6 +1509,7 @@ html.light .section-title { color: #18181b; }
   transition: transform 0.2s;
 }
 .episode-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.episode-import-source { display: flex; align-items: center; gap: 4px; margin: 6px 0 2px; }
 .episode-num { font-size: 0.8rem; color: #71717a; }
 .episode-title { font-weight: 500; color: #fafafa; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .episode-preview { font-size: 0.78rem; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
