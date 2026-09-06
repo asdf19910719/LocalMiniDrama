@@ -1,6 +1,6 @@
 {
   "schema": "local-mini-drama.episode-package",
-  "version": "1.0",
+  "version": "1.1",
   "generator": {
     "name": "example-upstream-ai",
     "model": "demo-model-1",
@@ -49,7 +49,9 @@
     {
       "source_key": "char_lin_wan",
       "name": "林晚",
+      "role": "main",
       "description": "24 岁的便利店夜班店员,性格温和但保持警觉。",
+      "personality": "温和细致,对陌生人保持必要警觉,遇到紧急情况时行动果断。",
       "appearance": "24 岁中国女性,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,神情温和而警觉",
       "image_prompt": "24 岁中国女性林晚的人物基础参考图,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,中性站姿,正面全身与面部细节清晰,纯色背景,写实电影风格,单人",
       "negative_prompt": "多人,年龄错误,发色错误,脸部变形,肢体畸形,多余手指,模糊,文字,水印",
@@ -100,6 +102,7 @@
     {
       "source_key": "prop_hot_coffee",
       "name": "热咖啡杯",
+      "type": "关键道具",
       "description": "林晚递给客人的热咖啡,杯身有淡淡热气。",
       "image_prompt": "一只白色纸杯热咖啡,杯口升起淡淡热气,放在浅色柜台面上,主体隔离,干净背景,写实风格,无人物",
       "negative_prompt": "人物,杂乱背景,文字水印"
