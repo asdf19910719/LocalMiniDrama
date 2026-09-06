@@ -656,6 +656,9 @@ function ensureAllColumns(database) {
     )`);
     ensureColumns(database, 'episode_imports', [
       { name: 'import_report', type: 'TEXT' },
+      { name: 'task_package_id', type: 'TEXT' },
+      { name: 'task_created_at', type: 'TEXT' },
+      { name: 'task_assets_digest', type: 'TEXT' },
     ]);
     database.exec('CREATE INDEX IF NOT EXISTS idx_episode_imports_episode_time ON episode_imports(episode_id, imported_at DESC, id DESC)');
   } catch (_) {}

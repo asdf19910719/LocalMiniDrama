@@ -314,7 +314,7 @@ function adaptExternalAiResult(db, result, task) {
     prop_refs: storyboard.prop_refs.map(resolve),
   }));
 
-  const current = getCurrentAssetState(db, task.drama_id);
+  const current = getCurrentAssetState(db, task.drama_id, { ensureKeys: false });
   const warnings = current.assetsDigest === task.assets_digest ? [] : [{
     code: 'PACKAGE_ASSETS_CHANGED',
     path: 'package_id',

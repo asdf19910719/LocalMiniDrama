@@ -29,6 +29,8 @@ const {
 } = require('./episodePackageSchema');
 const { normalizePackageForProjection } = require('./episodePackageProjection');
 const { sanitizeSourceFilename } = require('./episodeImportProvenanceService');
+const { getTaskBundle } = require('./externalAiTaskBundleService');
+const { adaptExternalAiResult } = require('./externalAiResultAdapter');
 const {
   validateBusinessRules,
   renderAction,
@@ -49,6 +51,7 @@ const {
 } = require('./storyboardCanonicalRepository');
 
 const NOW = () => new Date().toISOString();
+const EXTERNAL_AI_RESULT_SCHEMA = 'local-mini-drama.external-ai-result';
 
 function sha256Text(text) {
   return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
@@ -129,6 +132,42 @@ function parseRawText(rawText, { throwOnError }) {
     errors.push({ code: 'PACKAGE_INVALID', path: '', message });
   }
   return { pkg, errors };
+}
+
+function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnError = false } = {}) {
+  const parsed = parseRawText(rawText, { throwOnError });
+  if (parsed.pkg === null || parsed.pkg?.schema !== EXTERNAL_AI_RESULT_SCHEMA) {
+    return {
+      pkg: parsed.pkg,
+      parseErrors: parsed.errors,
+      adapterWarnings: [],
+      targetEpisodeId,
+      task: null,
+      sourceSchema: parsed.pkg?.schema || PACKAGE_SCHEMA_NAME,
+      sourceVersion: parsed.pkg?.version || null,
+    };
+  }
+
+  const task = getTaskBundle(db, parsed.pkg.package_id);
+  if (!task || Number(task.drama_id) !== Number(dramaId)) {
+    throwCode('PACKAGE_TASK_NOT_FOUND', '找不到属于当前项目的外部 AI 任务，请重新生成任务包');
+  }
+  const explicitTarget = targetEpisodeId === undefined || targetEpisodeId === null || String(targetEpisodeId).trim() === ''
+    ? null
+    : Number(targetEpisodeId);
+  if (task.target_episode_id && explicitTarget && Number(task.target_episode_id) !== explicitTarget) {
+    throwCode('PACKAGE_TARGET_MISMATCH', '所选目标集与结果绑定的任务目标不一致');
+  }
+  const adapted = adaptExternalAiResult(db, parsed.pkg, task);
+  return {
+    pkg: adapted.package,
+    parseErrors: [],
+    adapterWarnings: adapted.warnings,
+    targetEpisodeId: task.target_episode_id || targetEpisodeId,
+    task,
+    sourceSchema: EXTERNAL_AI_RESULT_SCHEMA,
+    sourceVersion: parsed.pkg.version,
+  };
 }
 
 /** 结构 + 业务双重校验;返回统一为 { code, path, message } 的错误/警告列表 */
@@ -379,7 +418,9 @@ function computePreviewStats(db, pkg, matches) {
  * @param {object} options { rawText, filename, dramaId, targetEpisodeId }
  */
 function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId } = {}) {
-  const { pkg, errors: parseErrors } = parseRawText(rawText, { throwOnError: false });
+  const prepared = prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnError: false });
+  const { pkg, parseErrors } = prepared;
+  targetEpisodeId = prepared.targetEpisodeId;
   let validation = { errors: [], warnings: [] };
   if (pkg !== null) {
     validation = validatePackage(pkg);
@@ -407,9 +448,15 @@ function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId 
     target_status: targetStatus,
     asset_matches: matches,
     errors: [...parseErrors, ...validation.errors],
-    warnings: [...validation.warnings, ...(projection.report?.warnings || [])],
+    warnings: [...prepared.adapterWarnings, ...validation.warnings, ...(projection.report?.warnings || [])],
     stats: computePreviewStats(db, normalized, matches),
     import_report: projection.report,
+    package_task: prepared.task ? {
+      package_id: prepared.task.package_id,
+      target_episode_number: prepared.task.target_episode_number,
+      assets_digest: prepared.task.assets_digest,
+      created_at: prepared.task.created_at,
+    } : null,
   };
 }
 
@@ -498,12 +545,9 @@ function insertPropRow(db, dramaId, episodeId, item) {
 function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisodeId, filename, decisions } = {}) {
   const run = db.transaction(() => {
     // 1. 重解析 + 结构 + 业务校验(§8.4 步骤 1)
-    let pkg;
-    try {
-      pkg = JSON.parse(String(rawText));
-    } catch (err) {
-      throwCode('PACKAGE_INVALID', `制作包不是合法 JSON:${err.message}`);
-    }
+    const prepared = prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnError: true });
+    let pkg = prepared.pkg;
+    targetEpisodeId = prepared.targetEpisodeId;
     const { errors } = validatePackage(pkg);
     if (errors.length > 0) {
       const first = errors.slice(0, 5).map((e) => `${e.path || '(root)'}: ${e.message}`).join('; ');
@@ -540,7 +584,7 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
     const plan = planAssetDecisions(db, pkg, effectiveDramaId, decisions || {});
 
     const stats = zeroStats();
-    const warnings = [...validateBusinessRules(pkg).warnings, ...importReport.warnings];
+    const warnings = [...prepared.adapterWarnings, ...validateBusinessRules(pkg).warnings, ...importReport.warnings];
     const audioPolicy = derivePackageAudioPolicy(pkg);
     warnings.push(...audioPolicy.report);
     const productionProfile = {
@@ -852,26 +896,46 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
     importReport.projection = { status: 'verified', verified_at: NOW() };
 
     // 10. episode_imports 审计快照(normalized_json 存渲染后的归一化包)
+    const importColumns = new Set(db.prepare('PRAGMA table_info(episode_imports)').all().map((column) => column.name));
+    const importedAt = NOW();
+    const importRecord = {
+      episode_id: episodeId,
+      schema_name: prepared.sourceSchema,
+      schema_version: prepared.sourceVersion || pkg.version,
+      source_filename: sanitizeSourceFilename(filename),
+      source_sha256: sha256Text(rawText),
+      raw_json: String(rawText),
+      normalized_json: JSON.stringify(buildNormalizedPackage(pkg)),
+      match_decisions: JSON.stringify(decisions || {}),
+      generator_metadata: pkg.generator !== undefined ? JSON.stringify(pkg.generator) : null,
+      import_report: JSON.stringify(importReport),
+      imported_at: importedAt,
+      task_package_id: prepared.task?.package_id || null,
+      task_created_at: prepared.task?.created_at || null,
+      task_assets_digest: prepared.task?.assets_digest || null,
+    };
+    const fields = Object.keys(importRecord).filter((field) => importColumns.has(field));
     db.prepare(
-      `INSERT INTO episode_imports (
-         episode_id, schema_name, schema_version, source_filename, source_sha256,
-         raw_json, normalized_json, match_decisions, generator_metadata, import_report, imported_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      episodeId,
-      PACKAGE_SCHEMA_NAME,
-      pkg.version,
-      sanitizeSourceFilename(filename),
-      sha256Text(rawText),
-      String(rawText),
-      JSON.stringify(buildNormalizedPackage(pkg)),
-      JSON.stringify(decisions || {}),
-      pkg.generator !== undefined ? JSON.stringify(pkg.generator) : null,
-      JSON.stringify(importReport),
-      NOW()
-    );
+      `INSERT INTO episode_imports (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`
+    ).run(...fields.map((field) => importRecord[field]));
+    if (prepared.task) {
+      db.prepare('UPDATE external_ai_package_tasks SET imported_at = ? WHERE package_id = ?').run(
+        importedAt,
+        prepared.task.package_id,
+      );
+    }
 
-    return { episode_id: episodeId, stats, warnings, import_report: importReport };
+    return {
+      episode_id: episodeId,
+      stats,
+      warnings,
+      import_report: importReport,
+      package_task: prepared.task ? {
+        package_id: prepared.task.package_id,
+        created_at: prepared.task.created_at,
+        assets_digest: prepared.task.assets_digest,
+      } : null,
+    };
   });
 
   return run();

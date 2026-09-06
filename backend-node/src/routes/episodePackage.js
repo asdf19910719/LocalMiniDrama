@@ -11,18 +11,91 @@ const {
   syncStoryboardVariantLinks,
 } = require('../services/storyboardVariantService');
 const { getEpisodeImportSource } = require('../services/episodeImportProvenanceService');
+const {
+  buildConversationContext,
+  createTaskBundle,
+  getTaskBundle,
+  buildTaskZip,
+} = require('../services/externalAiTaskBundleService');
 
 // 语义冲突映射 409;其余业务错误(PACKAGE_INVALID / PACKAGE_DECISION_INVALID /
 // CONFLICT_UNRESOLVED / VARIANT_CHARACTER_MISMATCH / VARIANT_SORT_ORDER_DUPLICATE)一律 400
 const CONFLICT_CODES = new Set(['TARGET_NOT_BLANK', 'PACKAGE_HASH_MISMATCH']);
+const NOT_FOUND_CODES = new Set(['DRAMA_NOT_FOUND', 'PACKAGE_TASK_NOT_FOUND']);
 
 function mapServiceError(res, log, scope, err) {
   if (err && err.code) {
-    const status = CONFLICT_CODES.has(err.code) ? 409 : 400;
+    const status = NOT_FOUND_CODES.has(err.code) ? 404 : (CONFLICT_CODES.has(err.code) ? 409 : 400);
     return response.error(res, status, err.code, err.message);
   }
   log.error(`episode package ${scope} failed`, { error: err.message });
   response.internalError(res, err.message || '服务器错误');
+}
+
+function queryValue(req, name) {
+  if (req.query && req.query[name] !== undefined) return req.query[name];
+  try {
+    return new URL(req.url, 'http://localhost').searchParams.get(name);
+  } catch (_) {
+    return null;
+  }
+}
+
+function conversationContext(db, log) {
+  return (req, res) => {
+    try {
+      const out = buildConversationContext(db, req.params.dramaId, {
+        targetEpisodeId: queryValue(req, 'target_episode_id'),
+        targetEpisodeNumber: queryValue(req, 'target_episode_number'),
+      });
+      return response.success(res, out);
+    } catch (err) {
+      return mapServiceError(res, log, 'context', err);
+    }
+  };
+}
+
+function publicTask(task) {
+  return {
+    package_id: task.package_id,
+    drama_id: task.drama_id,
+    target_episode_id: task.target_episode_id,
+    target_episode_number: task.target_episode_number,
+    assets_digest: task.assets_digest,
+    instructions_markdown: task.instructions_markdown,
+    created_at: task.created_at,
+    download_filename: `第${task.target_episode_number}集_AI制作任务_${task.package_id.slice(-8)}.zip`,
+  };
+}
+
+function createExternalAiTask(db, log) {
+  return (req, res) => {
+    try {
+      const body = req.body || {};
+      const task = createTaskBundle(db, req.params.dramaId, {
+        targetEpisodeId: body.target_episode_id,
+        targetEpisodeNumber: body.target_episode_number,
+      });
+      return response.created(res, publicTask(task));
+    } catch (err) {
+      return mapServiceError(res, log, 'create-task', err);
+    }
+  };
+}
+
+function downloadExternalAiTask(db, log) {
+  return (req, res) => {
+    try {
+      const task = getTaskBundle(db, req.params.packageId);
+      if (!task) throw Object.assign(new Error('外部 AI 任务不存在'), { code: 'PACKAGE_TASK_NOT_FOUND' });
+      const filename = `第${task.target_episode_number}集_AI制作任务_${task.package_id.slice(-8)}.zip`;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      return res.status(200).send(buildTaskZip(task));
+    } catch (err) {
+      return mapServiceError(res, log, 'download-task', err);
+    }
+  };
 }
 
 /**
@@ -164,6 +237,9 @@ function showImportSource(db, log) {
 
 module.exports = function episodePackageRoutes(db, cfg, log) {
   const r = express.Router();
+  r.get('/dramas/:dramaId/external-ai/context', conversationContext(db, log));
+  r.post('/dramas/:dramaId/external-ai/tasks', createExternalAiTask(db, log));
+  r.get('/external-ai/tasks/:packageId/download', downloadExternalAiTask(db, log));
   r.get('/dramas/:dramaId/blank-episodes', listBlankEpisodes(db, log));
   r.get('/episodes/:id/import-source', showImportSource(db, log));
   r.post('/episodes/import-package/preview', previewImport(db, log));

@@ -8,6 +8,8 @@ const createRoutes = require('../src/routes/episodePackage');
 const characterRoutes = require('../src/routes/characters');
 const { sha256Text } = require('../src/services/episodePackageService');
 const { listStoryboardVariantLinks } = require('../src/services/storyboardVariantService');
+const { createTaskBundle } = require('../src/services/externalAiTaskBundleService');
+const { validExternalAiResult } = require('./fixtures/externalAiResultFixture');
 
 const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
 const EXAMPLE_RAW = fs.readFileSync(EXAMPLE_PATH, 'utf8');
@@ -16,6 +18,15 @@ const EXAMPLE_RAW = fs.readFileSync(EXAMPLE_PATH, 'utf8');
 function createDb() {
   const db = new Database(':memory:');
   db.exec(`
+    CREATE TABLE dramas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      description TEXT,
+      genre TEXT,
+      style TEXT,
+      metadata TEXT,
+      deleted_at TEXT
+    );
     CREATE TABLE episodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drama_id INTEGER NOT NULL,
@@ -82,6 +93,7 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       source_key TEXT,
+      sort_order INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT
@@ -166,9 +178,30 @@ function createDb() {
       match_decisions TEXT,
       generator_metadata TEXT,
       import_report TEXT,
+      imported_at TEXT,
+      task_package_id TEXT,
+      task_created_at TEXT,
+      task_assets_digest TEXT
+    );
+    CREATE TABLE external_ai_package_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      package_id TEXT NOT NULL UNIQUE,
+      drama_id INTEGER NOT NULL,
+      target_episode_id INTEGER,
+      target_episode_number INTEGER NOT NULL,
+      assets_digest TEXT NOT NULL,
+      context_markdown TEXT NOT NULL,
+      instructions_markdown TEXT NOT NULL,
+      asset_manifest_json TEXT NOT NULL,
+      asset_snapshot_json TEXT NOT NULL,
+      response_schema_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
       imported_at TEXT
     );
   `);
+  db.prepare(`INSERT INTO dramas (id, title, description, genre, style, metadata) VALUES (1, '雨夜追凶', '记者追查旧案', '悬疑', 'cinematic', ?)`).run(
+    JSON.stringify({ external_ai_continuity_notes: '林晚尚不知道顾川身份。' })
+  );
   return db;
 }
 
@@ -178,6 +211,8 @@ function responseCapture() {
     body: null,
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
+    setHeader(name, value) { this.headers ||= {}; this.headers[name.toLowerCase()] = value; },
+    send(body) { this.statusCode ||= 200; this.body = body; return this; },
   };
 }
 
@@ -337,6 +372,49 @@ describe('Episode package routes', () => {
     });
   });
 
+  describe('external AI task preparation', () => {
+    it('returns a new-session context before story discussion', () => {
+      insertEpisode(db, {
+        drama_id: 1,
+        episode_number: 1,
+        title: '雨夜来客',
+        description: '林晚收到一本账本。',
+        script_content: '雨夜里，林晚接过残缺账本。',
+      });
+      const target = insertEpisode(db, { drama_id: 1, episode_number: 2, title: '第二集' });
+
+      const res = callRoute(routes, { method: 'GET', url: `/dramas/1/external-ai/context?target_episode_id=${target}` });
+
+      assert.equal(res.statusCode, 200);
+      assert.match(res.body.data.markdown, /林晚尚不知道顾川身份/);
+      assert.match(res.body.data.markdown, /雨夜里，林晚接过残缺账本/);
+      assert.equal(res.body.data.target_episode_number, 2);
+    });
+
+    it('creates and downloads a persisted three-file task ZIP', () => {
+      const target = insertEpisode(db, { drama_id: 1, episode_number: 2, title: '第二集' });
+      const created = callRoute(routes, {
+        method: 'POST',
+        url: '/dramas/1/external-ai/tasks',
+        body: { target_episode_id: target },
+      });
+
+      assert.equal(created.statusCode, 201);
+      assert.match(created.body.data.package_id, /^extai_/);
+      assert.equal(created.body.data.target_episode_number, 2);
+      assert.equal(created.body.data.asset_snapshot, undefined, 'private database ids are not returned');
+
+      const downloaded = callRoute(routes, {
+        method: 'GET',
+        url: `/external-ai/tasks/${encodeURIComponent(created.body.data.package_id)}/download`,
+      });
+      assert.equal(downloaded.statusCode, 200);
+      assert.equal(downloaded.headers['content-type'], 'application/zip');
+      assert.ok(Buffer.isBuffer(downloaded.body));
+      assert.ok(downloaded.body.length > 100);
+    });
+  });
+
   describe('POST /episodes/import-package', () => {
     it('imports a valid package into a new episode and writes all related tables', () => {
       const res = callRoute(routes, {
@@ -463,6 +541,70 @@ describe('Episode package routes', () => {
       assert.equal(res.statusCode, 400);
       assert.equal(res.body.success, false);
       assert.equal(res.body.error.code, 'PACKAGE_INVALID');
+    });
+
+    it('previews and imports an incremental external AI result while preserving reused assets and task provenance', () => {
+      const target = insertEpisode(db, { drama_id: 1, episode_number: 2, title: '第二集' });
+      db.prepare(`
+        INSERT INTO characters (
+          id, drama_id, source_key, name, role, description, personality, appearance,
+          polished_prompt, negative_prompt, voice_style, created_at, updated_at
+        ) VALUES (21, 1, 'char_lin_wan', '林晚', 'main', '调查记者', '冷静克制',
+          '二十七岁，黑色短发', '林晚定妆照', '避免改脸', '清冷女声', ?, ?)
+      `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
+      db.prepare(`
+        INSERT INTO character_variants (
+          id, character_id, source_key, name, description, appearance, image_prompt,
+          negative_prompt, is_default, created_at, updated_at
+        ) VALUES (31, 21, 'variant_lin_wan_default', '默认状态', '日常状态',
+          '深灰风衣', '深灰风衣定妆', '避免改脸', 1, ?, ?)
+      `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
+      db.prepare(`
+        INSERT INTO scenes (id, drama_id, episode_id, source_key, location, state, description, prompt, atmosphere, negative_prompt, created_at, updated_at)
+        VALUES (41, 1, 1, 'scene_store', '便利店', '雨夜', '冷白灯便利店', '便利店空镜', '紧张', '人物', ?, ?)
+      `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
+      db.prepare(`
+        INSERT INTO props (id, drama_id, episode_id, source_key, name, type, description, prompt, negative_prompt, created_at, updated_at)
+        VALUES (51, 1, 1, 'prop_ledger', '残缺账本', '线索', '缺少末页', '账本棚拍', '手', ?, ?)
+      `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
+      const task = createTaskBundle(db, 1, { targetEpisodeId: target });
+      const result = validExternalAiResult();
+      result.package_id = task.package_id;
+      const raw = JSON.stringify(result);
+      db.prepare(`
+        INSERT INTO props (id, drama_id, episode_id, source_key, name, type, description, prompt, negative_prompt, created_at, updated_at)
+        VALUES (52, 1, 1, NULL, '任务后新增道具', '普通道具', '不参与本集', '普通道具棚拍', '手', ?, ?)
+      `).run(new Date().toISOString(), '2026-09-07T00:00:00.000Z');
+
+      const preview = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: raw, filename: 'episode-2.json', drama_id: 1, target_episode_id: target },
+      });
+      assert.equal(preview.statusCode, 200);
+      assert.deepEqual(preview.body.data.errors, []);
+      assert.equal(preview.body.data.package_task.package_id, task.package_id);
+      assert.ok(preview.body.data.asset_matches.every((item) => item.decision === 'reuse'));
+      assert.equal(db.prepare('SELECT source_key FROM props WHERE id = 52').get().source_key, null, 'preview remains read-only');
+
+      const imported = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package',
+        body: {
+          raw_json_text: raw,
+          source_sha256: sha256Text(raw),
+          filename: 'episode-2.json',
+          drama_id: 1,
+          target_episode_id: target,
+        },
+      });
+      assert.equal(imported.statusCode, 200);
+      assert.equal(db.prepare('SELECT personality FROM characters WHERE id = 21').get().personality, '冷静克制');
+      const source = db.prepare('SELECT * FROM episode_imports WHERE episode_id = ?').get(target);
+      assert.equal(source.schema_name, 'local-mini-drama.external-ai-result');
+      assert.equal(source.task_package_id, task.package_id);
+      assert.equal(source.raw_json, raw);
+      assert.ok(db.prepare('SELECT imported_at FROM external_ai_package_tasks WHERE package_id = ?').get(task.package_id).imported_at);
     });
   });
 

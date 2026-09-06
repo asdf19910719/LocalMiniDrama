@@ -6,24 +6,36 @@ function sanitizeSourceFilename(value) {
   return basename || 'episode-package.json';
 }
 
-const SUMMARY_COLUMNS = `
-  source_filename, schema_name, schema_version, source_sha256, imported_at
-`;
+function summaryColumns(db) {
+  const columns = new Set(db.prepare('PRAGMA table_info(episode_imports)').all().map((column) => column.name));
+  const optional = ['task_package_id', 'task_created_at', 'task_assets_digest']
+    .map((column) => columns.has(column) ? column : `NULL AS ${column}`);
+  return [
+    'source_filename', 'schema_name', 'schema_version', 'source_sha256', 'imported_at',
+    ...optional,
+  ].join(', ');
+}
 
 function mapSummary(row) {
   if (!row) return null;
-  return {
+  const summary = {
     source_filename: sanitizeSourceFilename(row.source_filename),
     schema_name: row.schema_name || null,
     schema_version: row.schema_version || null,
     source_sha256: row.source_sha256 || null,
     imported_at: row.imported_at || null,
   };
+  if (row.task_package_id) {
+    summary.task_package_id = row.task_package_id;
+    summary.task_created_at = row.task_created_at || null;
+    summary.task_assets_digest = row.task_assets_digest || null;
+  }
+  return summary;
 }
 
 function getEpisodeImportSummary(db, episodeId) {
   const row = db.prepare(`
-    SELECT ${SUMMARY_COLUMNS}
+    SELECT ${summaryColumns(db)}
     FROM episode_imports
     WHERE episode_id = ?
     ORDER BY imported_at DESC, id DESC
@@ -41,7 +53,7 @@ function getEpisodeImportSummaries(db, episodeIds) {
 
   const placeholders = ids.map(() => '?').join(', ');
   const rows = db.prepare(`
-    SELECT episode_id, ${SUMMARY_COLUMNS}
+    SELECT episode_id, ${summaryColumns(db)}
     FROM episode_imports
     WHERE episode_id IN (${placeholders})
     ORDER BY episode_id ASC, imported_at DESC, id DESC
@@ -85,6 +97,9 @@ function getEpisodeImportSource(db, episodeId) {
     source_filename: sanitizeSourceFilename(row.source_filename),
     source_sha256: row.source_sha256 || null,
     imported_at: row.imported_at || null,
+    task_package_id: row.task_package_id || null,
+    task_created_at: row.task_created_at || null,
+    task_assets_digest: row.task_assets_digest || null,
     raw_json_text: row.raw_json == null ? '' : String(row.raw_json),
     normalized_json_text: row.normalized_json == null ? '' : String(row.normalized_json),
     match_decisions: parseJsonField(row.match_decisions, 'match_decisions', parseWarnings),

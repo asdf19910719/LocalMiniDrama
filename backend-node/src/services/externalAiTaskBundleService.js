@@ -212,9 +212,9 @@ function buildAssetData(db, drama) {
   return { manifest, snapshot };
 }
 
-function getCurrentAssetState(db, dramaId) {
+function getCurrentAssetState(db, dramaId, options = {}) {
   const drama = getDrama(db, dramaId);
-  ensureStableAssetKeys(db, drama.id);
+  if (options.ensureKeys !== false) ensureStableAssetKeys(db, drama.id);
   const data = buildAssetData(db, drama);
   return {
     ...data,
