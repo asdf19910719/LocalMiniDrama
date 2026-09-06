@@ -11,8 +11,8 @@ const { buildUniversalSegmentUserPromptBundle } = require('../services/universal
 const { normalizeUniversalSegmentShotDurations } = require('../services/universalSegmentDurationNormalize');
 const referenceSlotService = require('../services/referenceSlotService');
 const { createH3PromptDraftService } = require('../services/h3PromptDraftService');
-const { isH3VideoConfig } = require('../services/unifiedVideoGenerationService');
 const { ensureEpisodeAudioPlan } = require('../services/episodeAudioPlanService');
+const { workflowRequiresDraft } = require('../director/workflowExecutionPolicy');
 
 function parseJsonObjectOrNull(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
@@ -25,10 +25,24 @@ function parseJsonObjectOrNull(value) {
   }
 }
 
-/** 草稿行序列化:validation_errors 解析为对象透传给前端(GET/PUT/compile 共用)。 */
+function publicDraftGenerationParams(value) {
+  const parsed = parseJsonObjectOrNull(value);
+  if (!parsed) return value;
+  const snapshot = parsed.videoConfigSnapshot;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return value;
+  const publicSnapshot = { ...snapshot };
+  delete publicSnapshot.workflowPath;
+  delete publicSnapshot.workflow_path;
+  return JSON.stringify({ ...parsed, videoConfigSnapshot: publicSnapshot });
+}
+
+/** 草稿公开 DTO:解析校验错误并移除仅供后端执行的本机工作流路径。 */
 function serializeH3Draft(draft) {
   if (!draft) return null;
-  const out = { ...draft };
+  const out = {
+    ...draft,
+    generation_params: publicDraftGenerationParams(draft.generation_params),
+  };
   for (const field of ['validation_errors', 'coverage_manifest']) {
     const parsed = parseJsonObjectOrNull(out[field]);
     if (parsed) out[field] = parsed;
@@ -271,13 +285,14 @@ function normalizeUniversalSegmentAtImageSpacing(text) {
   );
 }
 
-function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined } = {}) {
+function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined, allowExperimental = false } = {}) {
   // H3 提示词草稿服务(Task 16):workflowRegistry 由 routes/index.js 注入,
   // 与 unifiedVideoGenerationService 收到的是同一 loadRegistry 实例(交接①),
   // 保证草稿快照/指纹与候选生成的解析形状一致。
   // h3DraftCompileFn 仅供测试注入编译替身;缺省走真实 h3PromptCompiler(懒构造,无 AI 依赖)。
   const h3Drafts = createH3PromptDraftService({
     workflowRegistry,
+    allowExperimental,
     ...(typeof h3DraftCompileFn === 'function' ? { compileFn: h3DraftCompileFn } : {}),
   });
   const storyboardExists = (storyboardId) => {
@@ -1218,12 +1233,14 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
       try {
         if (!storyboardExists(req.params.id)) return response.notFound(res, '分镜不存在');
         const videoConfigId = req.query.video_config_id;
+        const workflowId = String(req.query.workflow_id || req.query.workflowId || '').trim();
         if (videoConfigId == null || String(videoConfigId).trim() === '') {
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法定位 H3 提示词草稿');
         }
-        const workflowId = req.query.workflow_id || req.query.workflowId || null;
-        const draft = h3Drafts.getLatestDraft(db, req.params.id, String(videoConfigId), workflowId);
-        const freshness = draft ? h3Drafts.evaluateDraftFreshness(db, draft) : { stale: false, reasons: [] };
+        if (!workflowId) return response.error(res, 400, 'H3_WORKFLOW_REQUIRED', '缺少 workflow_id，无法定位 H3 提示词草稿');
+        const found = h3Drafts.getLatestDraftResult(db, req.params.id, String(videoConfigId), workflowId);
+        const draft = found.draft;
+        const freshness = draft ? h3Drafts.evaluateDraftFreshness(db, draft) : found.freshness;
         response.success(res, { draft: serializeH3Draft(draft), freshness });
       } catch (err) {
         log.error('storyboards h3 draft get', { error: err.message });
@@ -1240,9 +1257,10 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '缺少 video_config_id,无法编译 H3 提示词');
         }
         // 非 H3 配置入口把关(交接③):旧配置不产 H3 草稿,直接 400。
-        const workflowId = body.workflow_id || body.workflowId || null;
+        const workflowId = String(body.workflow_id || body.workflowId || '').trim();
+        if (!workflowId) return response.error(res, 400, 'H3_WORKFLOW_REQUIRED', '缺少 workflow_id，无法编译 H3 提示词');
         const runtime = h3Drafts.resolveVideoRuntime(db, body.video_config_id, { workflowId });
-        if (!isH3VideoConfig(runtime)) {
+        if (!runtime.workflow || !workflowRequiresDraft(runtime.workflow)) {
           return response.error(res, 400, 'H3_CONFIG_REQUIRED', '当前视频配置不是 H3 工作流,无需生成 H3 提示词草稿');
         }
         const episode = db.prepare(
@@ -1280,7 +1298,11 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           WORKFLOW_NOT_FOUND: 400,
           WORKFLOW_INVALID: 400,
           WORKFLOW_EXPERIMENTAL_REQUIRED: 400,
+          WORKFLOW_EXECUTION_INVALID: 400,
           VIDEO_WORKFLOW_NOT_ALLOWED: 400,
+          VIDEO_DIMENSIONS_INVALID: 400,
+          VIDEO_PARAMETERS_INVALID: 400,
+          VIDEO_REFERENCE_COUNT_INVALID: 400,
         };
         if (err.code && statusByCode[err.code] != null) {
           return response.error(res, statusByCode[err.code], err.code, err.message, err.details);

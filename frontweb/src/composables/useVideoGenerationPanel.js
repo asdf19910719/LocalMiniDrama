@@ -8,6 +8,7 @@ import {
   mapFreshnessReasons,
 } from '../utils/h3DraftState.js'
 import { assetImageUrl } from '../utils/mediaUrl.js'
+import { requiresH3Draft, slotReferenceFallbackPolicy } from '../utils/videoModeCompatibility.js'
 
 // H3 草稿文本防抖自动保存间隔(spec §11.3,Task 17)
 const H3_DRAFT_SAVE_DEBOUNCE_MS = 800
@@ -18,9 +19,6 @@ export function workflowIdForTESpeed(enabled) {
   return enabled ? H3_TE_SPEED_WORKFLOW_ID : H3_OFFICIAL_WORKFLOW_ID
 }
 
-function isSwitchableH3WorkflowId(value) {
-  return [H3_OFFICIAL_WORKFLOW_ID, H3_TE_SPEED_WORKFLOW_ID].includes(trimmed(value))
-}
 // 候选生成 409 门禁错误码(Task 16):命中时刷新草稿 + freshness 后再由 chip 呈现原因
 const H3_DRAFT_GATE_ERROR_CODES = new Set([
   'H3_DRAFT_STALE',
@@ -297,9 +295,10 @@ export function buildVideoCandidateRequest(form = {}, overrides = {}) {
     frameRate: positiveNumber(form.frameRate ?? 24, '帧率'),
     seed: nonNegativeInteger(form.seed ?? 42, '随机种子'),
     continuityMode: trimmed(form.continuityMode) || 'none',
-    workflowId: trimmed(form.workflowId) || H3_TE_SPEED_WORKFLOW_ID,
     generationMode: trimmed(form.generationMode) || 'single_reference',
   }
+  const workflowId = trimmed(form.workflowId)
+  if (workflowId) structured.workflowId = workflowId
   const optional = {
     anchorId: trimmed(form.anchorId),
     sourceArtifactId: trimmed(form.sourceArtifactId),
@@ -378,7 +377,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     candidateCount: 1,
     continuityMode: 'none',
     useVoiceReference: false,
-    workflowId: H3_TE_SPEED_WORKFLOW_ID,
+    workflowId: '',
     generationMode: 'single_reference',
     anchorId: '',
     sourceArtifactId: '',
@@ -440,6 +439,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   let h3SaveTimer = null
   let h3Dirty = false
   let h3DraftVersion = 0
+  let appliedWorkflowId = ''
 
   function requestIsCurrent(storyboardId, version, token = null, currentToken = null) {
     return version === mutationVersion
@@ -469,6 +469,23 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     currentGroup.value?.selected_artifact_id || selectedCandidate.value?.artifact?.id || ''
   ))
   const sourceAnchor = computed(() => normalizedSourceAnchor(props.storyboard))
+  const workflowOptions = computed(() => (
+    Array.isArray(capabilities.value?.workflows) ? capabilities.value.workflows : []
+  ))
+  const currentWorkflow = computed(() => (
+    workflowOptions.value.find((workflow) => workflow.id === form.workflowId) || null
+  ))
+  const workflowSelectable = computed(() => (
+    trimmed(defaultConfig.value?.provider).toLowerCase() !== 'comfyui'
+      || currentWorkflow.value?.selectable === true
+  ))
+  const workflowDimensionRules = computed(() => ({
+    minWidth: positiveDefault(currentWorkflow.value?.execution?.dimensions?.minWidth, 32),
+    maxWidth: positiveDefault(currentWorkflow.value?.execution?.dimensions?.maxWidth, 8192),
+    minHeight: positiveDefault(currentWorkflow.value?.execution?.dimensions?.minHeight, 32),
+    maxHeight: positiveDefault(currentWorkflow.value?.execution?.dimensions?.maxHeight, 8192),
+    multipleOf: positiveDefault(currentWorkflow.value?.execution?.dimensions?.multipleOf, 32),
+  }))
   const configStatus = computed(() => defaultConfig.value ? '服务已配置' : '未配置默认服务')
   const providerName = computed(() => {
     const config = defaultConfig.value
@@ -487,23 +504,35 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     return config.name || labels[trimmed(config.provider).toLowerCase()] || trimmed(config.provider) || '默认视频服务'
   })
   const modelName = computed(() => (
-    trimmed(defaultConfig.value?.default_model)
+    (trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui' && trimmed(form.workflowId))
+      || trimmed(defaultConfig.value?.default_model)
       || trimmed(Array.isArray(defaultConfig.value?.model) ? defaultConfig.value.model[0] : defaultConfig.value?.model)
       || '由默认配置决定'
   ))
   const teSpeedEnabled = computed(() => form.workflowId === H3_TE_SPEED_WORKFLOW_ID)
+  const teSpeedSwitchAvailable = computed(() => (
+    [H3_OFFICIAL_WORKFLOW_ID, H3_TE_SPEED_WORKFLOW_ID].every((workflowId) => (
+      workflowOptions.value.some((workflow) => workflow.id === workflowId && workflow.selectable === true)
+    ))
+  ))
   const workflowLabel = computed(() => {
     if (teSpeedEnabled.value) return '官方多参考图（Sage + TE-Speed 实验）'
     if (form.workflowId === H3_OFFICIAL_WORKFLOW_ID) return '官方多参考图（Sage）'
-    return trimmed(capabilities.value?.workflow?.label) || '官方多参考图（Sage）'
+    return trimmed(currentWorkflow.value?.label)
+      || trimmed(currentWorkflow.value?.variant)
+      || trimmed(currentWorkflow.value?.id)
+      || trimmed(capabilities.value?.workflow?.label)
+      || '未选择'
   })
-  const approximateAcceleration = computed(() => teSpeedEnabled.value)
-  const isH3Config = computed(() => {
-    const cfg = defaultConfig.value || {}
-    const provider = String(cfg.provider || '').toLowerCase()
-    const model = String(cfg.default_model || (Array.isArray(cfg.model) ? cfg.model[0] : cfg.model) || '').toLowerCase()
-    return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimax-h3') || model.includes('minimaxh3'))
-  })
+  const approximateAcceleration = computed(() => (
+    teSpeedEnabled.value
+      || currentWorkflow.value?.acceleration?.approximate === true
+      || currentWorkflow.value?.capabilities?.approximateAcceleration === true
+  ))
+  const isH3Config = computed(() => (
+    trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui'
+      && requiresH3Draft(currentWorkflow.value)
+  ))
   const h3UiState = computed(() => deriveH3DraftUiState({
     draft: h3Draft.value,
     freshness: h3Freshness.value,
@@ -550,20 +579,24 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   async function loadH3Draft() {
     const configId = defaultConfig.value?.id
-    if (!isH3Config.value || configId == null || typeof videosAPI.getH3Draft !== 'function') return
+    const requestWorkflowId = form.workflowId
+    if (!isH3Config.value || configId == null || !requestWorkflowId || typeof videosAPI.getH3Draft !== 'function') return
     const requestStoryboardId = props.storyboardId
     const requestVersion = ++h3DraftVersion
     h3DraftLoading.value = true
     try {
-      const result = await videosAPI.getH3Draft(requestStoryboardId, configId, form.workflowId)
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      const result = await videosAPI.getH3Draft(requestStoryboardId, configId, requestWorkflowId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
     } catch (caught) {
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(null, null)
       setError(caught)
     } finally {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) {
         h3DraftLoading.value = false
       }
     }
@@ -572,7 +605,8 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
   /** 「生成 H3 提示词」:调用 compile 草稿接口(替代旧 POST /videos/h3-preview 预览) */
   async function compileH3Draft() {
     const configId = defaultConfig.value?.id
-    if (!isH3Config.value || configId == null || creating.value || h3Compiling.value) return
+    const requestWorkflowId = form.workflowId
+    if (!isH3Config.value || configId == null || !requestWorkflowId || creating.value || h3Compiling.value) return
     if (typeof videosAPI.compileH3Draft !== 'function') return
     // 编译前先补存本地未保存文本:编译结果会 replaceText,不补存会静默覆盖未落库的编辑。
     // 补存失败则中止编译(与 generateCandidates 的门禁同款模式),错误保留展示。
@@ -590,14 +624,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     h3Compiling.value = true
     setError(null)
     try {
-      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId, form.workflowId)
-      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)) return
+      const result = await videosAPI.compileH3Draft(requestStoryboardId, configId, requestWorkflowId)
+      if (requestVersion !== h3DraftVersion || String(props.storyboardId) !== String(requestStoryboardId)
+        || form.workflowId !== requestWorkflowId) return
       applyH3Draft(result?.draft ?? null, result?.freshness, { replaceText: true })
       await loadReferenceSlots()
     } catch (caught) {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) setError(caught)
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) setError(caught)
     } finally {
-      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)) {
+      if (requestVersion === h3DraftVersion && String(props.storyboardId) === String(requestStoryboardId)
+        && form.workflowId === requestWorkflowId) {
         h3Compiling.value = false
       }
     }
@@ -636,12 +673,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
 
   async function setTESpeedEnabled(enabled) {
     const nextWorkflowId = workflowIdForTESpeed(Boolean(enabled))
+    const target = workflowOptions.value.find((workflow) => workflow.id === nextWorkflowId)
+    if (!target || target.selectable !== true) return false
     if (form.workflowId === nextWorkflowId) return true
-    await flushH3DraftSave()
-    if (h3Dirty) return false
-    form.workflowId = nextWorkflowId
-    resetH3DraftState()
-    await loadH3Draft()
+    await onWorkflowChange(nextWorkflowId)
+    if (form.workflowId !== nextWorkflowId) return false
     return true
   }
 
@@ -778,6 +814,48 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     form.seed = nonNegativeDefault(settings.seed, 42)
   }
 
+  function applyWorkflowDefaults(workflow) {
+    if (!workflow) return
+    const settings = parseObject(defaultConfig.value?.settings)
+    const overrides = parseObject(settings.workflow_overrides?.[workflow.id])
+    const legacy = trimmed(defaultConfig.value?.default_model) === trimmed(workflow.id) ? settings : {}
+    const defaults = workflow.execution?.defaults || {}
+    const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '')
+    form.width = positiveDefault(firstDefined(overrides.width, legacy.width, defaults.width), form.width)
+    form.height = positiveDefault(firstDefined(overrides.height, legacy.height, defaults.height), form.height)
+    form.frameRate = positiveDefault(firstDefined(
+      overrides.frameRate,
+      overrides.frame_rate,
+      legacy.frameRate,
+      legacy.frame_rate,
+      defaults.frameRate,
+    ), form.frameRate)
+    form.seed = nonNegativeDefault(firstDefined(overrides.seed, legacy.seed, defaults.seed), form.seed)
+    const mode = workflow.capabilities?.modes?.[0]
+    if (mode) form.generationMode = mode
+    if (workflow.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
+  }
+
+  async function onWorkflowChange(workflowId) {
+    const nextWorkflowId = trimmed(workflowId)
+    const previousWorkflowId = appliedWorkflowId || form.workflowId
+    if (nextWorkflowId === previousWorkflowId) return
+    // el-select 会先更新 v-model；保存旧草稿期间临时恢复已应用的工作流，失败时保持原选择和编辑内容。
+    form.workflowId = previousWorkflowId
+    await flushH3DraftSave()
+    if (h3Dirty) return
+    form.workflowId = nextWorkflowId
+    appliedWorkflowId = nextWorkflowId
+    resetH3DraftState()
+    applyWorkflowDefaults(currentWorkflow.value)
+    setError(null)
+    if (isH3Config.value) {
+      await Promise.all([loadH3Draft(), loadReferenceSlots()])
+    } else if (shouldUseSlotReferences()) {
+      await loadReferenceSlots()
+    }
+  }
+
   function positiveDefault(value, fallback) {
     const number = Number(value)
     return Number.isFinite(number) && number > 0 ? number : fallback
@@ -792,15 +870,22 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     configLoading.value = true
     try {
       defaultConfig.value = await videosAPI.getDefaultConfig()
+      applyConfigDefaults(defaultConfig.value)
       if (typeof videosAPI.capabilities === 'function' && trimmed(defaultConfig.value?.provider).toLowerCase() === 'comfyui') {
         capabilities.value = await videosAPI.capabilities()
-        const workflow = capabilities.value?.workflow
-        if (workflow?.id && !isSwitchableH3WorkflowId(workflow.id)) form.workflowId = workflow.id
-        const mode = capabilities.value?.capabilities?.modes?.[0]
-        if (mode) form.generationMode = mode
-        if (capabilities.value?.capabilities?.supportsContinuity === false) form.continuityMode = 'none'
+        const workflows = Array.isArray(capabilities.value?.workflows) ? capabilities.value.workflows : []
+        const workflow = workflows.find((item) => item.default)
+          || workflows.find((item) => item.id === capabilities.value?.workflow?.id)
+          || workflows.find((item) => item.selectable)
+          || null
+        form.workflowId = workflow?.id || ''
+        appliedWorkflowId = form.workflowId
+        applyWorkflowDefaults(workflow)
+      } else {
+        capabilities.value = null
+        form.workflowId = ''
+        appliedWorkflowId = ''
       }
-      applyConfigDefaults(defaultConfig.value)
     } catch (caught) {
       defaultConfig.value = null
       setError(caught)
@@ -892,6 +977,10 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     const requestStoryboardId = props.storyboardId
     const storyboardKey = String(requestStoryboardId)
     if (creating.value || inFlightCreates.has(storyboardKey)) return
+    if (!workflowSelectable.value) {
+      setError(Object.assign(new Error(currentWorkflow.value?.unavailableReason || '所选工作流当前不可用。'), { code: 'VIDEO_WORKFLOW_INVALID' }))
+      return
+    }
     // H3 门禁(Task 16):先补存待保存文本,再按 valid+未 stale+未保存中放行
     if (isH3Config.value) {
       await flushH3DraftSave()
@@ -924,6 +1013,11 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       if (shouldUseSlotReferences() && !h3SlotsLoaded.value) {
         // 抽屉刚打开就点生成时槽位可能仍在途：等待完成，避免回退到陈旧远程 URL
         await loadReferenceSlots()
+      }
+      if (!h3SlotsLoaded.value
+        && slotReferenceFallbackPolicy(defaultConfig.value, currentWorkflow.value) === 'abort') {
+        setError(Object.assign(new Error('参考图槽位加载失败，请重试。'), { code: 'VIDEO_REFERENCE_SLOTS_UNAVAILABLE' }))
+        return
       }
       if (h3SlotsLoaded.value && shouldUseSlotReferences()) {
         overrides.referenceImageUrls = slotReferenceUrls()
@@ -1150,12 +1244,17 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     generationMode,
     defaultConfig,
     capabilities,
+    workflowOptions,
+    currentWorkflow,
+    workflowSelectable,
+    workflowDimensionRules,
     configLoading,
     configStatus,
     providerName,
     modelName,
     workflowLabel,
     teSpeedEnabled,
+    teSpeedSwitchAvailable,
     setTESpeedEnabled,
     approximateAcceleration,
     isH3Config,
@@ -1198,6 +1297,7 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     compileH3Draft,
     loadH3Draft,
     loadReferenceSlots,
+    onWorkflowChange,
     onH3DraftTextInput,
     scheduleH3DraftSave,
     flushH3DraftSave,

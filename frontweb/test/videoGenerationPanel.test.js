@@ -63,7 +63,7 @@ test('exposes the same video-generation actions in drawer and sidebar layouts', 
   assert.deepEqual(drawerActions, ['刷新', '生成候选', '取消生成', '重试生成', '质量检查', '选用候选', '创建连续性锚点'])
 })
 
-test('builds numeric candidate input with the default H3 workflow and mode', () => {
+test('builds numeric candidate input with the explicitly selected workflow and mode', () => {
   const request = buildVideoCandidateRequest({
     prompt: '雨夜车站，人物撑伞转身',
     negativePrompt: '画面抖动',
@@ -76,6 +76,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
     continuityMode: 'motion_overlap',
     anchorId: 'anchor-1',
     sourceArtifactId: 'artifact-1',
+    workflowId: 'custom-workflow-v2',
   })
 
   assert.deepEqual(request, {
@@ -89,7 +90,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
       frameRate: 24,
       seed: 77,
       continuityMode: 'motion_overlap',
-      workflowId: 'minimax_h3_director_r2v_te_speed',
+      workflowId: 'custom-workflow-v2',
       generationMode: 'single_reference',
       anchorId: 'anchor-1',
       sourceArtifactId: 'artifact-1',
@@ -97,7 +98,7 @@ test('builds numeric candidate input with the default H3 workflow and mode', () 
   })
   assert.equal('provider' in request, false)
   assert.equal('model' in request, false)
-  assert.equal(request.structured.workflowId, 'minimax_h3_director_r2v_te_speed')
+  assert.equal(request.structured.workflowId, 'custom-workflow-v2')
   assert.equal(request.structured.generationMode, 'single_reference')
 })
 
@@ -114,6 +115,7 @@ test('accepts zero as a deterministic random seed', () => {
   })
 
   assert.equal(request.structured.seed, 0)
+  assert.equal('workflowId' in request.structured, false)
 })
 
 test('preserves the normal editor generation context in the unified candidate payload', async () => {
@@ -165,7 +167,6 @@ test('preserves the normal editor generation context in the unified candidate pa
       frameRate: 24,
       seed: 42,
       continuityMode: 'motion_overlap',
-        workflowId: 'minimax_h3_director_r2v_te_speed',
       generationMode: 'single_reference',
       imageUrl: 'https://assets.example.test/selected-first.png',
       firstFrameUrl: 'https://assets.example.test/selected-first.png',
@@ -484,9 +485,50 @@ const H3_CONFIG = {
   default_model: 'minimax_h3_director_r2v',
 }
 
+const H3_WORKFLOW = {
+  id: 'minimax_h3_director_r2v',
+  default: true,
+  selectable: true,
+  variant: '官方多参考图',
+  execution: {
+    requiresPromptDraft: true,
+    promptContract: 'h3_director_v1',
+    defaults: { width: 1312, height: 736, durationSeconds: 5, frameRate: 24, generationMode: 'single_reference' },
+    dimensions: { minWidth: 32, minHeight: 32, multipleOf: 32 },
+  },
+  capabilities: { modes: ['single_reference'], supportsContinuity: false },
+}
+
+const H3_TE_SPEED_WORKFLOW = {
+  ...H3_WORKFLOW,
+  id: 'minimax_h3_director_r2v_te_speed',
+  default: false,
+  label: '官方多参考图（Sage + TE-Speed 实验）',
+  acceleration: { approximate: true },
+}
+
+const FREE_TEXT_WORKFLOW = {
+  id: 'wan_free_text_v1',
+  default: false,
+  selectable: true,
+  variant: '自由文本',
+  execution: {
+    requiresPromptDraft: false,
+    promptContract: 'free_text_v1',
+    defaults: { width: 864, height: 480, frameRate: 16, generationMode: 'image_to_video' },
+    dimensions: { minWidth: 64, minHeight: 64, multipleOf: 16 },
+  },
+  capabilities: { modes: ['image_to_video'], supportsContinuity: true },
+}
+
 function h3ApiStub(extra = {}) {
   return {
     getDefaultConfig: async () => ({ ...H3_CONFIG }),
+    capabilities: async () => ({
+      workflow: H3_WORKFLOW,
+      workflows: [H3_WORKFLOW, FREE_TEXT_WORKFLOW],
+      capabilities: H3_WORKFLOW.capabilities,
+    }),
     getCandidateHistory: async () => ({ groups: [], latest: null }),
     getH3Draft: async () => ({ draft: null, freshness: { stale: false, reasons: [] } }),
     getReferenceSlots: async () => ({ slots: [], total: 0, overflow: [] }),
@@ -514,72 +556,201 @@ test('detects ComfyUI H3 configs for the draft flow', async () => {
   assert.equal(plain.isH3Config.value, false)
 })
 
-test('defaults the TE-Speed switch on and maps off to the official Sage workflow', async () => {
-  assert.equal(workflowIdForTESpeed(true), 'minimax_h3_director_r2v_te_speed')
-  assert.equal(workflowIdForTESpeed(false), 'minimax_h3_director_r2v')
+test('selects the server default workflow and exposes only catalog workflow options', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    () => {},
+    h3ApiStub(),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
 
-  const draftCalls = []
+  assert.equal(panel.form.workflowId, H3_WORKFLOW.id)
+  assert.deepEqual(panel.workflowOptions.value.map((workflow) => workflow.id), [H3_WORKFLOW.id, FREE_TEXT_WORKFLOW.id])
+  assert.equal(panel.currentWorkflow.value.id, H3_WORKFLOW.id)
+  assert.equal(panel.workflowSelectable.value, true)
+  assert.equal(panel.teSpeedSwitchAvailable.value, false)
+})
+
+test('offers the TE-Speed convenience switch only when both verified pair entries are selectable', async () => {
   const panel = useVideoGenerationPanel(
     reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
     () => {},
     h3ApiStub({
-      getH3Draft: async (_storyboardId, _configId, workflowId) => {
-        draftCalls.push(workflowId)
-        return { draft: null, freshness: { stale: false, reasons: [] } }
+      capabilities: async () => ({
+        workflow: H3_WORKFLOW,
+        workflows: [H3_WORKFLOW, H3_TE_SPEED_WORKFLOW],
+        capabilities: H3_WORKFLOW.capabilities,
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.teSpeedSwitchAvailable.value, true)
+  assert.equal(await panel.setTESpeedEnabled(true), true)
+  assert.equal(panel.form.workflowId, H3_TE_SPEED_WORKFLOW.id)
+  assert.equal(panel.approximateAcceleration.value, true)
+})
+
+test('preserves the storyboard duration when workflow defaults load or the H3 pair switches', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 1, storyboard: { id: 1, duration: 15, video_prompt: '长镜头' } }),
+    () => {},
+    h3ApiStub({
+      capabilities: async () => ({
+        workflow: H3_WORKFLOW,
+        workflows: [H3_WORKFLOW, H3_TE_SPEED_WORKFLOW],
+        capabilities: H3_WORKFLOW.capabilities,
+      }),
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.form.duration, 15)
+  assert.equal(await panel.setTESpeedEnabled(true), true)
+  assert.equal(panel.form.duration, 15)
+})
+
+test('switching workflows applies execution defaults and sends the selected workflow id', async () => {
+  const generated = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 2, storyboard: { id: 2, video_prompt: '自由文本镜头' } }),
+    () => {},
+    h3ApiStub({
+      getDefaultConfig: async () => ({
+        ...H3_CONFIG,
+        settings: JSON.stringify({
+          workflow_overrides: {
+            [FREE_TEXT_WORKFLOW.id]: { width: 1024, height: 576, frame_rate: 20, seed: 8 },
+          },
+        }),
+      }),
+      generateCandidates: async (storyboardId, body) => {
+        generated.push([storyboardId, body])
+        return {}
       },
     }),
   )
   await nextTick()
   await new Promise((resolve) => setImmediate(resolve))
 
-  assert.equal(panel.teSpeedEnabled.value, true)
-  assert.equal(panel.form.workflowId, 'minimax_h3_director_r2v_te_speed')
-  assert.equal(panel.approximateAcceleration.value, true)
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
 
-  await panel.setTESpeedEnabled(false)
-  assert.equal(panel.teSpeedEnabled.value, false)
-  assert.equal(panel.form.workflowId, 'minimax_h3_director_r2v')
-  assert.equal(panel.approximateAcceleration.value, false)
-  assert.equal(draftCalls.at(-1), 'minimax_h3_director_r2v')
+  assert.equal(panel.isH3Config.value, false)
+  assert.equal(panel.form.width, 1024)
+  assert.equal(panel.form.height, 576)
+  assert.equal(panel.form.frameRate, 20)
+  assert.equal(panel.form.seed, 8)
+  assert.equal(panel.form.generationMode, 'image_to_video')
+  assert.equal(panel.workflowDimensionRules.value.multipleOf, 16)
 
-  const component = fs.readFileSync(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8')
-  assert.match(component, /TE-Speed 加速/)
-  assert.match(component, /setTESpeedEnabled/)
+  await panel.generateCandidates()
+  assert.equal(generated[0][1].structured.workflowId, FREE_TEXT_WORKFLOW.id)
 })
 
-test('renders capability-driven TE-Speed identity without exposing tuning controls', async () => {
+test('uses legacy channel parameter overrides only for the configured default workflow', async () => {
   const panel = useVideoGenerationPanel(
-    reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
+    reactive({ storyboardId: 2, storyboard: { id: 2, video_prompt: '默认镜头' } }),
     () => {},
     h3ApiStub({
       getDefaultConfig: async () => ({
         ...H3_CONFIG,
-        default_model: 'minimax_h3_director_r2v_te_speed',
-      }),
-      capabilities: async () => ({
-        workflow: {
-          id: 'minimax_h3_director_r2v_te_speed',
-          label: '官方多参考图（Sage + TE-Speed 实验）',
-        },
-        capabilities: {
-          modes: ['single_reference'],
-          supportsContinuity: false,
-          supportsTESpeed: true,
-          approximateAcceleration: true,
-        },
+        settings: JSON.stringify({ width: 1280, height: 704, frame_rate: 30, seed: 6 }),
       }),
     }),
   )
   await nextTick()
   await new Promise((resolve) => setImmediate(resolve))
 
-  assert.equal(panel.isH3Config.value, true)
-  assert.equal(panel.workflowLabel.value, '官方多参考图（Sage + TE-Speed 实验）')
-  assert.equal(panel.approximateAcceleration.value, true)
+  assert.equal(panel.form.width, 1280)
+  assert.equal(panel.form.height, 704)
+  assert.equal(panel.form.frameRate, 30)
+  assert.equal(panel.form.seed, 6)
 
-  const component = fs.readFileSync(new URL('../src/components/video/VideoGenerationPanel.vue', import.meta.url), 'utf8')
-  assert.match(component, /近似加速/)
-  assert.doesNotMatch(component, /v-model="form\.(?:processingControlValue|mcs|teSpeedDevice|teSpeedMode)"/)
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+  assert.equal(panel.form.width, 864)
+  assert.equal(panel.form.height, 480)
+  assert.equal(panel.form.frameRate, 16)
+})
+
+test('flushes an edited H3 draft before clearing it during a workflow switch', async () => {
+  const saves = []
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 4, storyboard: { id: 4, video_prompt: '切换镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 44, storyboard_id: 4, status: 'valid', final_compiled_prompt: '原草稿' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async (_storyboardId, body) => {
+        saves.push(body.final_text)
+        return {
+          draft: { id: 44, storyboard_id: 4, status: 'valid', final_compiled_prompt: body.final_text, manually_edited: true },
+          freshness: { stale: false, reasons: [] },
+        }
+      },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '切换前编辑'
+  panel.onH3DraftTextInput()
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+
+  assert.deepEqual(saves, ['切换前编辑'])
+  assert.equal(panel.h3Draft.value, null)
+})
+
+test('keeps the current workflow and draft when saving before a switch fails', async () => {
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 4, storyboard: { id: 4, video_prompt: '切换失败镜头' } }),
+    () => {},
+    h3ApiStub({
+      getH3Draft: async () => ({
+        draft: { id: 45, workflow_id: H3_WORKFLOW.id, storyboard_id: 4, status: 'valid', final_compiled_prompt: '原草稿' },
+        freshness: { stale: false, reasons: [] },
+      }),
+      saveH3Draft: async () => { throw new Error('保存失败') },
+    }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  panel.h3DraftText.value = '不能丢失的编辑'
+  panel.onH3DraftTextInput()
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+
+  assert.equal(panel.form.workflowId, H3_WORKFLOW.id)
+  assert.equal(panel.h3DraftText.value, '不能丢失的编辑')
+  assert.equal(panel.error.value?.summary, '保存失败')
+})
+
+test('ignores an H3 draft response that arrives after switching workflows', async () => {
+  let resolveDraft
+  const draftResponse = new Promise((resolve) => { resolveDraft = resolve })
+  const panel = useVideoGenerationPanel(
+    reactive({ storyboardId: 8, storyboard: { id: 8, video_prompt: '竞态镜头' } }),
+    () => {},
+    h3ApiStub({ getH3Draft: async () => draftResponse }),
+  )
+  await nextTick()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await panel.onWorkflowChange(FREE_TEXT_WORKFLOW.id)
+  resolveDraft({
+    draft: { id: 99, status: 'valid', final_compiled_prompt: '过期 H3 草稿' },
+    freshness: { stale: false, reasons: [] },
+  })
+  await draftResponse
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(panel.form.workflowId, FREE_TEXT_WORKFLOW.id)
+  assert.equal(panel.h3Draft.value, null)
+  assert.equal(panel.h3DraftText.value, '')
 })
 
 test('restores the existing H3 draft text and chip when the panel opens', async () => {
@@ -587,9 +758,10 @@ test('restores the existing H3 draft text and chip when the panel opens', async 
     reactive({ storyboardId: 1, storyboard: { id: 1, video_prompt: '镜头' } }),
     () => {},
     h3ApiStub({
-      getH3Draft: async (storyboardId, videoConfigId) => {
+      getH3Draft: async (storyboardId, videoConfigId, workflowId) => {
         assert.equal(storyboardId, 1)
         assert.equal(videoConfigId, 77)
+        assert.equal(workflowId, H3_WORKFLOW.id)
         return {
           draft: { id: 9, status: 'valid', manually_edited: false, final_compiled_prompt: '编译好的 H3 提示词' },
           freshness: { stale: false, reasons: [] },
@@ -611,8 +783,8 @@ test('compile generates the draft text through the compile endpoint', async () =
     reactive({ storyboardId: 3, storyboard: { id: 3, universal_segment_text: '片段描述' } }),
     () => {},
     h3ApiStub({
-      compileH3Draft: async (storyboardId, videoConfigId) => {
-        compileCalls.push([storyboardId, videoConfigId])
+      compileH3Draft: async (storyboardId, videoConfigId, workflowId) => {
+        compileCalls.push([storyboardId, videoConfigId, workflowId])
         return {
           draft: { id: 12, status: 'valid', manually_edited: false, final_compiled_prompt: '新编译提示词' },
           freshness: { stale: false, reasons: [] },
@@ -624,7 +796,7 @@ test('compile generates the draft text through the compile endpoint', async () =
   await new Promise((resolve) => setImmediate(resolve))
 
   await panel.compileH3Draft()
-  assert.deepEqual(compileCalls, [[3, 77]])
+  assert.deepEqual(compileCalls, [[3, 77, H3_WORKFLOW.id]])
   assert.equal(panel.h3DraftText.value, '新编译提示词')
   assert.equal(panel.h3UiState.value.chip, 'ai')
 })

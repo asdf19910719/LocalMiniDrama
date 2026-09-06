@@ -6572,7 +6572,7 @@ async function collectSlotReferenceAbsoluteUrls(sbId, { silent = false } = {}) {
       .filter(Boolean)
   } catch (error) {
     console.warn('[FilmCreate] 参考图槽位接口加载失败', sbId, error)
-    if (slotReferenceFallbackPolicy(await getActiveVideoAiConfig()) === 'abort') {
+    if (slotReferenceFallbackPolicy(await getActiveVideoAiConfig(), await getActiveVideoWorkflowMeta()) === 'abort') {
       // silent:批量/流水线逐镜弹窗会刷屏,失败由调用点按现有机制记账
       if (!silent) ElMessage.error('参考图槽位加载失败，请重试')
       return null
@@ -6594,11 +6594,15 @@ function collectSbSceneOnlyReferenceAbsoluteUrls(sb) {
 
 let activeVideoAiConfigCache = null
 let activeVideoAiConfigCacheAt = 0
+let activeVideoWorkflowMetaCache = null
+let activeVideoWorkflowMetaCacheAt = 0
 const ACTIVE_VIDEO_AI_CONFIG_TTL_MS = 15000
 
 function invalidateActiveVideoAiConfigCache() {
   activeVideoAiConfigCache = null
   activeVideoAiConfigCacheAt = 0
+  activeVideoWorkflowMetaCache = null
+  activeVideoWorkflowMetaCacheAt = 0
 }
 
 async function getActiveVideoAiConfig() {
@@ -6616,6 +6620,27 @@ async function getActiveVideoAiConfig() {
   }
   activeVideoAiConfigCacheAt = now
   return activeVideoAiConfigCache
+}
+
+async function getActiveVideoWorkflowMeta() {
+  const cfg = await getActiveVideoAiConfig()
+  if (String(cfg?.provider || '').trim().toLowerCase() !== 'comfyui') return null
+  const now = Date.now()
+  if (activeVideoWorkflowMetaCache && now - activeVideoWorkflowMetaCacheAt < ACTIVE_VIDEO_AI_CONFIG_TTL_MS) {
+    return activeVideoWorkflowMetaCache
+  }
+  try {
+    const result = await videosAPI.capabilities()
+    const workflows = Array.isArray(result?.workflows) ? result.workflows : []
+    activeVideoWorkflowMetaCache = workflows.find((workflow) => workflow.default)
+      || workflows.find((workflow) => workflow.id === result?.workflow?.id)
+      || result?.workflow
+      || null
+  } catch {
+    activeVideoWorkflowMetaCache = null
+  }
+  activeVideoWorkflowMetaCacheAt = now
+  return activeVideoWorkflowMetaCache
 }
 
 /**
@@ -6642,8 +6667,8 @@ function videoModelNameFromAiConfig(cfg) {
   return String(m || '').trim()
 }
 
-function canUseUniversalOmniVideoApi(cfg) {
-  if (universalVideoCompatibility(cfg).compatible) return true
+function canUseUniversalOmniVideoApi(cfg, workflowMeta) {
+  if (universalVideoCompatibility(cfg, workflowMeta).compatible) return true
   if (!cfg) return false
   const proto = String(cfg.api_protocol || '').toLowerCase()
   const provider = String(cfg.provider || '').toLowerCase()
@@ -6981,9 +7006,9 @@ async function onGenerateSbVideo(sb) {
   let universalOmniApi = universal
   let h3DirectorMode = false
   if (universal) {
-    const videoCfg = await getActiveVideoAiConfig()
-    const compatibility = universalVideoCompatibility(videoCfg)
-    if (!canUseUniversalOmniVideoApi(videoCfg)) {
+    const [videoCfg, workflowMeta] = await Promise.all([getActiveVideoAiConfig(), getActiveVideoWorkflowMeta()])
+    const compatibility = universalVideoCompatibility(videoCfg, workflowMeta)
+    if (!canUseUniversalOmniVideoApi(videoCfg, workflowMeta)) {
       try {
         await confirmUniversalNonSeedance2Video()
       } catch {

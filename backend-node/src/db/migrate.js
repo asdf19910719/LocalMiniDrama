@@ -660,6 +660,7 @@ function ensureAllColumns(database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       storyboard_id INTEGER NOT NULL,
       video_config_id TEXT,
+      workflow_id TEXT,
       source_prompt TEXT,
       source_fingerprint TEXT,
       ai_compiled_prompt TEXT,
@@ -673,7 +674,6 @@ function ensureAllColumns(database) {
       manually_edited INTEGER DEFAULT 0,
       status TEXT DEFAULT 'valid',
       validation_errors TEXT,
-      workflow_id TEXT,
       created_at TEXT,
       updated_at TEXT
     )`);

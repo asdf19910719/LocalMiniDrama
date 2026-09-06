@@ -25,6 +25,9 @@ export const videosAPI = {
   capabilities() {
     return request.get('/videos/capabilities')
   },
+  workflows() {
+    return request.get('/videos/workflows')
+  },
   previewH3Prompt(body) {
     return request.post('/videos/h3-preview', body)
   },

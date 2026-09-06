@@ -7,6 +7,20 @@ const { stageReferenceAssets, safeName, cleanupReferenceAssets } = require('../s
 const { loadConfig } = require('../src/config');
 
 describe('reference asset staging', () => {
+  test('uses workflow-specific reference limits', async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stage-reference-limit-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const sources = ['a.png', 'b.png', 'c.png'].map((name) => {
+      const file = path.join(root, name);
+      fs.writeFileSync(file, name);
+      return { source: file };
+    });
+    await assert.rejects(
+      () => stageReferenceAssets(sources, { allowedRoots: [root], inputDir: path.join(root, 'out'), maxReferences: 2 }),
+      /VIDEO_REFERENCE_COUNT_INVALID/,
+    );
+  });
+
   test('copies allowlisted local refs using hash-derived path-free names', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ref-stage-'));
     const input = path.join(root, 'storage');

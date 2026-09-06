@@ -22,13 +22,14 @@ function filmFunctionBody(name) {
 const collectBody = filmFunctionBody('collectSlotReferenceAbsoluteUrls')
 
 test('slot failure policy aborts only H3 configs and keeps the legacy fallback otherwise', () => {
+  const h3Workflow = { execution: { requiresPromptDraft: true } }
+  const freeTextWorkflow = { execution: { requiresPromptDraft: false } }
   // H3:参考图必须与草稿 reference_snapshot 同源 → 中止
-  assert.equal(slotReferenceFallbackPolicy({ provider: 'comfyui', default_model: 'h3-continuity-v1' }), 'abort')
-  assert.equal(slotReferenceFallbackPolicy({ provider: 'comfyui', default_model: 'minimax-h3-director' }), 'abort')
+  assert.equal(slotReferenceFallbackPolicy({ provider: 'comfyui' }, h3Workflow), 'abort')
   // 非 H3:可用性优先,保留 legacy 兜底
-  assert.equal(slotReferenceFallbackPolicy({ provider: 'volces', default_model: 'doubao-seedance-2-0' }), 'legacy_fallback')
-  assert.equal(slotReferenceFallbackPolicy({ provider: 'comfyui', default_model: 'other-workflow' }), 'legacy_fallback')
-  assert.equal(slotReferenceFallbackPolicy(null), 'legacy_fallback')
+  assert.equal(slotReferenceFallbackPolicy({ provider: 'volces' }, null), 'legacy_fallback')
+  assert.equal(slotReferenceFallbackPolicy({ provider: 'comfyui', default_model: 'minimax-h3-director' }, freeTextWorkflow), 'legacy_fallback')
+  assert.equal(slotReferenceFallbackPolicy(null, null), 'legacy_fallback')
 })
 
 test('slot reference collector warns, aborts under H3, and never silently degrades to legacy refs', () => {
@@ -36,7 +37,7 @@ test('slot reference collector warns, aborts under H3, and never silently degrad
   // 槽位接口失败必须留痕,不得静默
   assert.match(collectBody, /console\.warn\(/)
   // H3 配置下:提示用户并返回 null 中止提交(角色主图 ≠ 状态图,降级会发错参考图)
-  assert.match(collectBody, /getActiveVideoAiConfig\(\)/)
+  assert.match(collectBody, /getActiveVideoWorkflowMeta\(\)/)
   assert.match(collectBody, /slotReferenceFallbackPolicy\(/)
   assert.match(collectBody, /ElMessage\.error\('参考图槽位加载失败/)
   assert.match(collectBody, /return null/)

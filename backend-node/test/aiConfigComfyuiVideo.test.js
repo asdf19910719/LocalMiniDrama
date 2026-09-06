@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const Database = require('better-sqlite3');
 const aiConfigService = require('../src/services/aiConfigService');
 const aiConfigRoutes = require('../src/routes/aiConfig');
 
@@ -38,6 +39,14 @@ function createDb() {
 }
 
 const log = { info() {}, error() {}, errorw() {} };
+const workflowRegistry = {
+  workflows: [
+    { id: 'h3-continuity-v1', status: 'verified' },
+    { id: 'minimax_h3_director_r2v', status: 'verified' },
+    { id: 'alternate', status: 'verified' },
+  ],
+};
+const workflowOptions = { workflowRegistry, allowExperimental: false };
 
 function responseRecorder() {
   const result = {};
@@ -60,7 +69,7 @@ test('creates a ComfyUI video config with an empty key, local URL, workflow, and
     default_model: 'h3-continuity-v1',
     settings: JSON.stringify({ width: '1280', height: '704' }),
     is_default: true,
-  });
+  }, workflowOptions);
 
   assert.equal(config.base_url, 'http://127.0.0.1:8188');
   assert.equal(config.api_key, '');
@@ -69,7 +78,7 @@ test('creates a ComfyUI video config with an empty key, local URL, workflow, and
   assert.deepEqual(JSON.parse(config.settings), { width: 1280, height: 704 });
 });
 
-test('defaults a new ComfyUI video config to the higher 32-aligned base resolution', () => {
+test('does not inject H3-specific dimensions into a general ComfyUI channel', () => {
   const db = createDb();
   const config = aiConfigService.createConfig(db, log, {
     service_type: 'video',
@@ -78,9 +87,34 @@ test('defaults a new ComfyUI video config to the higher 32-aligned base resoluti
     model: ['minimax_h3_director_r2v'],
     default_model: 'minimax_h3_director_r2v',
     is_default: true,
-  });
+  }, workflowOptions);
 
-  assert.deepEqual(JSON.parse(config.settings), { width: 1312, height: 736 });
+  assert.deepEqual(JSON.parse(config.settings), {});
+});
+
+test('atomically rejects invalid ComfyUI create and partial update candidates', () => {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE ai_service_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, service_type TEXT, provider TEXT, api_protocol TEXT,
+    name TEXT, base_url TEXT, api_key TEXT, model TEXT, default_model TEXT, endpoint TEXT,
+    query_endpoint TEXT, priority INTEGER, is_default INTEGER, is_active INTEGER, settings TEXT,
+    created_at TEXT, updated_at TEXT, deleted_at TEXT
+  )`);
+
+  assert.throws(() => aiConfigService.createConfig(db, log, {
+    service_type: 'video', provider: 'comfyui', name: 'invalid', model: ['missing'], default_model: 'missing',
+  }, workflowOptions), (error) => error.code === 'WORKFLOW_NOT_FOUND');
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM ai_service_configs').get().count, 0);
+
+  const created = aiConfigService.createConfig(db, log, {
+    service_type: 'video', provider: 'comfyui', name: 'valid', model: ['h3-continuity-v1', 'alternate'],
+    default_model: 'h3-continuity-v1',
+  }, workflowOptions);
+  assert.throws(() => aiConfigService.updateConfig(db, log, created.id, {
+    default_model: 'missing',
+  }, workflowOptions), (error) => error.code === 'COMFYUI_DEFAULT_WORKFLOW_NOT_ALLOWED');
+  assert.equal(aiConfigService.getConfig(db, created.id).default_model, 'h3-continuity-v1');
+  db.close();
 });
 
 test('uses the shared ComfyUI provider for a read-only connection check and returns Chinese checks', async () => {
@@ -114,13 +148,16 @@ test('uses the shared ComfyUI provider for a read-only connection check and retu
 
   await routes.testConnection({ body: {
     service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188', api_key: '',
-    model: 'h3-continuity-v1', settings: JSON.stringify({ width: 1280, height: 704 }),
+    model: ['h3-continuity-v1', 'alternate'], default_model: 'h3-continuity-v1', workflow: 'alternate',
+    settings: JSON.stringify({ width: 1280, height: 704, workflow_overrides: { alternate: { width: 1024, height: 576 } } }),
   } }, res);
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].model, 'h3-continuity-v1');
+  assert.equal(calls[0].model, 'alternate');
   assert.equal(calls[0].base_url, 'http://127.0.0.1:8188');
-  assert.deepEqual(calls[0].config.settings, { width: 1280, height: 704 });
+  assert.equal(calls[0].config.default_model, 'h3-continuity-v1');
+  assert.deepEqual(calls[0].config.settings, { width: 1280, height: 704, workflow_overrides: { alternate: { width: 1024, height: 576 } } });
+  assert.deepEqual(calls[0].input, {});
   assert.deepEqual(res.result.body.data, {
     ok: true,
     provider: 'comfyui',
@@ -133,4 +170,60 @@ test('uses the shared ComfyUI provider for a read-only connection check and retu
     ],
     message: 'ComfyUI 连接检查通过，未启动推理任务',
   });
+});
+
+test('preserves stable provider error codes from ComfyUI connection checks', async () => {
+  const routes = aiConfigRoutes(createDb(), log, {}, {
+    providerRegistry: {
+      get() {
+        return {
+          async testConnection() {
+            const error = new Error('工作流缺少输入绑定 adapter');
+            error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+            error.status = 400;
+            error.details = { workflowId: 'alternate' };
+            throw error;
+          },
+        };
+      },
+    },
+  });
+  const res = responseRecorder();
+
+  await routes.testConnection({ body: {
+    service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188',
+    workflow: 'alternate', settings: '{}',
+  } }, res);
+
+  assert.equal(res.result.status, 400);
+  assert.equal(res.result.body.error.code, 'WORKFLOW_ADAPTER_REQUIRED');
+  assert.deepEqual(res.result.body.error.details, { workflowId: 'alternate' });
+});
+
+test('preserves retryable provider 5xx statuses from ComfyUI connection checks', async () => {
+  const routes = aiConfigRoutes(createDb(), log, {}, {
+    providerRegistry: {
+      get() {
+        return {
+          async testConnection() {
+            const error = new Error('ComfyUI 暂时不可用');
+            error.code = 'COMFYUI_UNAVAILABLE';
+            error.status = 503;
+            error.details = { retryable: true };
+            throw error;
+          },
+        };
+      },
+    },
+  });
+  const res = responseRecorder();
+
+  await routes.testConnection({ body: {
+    service_type: 'video', provider: 'comfyui', base_url: 'http://127.0.0.1:8188',
+    workflow: 'alternate', settings: '{}',
+  } }, res);
+
+  assert.equal(res.result.status, 503);
+  assert.equal(res.result.body.error.code, 'COMFYUI_UNAVAILABLE');
+  assert.deepEqual(res.result.body.error.details, { retryable: true });
 });

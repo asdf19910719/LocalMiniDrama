@@ -5,6 +5,41 @@ const { buildVideoConfigSnapshot } = require('../src/services/videoGenerationSna
 const { runMigrationsAndEnsure } = require('../src/db/migrate');
 
 describe('buildVideoConfigSnapshot', () => {
+  test('freezes the complete workflow contract and final effective parameters', () => {
+    const execution = {
+      promptContract: 'free_text_v1',
+      requiresPromptDraft: false,
+      dimensions: { minWidth: 64, maxWidth: 2048, minHeight: 64, maxHeight: 2048, multipleOf: 8 },
+      references: { min: 0, max: 2 },
+      vramPolicy: 'none',
+      defaults: { width: 640, height: 360, durationSeconds: 4, frameRate: 20, seed: 3 },
+    };
+    const snapshot = buildVideoConfigSnapshot({
+      config: { id: 7, provider: 'comfyui', default_model: 'free-text-v1', settings: {} },
+      provider: 'comfyui',
+      protocol: 'comfyui',
+      model: 'free-text-v1',
+      workflow: {
+        id: 'free-text-v1', status: 'verified', workflowPath: 'E:/workflows/free-text.json',
+        workflowSha256: 'sha256:abc', variant: 'official', family: 'video',
+        adapter: 'free_text_adapter', adapterVersion: 'v2', execution,
+      },
+      effectiveParameters: { width: 1280, height: 704, durationSeconds: 6, frameRate: 24, seed: 99 },
+      planHash: 'sha256:plan',
+    });
+
+    assert.equal(snapshot.workflowSnapshotVersion, 1);
+    assert.equal(snapshot.workflowPath, 'E:/workflows/free-text.json');
+    assert.equal(snapshot.workflowStatus, 'verified');
+    assert.equal(snapshot.workflowFamily, 'video');
+    assert.deepEqual(snapshot.workflowExecution, execution);
+    assert.notEqual(snapshot.workflowExecution, execution);
+    assert.deepEqual(snapshot.effectiveParameters, {
+      width: 1280, height: 704, durationSeconds: 6, frameRate: 24, seed: 99,
+    });
+    assert.equal(snapshot.planHash, 'sha256:plan');
+  });
+
   test('keeps only resolved routing and allowlisted non-secret settings', () => {
     const snapshot = buildVideoConfigSnapshot({
       config: {

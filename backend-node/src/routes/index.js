@@ -87,7 +87,10 @@ function setupRouter(cfg, db, log) {
   const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
   // H3 提示词草稿路由与 unified 服务共用同一注册表实例(Task 16 交接①),
   // 保证草稿快照/指纹与候选生成的解析形状一致,否则门禁恒判 stale。
-  const storyboards = storyboardRoutes(db, log, { workflowRegistry: directorRegistry });
+  const storyboards = storyboardRoutes(db, log, {
+    workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
+  });
   const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
   const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
   const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
@@ -109,6 +112,8 @@ function setupRouter(cfg, db, log) {
       referenceStager: (refs, context) => stageReferenceAssets(refs, {
         allowedRoots: directorAllowedRoots,
         inputDir: comfyInputDir,
+        minReferences: context?.referenceLimits?.min ?? 0,
+        maxReferences: context?.referenceLimits?.max ?? 9,
         remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
         client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
         remote: !comfyInputDir,
@@ -123,12 +128,17 @@ function setupRouter(cfg, db, log) {
       allowExperimental: cfg.director.allow_experimental,
     }),
   });
-  const aiConfig = aiConfigRoutes(db, log, cfg, { providerRegistry: videoProviderRegistry });
+  const aiConfig = aiConfigRoutes(db, log, cfg, {
+    providerRegistry: videoProviderRegistry,
+    workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
+  });
   const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
     db,
     log,
     providerRegistry: videoProviderRegistry,
     workflowRegistry: directorRegistry,
+    allowExperimental: cfg.director.allow_experimental,
   });
   const preparedVideoGenerationService = createPreparedVideoGenerationService({
     db,
@@ -392,6 +402,7 @@ function setupRouter(cfg, db, log) {
   // ---------- videos ----------
   r.get('/videos', videos.list);
   r.get('/videos/capabilities', videos.capabilities);
+  r.get('/videos/workflows', videos.workflows);
   r.post('/videos', videos.create);
   r.post('/videos/prepared', videos.preparedCreate);
   r.post('/videos/prepared/batch', videos.preparedBatch);

@@ -231,6 +231,25 @@ function buildService(db, harness, overrides = {}) {
   });
 }
 
+function testComfyuiWorkflowRegistry() {
+  return {
+    workflows: [{
+      id: 'old-model',
+      status: 'verified',
+      workflowPath: 'E:/test/workflows/old-model.json',
+      workflowSha256: 'sha256:test-old-model',
+      execution: {
+        promptContract: 'free_text_v1',
+        requiresPromptDraft: false,
+        dimensions: { minWidth: 64, maxWidth: 4096, minHeight: 64, maxHeight: 4096, multipleOf: 8 },
+        references: { min: 0, max: 3 },
+        vramPolicy: 'none',
+        defaults: { width: 1280, height: 704, durationSeconds: 5, frameRate: 24, seed: 1 },
+      },
+    }],
+  };
+}
+
 describe('unified video generation lifecycle', () => {
   it('allows only the official and TE-Speed H3 workflows to switch in either direction', () => {
     assert.equal(isSwitchableH3WorkflowPair(
@@ -245,12 +264,171 @@ describe('unified video generation lifecycle', () => {
     assert.equal(isSwitchableH3WorkflowPair('h3-continuity-v1', 'minimax_h3_director_r2v_te_speed'), false);
   });
 
+  it('rejects manual resubmission of a persisted ComfyUI task without a versioned workflow snapshot', async () => {
+    const db = createTestDb();
+    const harness = createHarness();
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7,
+      provider: 'comfyui',
+      model: 'h3-continuity-v1',
+      settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'failed', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    await assert.rejects(
+      () => service.retryVideoGeneration(id),
+      (error) => error.code === 'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE' && error.status === 409,
+    );
+    assert.equal(db.prepare('SELECT status FROM video_generations WHERE id = ?').get(id).status, 'failed');
+    assert.equal(harness.jobs.length, 0);
+  });
+
+  it('fails legacy ComfyUI submissions during restart recovery instead of selecting the live registry', async () => {
+    const db = createTestDb();
+    const harness = createHarness();
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7,
+      provider: 'comfyui',
+      model: 'h3-continuity-v1',
+      settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'waiting', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    assert.equal(await service.recoverVideoGenerations(), 1);
+    const row = db.prepare('SELECT status, error_msg FROM video_generations WHERE id = ?').get(id);
+    assert.equal(row.status, 'failed');
+    assert.equal(JSON.parse(row.error_msg).code, 'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE');
+    assert.equal(harness.jobs.length, 0);
+  });
+
+  it('recovers a legacy ComfyUI task with an existing provider task id without resubmitting it', async () => {
+    const db = createTestDb();
+    const harness = createHarness({
+      recover: [{
+        providerTaskId: 'legacy-upstream-task', status: 'completed', progress: 100,
+        output: { videoUrl: 'https://cdn.example.test/legacy-recovered.mp4' },
+      }],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7, provider: 'comfyui', model: 'h3-continuity-v1', settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, provider_task_id, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'failed', 'legacy-upstream-task', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    const retried = await service.retryVideoGeneration(id);
+    assert.equal(retried.status, 'queued');
+    await harness.runNext();
+
+    assert.equal(harness.calls.recover.length, 1);
+    assert.equal(harness.calls.submit.length, 0);
+    assert.equal(service.getVideoGeneration(id).status, 'review');
+  });
+
+  it('restores a legacy ComfyUI task with an existing provider task id after restart without resubmitting it', async () => {
+    const db = createTestDb();
+    const harness = createHarness({
+      recover: [{ providerTaskId: 'legacy-running-task', status: 'running', progress: 45 }],
+    });
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const service = buildService(db, harness);
+    const legacySnapshot = JSON.stringify({
+      configId: 7, provider: 'comfyui', model: 'h3-continuity-v1', settings: {},
+    });
+    const id = Number(db.prepare(`
+      INSERT INTO video_generations
+        (provider, model, config_id, config_snapshot, status, provider_task_id, created_at, updated_at)
+      VALUES ('comfyui', 'h3-continuity-v1', 7, ?, 'running', 'legacy-running-task', ?, ?)
+    `).run(legacySnapshot, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').lastInsertRowid);
+
+    assert.equal(await service.recoverVideoGenerations(), 1);
+    await harness.runNext();
+
+    assert.equal(harness.calls.recover.length, 1);
+    assert.equal(harness.calls.submit.length, 0);
+    assert.equal(service.getVideoGeneration(id).status, 'running');
+  });
+
+  it('persists the selected ComfyUI workflow consistently and keeps its snapshot on retry', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      api_protocol: '',
+      base_url: 'http://127.0.0.1:8188',
+      model: JSON.stringify(['official', 'alternate']),
+      default_model: 'official',
+    });
+    const harness = createHarness();
+    harness.registry = {
+      has(name) { return name === 'comfyui'; },
+      get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
+    };
+    const workflowRegistry = {
+      workflows: [
+        ...['official', 'alternate'].map((id) => ({
+          id, status: 'verified',
+          workflowPath: `E:/private/workflows/${id}.json`,
+          workflowSha256: `sha256:${id}`,
+          execution: {
+            promptContract: 'free_text_v1', requiresPromptDraft: false,
+            dimensions: { minWidth: 1, maxWidth: 4096, minHeight: 1, maxHeight: 4096, multipleOf: 1 },
+            references: { min: 0, max: 3 }, vramPolicy: 'none',
+            defaults: { width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1 },
+          },
+        })),
+      ],
+    };
+    const service = buildService(db, harness, { workflowRegistry });
+
+    const created = await service.createVideoGeneration({ prompt: 'alternate workflow', workflow_id: 'alternate' });
+    const row = db.prepare('SELECT * FROM video_generations WHERE id = ?').get(created.id);
+    const snapshot = JSON.parse(row.config_snapshot);
+    assert.equal(row.model, 'alternate');
+    assert.equal(snapshot.model, 'alternate');
+    assert.equal(snapshot.workflowId, 'alternate');
+    assert.equal(snapshot.workflowPath, 'E:/private/workflows/alternate.json');
+    assert.equal(snapshot.workflowSnapshotVersion, 1);
+    assert.equal(snapshot.workflowExecution.promptContract, 'free_text_v1');
+    assert.deepEqual(snapshot.effectiveParameters, {
+      width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1,
+    });
+    assert.equal(created.routing_snapshot.workflowPath, undefined);
+    assert.equal(created.config_snapshot.workflowPath, undefined);
+
+    db.prepare("UPDATE video_generations SET status = 'failed'").run();
+    await service.retryVideoGeneration(created.id);
+    const retried = db.prepare('SELECT * FROM video_generations WHERE id = ?').get(created.id);
+    assert.equal(retried.config_snapshot, row.config_snapshot);
+    assert.equal(retried.model, 'alternate');
+    db.close();
+  });
+
   it('uses the skill-agent compiler for H3 prompt previews', async () => {
     const db = createTestDb();
     seedDefaultConfig(db, {
       provider: 'comfyui',
-      model: JSON.stringify(['h3-continuity-v1']),
-      default_model: 'h3-continuity-v1',
+      model: JSON.stringify(['custom-director']),
+      default_model: 'custom-director',
     });
     const validPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
     const calls = [];
@@ -271,7 +449,21 @@ describe('unified video generation lifecycle', () => {
       },
     });
     const harness = createHarness();
-    const service = buildService(db, harness, { h3PromptCompiler: compiler });
+    const workflowRegistry = {
+      workflows: [{
+        id: 'custom-director',
+        status: 'verified',
+        execution: {
+          promptContract: 'h3_director_v1',
+          requiresPromptDraft: true,
+          dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+          references: { min: 0, max: 9 },
+          vramPolicy: 'h3_estimate',
+          defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 1 },
+        },
+      }],
+    };
+    const service = buildService(db, harness, { h3PromptCompiler: compiler, workflowRegistry });
 
     const result = await service.previewH3Prompt({ prompt: 'a woman walks', duration: 5 });
 
@@ -280,6 +472,37 @@ describe('unified video generation lifecycle', () => {
     assert.equal(result.compilerVersion, 'h3-skill-agent-v1');
     assert.equal(result.skillProvenance.toolCallId, 'call-preview');
     assert.equal(result.compiledPrompt, validPrompt);
+    db.close();
+  });
+
+  it('rejects H3-looking workflow names whose execution contract is free text', async () => {
+    const db = createTestDb();
+    seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['minimax-h3-lookalike']),
+      default_model: 'minimax-h3-lookalike',
+    });
+    const harness = createHarness();
+    const workflowRegistry = {
+      workflows: [{
+        id: 'minimax-h3-lookalike',
+        status: 'verified',
+        execution: {
+          promptContract: 'free_text_v1',
+          requiresPromptDraft: false,
+          dimensions: { minWidth: 1, maxWidth: 4096, minHeight: 1, maxHeight: 4096, multipleOf: 1 },
+          references: { min: 0, max: 3 },
+          vramPolicy: 'none',
+          defaults: { width: 640, height: 360, durationSeconds: 5, frameRate: 24, seed: 1 },
+        },
+      }],
+    };
+    const service = buildService(db, harness, { workflowRegistry });
+
+    await assert.rejects(
+      service.previewH3Prompt({ prompt: 'a woman walks' }),
+      (error) => error.code === 'H3_PREVIEW_UNSUPPORTED',
+    );
     db.close();
   });
 
@@ -366,6 +589,126 @@ describe('unified video generation lifecycle', () => {
     db.close();
   });
 
+  it('rejects an H3 draft belonging to another selected workflow', async () => {
+    const db = createTestDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (12, 5)').run();
+    const configId = seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['h3-a', 'h3-b']),
+      default_model: 'h3-a',
+    });
+    const execution = {
+      promptContract: 'h3_director_v1', requiresPromptDraft: true,
+      dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+      references: { min: 0, max: 9 }, vramPolicy: 'h3_estimate',
+      defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+    };
+    const draft = { id: 12, storyboard_id: 12, video_config_id: String(configId), workflow_id: 'h3-b' };
+    const service = buildService(db, createHarness(), {
+      workflowRegistry: { workflows: [{ id: 'h3-a', status: 'verified', execution }, { id: 'h3-b', status: 'verified', execution }] },
+      h3PromptDraftService: {
+        getDraftById() { return draft; },
+        evaluateDraftFreshness() { return { stale: false, reasons: [] }; },
+      },
+    });
+    await assert.rejects(
+      () => service.createVideoGeneration({ prompt: 'x', storyboard_id: 12, workflow_id: 'h3-a', h3_prompt_draft_id: draft.id }),
+      (error) => error.code === 'H3_DRAFT_WORKFLOW_MISMATCH' && error.status === 409,
+    );
+    db.close();
+  });
+
+  it('rejects an unbound legacy H3 draft when its SHA cannot identify the selected workflow', async () => {
+    const db = createTestDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (13, 5)').run();
+    const configId = seedDefaultConfig(db, {
+      provider: 'comfyui',
+      model: JSON.stringify(['h3-a', 'h3-b']),
+      default_model: 'h3-a',
+    });
+    const execution = {
+      promptContract: 'h3_director_v1', requiresPromptDraft: true,
+      dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+      references: { min: 0, max: 9 }, vramPolicy: 'h3_estimate',
+      defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+    };
+    const compiledPrompt = 'integrated_multimodal_description: [Shot 1] A woman walks.\noverall_soundscape: Footsteps.\nnon_diegetic_music: N/A';
+    const draft = {
+      id: 13,
+      storyboard_id: 13,
+      video_config_id: String(configId),
+      workflow_id: null,
+      final_compiled_prompt: compiledPrompt,
+      compiled_prompt_hash: require('node:crypto').createHash('sha256').update(compiledPrompt).digest('hex'),
+      status: 'valid',
+    };
+    const service = buildService(db, createHarness(), {
+      workflowRegistry: {
+        workflows: [
+          { id: 'h3-a', status: 'verified', workflowSha256: 'sha256:a', execution },
+          { id: 'h3-b', status: 'verified', workflowSha256: 'sha256:b', execution },
+        ],
+      },
+      h3PromptDraftService: {
+        getDraftById() { return draft; },
+        resolveDraftWorkflow() { return draft; },
+        evaluateDraftFreshness() { return { stale: false, reasons: [] }; },
+      },
+    });
+
+    await assert.rejects(
+      () => service.createVideoGeneration({ prompt: 'x', storyboard_id: 13, workflow_id: 'h3-b', h3_prompt_draft_id: draft.id }),
+      (error) => error.code === 'H3_DRAFT_WORKFLOW_MISMATCH' && error.status === 409,
+    );
+    db.close();
+  });
+
+  it('persists the validated audio policy for a generic registered H3 workflow', async () => {
+    const db = createTestDb();
+    db.prepare('INSERT INTO storyboards (id, duration) VALUES (14, 5)').run();
+    const configId = seedDefaultConfig(db, {
+      provider: 'comfyui',
+      api_protocol: '',
+      model: JSON.stringify(['silent-director']),
+      default_model: 'silent-director',
+      settings: JSON.stringify({ width: 864, height: 480, audio_enabled: false }),
+    });
+    const execution = {
+      promptContract: 'h3_director_v1', requiresPromptDraft: true,
+      dimensions: { minWidth: 32, maxWidth: 4096, minHeight: 32, maxHeight: 4096, multipleOf: 32 },
+      references: { min: 0, max: 9 }, vramPolicy: 'h3_estimate',
+      defaults: { width: 864, height: 480, durationSeconds: 5, frameRate: 24, seed: 42 },
+    };
+    const compiledPrompt = 'integrated_multimodal_description: [Shot 1] A silent room.\noverall_soundscape: N/A\nnon_diegetic_music: N/A';
+    const draft = {
+      id: 14,
+      storyboard_id: 14,
+      video_config_id: String(configId),
+      workflow_id: 'silent-director',
+      final_compiled_prompt: compiledPrompt,
+      compiled_prompt_hash: require('node:crypto').createHash('sha256').update(compiledPrompt).digest('hex'),
+      reference_snapshot: JSON.stringify({ audio: [] }),
+      generation_params: JSON.stringify({ audioEnabled: false, durationSeconds: 5 }),
+      status: 'valid',
+    };
+    const service = buildService(db, createHarness(), {
+      workflowRegistry: {
+        workflows: [{ id: 'silent-director', status: 'verified', workflowSha256: 'sha256:silent', execution }],
+      },
+      h3PromptDraftService: {
+        getDraftById() { return draft; },
+        evaluateDraftFreshness() { return { stale: false, reasons: [] }; },
+      },
+    });
+
+    const created = await service.createVideoGeneration({
+      prompt: 'silent', storyboard_id: 14, workflow_id: 'silent-director', h3_prompt_draft_id: draft.id,
+    });
+    const snapshot = JSON.parse(db.prepare('SELECT config_snapshot FROM video_generations WHERE id = ?').get(created.id).config_snapshot);
+    assert.equal(snapshot.settings.audio_enabled, false);
+    db.close();
+  });
+
   it('requeues a candidate when ComfyUI reports a temporary GPU lock', async () => {
     const db = createTestDb();
     seedDefaultConfig(db);
@@ -400,7 +743,8 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
-    const firstService = buildService(db, firstHarness, { gpuBusyRetryDelayMs: 1 });
+    const workflowRegistry = testComfyuiWorkflowRegistry();
+    const firstService = buildService(db, firstHarness, { gpuBusyRetryDelayMs: 1, workflowRegistry });
 
     const created = await firstService.createVideoGeneration({ prompt: 'wait across restart' });
     await firstHarness.runNext();
@@ -415,7 +759,7 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return restartedHarness.provider; },
     };
-    const restartedService = buildService(db, restartedHarness);
+    const restartedService = buildService(db, restartedHarness, { workflowRegistry });
 
     await restartedService.recoverVideoGenerations();
     await restartedHarness.runNext();
@@ -435,7 +779,8 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
-    const firstService = buildService(db, firstHarness);
+    const workflowRegistry = testComfyuiWorkflowRegistry();
+    const firstService = buildService(db, firstHarness, { workflowRegistry });
     const created = await firstService.createVideoGeneration({ prompt: 'recover behind another lease' });
     await firstHarness.runNext();
     firstHarness.jobs.length = 0;
@@ -453,7 +798,7 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return recoveryHarness.provider; },
     };
-    const recoveryService = buildService(db, recoveryHarness, { gpuBusyRetryDelayMs: 1 });
+    const recoveryService = buildService(db, recoveryHarness, { gpuBusyRetryDelayMs: 1, workflowRegistry });
 
     await recoveryService.recoverVideoGenerations();
     await recoveryHarness.runNext();
@@ -494,6 +839,7 @@ describe('unified video generation lifecycle', () => {
     const service = buildService(db, harness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 2,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
     });
 
     const created = await service.createVideoGeneration({ prompt: 'temporary query failure' });
@@ -523,9 +869,11 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
+    const workflowRegistry = testComfyuiWorkflowRegistry();
     const firstService = buildService(db, firstHarness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 1,
+      workflowRegistry,
     });
 
     const created = await firstService.createVideoGeneration({ prompt: 'bounded query retry after restart' });
@@ -546,6 +894,7 @@ describe('unified video generation lifecycle', () => {
     const restartedService = buildService(db, restartedHarness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 1,
+      workflowRegistry,
     });
 
     await restartedService.recoverVideoGenerations();
@@ -571,10 +920,12 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
+    const workflowRegistry = testComfyuiWorkflowRegistry();
     const firstService = buildService(db, firstHarness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 1,
       gpuBusyRetryDelayMs: 1,
+      workflowRegistry,
     });
 
     const created = await firstService.createVideoGeneration({ prompt: 'query retry survives GPU busy' });
@@ -592,6 +943,7 @@ describe('unified video generation lifecycle', () => {
     const restartedService = buildService(db, restartedHarness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 1,
+      workflowRegistry,
     });
 
     await restartedService.recoverVideoGenerations();
@@ -623,6 +975,7 @@ describe('unified video generation lifecycle', () => {
     const service = buildService(db, harness, {
       queryRetryDelayMs: 1,
       queryRetryLimit: 1,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
     });
 
     const created = await service.createVideoGeneration({ prompt: 'persistent query failure' });
@@ -655,7 +1008,10 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
     };
-    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+    const service = buildService(db, harness, {
+      transientRetryDelayMs: 1,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
+    });
 
     const created = await service.createVideoGeneration({ prompt: 'transient retry' });
     await harness.runNext();
@@ -688,7 +1044,8 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return firstHarness.provider; },
     };
-    const firstService = buildService(db, firstHarness);
+    const workflowRegistry = testComfyuiWorkflowRegistry();
+    const firstService = buildService(db, firstHarness, { workflowRegistry });
     const created = await firstService.createVideoGeneration({ prompt: 'restart-safe retry' });
     await firstHarness.runNext();
     await firstHarness.runNext();
@@ -701,7 +1058,7 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get() { return restartedHarness.provider; },
     };
-    const restartedService = buildService(db, restartedHarness);
+    const restartedService = buildService(db, restartedHarness, { workflowRegistry });
     await restartedService.recoverVideoGenerations();
     await restartedHarness.runNext();
 
@@ -746,7 +1103,10 @@ describe('unified video generation lifecycle', () => {
       has(name) { return name === 'comfyui'; },
       get(name) { assert.equal(name, 'comfyui'); return harness.provider; },
     };
-    const service = buildService(db, harness, { transientRetryDelayMs: 1 });
+    const service = buildService(db, harness, {
+      transientRetryDelayMs: 1,
+      workflowRegistry: testComfyuiWorkflowRegistry(),
+    });
 
     const created = await service.createVideoGeneration({ prompt: 'bounded retry' });
     await harness.runNext();

@@ -37,10 +37,7 @@ function assertAllowedLocalPath(candidatePath, allowedRoots, { mustExist = true,
     throw new Error('Director allowed local roots are not configured');
   }
   const candidate = canonicalExistingPath(candidatePath, mustExist);
-  const roots = allowedRoots.map((root) => {
-    if (!fs.existsSync(root)) throw new Error(`Allowed local root does not exist: ${path.resolve(root)}`);
-    return fs.realpathSync(root);
-  });
+  const roots = allowedRoots.map((root) => canonicalExistingPath(root, false));
   if (!roots.some((root) => isWithinRoot(root, candidate))) {
     throw new Error(`Local path is outside allowed local roots: ${candidate}`);
   }

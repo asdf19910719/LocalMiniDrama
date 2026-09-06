@@ -6,14 +6,17 @@ export function videoModelNameFromConfig(cfg) {
   return String(cfg.model || '').trim()
 }
 
-export function isH3ComfyUiConfig(cfg) {
-  const provider = String(cfg?.provider || '').trim().toLowerCase()
-  const model = videoModelNameFromConfig(cfg).toLowerCase()
-  return provider === 'comfyui' && (model === 'h3-continuity-v1' || model.startsWith('minimax_h3_') || model.includes('minimaxh3') || model.includes('minimax-h3'))
+export function requiresH3Draft(workflowMeta) {
+  return workflowMeta?.execution?.requiresPromptDraft === true
 }
 
-export function universalVideoCompatibility(cfg) {
-  if (isH3ComfyUiConfig(cfg)) return { compatible: true, mode: 'h3_director', supportsOmniReferences: false }
+export function isH3ComfyUiConfig(cfg, workflowMeta) {
+  const provider = String(cfg?.provider || '').trim().toLowerCase()
+  return provider === 'comfyui' && requiresH3Draft(workflowMeta)
+}
+
+export function universalVideoCompatibility(cfg, workflowMeta) {
+  if (isH3ComfyUiConfig(cfg, workflowMeta)) return { compatible: true, mode: 'h3_director', supportsOmniReferences: false }
   const protocol = String(cfg?.api_protocol || '').trim().toLowerCase()
   const provider = String(cfg?.provider || '').trim().toLowerCase()
   const model = videoModelNameFromConfig(cfg).toLowerCase()
@@ -24,8 +27,8 @@ export function universalVideoCompatibility(cfg) {
   return { compatible: false, mode: 'fallback', supportsOmniReferences: false }
 }
 
-export function canUseUniversalOmniVideoApi(cfg) {
-  return universalVideoCompatibility(cfg).compatible
+export function canUseUniversalOmniVideoApi(cfg, workflowMeta) {
+  return universalVideoCompatibility(cfg, workflowMeta).compatible
 }
 
 /**
@@ -34,6 +37,6 @@ export function canUseUniversalOmniVideoApi(cfg) {
  *   legacy 本地收集取角色主图而非状态图,静默降级会给 H3 发错参考图,必须中止提交;
  * - 非 H3 → 'legacy_fallback':可用性优先,保留 legacy 本地收集兜底。
  */
-export function slotReferenceFallbackPolicy(cfg) {
-  return isH3ComfyUiConfig(cfg) ? 'abort' : 'legacy_fallback'
+export function slotReferenceFallbackPolicy(_cfg, workflowMeta) {
+  return requiresH3Draft(workflowMeta) ? 'abort' : 'legacy_fallback'
 }

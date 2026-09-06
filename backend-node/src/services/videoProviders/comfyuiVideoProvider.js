@@ -9,10 +9,13 @@ const {
 const { getAdapter } = require('../../director/adapters');
 const { stageReferenceAssets } = require('./referenceAssetStaging');
 const {
-  validateH3Dimensions,
   validateVramBudget,
 } = require('../../director/directorGenerationPolicy');
 const { validateH3Prompt } = require('../h3PromptCompiler');
+const {
+  resolveWorkflowParameters,
+  validateWorkflowReferences,
+} = require('../../director/workflowExecutionPolicy');
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 
@@ -37,13 +40,16 @@ function contextSettings(context) {
 function contextInput(context) {
   const input = context?.input || context?.request || context || {};
   const settings = contextSettings(context);
+  const frozen = context?.snapshot?.effectiveParameters || {};
   const continuityMode = input.continuityMode ?? input.continuity_mode ?? settings.continuity_mode;
   return {
     ...input,
-    width: input.width ?? settings.width,
-    height: input.height ?? settings.height,
-    frameRate: input.frameRate ?? input.frame_rate ?? settings.frame_rate,
-    seed: input.seed ?? settings.seed,
+    width: frozen.width ?? input.width ?? settings.width,
+    height: frozen.height ?? input.height ?? settings.height,
+    durationSeconds: frozen.durationSeconds ?? input.durationSeconds ?? input.duration,
+    duration: frozen.durationSeconds ?? input.duration ?? input.durationSeconds,
+    frameRate: frozen.frameRate ?? input.frameRate ?? input.frame_rate ?? settings.frame_rate,
+    seed: frozen.seed ?? input.seed ?? settings.seed,
     audioEnabled: input.audioEnabled ?? input.audio_enabled ?? settings.audio_enabled ?? true,
     continuityMode: continuityMode === false || continuityMode === 0 || continuityMode === '0' || continuityMode === '0.0'
       ? 'none' : continuityMode,
@@ -130,7 +136,67 @@ function createComfyUIVideoProvider({
   const leases = new Map();
   const stagedByTask = new Map();
 
-  function select(context) {
+  function snapshotError(code, message, details = {}) {
+    const error = new Error(message || code);
+    error.code = code;
+    error.status = 409;
+    error.details = details;
+    return error;
+  }
+
+  function selectSnapshot(context) {
+    const snapshot = context?.snapshot;
+    if (Number(snapshot?.workflowSnapshotVersion) !== 1) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_LEGACY_UNSAFE',
+        'ComfyUI 提交缺少不可变工作流快照，无法安全执行',
+        { videoGenerationId: context?.videoGenerationId ?? null },
+      );
+    }
+    const workflowId = String(snapshot.workflowId || snapshot.model || '').trim();
+    if (!workflowId || !snapshot.workflowPath || !snapshot.workflowSha256 || !snapshot.workflowExecution) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_INVALID',
+        'ComfyUI 工作流快照缺失关键执行信息，无法安全提交',
+        { workflowId: workflowId || null },
+      );
+    }
+    let actualSha256;
+    try {
+      actualSha256 = sha256File(snapshot.workflowPath);
+    } catch (error) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_UNAVAILABLE',
+        `快照中的 ComfyUI 工作流文件不可用: ${workflowId}`,
+        { workflowId, cause: error.code || error.message },
+      );
+    }
+    if (actualSha256 !== snapshot.workflowSha256) {
+      throw snapshotError(
+        'VIDEO_WORKFLOW_SNAPSHOT_MISMATCH',
+        `快照中的 ComfyUI 工作流 SHA-256 已变化: ${workflowId}`,
+        { workflowId, expected: snapshot.workflowSha256, actual: actualSha256 },
+      );
+    }
+    return {
+      id: workflowId,
+      status: 'verified',
+      workflowPath: snapshot.workflowPath,
+      workflowSha256: snapshot.workflowSha256,
+      family: snapshot.workflowFamily || null,
+      variant: snapshot.workflowVariant || null,
+      adapter: snapshot.adapter || null,
+      adapterVersion: snapshot.adapterVersion || null,
+      execution: structuredClone(snapshot.workflowExecution),
+      capabilities: structuredClone(snapshot.workflowCapabilities || null),
+    };
+  }
+
+  function select(context, { useSnapshot = true } = {}) {
+    if (useSnapshot) {
+      const frozen = selectSnapshot(context);
+      if (frozen) return frozen;
+    }
     const workflowId = workflowIdFor(context);
     if (!workflowId) throw new Error('COMFYUI_WORKFLOW_ID_REQUIRED');
     return selectWorkflow(registry, workflowId, { allowExperimental });
@@ -195,18 +261,24 @@ function createComfyUIVideoProvider({
 
   async function submit(context = {}) {
     const selected = select(context);
+    const submissionRegistry = { version: context?.snapshot?.workflowSnapshotVersion || registry.version, workflows: [selected] };
     const input = contextInput(context);
-    const dimensions = validateH3Dimensions(input);
-    const normalizedInput = { ...input, ...dimensions };
     const settings = contextSettings(context);
-    validateVramBudget(normalizedInput, {
-      totalVramMb: settings.vram_budget_mb || process.env.DIRECTOR_VRAM_MB || 16303,
-      reserveMb: settings.vram_reserve_mb || 512,
+    const parameters = resolveWorkflowParameters(selected, input, {
+      settings,
+      default_model: context?.config?.default_model || context?.snapshot?.model,
     });
+    const normalizedInput = { ...input, ...parameters };
+    if (selected.execution.vramPolicy === 'h3_estimate') {
+      validateVramBudget(normalizedInput, {
+        totalVramMb: settings.vram_budget_mb || process.env.DIRECTOR_VRAM_MB || 16303,
+        reserveMb: settings.vram_reserve_mb || 512,
+      });
+    }
     const template = readWorkflowTemplate(selected.workflowPath);
     const owner = String(context.taskId || context.videoGenerationId || `comfyui-${crypto.randomUUID()}`);
     let stagedAssets = [];
-    if ((selected.id === 'h3-continuity-v1' || String(context.model || '').toLowerCase().includes('h3'))
+    if (selected.execution.promptContract === 'h3_director_v1'
       && (context.videoGenerationId || context.promptFormat || context.input?.promptFormat)) {
       validateH3Prompt(normalizedInput.prompt, {
         durationSeconds: normalizedInput.durationSeconds || normalizedInput.duration,
@@ -218,11 +290,22 @@ function createComfyUIVideoProvider({
     try {
       if (selected.adapter) {
         const adapter = getAdapter(selected.adapter);
+        if (selected.adapterVersion && String(adapter.version || '') !== String(selected.adapterVersion)) {
+          throw snapshotError(
+            'VIDEO_WORKFLOW_ADAPTER_VERSION_MISMATCH',
+            `ComfyUI 工作流 adapter 版本与快照不一致: ${selected.id}`,
+            { workflowId: selected.id, expected: selected.adapterVersion, actual: adapter.version || null },
+          );
+        }
         stagedAssets = Array.isArray(normalizedInput.stagedAssets) ? normalizedInput.stagedAssets : [];
         const rawRefs = normalizedInput.referenceUrls || normalizedInput.reference_urls || [];
-        const refs = Array.isArray(rawRefs) ? rawRefs : (rawRefs ? [rawRefs] : []);
+        const refs = validateWorkflowReferences(selected, rawRefs);
         if (!stagedAssets.length && refs.length && typeof referenceStager === 'function') {
-          stagedAssets = await referenceStager(refs, context);
+          stagedAssets = await referenceStager(refs, {
+            ...context,
+            workflow: selected,
+            referenceLimits: selected.execution.references,
+          });
         }
         if (!stagedAssets.length && refs.some((ref) => typeof ref === 'string' && /^[A-Za-z]:[\\/]|^\//.test(ref))) {
           throw new Error('VIDEO_REFERENCE_STAGING_REQUIRED');
@@ -231,12 +314,18 @@ function createComfyUIVideoProvider({
         if (stagedAssets.length) stagedByTask.set(owner, stagedAssets);
         adapter.validate({ ...normalizedInput, stagedAssets }, template);
         prompt = adapter.buildPrompt(template, normalizedInput, stagedAssets);
-      } else {
+      } else if (selected.execution.promptContract === 'h3_director_v1') {
+        validateWorkflowReferences(selected, normalizedInput.referenceUrls || normalizedInput.reference_urls || []);
         prompt = buildStructuredWorkflowPrompt(template, normalizedInput);
+      } else {
+        const error = new Error(`工作流 ${selected.id} 缺少输入绑定 adapter`);
+        error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+        error.status = 400;
+        throw error;
       }
       handle = gpuMutex.acquire(owner, { leaseMs: Number(context.leaseMs || leaseMs) });
       const submitted = await clientFor(context).submitWorkflow({
-        registry,
+        registry: submissionRegistry,
         workflowId: selected.id,
         prompt,
         inputs: safeSubmitInputs(normalizedInput, stagedAssets),
@@ -313,8 +402,18 @@ function createComfyUIVideoProvider({
   }
 
   async function testConnection(context = {}) {
-    const selected = select(context);
-    const dimensions = validateH3Dimensions(contextInput(context));
+    const selected = select(context, { useSnapshot: false });
+    if (selected.execution.promptContract === 'free_text_v1' && !selected.adapter) {
+      const error = new Error(`工作流 ${selected.id} 缺少输入绑定 adapter`);
+      error.code = 'WORKFLOW_ADAPTER_REQUIRED';
+      error.status = 400;
+      throw error;
+    }
+    const settings = contextSettings(context);
+    const parameters = resolveWorkflowParameters(selected, contextInput(context), {
+      settings,
+      default_model: context?.config?.default_model || context?.snapshot?.model,
+    });
     const connectionClient = clientForConnection(context);
     const actualSha256 = sha256File(selected.workflowPath);
     if (actualSha256 !== selected.workflowSha256) {
@@ -334,12 +433,17 @@ function createComfyUIVideoProvider({
     if (absentModels.length) throw new Error(`ComfyUI 缺少必需模型: ${absentModels.join(', ')}`);
 
     const totalVramMb = detectedVramMb(systemStats);
-    if (!totalVramMb) throw new Error('ComfyUI 未返回可用的 GPU 显存信息');
-    const settings = contextSettings(context);
-    const vram = validateVramBudget(dimensions, {
-      totalVramMb: Math.min(totalVramMb, Number(settings.vram_budget_mb || totalVramMb)),
-      reserveMb: Number(settings.vram_reserve_mb || 512),
-    });
+    let vram = null;
+    if (selected.execution.vramPolicy === 'h3_estimate') {
+      if (!totalVramMb) throw new Error('ComfyUI 未返回可用的 GPU 显存信息');
+      vram = {
+        ...validateVramBudget(parameters, {
+          totalVramMb: Math.min(totalVramMb, Number(settings.vram_budget_mb || totalVramMb)),
+          reserveMb: Number(settings.vram_reserve_mb || 512),
+        }),
+        totalVramMb,
+      };
+    }
 
     return normalized(null, 'completed', 100, {
       workflow: { id: selected.id, status: selected.status, sha256: actualSha256 },
@@ -347,7 +451,7 @@ function createComfyUIVideoProvider({
       queue,
       nodes: { required: requiredNodes },
       models: { required: [...selected.modelFiles], folders },
-      vram: { ...vram, totalVramMb },
+      vram,
       inferenceStarted: false,
     });
   }

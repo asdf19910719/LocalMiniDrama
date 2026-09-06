@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateWorkflowGovernance } = require('./directorGovernance');
 const { getAdapter } = require('./adapters');
+const { validateWorkflowExecution } = require('./workflowExecutionPolicy');
 
 const REGISTRY_VERSION = 1;
 const WORKFLOW_STATUSES = new Set(['verified', 'configured', 'invalid']);
@@ -185,14 +186,15 @@ function validateEntryShape(entry, index) {
   if (entry.workflowFormat != null && entry.workflowFormat !== 'api') {
     throw new WorkflowRegistryError(`workflow ${entry.id} must use ComfyUI API format`);
   }
-  const hasAdapterMetadata = ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']
+  const hasAdapterMetadata = ['family', 'adapter', 'adapterVersion', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']
     .some((field) => field in entry);
   if (hasAdapterMetadata) {
-    for (const field of ['family', 'adapter', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']) {
+    for (const field of ['family', 'adapter', 'adapterVersion', 'variant', 'workflowFormat', 'capabilities', 'inputSchemaVersion']) {
       if (!(field in entry)) throw new WorkflowRegistryError(`workflow ${entry.id} missing ${field}`);
     }
-    if (!String(entry.family).trim() || !String(entry.variant).trim() || !String(entry.adapter).trim()) {
-      throw new WorkflowRegistryError(`workflow ${entry.id} family, adapter, and variant are required`);
+    if (!String(entry.family).trim() || !String(entry.variant).trim()
+      || !String(entry.adapter).trim() || !String(entry.adapterVersion).trim()) {
+      throw new WorkflowRegistryError(`workflow ${entry.id} family, adapter, adapterVersion, and variant are required`);
     }
     if (!Number.isInteger(entry.inputSchemaVersion) || entry.inputSchemaVersion < 1) {
       throw new WorkflowRegistryError(`workflow ${entry.id} inputSchemaVersion must be a positive integer`);
@@ -212,8 +214,15 @@ function validateEntryShape(entry, index) {
   }
   if (entry.adapter != null) {
     try {
-      getAdapter(entry.adapter);
+      const adapter = getAdapter(entry.adapter);
+      if (String(entry.adapterVersion || '') !== String(adapter.version || '')) {
+        throw new WorkflowRegistryError(
+          `workflow ${entry.id} adapterVersion ${entry.adapterVersion || '(empty)'} does not match registered adapter version ${adapter.version || '(empty)'}`,
+          'ADAPTER_VERSION_MISMATCH',
+        );
+      }
     } catch (error) {
+      if (error instanceof WorkflowRegistryError) throw error;
       throw new WorkflowRegistryError(error.message, 'ADAPTER_NOT_FOUND');
     }
   }
@@ -225,6 +234,7 @@ function validateEntryShape(entry, index) {
   } catch (error) {
     throw new WorkflowRegistryError(error.message);
   }
+  validateWorkflowExecution(entry.execution, entry.id);
 }
 
 function loadRegistry(registryPath, options = {}) {
@@ -305,6 +315,7 @@ function loadRegistry(registryPath, options = {}) {
       variant: entry.variant || null,
       capabilities: entry.capabilities ? cloneJson(entry.capabilities) : null,
       acceleration: entry.acceleration ? cloneJson(entry.acceleration) : null,
+      execution: validateWorkflowExecution(entry.execution, entry.id),
       inputSchemaVersion: entry.inputSchemaVersion || 1,
       provenance: cloneJson(entry.provenance),
       runtimeLock: cloneJson(entry.runtimeLock),

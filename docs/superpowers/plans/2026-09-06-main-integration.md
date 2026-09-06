@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make local `main` contain the latest verified production code while deliberately excluding all `comfyui-workflow-switching*` and `dreamina-cli-image-provider` branches.
+**Goal:** Make local `main` contain the latest verified production code. The initial pass excluded all `comfyui-workflow-switching*` and Dreamina branches; a subsequent user instruction explicitly authorized integrating `codex/comfyui-workflow-switching-v2`.
 
 **Architecture:** Preserve the dirty source checkout by committing only product source, tests, migrations, configuration, and required documentation on `codex/cloud-video-upscale`. Integrate from a separate `main` worktree. Where a newer consolidated commit already contains an older branch's behavior, verify that behavior and use an `ours` merge to record ancestry without replacing the newer implementation or importing benchmark artifacts.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Never merge or cherry-pick `codex/comfyui-workflow-switching-v2`, `feat/comfyui-workflow-switching`, or `feature/dreamina-cli-image-provider`.
+- Do not merge or cherry-pick `feat/comfyui-workflow-switching` or `feature/dreamina-cli-image-provider`. The newer `codex/comfyui-workflow-switching-v2` is authorized for integration.
 - Preserve runtime data, exports, dependency mirrors, logs, temporary reports, screenshots, and unrelated research artifacts outside Git.
 - Do not push `main` to the remote; this plan updates local `main` only.
 - Run backend tests with Node.js 22, run the complete frontend tests, and build the frontend before declaring completion.
@@ -166,12 +166,21 @@ git log --oneline --decorate -10 main
 
 No worktree or branch is deleted by this plan.
 
+### Task 5: Integrate ComfyUI workflow switching v2 after follow-up authorization
+
+- [x] Merge `codex/comfyui-workflow-switching-v2` into the isolated local `main` worktree.
+- [x] Resolve H3 audio/semantic-review, TE-Speed, retry-recovery, immutable workflow snapshot, migration, API, and UI conflicts without dropping either side's behavior.
+- [x] Preserve the official H3 ↔ TE-Speed paired switch in the generic workflow catalog and derive H3 behavior from the workflow execution contract.
+- [x] Align the registration helper with the repository's cross-platform, line-ending-stable workflow SHA rule.
+- [x] Run focused regression tests, complete backend and frontend tests, and the Vite production build before committing.
+
 ## Completion Record
 
 - Production snapshot: `93f022a feat: integrate production video and AV pipelines`
 - Production merge into `main`: `599b580 Merge branch 'codex/cloud-video-upscale'`
 - Superseded histories recorded with tree-preserving `ours` merges: unified ChatGPT image generation, H3 TE-Speed, H3 Skill Agent, and the external Director fallback fix.
 - Final verification discovered and fixed a Windows worktree regression: workflow SHA-256 validation now normalizes line endings before hashing, with an LF/CRLF regression test.
+- Pre-commit review found and fixed three merge regressions: unidentified legacy drafts now fail closed across workflows, workflow defaults no longer overwrite storyboard duration, and generic H3 execution contracts preserve the validated `audio_enabled` policy in immutable task snapshots.
 - Final backend tests, frontend tests, and `npm run build` passed on local `main` using Node.js 22 for the test suites.
-- `git branch -a --no-merged main` contains only the three deliberately excluded branches: `codex/comfyui-workflow-switching-v2`, `feat/comfyui-workflow-switching`, and `feature/dreamina-cli-image-provider`.
+- The follow-up integration includes `codex/comfyui-workflow-switching-v2`; `git branch -a --no-merged main` should retain only the deliberately excluded legacy `feat/comfyui-workflow-switching` and `feature/dreamina-cli-image-provider` branches.
 - Local runtime data, exports, dependency mirrors, logs, benchmark artifacts, other worktrees, and all existing branches were preserved.
