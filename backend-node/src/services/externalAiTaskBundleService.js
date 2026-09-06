@@ -212,6 +212,16 @@ function buildAssetData(db, drama) {
   return { manifest, snapshot };
 }
 
+function getCurrentAssetState(db, dramaId) {
+  const drama = getDrama(db, dramaId);
+  ensureStableAssetKeys(db, drama.id);
+  const data = buildAssetData(db, drama);
+  return {
+    ...data,
+    assetsDigest: sha256(canonicalJson(data.manifest)),
+  };
+}
+
 function buildConversationContext(db, dramaId, options = {}) {
   const drama = getDrama(db, dramaId);
   ensureStableAssetKeys(db, drama.id);
@@ -394,6 +404,7 @@ module.exports = {
   canonicalJson,
   sha256,
   ensureStableAssetKeys,
+  getCurrentAssetState,
   buildConversationContext,
   createTaskBundle,
   getTaskBundle,
