@@ -86,7 +86,18 @@ const error = ref('')
 const source = ref(null)
 const activeTab = ref('raw')
 const normalizedDisplay = computed(() => formatJsonText(source.value?.normalized_json_text || ''))
-const reportSections = computed(() => importReportSections(source.value?.import_report, source.value?.parse_warnings))
+const reportSections = computed(() => importReportSections(
+  source.value?.import_report,
+  source.value?.parse_warnings,
+  source.value?.match_decisions,
+  source.value?.generator_metadata,
+))
+const reportDisplay = computed(() => JSON.stringify({
+  import_report: source.value?.import_report || null,
+  match_decisions: source.value?.match_decisions || null,
+  generator_metadata: source.value?.generator_metadata || null,
+  parse_warnings: source.value?.parse_warnings || [],
+}, null, 2))
 
 watch(() => [props.modelValue, props.episodeId], ([visible, episodeId]) => {
   if (!visible || !episodeId) return
@@ -111,7 +122,7 @@ async function loadSource() {
 function currentText() {
   if (activeTab.value === 'raw') return source.value?.raw_json_text || ''
   if (activeTab.value === 'normalized') return normalizedDisplay.value
-  return JSON.stringify(source.value?.import_report || {}, null, 2)
+  return reportDisplay.value
 }
 
 async function copyCurrent() {

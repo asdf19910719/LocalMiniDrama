@@ -30,9 +30,19 @@ test('导入报告按映射结果分组并保留解析警告', () => {
     warnings: [{ code: 'CHARACTER_PERSONALITY_MISSING' }],
   }, [{ field: 'match_decisions' }])
   assert.deepEqual(sections.map((item) => [item.key, item.items.length]), [
-    ['created', 1], ['reused', 0], ['derived_fields', 1], ['missing_fields', 1],
+    ['created', 1], ['reused', 0], ['match_decisions', 0], ['generator_metadata', 0],
+    ['derived_fields', 1], ['missing_fields', 1],
     ['audit_only_fields', 1], ['warnings', 2],
   ])
+})
+
+test('导入报告展示原始匹配决策与生成器元数据', () => {
+  const matchDecisions = { characters: { char_a: 'create' } }
+  const generatorMetadata = { provider: 'external-ai' }
+  const sections = importReportSections({}, [], matchDecisions, generatorMetadata)
+
+  assert.deepEqual(sections.find((item) => item.key === 'match_decisions').items, [matchDecisions])
+  assert.deepEqual(sections.find((item) => item.key === 'generator_metadata').items, [generatorMetadata])
 })
 
 test('hasImportSource 只认后端摘要', () => {

@@ -24,5 +24,7 @@ test('来源弹窗懒加载并以纯文本展示三个页签', () => {
   assert.match(dialog, /name="raw"/)
   assert.match(dialog, /name="normalized"/)
   assert.match(dialog, /name="report"/)
+  assert.match(dialog, /source\.value\?\.match_decisions/)
+  assert.match(dialog, /source\.value\?\.generator_metadata/)
   assert.doesNotMatch(dialog, /v-html/)
 })
