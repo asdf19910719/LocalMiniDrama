@@ -772,6 +772,13 @@ function ensureAllColumns(database) {
 function runMigrationsAndEnsure(database) {
   runMigrations(database);
   ensureAllColumns(database);
+  try {
+    const { backfillEpisodePackageImports } = require('../services/episodeImportBackfillService');
+    const result = backfillEpisodePackageImports(database);
+    if (result.processed || result.skipped) console.log('Episode package backfill:', result);
+  } catch (error) {
+    console.warn('Episode package backfill skipped:', error.message);
+  }
 }
 
 function main() {
