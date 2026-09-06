@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "local-mini-drama.episode-package",
   "title": "LocalMiniDrama 单集制作包",
-  "description": "LocalMiniDrama 单集制作包协议(schema: local-mini-drama.episode-package, version: 1.0)。一个文件只描述一集,必须是 UTF-8 JSON,禁止 Markdown 围栏、注释和尾随逗号。结构之外的跨字段引用、唯一性和顺序校验由业务校验器负责(设计文档 §5、§12)。未知字段允许存在(前向兼容)。",
+  "description": "LocalMiniDrama 单集制作包协议(schema: local-mini-drama.episode-package, versions: 1.0/1.1)。一个文件只描述一集,必须是 UTF-8 JSON,禁止 Markdown 围栏、注释和尾随逗号。结构之外的跨字段引用、唯一性和顺序校验由业务校验器负责(设计文档 §5、§12)。未知字段允许存在(前向兼容)。",
   "type": "object",
   "required": ["schema", "version", "episode", "storyboards"],
   "additionalProperties": true,
@@ -12,8 +12,8 @@
       "const": "local-mini-drama.episode-package"
     },
     "version": {
-      "description": "协议版本,当前固定为 1.0。",
-      "const": "1.0"
+      "description": "协议版本；1.0 为兼容旧包，1.1 为当前完整字段合同。",
+      "enum": ["1.0", "1.1"]
     },
     "generator": {
       "description": "可选。生成器元信息,仅用于审计展示。",
@@ -144,6 +144,8 @@
           },
           "name": { "type": "string", "minLength": 1, "description": "必填。人物名称。" },
           "description": { "type": "string", "minLength": 1, "description": "必填。人物身份和剧情功能。" },
+          "role": { "enum": ["main", "supporting", "minor"], "description": "1.1 必填。角色类型。" },
+          "personality": { "type": "string", "description": "1.1 必填且非空。人物性格。" },
           "appearance": { "type": "string", "description": "旧包可选,complete_av_v1 新包必填且非空。人物跨状态保持稳定的外观锚点。" },
           "image_prompt": { "type": "string", "description": "旧包可选,complete_av_v1 新包必填且非空。人物基础生图提示词。" },
           "negative_prompt": { "type": "string", "description": "旧包可选,complete_av_v1 新包必填且非空。人物级负向提示词。" },
@@ -225,6 +227,7 @@
             "description": "必填。道具稳定标识,所属项目内唯一。"
           },
           "name": { "type": "string", "minLength": 1, "description": "必填。道具名称。" },
+          "type": { "type": "string", "description": "1.1 必填且非空。道具类型，如关键道具、随身物件。" },
           "description": { "type": "string", "minLength": 1, "description": "必填。道具描述。" },
           "image_prompt": { "type": "string", "minLength": 1, "description": "必填。生图提示词。" },
           "negative_prompt": { "type": "string", "description": "可选。负向提示词。" }
@@ -352,6 +355,28 @@
     }
   },
   "allOf": [
+    {
+      "if": { "properties": { "version": { "const": "1.1" } }, "required": ["version"] },
+      "then": {
+        "properties": {
+          "characters": {
+            "items": {
+              "required": ["role", "personality"],
+              "properties": {
+                "role": { "enum": ["main", "supporting", "minor"] },
+                "personality": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "props": {
+            "items": {
+              "required": ["type"],
+              "properties": { "type": { "type": "string", "minLength": 1 } }
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

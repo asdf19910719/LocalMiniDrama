@@ -1,5 +1,5 @@
 /**
- * 单集制作包(local-mini-drama.episode-package v1.0)结构与类型校验
+ * 单集制作包(local-mini-drama.episode-package v1.0/v1.1)结构与类型校验
  *
  * - packageJsonSchema:与 docs/单集制作包导入/制作包schema.json 同构的
  *   JSON Schema draft-07 对象,是字段契约的权威文档(供上游 AI 与将来工具使用)。
@@ -16,14 +16,15 @@
 'use strict';
 
 const PACKAGE_SCHEMA_NAME = 'local-mini-drama.episode-package';
-const PACKAGE_SCHEMA_VERSION = '1.0';
+const PACKAGE_SCHEMA_VERSION = '1.1';
+const SUPPORTED_PACKAGE_VERSIONS = Object.freeze(['1.0', '1.1']);
 
 const packageJsonSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: 'local-mini-drama.episode-package',
   title: 'LocalMiniDrama 单集制作包',
   description:
-    'LocalMiniDrama 单集制作包协议(schema: local-mini-drama.episode-package, version: 1.0)。' +
+    'LocalMiniDrama 单集制作包协议(schema: local-mini-drama.episode-package, versions: 1.0/1.1)。' +
     '一个文件只描述一集,必须是 UTF-8 JSON,禁止 Markdown 围栏、注释和尾随逗号。' +
     '结构之外的跨字段引用、唯一性和顺序校验由业务校验器负责(设计文档 §5、§12)。' +
     '未知字段允许存在(前向兼容)。',
@@ -36,8 +37,8 @@ const packageJsonSchema = {
       const: 'local-mini-drama.episode-package',
     },
     version: {
-      description: '协议版本,当前固定为 1.0。',
-      const: '1.0',
+      description: '协议版本；1.0 为兼容旧包，1.1 为当前完整字段合同。',
+      enum: SUPPORTED_PACKAGE_VERSIONS,
     },
     generator: {
       description: '可选。生成器元信息,仅用于审计展示。',
@@ -184,6 +185,8 @@ const packageJsonSchema = {
           },
           name: { type: 'string', minLength: 1, description: '必填。人物名称。' },
           description: { type: 'string', minLength: 1, description: '必填。人物身份和剧情功能。' },
+          role: { enum: ['main', 'supporting', 'minor'], description: '1.1 必填。角色类型。' },
+          personality: { type: 'string', description: '1.1 必填且非空。人物性格。' },
           appearance: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物跨状态保持稳定的外观锚点。' },
           image_prompt: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物基础生图提示词。' },
           negative_prompt: { type: 'string', description: '旧包可选,complete_av_v1 新包必填且非空。人物级负向提示词。' },
@@ -267,6 +270,7 @@ const packageJsonSchema = {
             description: '必填。道具稳定标识,所属项目内唯一。',
           },
           name: { type: 'string', minLength: 1, description: '必填。道具名称。' },
+          type: { type: 'string', description: '1.1 必填且非空。道具类型，如关键道具、随身物件。' },
           description: { type: 'string', minLength: 1, description: '必填。道具描述。' },
           image_prompt: { type: 'string', minLength: 1, description: '必填。生图提示词。' },
           negative_prompt: { type: 'string', description: '可选。负向提示词。' },
@@ -396,6 +400,28 @@ const packageJsonSchema = {
     },
   },
   allOf: [
+    {
+      if: { properties: { version: { const: '1.1' } }, required: ['version'] },
+      then: {
+        properties: {
+          characters: {
+            items: {
+              required: ['role', 'personality'],
+              properties: {
+                role: { enum: ['main', 'supporting', 'minor'] },
+                personality: { type: 'string', minLength: 1 },
+              },
+            },
+          },
+          props: {
+            items: {
+              required: ['type'],
+              properties: { type: { type: 'string', minLength: 1 } },
+            },
+          },
+        },
+      },
+    },
     {
       if: {
         properties: {
@@ -684,11 +710,13 @@ function validateScene(errors, basePath, scene) {
   }
 }
 
-function validateProp(errors, basePath, prop) {
+function validateProp(errors, basePath, prop, strictProjectionPackage = false) {
   if (!requireObject(errors, basePath, prop)) return;
   for (const field of ['source_key', 'name', 'description', 'image_prompt']) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, prop[field]);
   }
+  if (strictProjectionPackage) pushNonEmptyStringError(errors, `${basePath}.type`, prop.type);
+  else pushOptionalNonEmptyStringError(errors, `${basePath}.type`, prop.type);
 }
 
 function validateCharacterRef(errors, basePath, ref) {
@@ -848,11 +876,12 @@ function validatePackageStructure(pkg) {
   if (pkg.schema !== PACKAGE_SCHEMA_NAME) {
     errors.push({ path: 'schema', message: `schema 必须为 "${PACKAGE_SCHEMA_NAME}"` });
   }
-  if (pkg.version !== PACKAGE_SCHEMA_VERSION) {
-    errors.push({ path: 'version', message: `version 必须为 "${PACKAGE_SCHEMA_VERSION}"` });
+  if (!SUPPORTED_PACKAGE_VERSIONS.includes(pkg.version)) {
+    errors.push({ path: 'version', message: `version 必须为 ${SUPPORTED_PACKAGE_VERSIONS.join(' 或 ')}` });
   }
 
   const strictNewPackage = pkg.generation_profile?.contract_profile === 'complete_av_v1';
+  const strictProjectionPackage = pkg.version === '1.1';
 
   if (pkg.generator !== undefined) {
     requireObject(errors, 'generator', pkg.generator);
@@ -964,6 +993,14 @@ function validatePackageStructure(pkg) {
     list.forEach((item, index) => {
       if (field === 'characters') {
         validateCharacter(errors, `${field}[${index}]`, item, strictNewPackage);
+        if (strictProjectionPackage && isPlainObject(item)) {
+          if (!['main', 'supporting', 'minor'].includes(item.role)) {
+            errors.push({ path: `${field}[${index}].role`, message: `${field}[${index}].role 无效` });
+          }
+          pushNonEmptyStringError(errors, `${field}[${index}].personality`, item.personality);
+        }
+      } else if (field === 'props') {
+        validateProp(errors, `${field}[${index}]`, item, strictProjectionPackage);
       } else {
         ASSET_ARRAY_VALIDATORS[field](errors, `${field}[${index}]`, item);
       }
@@ -987,6 +1024,7 @@ function validatePackageStructure(pkg) {
 module.exports = {
   PACKAGE_SCHEMA_NAME,
   PACKAGE_SCHEMA_VERSION,
+  SUPPORTED_PACKAGE_VERSIONS,
   packageJsonSchema,
   validatePackageStructure,
 };

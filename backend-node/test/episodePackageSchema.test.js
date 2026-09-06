@@ -6,6 +6,7 @@ const path = require('node:path');
 const {
   PACKAGE_SCHEMA_NAME,
   PACKAGE_SCHEMA_VERSION,
+  SUPPORTED_PACKAGE_VERSIONS,
   packageJsonSchema,
   validatePackageStructure,
 } = require('../src/services/episodePackageSchema');
@@ -45,7 +46,40 @@ function violationErrors(mutate) {
 describe('episodePackageSchema', () => {
   it('导出固定的 schema 名称与版本', () => {
     assert.equal(PACKAGE_SCHEMA_NAME, 'local-mini-drama.episode-package');
-    assert.equal(PACKAGE_SCHEMA_VERSION, '1.0');
+    assert.equal(PACKAGE_SCHEMA_VERSION, '1.1');
+    assert.deepEqual(SUPPORTED_PACKAGE_VERSIONS, ['1.0', '1.1']);
+  });
+
+  it('1.1 要求角色类型、性格和道具类型，1.0 保持兼容', () => {
+    const pkg = examplePackage();
+    pkg.version = '1.1';
+    pkg.characters[0].role = 'main';
+    pkg.characters[0].personality = '冷静、警惕';
+    pkg.props[0].type = '关键道具';
+    assert.equal(validatePackageStructure(pkg).ok, true);
+
+    delete pkg.characters[0].personality;
+    delete pkg.props[0].type;
+    assert.deepEqual(validatePackageStructure(pkg).errors.map((item) => item.path).sort(), [
+      'characters[0].personality',
+      'props[0].type',
+    ]);
+
+    pkg.version = '1.0';
+    assert.equal(validatePackageStructure(pkg).ok, true);
+  });
+
+  it('1.1 拒绝非法角色类型，未知协议版本被拒绝', () => {
+    const pkg = examplePackage();
+    pkg.version = '1.1';
+    pkg.characters[0].role = 'lead';
+    pkg.characters[0].personality = '谨慎';
+    pkg.props[0].type = '关键道具';
+    assert.deepEqual(validatePackageStructure(pkg).errors.map((item) => item.path), ['characters[0].role']);
+
+    pkg.characters[0].role = 'main';
+    pkg.version = '2.0';
+    assert.deepEqual(validatePackageStructure(pkg).errors.map((item) => item.path), ['version']);
   });
 
   it('packageJsonSchema 为 draft-07 且与 schema.json 文件同构', () => {
