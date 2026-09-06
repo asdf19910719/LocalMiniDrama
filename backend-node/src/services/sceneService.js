@@ -64,15 +64,18 @@ function createScene(db, log, dramaId, req) {
   const episodeId = req.episode_id != null ? Number(req.episode_id) : null;
   try {
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, atmosphere, image_url, local_path, storyboard_count, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, time, state, description, prompt, atmosphere, negative_prompt, image_url, local_path, storyboard_count, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
     ).run(
       Number(dramaId),
       episodeId,
       req.location || '',
       req.time || '',
+      req.state ?? null,
+      req.description ?? null,
       req.prompt || '',
       req.atmosphere ?? null,
+      req.negative_prompt ?? null,
       req.image_url ?? null,
       req.local_path ?? null,
       now,

@@ -26,4 +26,22 @@ describe('scene imported fields', () => {
     const listed = sceneService.listByDramaId(db, 5)[0];
     assert.deepEqual({ state: listed.state, description: listed.description, atmosphere: listed.atmosphere, negative_prompt: listed.negative_prompt }, expected);
   });
+
+  it('createScene 不丢失场景语义字段', () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE scenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER, episode_id INTEGER, location TEXT, time TEXT,
+      state TEXT, description TEXT, prompt TEXT, atmosphere TEXT, negative_prompt TEXT,
+      polished_prompt TEXT, polished_prompt_single TEXT, image_url TEXT, local_path TEXT,
+      extra_images TEXT, ref_image TEXT, storyboard_count INTEGER, status TEXT, error_msg TEXT,
+      created_at TEXT, updated_at TEXT, deleted_at TEXT
+    )`);
+    sceneService.createScene(db, { info() {} }, 5, {
+      episode_id: 7, location: '天台', time: '凌晨', state: 'night', description: '湿冷天台',
+      atmosphere: '紧张', prompt: 'cinematic rooftop', negative_prompt: 'sunny',
+    });
+    assert.deepEqual(db.prepare('SELECT state, description, atmosphere, prompt, negative_prompt FROM scenes').get(), {
+      state: 'night', description: '湿冷天台', atmosphere: '紧张', prompt: 'cinematic rooftop', negative_prompt: 'sunny',
+    });
+  });
 });
