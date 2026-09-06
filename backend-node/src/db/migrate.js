@@ -660,6 +660,26 @@ function ensureAllColumns(database) {
     database.exec('CREATE INDEX IF NOT EXISTS idx_episode_imports_episode_time ON episode_imports(episode_id, imported_at DESC, id DESC)');
   } catch (_) {}
 
+  // --- 外部 AI 轻量协作:项目生成任务包记录 ---
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS external_ai_package_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      package_id TEXT NOT NULL UNIQUE,
+      drama_id INTEGER NOT NULL,
+      target_episode_id INTEGER,
+      target_episode_number INTEGER NOT NULL,
+      assets_digest TEXT NOT NULL,
+      context_markdown TEXT NOT NULL,
+      instructions_markdown TEXT NOT NULL,
+      asset_manifest_json TEXT NOT NULL,
+      asset_snapshot_json TEXT NOT NULL,
+      response_schema_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      imported_at TEXT
+    )`);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_external_ai_tasks_drama_time ON external_ai_package_tasks(drama_id, created_at DESC, id DESC)');
+  } catch (_) {}
+
   // --- 单集制作包导入:H3 提示词草稿表 ---
   try {
     database.exec(`CREATE TABLE IF NOT EXISTS storyboard_h3_prompt_drafts (
