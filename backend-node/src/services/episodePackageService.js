@@ -162,6 +162,9 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
   if (task.target_episode_id && explicitTarget && Number(task.target_episode_id) !== explicitTarget) {
     throwCode('PACKAGE_TARGET_MISMATCH', '所选目标集与结果绑定的任务目标不一致');
   }
+  if (!task.target_episode_id && explicitTarget) {
+    throwCode('PACKAGE_TARGET_MISMATCH', '该任务绑定为创建新剧集，不能改为填充其他空白集');
+  }
   if (!task.target_episode_id) {
     const occupied = db.prepare(`
       SELECT id FROM episodes

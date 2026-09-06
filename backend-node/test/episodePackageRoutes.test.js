@@ -618,6 +618,16 @@ describe('Episode package routes', () => {
       result.episode.episode_number = 2;
       const raw = JSON.stringify(result);
 
+      const wrongBlankTarget = insertEpisode(db, { drama_id: 1, episode_number: 3, title: '第三集空白' });
+      const mismatched = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: raw, drama_id: 1, target_episode_id: wrongBlankTarget },
+      });
+      assert.equal(mismatched.statusCode, 400);
+      assert.equal(mismatched.body.error.code, 'PACKAGE_TARGET_MISMATCH');
+      db.prepare('UPDATE episodes SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), wrongBlankTarget);
+
       insertEpisode(db, { drama_id: 1, episode_number: 2, title: '后来新增的第二集' });
       const occupied = callRoute(routes, {
         method: 'POST',
