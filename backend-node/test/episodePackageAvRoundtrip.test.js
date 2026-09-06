@@ -11,7 +11,7 @@ const {
   importEpisodePackage,
 } = require('../src/services/episodePackageService');
 
-const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
+const EXAMPLE_PATH = path.join(__dirname, 'fixtures', 'episodePackageV11.json');
 
 function createDb() {
   const db = new Database(':memory:');

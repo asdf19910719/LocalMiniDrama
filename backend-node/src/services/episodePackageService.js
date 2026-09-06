@@ -142,6 +142,7 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
       parseErrors: parsed.errors,
       adapterWarnings: [],
       targetEpisodeId,
+      targetEpisodeNumber: null,
       task: null,
       sourceSchema: parsed.pkg?.schema || PACKAGE_SCHEMA_NAME,
       sourceVersion: parsed.pkg?.version || null,
@@ -152,11 +153,24 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
   if (!task || Number(task.drama_id) !== Number(dramaId)) {
     throwCode('PACKAGE_TASK_NOT_FOUND', '找不到属于当前项目的外部 AI 任务，请重新生成任务包');
   }
+  if (task.imported_at) {
+    throwCode('PACKAGE_TASK_ALREADY_IMPORTED', '该外部 AI 任务已经成功导入，不能重复使用');
+  }
   const explicitTarget = targetEpisodeId === undefined || targetEpisodeId === null || String(targetEpisodeId).trim() === ''
     ? null
     : Number(targetEpisodeId);
   if (task.target_episode_id && explicitTarget && Number(task.target_episode_id) !== explicitTarget) {
     throwCode('PACKAGE_TARGET_MISMATCH', '所选目标集与结果绑定的任务目标不一致');
+  }
+  if (!task.target_episode_id) {
+    const occupied = db.prepare(`
+      SELECT id FROM episodes
+      WHERE drama_id = ? AND episode_number = ? AND deleted_at IS NULL
+      LIMIT 1
+    `).get(Number(task.drama_id), Number(task.target_episode_number));
+    if (occupied) {
+      throwCode('PACKAGE_TARGET_OCCUPIED', `任务目标第 ${task.target_episode_number} 集已存在，请重新生成任务包`);
+    }
   }
   const adapted = adaptExternalAiResult(db, parsed.pkg, task);
   return {
@@ -164,6 +178,7 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
     parseErrors: [],
     adapterWarnings: adapted.warnings,
     targetEpisodeId: task.target_episode_id || targetEpisodeId,
+    targetEpisodeNumber: task.target_episode_number,
     task,
     sourceSchema: EXTERNAL_AI_RESULT_SCHEMA,
     sourceVersion: parsed.pkg.version,
@@ -627,10 +642,12 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
       );
       episodeId = episodeRow.id;
     } else {
-      const maxRow = db
-        .prepare('SELECT MAX(episode_number) AS m FROM episodes WHERE drama_id = ? AND deleted_at IS NULL')
-        .get(effectiveDramaId);
-      const episodeNumber = (maxRow && typeof maxRow.m === 'number' ? maxRow.m : 0) + 1;
+      const maxRow = prepared.targetEpisodeNumber == null
+        ? db.prepare('SELECT MAX(episode_number) AS m FROM episodes WHERE drama_id = ? AND deleted_at IS NULL').get(effectiveDramaId)
+        : null;
+      const episodeNumber = prepared.targetEpisodeNumber == null
+        ? (maxRow && typeof maxRow.m === 'number' ? maxRow.m : 0) + 1
+        : Number(prepared.targetEpisodeNumber);
       episodeId = Number(
         db.prepare(
           `INSERT INTO episodes (drama_id, episode_number, title, script_content, description, audio_plan, production_profile, status, created_at, updated_at)

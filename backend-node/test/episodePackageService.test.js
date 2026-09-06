@@ -17,7 +17,7 @@ const {
   generateScriptFromStoryboards,
 } = require('../src/services/episodePackageValidator');
 
-const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
+const EXAMPLE_PATH = path.join(__dirname, 'fixtures', 'episodePackageV11.json');
 
 // 用 node:crypto 独立计算哈希,避免与被测函数互相印证
 function shaOf(text) {

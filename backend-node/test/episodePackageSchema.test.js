@@ -11,11 +11,11 @@ const {
   validatePackageStructure,
 } = require('../src/services/episodePackageSchema');
 
-const SPECS_DIR = path.join(__dirname, '..', '..', 'docs', '单集制作包导入');
+const SPECS_DIR = path.join(__dirname, 'fixtures');
 
 const DOC_NAMES = {
-  example: '制作包示例.json',
-  schema: '制作包schema.json',
+  example: 'episodePackageV11.json',
+  schema: 'episodePackageV11.schema.json',
 };
 
 function loadDoc(name) {
@@ -82,7 +82,7 @@ describe('episodePackageSchema', () => {
     assert.deepEqual(validatePackageStructure(pkg).errors.map((item) => item.path), ['version']);
   });
 
-  it('packageJsonSchema 为 draft-07 且与 schema.json 文件同构', () => {
+  it('内部规范化 packageJsonSchema 为 draft-07 且与回归 fixture 同构', () => {
     assert.equal(packageJsonSchema.$schema, 'http://json-schema.org/draft-07/schema#');
     assert.deepEqual(loadDoc(DOC_NAMES.schema), packageJsonSchema);
   });

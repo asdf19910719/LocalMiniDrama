@@ -79,14 +79,26 @@
           <div class="section-title">分集列表</div>
           <span class="section-count">共 {{ episodes.length }} 集</span>
           <EpisodeBatchImportDialog ref="episodeBatchImportDialogRef" :start-episode-number="nextEpisodeNumber" style="margin-left: auto" @import="onBatchImportEpisodes" />
-          <el-button size="small" @click="packageImportVisible = true">
-            <el-icon><Upload /></el-icon>导入制作包
+          <el-button size="small" type="primary" plain @click="externalAiVisible = true">外部 AI 协作</el-button>
+          <el-button size="small" @click="openDirectPackageImport">
+            <el-icon><Upload /></el-icon>直接导入 JSON
           </el-button>
           <el-button size="small" type="primary" :loading="addingEpisode" @click="onAddEpisode">
             <el-icon><Plus /></el-icon>新增一集
           </el-button>
         </div>
-        <EpisodePackageImportDialog v-model="packageImportVisible" :drama-id="dramaId" @imported="onPackageImported" />
+        <ExternalAiCollaborationDialog
+          v-model="externalAiVisible"
+          :drama-id="dramaId"
+          :next-episode-number="nextEpisodeNumber"
+          @import-result="openExternalAiResultImport"
+        />
+        <EpisodePackageImportDialog
+          v-model="packageImportVisible"
+          :drama-id="dramaId"
+          :initial-target-episode-id="packageImportTargetEpisodeId"
+          @imported="onPackageImported"
+        />
         <EpisodeImportSourceDialog
           v-model="importSourceVisible"
           :episode-id="importSourceEpisodeId"
@@ -571,6 +583,7 @@ import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid, U
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
 import EpisodePackageImportDialog from '@/components/EpisodePackageImportDialog.vue'
 import EpisodeImportSourceDialog from '@/components/EpisodeImportSourceDialog.vue'
+import ExternalAiCollaborationDialog from '@/components/ExternalAiCollaborationDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
 import { useTheme } from '@/composables/useTheme'
 import { dramaAPI } from '@/api/drama'
@@ -1065,6 +1078,8 @@ const deletingEpisodeId = ref(null)
 
 // ---------- 单集制作包导入 ----------
 const packageImportVisible = ref(false)
+const externalAiVisible = ref(false)
+const packageImportTargetEpisodeId = ref(null)
 const importSourceVisible = ref(false)
 const importSourceEpisodeId = ref(null)
 const importSourceEpisodeLabel = ref('')
@@ -1072,6 +1087,14 @@ function openImportSource(ep) {
   importSourceEpisodeId.value = ep.id
   importSourceEpisodeLabel.value = `第 ${ep.episode_number ?? '?'} 集「${ep.title || '未命名'}」`
   importSourceVisible.value = true
+}
+function openDirectPackageImport() {
+  packageImportTargetEpisodeId.value = null
+  packageImportVisible.value = true
+}
+function openExternalAiResultImport({ targetEpisodeId } = {}) {
+  packageImportTargetEpisodeId.value = targetEpisodeId || null
+  packageImportVisible.value = true
 }
 function onPackageImported() {
   // 导入成功(新建或填充空白集)后刷新分集列表

@@ -11,8 +11,12 @@ const { listStoryboardVariantLinks } = require('../src/services/storyboardVarian
 const { createTaskBundle } = require('../src/services/externalAiTaskBundleService');
 const { validExternalAiResult } = require('./fixtures/externalAiResultFixture');
 
-const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
+const EXAMPLE_PATH = path.join(__dirname, 'fixtures', 'episodePackageV11.json');
 const EXAMPLE_RAW = fs.readFileSync(EXAMPLE_PATH, 'utf8');
+const EXTERNAL_EXAMPLE_RAW = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json'),
+  'utf8',
+);
 
 // 表结构:01_init.sql 裁剪 + migrations/30_episode_package_import.sql(含唯一索引)
 function createDb() {
@@ -605,6 +609,60 @@ describe('Episode package routes', () => {
       assert.equal(source.task_package_id, task.package_id);
       assert.equal(source.raw_json, raw);
       assert.ok(db.prepare('SELECT imported_at FROM external_ai_package_tasks WHERE package_id = ?').get(task.package_id).imported_at);
+    });
+
+    it('creates an unbound task at its frozen episode number and refuses an occupied target', () => {
+      const task = createTaskBundle(db, 1, { targetEpisodeNumber: 2 });
+      const result = JSON.parse(EXTERNAL_EXAMPLE_RAW);
+      result.package_id = task.package_id;
+      result.episode.episode_number = 2;
+      const raw = JSON.stringify(result);
+
+      insertEpisode(db, { drama_id: 1, episode_number: 2, title: '后来新增的第二集' });
+      const occupied = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: raw, drama_id: 1 },
+      });
+      assert.equal(occupied.statusCode, 409);
+      assert.equal(occupied.body.error.code, 'PACKAGE_TARGET_OCCUPIED');
+
+      db.prepare('UPDATE episodes SET deleted_at = ? WHERE episode_number = 2').run(new Date().toISOString());
+      const preview = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: raw, drama_id: 1 },
+      });
+      const imported = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package',
+        body: { raw_json_text: raw, source_sha256: sha256Text(raw), drama_id: 1 },
+      });
+      assert.equal(preview.statusCode, 200);
+      assert.equal(imported.statusCode, 200);
+      assert.equal(db.prepare('SELECT episode_number FROM episodes WHERE id = ?').get(imported.body.data.episode_id).episode_number, 2);
+    });
+
+    it('rejects reuse of a task after its first successful import', () => {
+      const task = createTaskBundle(db, 1, { targetEpisodeNumber: 1 });
+      const result = JSON.parse(EXTERNAL_EXAMPLE_RAW);
+      result.package_id = task.package_id;
+      result.episode.episode_number = 1;
+      const raw = JSON.stringify(result);
+      const first = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package',
+        body: { raw_json_text: raw, source_sha256: sha256Text(raw), drama_id: 1 },
+      });
+      assert.equal(first.statusCode, 200);
+
+      const second = callRoute(routes, {
+        method: 'POST',
+        url: '/episodes/import-package/preview',
+        body: { raw_json_text: raw, drama_id: 1 },
+      });
+      assert.equal(second.statusCode, 409);
+      assert.equal(second.body.error.code, 'PACKAGE_TASK_ALREADY_IMPORTED');
     });
   });
 

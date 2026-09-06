@@ -1,67 +1,37 @@
-# 单集制作包 · 上游 AI 输出提示词模板
+# 外部 AI 单集增量结果提示词
 
-协议:`local-mini-drama.episode-package` / `version 1.1`
+正常流程请直接使用项目生成的任务 ZIP；ZIP 内的 `任务说明.md` 已包含本模板的核心约束。本文件仅用于理解协议或在外部 AI 没有正确读取附件时补充说明。
 
-本模板用于把任意上游 AI(剧本工具、分镜助手等)的输出约束为可直接导入 LocalMiniDrama 的单集制作包。
+## 可直接发送的补充提示词
 
-配套材料(随本模板一并提供给上游 AI):
+你现在要把我们已经确认的本集剧情整理为 LocalMiniDrama 可导入的单集增量结果。
 
-- `制作包schema.json` —— 字段、类型与必填规则的唯一权威定义
-- `制作包示例.json` —— 覆盖全部字段的合法示例
+请先完整读取附件中的：
 
-使用方式:把下方“提示词模板”整段原文发给上游 AI,并附上上述两份文件。
+1. `任务说明.md`
+2. `当前项目资产.json`
+3. `返回格式.schema.json`
 
----
+输出要求：
 
-## 提示词模板(原文复制)
+1. 最终只返回一个 UTF-8 JSON 对象，不要 Markdown 代码围栏、解释、注释或尾随逗号。
+2. `schema` 必须是 `local-mini-drama.external-ai-result`，`version` 必须是字符串 `1`。
+3. `package_id` 必须从 `任务说明.md` 原样复制，不能自行生成或修改。
+4. 只整理当前会话中已经确认的本集剧情，不擅自续写下一集或改写既有世界观。
+5. `当前项目资产.json` 中的资产是只读的：只通过其中的 `source_key` 引用，不要在 `new_assets` 重复声明，也不要修改其名称、性格、外貌、状态或提示词。
+6. 只有本集首次出现的新人物、新场景、新道具，以及已有人物在本集首次出现的新状态，才能写入 `new_assets`。
+7. 新人物必须完整填写身份与剧情功能、角色类型、性格、基础外貌、正负生图提示词、声音设定，并至少提供一个 `is_default=true` 的状态。
+8. 所有 `local_ref` 在整份 JSON 中唯一，并以英文字母开头；分镜可引用本次结果中先声明的 `local_ref`。
+9. `storyboard_number` 从 1 开始连续递增。每个分镜都提供完整动作起点/过程/终点、镜头、构图、对白表演、声音、转场、图片提示词和通用视频段落文本。
+10. 对白只放入 `dialogue`，动作只放入 `action`；不要把人物对白混在动作描述里。
+11. 严格遵守 `返回格式.schema.json`，不要添加 Schema 未定义的字段。
 
-你是短剧分镜与资产管理助手。请根据我提供的剧情材料,输出一份可直接导入 LocalMiniDrama 的单集制作包 JSON。
+提交前自检：
 
-### 输出格式(硬性约束)
-
-1. 只输出一个 JSON 对象:第一个字符是 `{`,最后一个字符是 `}`,对象之外不得有任何文字。
-2. 禁止 Markdown 代码围栏(``` 或 ~~~)、禁止注释、禁止尾随逗号、禁止未转义的引号和换行。
-3. 顶层字段 `schema` 固定为 `"local-mini-drama.episode-package"`,`version` 固定为 `"1.1"`,不得改动。
-4. `generation_profile.contract_profile` 固定为 `"complete_av_v1"`,用于让导入器启用新包完整性校验,不得省略或改名。
-5. `episode`、`audio_plan` 与 `storyboards` 必须输出;`characters`、`scenes`、`props` 允许为空数组,但任何被分镜引用到的资产都必须在包内定义。Schema 为兼容旧包仍把 `audio_plan` 标为可选,新生成包不得省略。
-6. `制作包schema.json` 定义导入兼容边界和字段类型;`complete_av_v1` 条件规则定义新生成包的完整性要求,两者都必须满足。写法参照 `制作包示例.json`。
-
-### source_key 稳定命名规则
-
-1. 只使用小写英文字母、数字和下划线;禁止中文、空格、连字符,禁止用数组下标或显示名称当标识。
-2. 按用途使用固定前缀:剧集 `ep_`、人物 `char_`、场景 `scene_`、道具 `prop_`、分镜 `sb_`(分镜按镜号 `sb_01`、`sb_02` 递增)。
-3. 唯一性范围:人物、场景、道具的 `source_key` 在整个包内唯一;人物状态的 `source_key` 在所属人物内唯一(默认状态建议命名为 `char_<人物>_default`);分镜 `source_key` 在集内唯一。
-4. `source_key` 是跨导入的稳定外键:不同版本之间不要改名;所有引用(`scene_ref`、`character_ref`、`variant_ref`、`prop_refs`)必须填 `source_key`,禁止填显示名称。
-
-### 内容要求
-
-1. 每个人物顶层都必须给出 `role`、`personality`、`appearance`、`image_prompt`、`negative_prompt` 和 `voice_profile`。`role` 只能是 `main`、`supporting`、`minor`;`personality` 单独描述稳定性格,不得只写进 `description`。其中 `appearance` 只写跨服装、跨状态不变的身份外观锚点;`image_prompt` 是人物基础参考图提示词;`negative_prompt` 是人物级负向约束;`voice_profile` 描述音色、年龄感、语速、语气和口音。即使本集暂时无台词,也要为可复用角色给出声音档案。
-2. 每个人物至少 1 个状态(`variants`);服装、年龄、受伤、伪装等视觉差异拆成独立状态,每个状态都必须给出可直接手动生图的 `image_prompt`。状态 `appearance` 写本状态的完整可见造型,不得只写“同上”或只写变化部分。
-3. 场景的昼夜、整洁/破败差异用不同场景加 `state` 表达;场景 `image_prompt` 按空镜描述(不含剧情人物)。
-4. 道具保持独立资产并填写非空 `type`(如关键道具、随身物件、陈设);`image_prompt` 按主体隔离、无人物、无复杂背景描述。
-5. 每个分镜必须给出完整动作过程:`action` 优先用 `{"start": ..., "progression": ..., "end": ...}` 三段结构;对白保留原语言写入 `dialogue`,不得混入 `action`。
-6. `character_refs` 每项必须同时给出 `character_ref` 与 `variant_ref`(精确到状态),并声明 `reference_role`(如 `primary`、`supporting`、`appearance_only`)和数字类型的 `sort_order`;手部特写、背影、侧脸等镜头构图说明写进 `framing_note`,不要当人物状态。
-7. 必须主动规划剧集声音并输出 `audio_plan`。`bgm.mode` 三选一:`none`=明确全剧不要 BGM,`episode_track`=后期铺一条整集 BGM,`per_segment`=每段视频由 H3 按分镜生成 BGM。不要通过省略字段表达“无音乐”。
-8. 选择 `per_segment` 时,`bgm.planning` 使用 `external`,`source_type` 使用 `generated`,并给出贯穿全剧的 `prompt` 与稳定的 `continuity_key`;每个分镜都必须在 `audio_description.music_cue.mode` 中明确 `inherit`、`override`、`stinger` 或 `mute`,禁止让下游猜测。
-9. 每镜 `audio_description` 使用结构化对象。环境底噪写 `ambience`,动作音写 `sound_effects`,对白处理写 `dialogue_treatment`,画内音乐写 `diegetic_music`,刻意静音写 `silence`,非画内配乐只写 `music_cue`。不要使用 `foley`、`voice`、`silence_requirement` 等非标准别名。
-10. `speech.dialogue_owner` 和 `speech.narration_owner` 必须明确指定为 `h3_native`、`post_tts` 或 `none`,避免 H3 原生语音与后期 TTS 重复。默认建议对白由 `h3_native` 负责,旁白由 `post_tts` 负责。
-11. `transition` 优先使用结构化对象,明确 `type`、`duration` 与 `audio_bridge`;不要只用自然语言描述音频衔接。
-12. `storyboard_number` 从 1 开始连续递增且不重复;`duration_seconds` 为正数。
-13. 确实不需要的可选字段直接省略,不要输出 `null`。
-
-### 输出前自检清单
-
-- [ ] 整个输出可被 `JSON.parse` 直接解析:无围栏、无注释、无尾随逗号
-- [ ] `schema` 与 `version` 为固定字面量
-- [ ] `generation_profile.contract_profile` 为 `complete_av_v1`
-- [ ] `episode.source_key`、`title`、`summary` 均为非空字符串,`episode_number` 为正整数
-- [ ] 每个人物顶层的 `role`、`personality`、`appearance`、`image_prompt`、`negative_prompt`、`voice_profile` 均为非空且语义独立
-- [ ] 每个人物的 `variants` 至少 1 项,且每个状态的 `source_key`、`name`、`description`、`appearance`、`image_prompt` 齐全
-- [ ] 所有 `scene_ref`、`character_ref`、`variant_ref`、`prop_refs` 都能对应包内已有的 `source_key`
-- [ ] 每个道具都有非空 `type`
-- [ ] 每个 `character_refs` 项都有 `character_ref`、`variant_ref` 和 number 类型的 `sort_order`
-- [ ] 已显式输出 `audio_plan`;`bgm.mode`、对白归属、旁白归属都已确定
-- [ ] 若 `bgm.mode` 为 `per_segment`,每个分镜都有结构化的 `audio_description.music_cue`,且剧集 `prompt`/`continuity_key` 与逐镜 cue 语义一致
-- [ ] `audio_description` 未使用 `foley`、`voice`、`silence_requirement` 等非标准键
-- [ ] `storyboard_number` 连续且不重复,所有 `duration_seconds` 为正数
-- [ ] 输出只有那一个 JSON 对象,没有任何其余说明文字
+- `package_id` 与任务说明完全一致；
+- 本集集号与任务目标一致；
+- 已有资产全部引用 `source_key`，新资产全部使用唯一 `local_ref`；
+- 新人物的性格、外貌、提示词、声音和默认状态没有缺项；
+- 所有分镜引用都能在资产清单或 `new_assets` 中找到；
+- 分镜编号连续；
+- 最终回复只有 JSON。

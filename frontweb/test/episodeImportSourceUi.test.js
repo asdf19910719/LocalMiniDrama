@@ -28,3 +28,13 @@ test('来源弹窗懒加载并以纯文本展示三个页签', () => {
   assert.match(dialog, /source\.value\?\.generator_metadata/)
   assert.doesNotMatch(dialog, /v-html/)
 })
+
+test('来源弹窗显示生成任务与资产快照追溯信息', () => {
+  const dialog = read('src/components/EpisodeImportSourceDialog.vue')
+  assert.match(dialog, /任务包 ID/)
+  assert.match(dialog, /source\.task_package_id/)
+  assert.match(dialog, /任务生成时间/)
+  assert.match(dialog, /source\.task_created_at/)
+  assert.match(dialog, /任务资产摘要/)
+  assert.match(dialog, /source\.task_assets_digest/)
+})

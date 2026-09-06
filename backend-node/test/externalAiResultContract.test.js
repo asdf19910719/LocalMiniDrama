@@ -1,5 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   EXTERNAL_AI_RESULT_SCHEMA,
@@ -80,5 +82,13 @@ describe('externalAiResultContract', () => {
     const errors = validateExternalAiResult(value).errors;
     assert.ok(errors.some((item) => item.code === 'LOCAL_REF_DUPLICATE' && item.path === 'new_assets.props[1].local_ref'));
     assert.ok(errors.some((item) => item.code === 'STORYBOARD_NUMBER_INVALID' && item.path === 'storyboards[0].storyboard_number'));
+  });
+
+  it('keeps the published schema and example synchronized with the runtime contract', () => {
+    const docsDir = path.resolve(__dirname, '../../docs/单集制作包导入');
+    const publishedSchema = JSON.parse(fs.readFileSync(path.join(docsDir, '制作包schema.json'), 'utf8'));
+    const publishedExample = JSON.parse(fs.readFileSync(path.join(docsDir, '制作包示例.json'), 'utf8'));
+    assert.deepEqual(publishedSchema, EXTERNAL_AI_RESULT_SCHEMA);
+    assert.deepEqual(validateExternalAiResult(publishedExample), { ok: true, errors: [] });
   });
 });

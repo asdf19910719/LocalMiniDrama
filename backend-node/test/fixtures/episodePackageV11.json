@@ -1,0 +1,234 @@
+{
+  "schema": "local-mini-drama.episode-package",
+  "version": "1.1",
+  "generator": {
+    "name": "example-upstream-ai",
+    "model": "demo-model-1",
+    "generated_at": "2026-09-03T10:00:00+08:00"
+  },
+  "generation_profile": {
+    "contract_profile": "complete_av_v1",
+    "video_mode": "multi_reference_r2v",
+    "uses_first_last_frame": false,
+    "max_reference_images": 9,
+    "reference_order": ["scene", "character_variant", "prop"]
+  },
+  "audio_plan": {
+    "version": 1,
+    "bgm": {
+      "mode": "per_segment",
+      "planning": "external",
+      "source_type": "generated",
+      "prompt": "克制、温暖而略带悬念的雨夜钢琴与柔和弦乐母题,低动态,主动给对白让位",
+      "continuity_key": "rain_night_warmth",
+      "volume_db": -22,
+      "ducking_db": -8,
+      "fade_in_ms": 800,
+      "fade_out_ms": 1200,
+      "crossfade_ms": 500
+    },
+    "mastering": {
+      "target_lufs": -14,
+      "true_peak_db": -1
+    },
+    "speech": {
+      "dialogue_owner": "h3_native",
+      "narration_owner": "post_tts"
+    }
+  },
+  "episode": {
+    "source_key": "ep_rain_night_store_01",
+    "episode_number": 1,
+    "title": "雨夜便利店",
+    "summary": "凌晨的雨夜里,便利店夜班店员林晚遇到一位浑身湿透的客人,一杯热咖啡换来一句道谢,短暂的交会被雨声完整见证。",
+    "script": "场景一:便利店门口,雨夜。自动门滑开,客人低头走进店内,林晚轻声说欢迎光临。场景二:便利店店内。林晚把热咖啡放在柜台上推向客人,请他先喝点热的,客人接过,雨声渐弱。",
+    "duration_target_seconds": 30,
+    "notes": "示例文件,用于演示单集制作包协议的全部字段。"
+  },
+  "characters": [
+    {
+      "source_key": "char_lin_wan",
+      "name": "林晚",
+      "role": "main",
+      "description": "24 岁的便利店夜班店员,性格温和但保持警觉。",
+      "personality": "温和细致,对陌生人保持必要警觉,遇到紧急情况时行动果断。",
+      "appearance": "24 岁中国女性,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,神情温和而警觉",
+      "image_prompt": "24 岁中国女性林晚的人物基础参考图,鹅蛋脸,深棕色杏眼,黑色长发,身形纤细,中性站姿,正面全身与面部细节清晰,纯色背景,写实电影风格,单人",
+      "negative_prompt": "多人,年龄错误,发色错误,脸部变形,肢体畸形,多余手指,模糊,文字,水印",
+      "voice_profile": "青年女声,语速平缓,略带倦意",
+      "variants": [
+        {
+          "source_key": "char_lin_wan_default",
+          "name": "夜班制服",
+          "description": "日常夜班状态,本集默认状态。",
+          "appearance": "黑色长发扎低马尾,深蓝色便利店制服,胸前别着名牌,神情平静",
+          "image_prompt": "一位 24 岁中国女性便利店店员,黑色长发低马尾,深蓝色制服衬衫,胸前名牌,平静站立,半身像,干净纯色背景,写实风格,单人",
+          "negative_prompt": "多人,模糊,多余手指,文字水印",
+          "is_default": true
+        },
+        {
+          "source_key": "char_lin_wan_rain",
+          "name": "雨夜淋湿",
+          "description": "出门帮客人捡拾掉落物品后被雨淋湿的状态。",
+          "appearance": "头发湿透贴在脸颊,制服肩部和前襟被雨水打湿,颜色变深",
+          "image_prompt": "同一位 24 岁中国女性便利店店员,黑色长发被雨水打湿贴在脸颊,深蓝色制服肩部湿透颜色加深,神情略带无奈,半身像,干净纯色背景,写实风格,单人",
+          "negative_prompt": "多人,模糊,文字水印",
+          "is_default": false
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "source_key": "scene_store_entrance_rain",
+      "name": "便利店门口",
+      "state": "雨夜",
+      "description": "玻璃门外的雨幕,门内地砖有被踩湿的水痕。",
+      "atmosphere": "湿冷、安静而略带戒备感,室内冷白光与门外雨幕形成反差",
+      "image_prompt": "深夜便利店入口空镜,玻璃门上有雨痕,门外雨幕连片,地砖反光,冷白灯光,写实风格,无人物",
+      "negative_prompt": "人物,文字水印,卡通风格"
+    },
+    {
+      "source_key": "scene_store_night",
+      "name": "便利店店内",
+      "state": "深夜营业中",
+      "description": "货架整齐,冷柜灯光亮起,收银台柜台整洁。",
+      "atmosphere": "封闭安静的深夜营业空间,冷白灯光中逐渐出现微弱暖意",
+      "image_prompt": "深夜便利店内景空镜,整齐货架,亮着灯的冷柜,收银柜台,冷白荧光灯氛围,写实风格,无人物",
+      "negative_prompt": "人物,文字水印,卡通风格"
+    }
+  ],
+  "props": [
+    {
+      "source_key": "prop_hot_coffee",
+      "name": "热咖啡杯",
+      "type": "关键道具",
+      "description": "林晚递给客人的热咖啡,杯身有淡淡热气。",
+      "image_prompt": "一只白色纸杯热咖啡,杯口升起淡淡热气,放在浅色柜台面上,主体隔离,干净背景,写实风格,无人物",
+      "negative_prompt": "人物,杂乱背景,文字水印"
+    }
+  ],
+  "storyboards": [
+    {
+      "source_key": "sb_01",
+      "storyboard_number": 1,
+      "title": "客人进门",
+      "description": "自动门滑开,浑身湿透的客人走进便利店,林晚抬头招呼。",
+      "duration_seconds": 4,
+      "scene_ref": "scene_store_entrance_rain",
+      "character_refs": [
+        {
+          "character_ref": "char_lin_wan",
+          "variant_ref": "char_lin_wan_default",
+          "reference_role": "primary",
+          "sort_order": 1,
+          "framing_note": "中景,林晚在柜台后抬头,门口在画面右侧"
+        }
+      ],
+      "prop_refs": ["prop_hot_coffee"],
+      "shot_type": "中景",
+      "camera_angle": "平视",
+      "camera_movement": "固定机位",
+      "composition": "柜台与林晚位于画面左侧,自动门与雨夜门口位于画面右侧,景深落在门口",
+      "action": {
+        "start": "雨夜里,便利店的自动门缓缓滑开,门外的雨声涌入。",
+        "progression": "浑身湿透的客人低着头走进店内,在门口地垫上跺了跺脚;柜台后的林晚抬起头看向来人。",
+        "end": "自动门在客人身后合拢,雨声重新变得沉闷,林晚开口打招呼。"
+      },
+      "dialogue": [
+        {
+          "speaker": "林晚",
+          "line": "欢迎光临。",
+          "performance": "强撑睡意的轻声招呼,语调平稳"
+        }
+      ],
+      "narration": "凌晨两点,这场雨丝毫没有停的意思。",
+      "is_primary": true,
+      "audio_description": {
+        "ambience": ["持续雨声", "冷柜低鸣"],
+        "sound_effects": ["自动门滑动声", "脚步踩湿地垫声"],
+        "dialogue_treatment": "林晚的近距离轻声对白保持清晰,环境声在对白时自然退后",
+        "silence": false,
+        "music_cue": {
+          "mode": "inherit",
+          "intensity": 0.2,
+          "start": "自动门打开后轻柔淡入",
+          "end": "对白开始前降低到极弱"
+        }
+      },
+      "transition": {
+        "type": "cut",
+        "duration": 0,
+        "audio_bridge": {
+          "mode": "carry",
+          "duration_ms": 300,
+          "description": "雨声跨切延续到下一镜"
+        }
+      },
+      "image_prompt": "深夜便利店,自动门打开,门口站着浑身湿透的客人,柜台后的女店员抬头看向来人,雨夜冷白灯光,电影感构图",
+      "universal_segment_text": "@图片1 是雨夜的便利店门口空镜,@图片2 是柜台后的林晚,客人推门进店时她抬起头;@图片3 的热咖啡正放在柜台上冒着热气。",
+      "notes": "客人只出现在动作描述中,不作为可生图资产定义。"
+    },
+    {
+      "source_key": "sb_02",
+      "storyboard_number": 2,
+      "title": "递上热咖啡",
+      "description": "林晚把热咖啡推到客人面前,请他先暖暖身子。",
+      "duration_seconds": 3.5,
+      "scene_ref": "scene_store_night",
+      "character_refs": [
+        {
+          "character_ref": "char_lin_wan",
+          "variant_ref": "char_lin_wan_rain",
+          "reference_role": "primary",
+          "sort_order": 1,
+          "framing_note": "近景,双手递杯,肩部湿痕可见"
+        }
+      ],
+      "prop_refs": ["prop_hot_coffee"],
+      "shot_type": "近景",
+      "camera_angle": "俯视 15 度",
+      "camera_movement": "缓推",
+      "composition": "咖啡杯在画面中心偏下,林晚双手入画,虚化的货架作为背景",
+      "action": {
+        "start": "林晚端起柜台上冒着热气的咖啡杯。",
+        "progression": "她双手把杯子轻轻推向客人,杯底与柜台面摩擦出一声轻响。",
+        "end": "客人伸手接过杯子,热气在两人之间飘散。"
+      },
+      "dialogue": [
+        {
+          "speaker": "林晚",
+          "line": "先喝点热的吧,外面雨这么大。",
+          "performance": "语气小心,带着一点不好意思"
+        }
+      ],
+      "is_primary": true,
+      "audio_description": {
+        "ambience": ["门外雨声减弱为背景底噪", "冷柜低鸣"],
+        "sound_effects": ["杯底摩擦柜台的轻响", "客人接杯时纸杯轻微挤压声"],
+        "dialogue_treatment": "林晚低语贴近、自然,杯底声不得盖过台词",
+        "silence": false,
+        "music_cue": {
+          "mode": "override",
+          "prompt": "延续 rain_night_warmth 母题,稀疏钢琴加入一层温暖弦乐,在客人接杯时轻微抬升",
+          "intensity": 0.35,
+          "start": "承接上一镜的极弱钢琴",
+          "end": "随画面淡出一起淡出"
+        }
+      },
+      "transition": {
+        "type": "fade",
+        "duration": 0.4,
+        "visual_description": "淡出到黑场",
+        "audio_bridge": {
+          "mode": "fade",
+          "duration_ms": 400,
+          "description": "雨声与分段 BGM 同步淡出"
+        }
+      },
+      "image_prompt": "便利店柜台近景,女店员双手递出冒热气的纸杯咖啡,客人伸手接过,背景货架虚化,冷白灯光,电影感",
+      "universal_segment_text": "@图片1 是深夜店内空镜,@图片2 是淋湿状态的林晚,她把 @图片3 的热咖啡轻轻推向客人。",
+      "notes": "本镜使用林晚的“雨夜淋湿”状态,演示同一人物不同状态的精确关联。"
+    }
+  ]
+}

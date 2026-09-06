@@ -186,6 +186,7 @@ const MAX_PACKAGE_BYTES = 10 * 1024 * 1024
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   dramaId: { type: [Number, String], default: null },
+  initialTargetEpisodeId: { type: [Number, String], default: null },
 })
 
 const emit = defineEmits(['update:modelValue', 'imported'])
@@ -318,8 +319,13 @@ function resetState() {
   previewErrors.value = []
   previewWarnings.value = []
   stats.value = {}
-  targetMode.value = 'create'
-  targetEpisodeId.value = null
+  if (props.initialTargetEpisodeId != null) {
+    targetMode.value = 'fill'
+    targetEpisodeId.value = props.initialTargetEpisodeId
+  } else {
+    targetMode.value = 'create'
+    targetEpisodeId.value = null
+  }
   blankEpisodes.value = []
   blankEpisodesLoading.value = false
   blankEpisodesLoadedForDrama = null

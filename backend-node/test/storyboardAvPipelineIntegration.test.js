@@ -13,7 +13,7 @@ const { buildStoryboardGenerationContext, generationContextFingerprint } = requi
 const { createH3PromptCompiler } = require('../src/services/h3PromptCompiler');
 const { serializeCanonicalJson } = require('../src/services/storyboardAvContractService');
 
-const EXAMPLE_PATH = path.join(__dirname, '..', '..', 'docs', '单集制作包导入', '制作包示例.json');
+const EXAMPLE_PATH = path.join(__dirname, 'fixtures', 'episodePackageV11.json');
 const log = { info() {}, warn() {}, error() {} };
 
 function createDb() {

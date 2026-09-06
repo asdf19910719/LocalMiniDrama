@@ -20,6 +20,9 @@
           <el-descriptions-item label="导入时间">{{ formatTime(source.imported_at) }}</el-descriptions-item>
           <el-descriptions-item label="协议">{{ source.schema_name || '未知' }} v{{ source.schema_version || '?' }}</el-descriptions-item>
           <el-descriptions-item label="SHA-256"><code>{{ source.source_sha256 || '未记录' }}</code></el-descriptions-item>
+          <el-descriptions-item v-if="source.task_package_id" label="任务包 ID"><code>{{ source.task_package_id }}</code></el-descriptions-item>
+          <el-descriptions-item v-if="source.task_created_at" label="任务生成时间">{{ formatTime(source.task_created_at) }}</el-descriptions-item>
+          <el-descriptions-item v-if="source.task_assets_digest" label="任务资产摘要" :span="2"><code>{{ source.task_assets_digest }}</code></el-descriptions-item>
         </el-descriptions>
 
         <div class="source-actions">
