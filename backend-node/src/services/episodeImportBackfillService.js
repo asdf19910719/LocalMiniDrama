@@ -134,7 +134,7 @@ function applyOneImport(db, row, pkg, decisions) {
 }
 
 function backfillEpisodePackageImports(db) {
-  const result = { processed: 0, updated_fields: 0, skipped: 0 };
+  const result = { processed: 0, updated_fields: 0, skipped: 0, errors: [] };
   let rows;
   try {
     rows = db.prepare(`
@@ -154,13 +154,19 @@ function backfillEpisodePackageImports(db) {
       const report = { version: 1, backfill: { status: 'skipped_invalid_json' } };
       db.prepare('UPDATE episode_imports SET import_report = ? WHERE id = ?').run(JSON.stringify(report), row.id);
       result.skipped += 1;
+      result.errors.push({ import_id: row.id, code: 'INVALID_RAW_JSON' });
       continue;
     }
     const decisions = parseObject(row.match_decisions);
-    const outcome = db.transaction(() => applyOneImport(db, row, pkg, decisions))();
-    if (outcome.skipped) result.skipped += 1;
-    else result.processed += 1;
-    result.updated_fields += outcome.updatedFields;
+    try {
+      const outcome = db.transaction(() => applyOneImport(db, row, pkg, decisions))();
+      if (outcome.skipped) result.skipped += 1;
+      else result.processed += 1;
+      result.updated_fields += outcome.updatedFields;
+    } catch (error) {
+      result.skipped += 1;
+      result.errors.push({ import_id: row.id, code: 'BACKFILL_FAILED', message: error.message });
+    }
   }
   return result;
 }

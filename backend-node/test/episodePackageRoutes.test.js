@@ -471,7 +471,7 @@ describe('Episode package routes', () => {
       const episodeId = insertEpisode(db, { episode_number: 9 });
       const res = callRoute(routes, { method: 'GET', url: `/episodes/${episodeId}/import-source` });
       assert.equal(res.statusCode, 404);
-      assert.equal(res.body.error.code, 'NOT_FOUND');
+      assert.equal(res.body.error.code, 'IMPORT_SOURCE_NOT_FOUND');
     });
   });
 

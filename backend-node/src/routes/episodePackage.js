@@ -153,7 +153,7 @@ function showImportSource(db, log) {
     if (!Number.isInteger(episodeId) || episodeId <= 0) return response.badRequest(res, '无效的剧集 ID');
     try {
       const source = getEpisodeImportSource(db, episodeId);
-      if (!source) return response.notFound(res, '该剧集没有外部 JSON 导入记录');
+      if (!source) return response.error(res, 404, 'IMPORT_SOURCE_NOT_FOUND', '该剧集没有外部 JSON 导入记录');
       return response.success(res, source);
     } catch (err) {
       log.error('episode import source failed', { episode_id: episodeId, error: err.message });

@@ -100,14 +100,18 @@ describe('episode import historical backfill', () => {
     assert.equal(JSON.parse(audit.import_report).backfill.status, 'applied');
 
     const second = backfillEpisodePackageImports(db);
-    assert.deepEqual(second, { processed: 0, updated_fields: 0, skipped: 0 });
+    assert.deepEqual(second, { processed: 0, updated_fields: 0, skipped: 0, errors: [] });
   });
 
   it('原始 JSON 损坏时记录跳过状态且不阻断启动', () => {
     const db = createDb();
     db.prepare('INSERT INTO episodes (id, drama_id) VALUES (1, 9)').run();
     db.prepare("INSERT INTO episode_imports (id, episode_id, raw_json) VALUES (1, 1, '{bad')").run();
-    assert.deepEqual(backfillEpisodePackageImports(db), { processed: 0, updated_fields: 0, skipped: 1 });
+    const result = backfillEpisodePackageImports(db);
+    assert.equal(result.processed, 0);
+    assert.equal(result.skipped, 1);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0].import_id, 1);
     const report = JSON.parse(db.prepare('SELECT import_report FROM episode_imports WHERE id=1').get().import_report);
     assert.equal(report.backfill.status, 'skipped_invalid_json');
   });
