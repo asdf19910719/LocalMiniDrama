@@ -46,6 +46,12 @@ function setup() {
   insert("INSERT INTO image_generation_batches (id, drama_id, resource_scope, generation_channel, created_at, updated_at) VALUES ('batch-1', 1, 'project', 'local', ?, ?), ('batch-2', 2, 'project', 'local', ?, ?)", now, now, now, now);
   insert("INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, batch_id, created_at, updated_at) VALUES ('task-1', 1, 'storyboard_main', 111, 'local', 'batch-1', ?, ?), ('task-2', 2, 'storyboard_main', 211, 'local', 'batch-2', ?, ?)", now, now, now, now);
   insert("INSERT INTO external_generation_jobs (id, drama_id, storyboard_id, site, prompt_snapshot, prompt_hash, created_at, updated_at) VALUES ('job-1', 1, 111, 'site', '目标', 'hash', ?, ?), ('job-2', 2, 211, 'site', '保留', 'hash', ?, ?)", now, now, now, now);
+  insert("INSERT INTO image_generation_batches (id, drama_id, resource_scope, generation_channel, created_at, updated_at) VALUES ('batch-indirect', 2, 'episode', 'external', ?, ?)", now, now);
+  insert("INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, batch_id, created_at, updated_at) VALUES ('task-indirect', 2, 'storyboard_main', 111, 'external', 'batch-indirect', ?, ?)", now, now);
+  insert("INSERT INTO external_generation_jobs (id, drama_id, storyboard_id, image_generation_task_id, site, prompt_snapshot, prompt_hash, created_at, updated_at) VALUES ('job-indirect', 2, NULL, 'task-indirect', 'site', '目标间接任务', 'hash-indirect', ?, ?)", now, now);
+  insert("INSERT INTO external_generation_attempts (id, job_id, sequence, created_at, updated_at) VALUES ('attempt-indirect', 'job-indirect', 1, ?, ?)", now, now);
+  insert("INSERT INTO external_generation_results (id, attempt_id, result_index, created_at, updated_at) VALUES ('result-indirect', 'attempt-indirect', 1, ?, ?)", now, now);
+  insert("INSERT INTO external_generation_events (id, attempt_id, idempotency_key, sequence, event_type, created_at) VALUES ('event-indirect', 'attempt-indirect', 'idem-indirect', 1, 'done', ?)", now);
   insert("INSERT INTO external_generation_attempts (id, job_id, sequence, created_at, updated_at) VALUES ('attempt-1', 'job-1', 1, ?, ?), ('attempt-2', 'job-2', 1, ?, ?)", now, now, now, now);
   insert("INSERT INTO external_generation_results (id, attempt_id, result_index, created_at, updated_at) VALUES ('result-1', 'attempt-1', 1, ?, ?), ('result-2', 'attempt-2', 1, ?, ?)", now, now, now, now);
   insert("INSERT INTO external_generation_events (id, attempt_id, idempotency_key, sequence, event_type, created_at) VALUES ('event-1', 'attempt-1', 'idem-1', 1, 'done', ?), ('event-2', 'attempt-2', 'idem-2', 1, 'done', ?)", now, now);
@@ -88,8 +94,10 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(preview.project.id, 1);
   assert.equal(preview.counts.dramas, 1);
   assert.equal(preview.counts.episodes, 1);
-  assert.equal(preview.counts.external_generation_jobs, 1);
-  assert.equal(preview.counts.external_generation_events, 1);
+  assert.equal(preview.counts.external_generation_jobs, 2);
+  assert.equal(preview.counts.external_generation_events, 2);
+  assert.equal(preview.counts.image_generation_tasks, 2);
+  assert.equal(preview.counts.image_generation_batches, 2);
   assert.equal(preview.counts.async_tasks, 3);
   assert.equal(preview.counts.director_anchors, 2);
   assert.equal(preview.counts.director_artifacts, 2);
@@ -97,7 +105,7 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(preview.storage.file_count, 2);
   assert.equal(preview.storage.bytes, 9);
   assert.equal(count(db, 'dramas'), 3);
-  assert.equal(count(db, 'external_generation_jobs'), 2);
+  assert.equal(count(db, 'external_generation_jobs'), 3);
   assert.equal(fs.existsSync(projectDir), true);
   assert.equal(fs.existsSync(neighboringProjectDir), true);
 
@@ -105,7 +113,7 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(result.deleted, true);
   assert.equal(result.counts.dramas, 1);
   assert.equal(result.counts.episodes, 1);
-  assert.equal(result.counts.external_generation_jobs, 1);
+  assert.equal(result.counts.external_generation_jobs, 2);
   assert.equal(result.counts.async_tasks, 3);
   assert.equal(result.counts.director_anchors, 2);
   assert.equal(result.counts.director_artifacts, 2);
@@ -136,6 +144,12 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(count(db, 'external_generation_idempotency'), 1);
   assert.equal(count(db, 'image_generation_batches'), 1);
   assert.equal(count(db, 'image_generation_tasks'), 1);
+  assert.equal(count(db, 'image_generation_batches', 'id = ?', 'batch-indirect'), 0);
+  assert.equal(count(db, 'image_generation_tasks', 'id = ?', 'task-indirect'), 0);
+  assert.equal(count(db, 'external_generation_jobs', 'id = ?', 'job-indirect'), 0);
+  assert.equal(count(db, 'external_generation_attempts', 'id = ?', 'attempt-indirect'), 0);
+  assert.equal(count(db, 'external_generation_results', 'id = ?', 'result-indirect'), 0);
+  assert.equal(count(db, 'external_generation_events', 'id = ?', 'event-indirect'), 0);
   assert.equal(deleteProjectPermanently(db, cfg, { error() {} }, 1), null);
 });
 

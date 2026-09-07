@@ -18,7 +18,8 @@ function createDb() {
     CREATE TABLE episode_characters (episode_id INTEGER NOT NULL, character_id INTEGER NOT NULL);
     CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER NOT NULL, deleted_at TEXT);
     CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER NOT NULL, deleted_at TEXT);
-    CREATE TABLE storyboards (id INTEGER PRIMARY KEY, scene_id INTEGER, characters TEXT, deleted_at TEXT);
+    CREATE TABLE episodes (id INTEGER PRIMARY KEY, drama_id INTEGER NOT NULL);
+    CREATE TABLE storyboards (id INTEGER PRIMARY KEY, episode_id INTEGER, scene_id INTEGER, characters TEXT, deleted_at TEXT);
     CREATE TABLE storyboard_character_variants (storyboard_id INTEGER NOT NULL, character_id INTEGER NOT NULL, variant_id INTEGER NOT NULL);
     CREATE TABLE storyboard_characters (storyboard_id INTEGER NOT NULL, character_id INTEGER NOT NULL);
     CREATE TABLE storyboard_props (storyboard_id INTEGER NOT NULL, prop_id INTEGER NOT NULL);
@@ -29,6 +30,7 @@ function createDb() {
 function insertFixture(db) {
   db.exec(`
     INSERT INTO dramas (id) VALUES (1), (2);
+    INSERT INTO episodes (id, drama_id) VALUES (101, 1), (201, 2);
     INSERT INTO characters (id, drama_id) VALUES (11, 1), (12, 1), (21, 2);
     INSERT INTO character_libraries (id, drama_id, name) VALUES (11, 1, '角色库同编号条目');
     INSERT INTO character_variants (id, character_id, deleted_at) VALUES
@@ -36,10 +38,11 @@ function insertFixture(db) {
     INSERT INTO episode_characters (episode_id, character_id) VALUES (101, 11), (101, 12), (201, 21);
     INSERT INTO scenes (id, drama_id) VALUES (31, 1), (32, 1), (41, 2);
     INSERT INTO props (id, drama_id) VALUES (51, 1), (52, 1), (61, 2);
-    INSERT INTO storyboards (id, scene_id, characters) VALUES
-      (1001, 31, '[11,12]'),
-      (1002, 32, '[{"id":11,"name":"目标角色"},{"id":12,"name":"保留角色"}]'),
-      (2001, 41, '[21]');
+    INSERT INTO storyboards (id, episode_id, scene_id, characters) VALUES
+      (1001, 101, 31, '[11,12]'),
+      (1002, 101, 32, '[{"id":11,"name":"目标角色"},{"id":12,"name":"保留角色"}]'),
+      (2001, 201, 41, '[21]'),
+      (2002, 201, 41, '[11,21]');
     INSERT INTO storyboard_character_variants (storyboard_id, character_id, variant_id) VALUES
       (1001, 11, 111), (1001, 12, 112), (2001, 21, 121);
     INSERT INTO storyboard_characters (storyboard_id, character_id) VALUES (1001, 11);
@@ -61,6 +64,7 @@ test('character deletion clears only its episode, storyboard, and variant associ
   assert.deepEqual(JSON.parse(db.prepare('SELECT characters FROM storyboards WHERE id = 1002').get().characters), [
     { id: 12, name: '保留角色' },
   ]);
+  assert.deepEqual(JSON.parse(db.prepare('SELECT characters FROM storyboards WHERE id = 2002').get().characters), [11, 21]);
   assert.equal(db.prepare('SELECT scene_id FROM storyboards WHERE id = 1001').get().scene_id, 31);
   assert.deepEqual(db.prepare('SELECT character_id FROM storyboard_character_variants ORDER BY character_id').all(), [
     { character_id: 12 }, { character_id: 21 },

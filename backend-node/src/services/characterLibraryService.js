@@ -349,7 +349,17 @@ function deleteCharacter(db, log, characterId) {
     db.prepare('DELETE FROM storyboard_character_variants WHERE character_id = ?').run(id);
     db.prepare('DELETE FROM character_variants WHERE character_id = ?').run(id);
 
-    const storyboards = db.prepare('SELECT id, characters FROM storyboards WHERE characters IS NOT NULL').all();
+    const hasEpisodeOwnership = Boolean(
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'episodes'").get()
+      && db.prepare('PRAGMA table_info(storyboards)').all().some((column) => column.name === 'episode_id')
+    );
+    const storyboards = db.prepare(
+      `SELECT sb.id, sb.characters
+       FROM storyboards sb
+       ${hasEpisodeOwnership
+         ? 'JOIN episodes ep ON ep.id = sb.episode_id WHERE ep.drama_id = ? AND sb.characters IS NOT NULL'
+         : 'WHERE sb.characters IS NOT NULL'}`
+    ).all(...(hasEpisodeOwnership ? [charRow.drama_id] : []));
     const updateCharacters = db.prepare('UPDATE storyboards SET characters = ? WHERE id = ?');
     for (const storyboard of storyboards) {
       try {

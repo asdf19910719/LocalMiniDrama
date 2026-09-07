@@ -66,8 +66,6 @@ function discoverProjectOwnedIds(db, dramaId) {
   const propIds = selectIds(db, 'props', 'drama_id = ?', [dramaId]);
   const variantIds = characterIds.length ? selectIds(db, 'character_variants', `character_id IN (${placeholders(characterIds)})`, characterIds) : [];
   const externalJobIds = selectIds(db, 'external_generation_jobs', 'drama_id = ?', [dramaId]);
-  const externalAttemptIds = externalJobIds.length ? selectIds(db, 'external_generation_attempts', `job_id IN (${placeholders(externalJobIds)})`, externalJobIds) : [];
-  const externalResultIds = externalAttemptIds.length ? selectIds(db, 'external_generation_results', `attempt_id IN (${placeholders(externalAttemptIds)})`, externalAttemptIds) : [];
   const videoMergeIds = tableExists(db, 'video_merges')
     ? ids(db.prepare(`SELECT id FROM video_merges WHERE drama_id = ?${episodeIds.length ? ` OR episode_id IN (${placeholders(episodeIds)})` : ''}`).all(dramaId, ...episodeIds))
     : [];
@@ -83,6 +81,64 @@ function discoverProjectOwnedIds(db, dramaId) {
     if (columnExists(db, table, 'scene_id')) appendInClause(clauses, params, 'scene_id', sceneIds);
     return clauses.length ? selectIds(db, table, clauses.join(' OR '), params) : [];
   };
+  const imageGenerationIds = generationIdsFor('image_generations');
+  const imageTaskRows = [];
+  if (tableExists(db, 'image_generation_tasks')) {
+    const taskClauses = [];
+    const taskParams = [];
+    if (columnExists(db, 'image_generation_tasks', 'drama_id')) {
+      taskClauses.push('drama_id = ?');
+      taskParams.push(dramaId);
+    }
+    if (imageGenerationIds.length && columnExists(db, 'image_generation_tasks', 'image_generation_id')) {
+      appendInClause(taskClauses, taskParams, 'image_generation_id', imageGenerationIds);
+    }
+    for (const [prefix, values] of [['storyboard', storyboardIds], ['scene', sceneIds], ['prop', propIds], ['character', characterIds]]) {
+      if (values.length && columnExists(db, 'image_generation_tasks', 'target_type') && columnExists(db, 'image_generation_tasks', 'target_id')) {
+        taskClauses.push(`(target_type LIKE '${prefix}%' AND target_id IN (${placeholders(values)}))`);
+        taskParams.push(...values);
+      }
+    }
+    if (taskClauses.length) {
+      const taskSelect = ['id'];
+      for (const column of ['batch_id', 'image_generation_id', 'external_job_id']) {
+        taskSelect.push(columnExists(db, 'image_generation_tasks', column) ? column : `NULL AS ${column}`);
+      }
+      imageTaskRows.push(...db.prepare(`SELECT ${taskSelect.join(', ')} FROM image_generation_tasks WHERE ${taskClauses.join(' OR ')}`).all(...taskParams));
+    }
+  }
+  const imageTaskIds = ids(imageTaskRows);
+  const imageBatchIds = [...new Set([
+    ...selectIds(db, 'image_generation_batches', 'drama_id = ?', [dramaId]),
+    ...imageTaskRows.map((row) => row.batch_id).filter(Boolean),
+  ])];
+  const taskExternalJobIds = imageTaskRows.map((row) => row.external_job_id).filter(Boolean);
+  const linkedExternalJobIds = [];
+  if (tableExists(db, 'external_generation_jobs')) {
+    const clauses = [];
+    const params = [];
+    if (storyboardIds.length && columnExists(db, 'external_generation_jobs', 'storyboard_id')) {
+      appendInClause(clauses, params, 'storyboard_id', storyboardIds);
+    }
+    if (imageTaskIds.length && columnExists(db, 'external_generation_jobs', 'image_generation_task_id')) {
+      appendInClause(clauses, params, 'image_generation_task_id', imageTaskIds);
+    }
+    if (taskExternalJobIds.length) {
+      appendInClause(clauses, params, 'id', taskExternalJobIds);
+    }
+    if (clauses.length) linkedExternalJobIds.push(...selectIds(db, 'external_generation_jobs', clauses.join(' OR '), params));
+  }
+  const allExternalJobIds = [...new Set([...externalJobIds, ...linkedExternalJobIds])];
+  const externalAttemptIds = allExternalJobIds.length
+    ? selectIds(db, 'external_generation_attempts', `job_id IN (${placeholders(allExternalJobIds)})`, allExternalJobIds)
+    : [];
+  const externalResultIds = externalAttemptIds.length
+    ? selectIds(db, 'external_generation_results', `attempt_id IN (${placeholders(externalAttemptIds)})`, externalAttemptIds)
+    : [];
+  const allImageGenerationIds = [...new Set([
+    ...imageGenerationIds,
+    ...imageTaskRows.map((row) => row.image_generation_id).filter((id) => id != null),
+  ])];
   const directorGroupIds = storyboardIds.length
     ? selectIds(db, 'director_candidate_groups', `shot_id IN (${placeholders(storyboardIds)})`, storyboardIds.map(String))
     : [];
@@ -95,19 +151,18 @@ function discoverProjectOwnedIds(db, dramaId) {
   if (directorJobIds.length && tableExists(db, 'director_artifacts')) {
     directorArtifactIds.push(...selectIds(db, 'director_artifacts', `job_id IN (${placeholders(directorJobIds)})`, directorJobIds));
   }
-  const imageGenerationIds = generationIdsFor('image_generations');
   const videoGenerationIds = generationIdsFor('video_generations');
   const asyncTaskIds = [...new Set([
-    ...selectColumnValues(db, 'image_generations', 'task_id', imageGenerationIds),
+    ...selectColumnValues(db, 'image_generations', 'task_id', allImageGenerationIds),
     ...selectColumnValues(db, 'video_generations', 'task_id', videoGenerationIds),
     ...selectColumnValues(db, 'video_merges', 'task_id', videoMergeIds),
     ...selectColumnValues(db, 'video_upscale_jobs', 'async_task_id', upscaleJobIds),
   ])];
   return {
     episodeIds, storyboardIds, characterIds, sceneIds, propIds, variantIds,
-    externalJobIds, externalAttemptIds, externalResultIds, videoMergeIds,
+    externalJobIds: allExternalJobIds, externalAttemptIds, externalResultIds, videoMergeIds,
     upscaleJobIds,
-    imageGenerationIds, videoGenerationIds, asyncTaskIds,
+    imageGenerationIds: allImageGenerationIds, imageTaskIds, imageBatchIds, videoGenerationIds, asyncTaskIds,
     directorGroupIds, directorCandidateIds, directorJobIds,
     directorArtifactIds: [...new Set(directorArtifactIds)],
   };
@@ -183,11 +238,13 @@ function previewProjectDeletion(db, cfg, dramaId, { includeDeleted = false } = {
     const anchorParams = [...owned.directorArtifactIds, ...owned.directorArtifactIds];
     counts.director_anchors = db.prepare(`SELECT COUNT(*) AS total FROM director_anchors WHERE source_artifact_id IN (${placeholders(owned.directorArtifactIds)}) OR derived_artifact_id IN (${placeholders(owned.directorArtifactIds)})`).get(...anchorParams).total;
   }
-  for (const table of ['character_libraries', 'scene_libraries', 'prop_libraries', 'assets', 'image_generation_batches', 'image_generation_tasks', 'external_generation_sessions', 'external_ai_package_tasks']) {
+  for (const table of ['character_libraries', 'scene_libraries', 'prop_libraries', 'assets', 'external_generation_sessions', 'external_ai_package_tasks']) {
     if (tableExists(db, table) && columnExists(db, table, 'drama_id')) {
       counts[table] = db.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE drama_id = ?`).get(id).total;
     }
   }
+  counts.image_generation_batches = owned.imageBatchIds.length;
+  counts.image_generation_tasks = owned.imageTaskIds.length;
   for (const [table, idColumn, values] of [
     ['storyboard_characters', 'storyboard_id', owned.storyboardIds], ['storyboard_props', 'storyboard_id', owned.storyboardIds],
     ['storyboard_character_variants', 'storyboard_id', owned.storyboardIds], ['storyboard_h3_prompt_drafts', 'storyboard_id', owned.storyboardIds],
@@ -240,10 +297,13 @@ function deleteProjectRows(db, dramaId, owned, counts) {
     removeByIds(table, 'id', table === 'image_generations' ? owned.imageGenerationIds : owned.videoGenerationIds);
   }
   removeByIds('video_merges', 'id', owned.videoMergeIds);
-  deleteWhere(db, counts, 'image_generation_tasks', 'drama_id = ?', [dramaId]);
-  deleteWhere(db, counts, 'image_generation_batches', 'drama_id = ?', [dramaId]);
+  removeByIds('image_generation_tasks', 'id', owned.imageTaskIds);
+  if (owned.imageBatchIds.length && tableExists(db, 'image_generation_batches')) {
+    const orphanedBatchIds = owned.imageBatchIds.filter((batchId) => !db.prepare('SELECT 1 FROM image_generation_tasks WHERE batch_id = ?').get(batchId));
+    removeByIds('image_generation_batches', 'id', orphanedBatchIds);
+  }
   deleteWhere(db, counts, 'external_ai_package_tasks', 'drama_id = ?', [dramaId]);
-  deleteWhere(db, counts, 'external_generation_jobs', 'drama_id = ?', [dramaId]);
+  removeByIds('external_generation_jobs', 'id', owned.externalJobIds);
   deleteWhere(db, counts, 'assets', 'drama_id = ?', [dramaId]);
   deleteWhere(db, counts, 'character_libraries', 'drama_id = ?', [dramaId]);
   deleteWhere(db, counts, 'scene_libraries', 'drama_id = ?', [dramaId]);
