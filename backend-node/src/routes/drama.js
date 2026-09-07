@@ -3,6 +3,7 @@ const propService = require('../services/propService');
 const response = require('../response');
 const dramaExportService = require('../services/dramaExportService');
 const dramaImportService = require('../services/dramaImportService');
+const projectDeletionService = require('../services/projectDeletionService');
 const path = require('node:path');
 const fs = require('node:fs');
 const {
@@ -180,11 +181,16 @@ function updateDrama(db, log) {
   };
 }
 
-function deleteDrama(db, log) {
+function deleteDrama(db, cfg, log) {
   return (req, res) => {
-    const ok = dramaService.deleteDrama(db, log, req.params.id);
-    if (!ok) return response.notFound(res, '剧本不存在');
-    response.success(res, { message: '删除成功' });
+    try {
+      const result = projectDeletionService.deleteProjectPermanently(db, cfg, log, req.params.id);
+      if (!result) return response.notFound(res, '剧本不存在');
+      response.success(res, result);
+    } catch (error) {
+      log.error('Delete drama permanently failed', { drama_id: req.params.id, error: error.message });
+      response.internalError(res, error.message || '删除失败');
+    }
   };
 }
 
@@ -406,7 +412,7 @@ module.exports = function dramaRoutes(db, cfg, log) {
     getDrama: getDrama(db, cfg),
     listDramas: listDramas(db, log),
     updateDrama: updateDrama(db, log),
-    deleteDrama: deleteDrama(db, log),
+    deleteDrama: deleteDrama(db, cfg, log),
     getDramaStats: getDramaStats(db, log),
     saveOutline: saveOutline(db, log),
     getCharacters: getCharacters(db),
