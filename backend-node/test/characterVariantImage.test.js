@@ -38,6 +38,7 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       polished_prompt TEXT,
+      asset_mode TEXT DEFAULT 'TURNAROUND',
       stages TEXT,
       negative_prompt TEXT,
       seedance2_asset TEXT,
@@ -56,6 +57,8 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       extra_images TEXT,
+      asset_mode TEXT DEFAULT 'SINGLE',
+      use_identity_reference INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
@@ -220,5 +223,55 @@ describe('generateVariantImage', () => {
     assert.equal(raw.local_path, 'projects/0001_20260101_测试剧/characters/variant-gen-local.png');
     assert.ok(raw.updated_at);
     assert.notEqual(raw.updated_at, '2020-01-01T00:00:00.000Z');
+  });
+
+  it('adds turnaround layout instructions when variant asset mode is TURNAROUND', async () => {
+    const charId = insertCharacter(db);
+    const variant = createVariant(db, {
+      character_id: charId,
+      name: '战损状态',
+      image_prompt: '灰尘覆盖的黑色外套，左眉轻微擦伤',
+      asset_mode: 'TURNAROUND',
+    });
+    const { deps, calls } = makeStubs();
+
+    await generateVariantImage(db, cfg, log, variant.id, {}, deps);
+
+    assert.match(calls.imageApi[0].prompt, /正面、正侧面、背面/);
+    assert.match(calls.imageApi[0].prompt, /灰尘覆盖的黑色外套/);
+  });
+
+  it('does not send an identity reference when the variant preference is disabled', async () => {
+    const charId = insertCharacter(db);
+    db.prepare("UPDATE characters SET local_path='characters/base-identity.png' WHERE id=?").run(charId);
+    const variant = createVariant(db, {
+      character_id: charId,
+      name: '伪装状态',
+      image_prompt: '银色短发，深色风衣',
+      use_identity_reference: false,
+    });
+    const { deps, calls } = makeStubs();
+
+    await generateVariantImage(db, cfg, log, variant.id, {}, deps);
+
+    assert.equal(calls.imageApi[0].reference_image_urls, undefined);
+    assert.equal(calls.imageApi[0].system_prompt, undefined);
+  });
+
+  it('continues without a reference when identity matching is enabled but the base image is missing', async () => {
+    const charId = insertCharacter(db);
+    const variant = createVariant(db, {
+      character_id: charId,
+      name: '常态',
+      image_prompt: '米色衬衫，神情平静',
+      use_identity_reference: true,
+    });
+    const { deps, calls } = makeStubs();
+
+    const row = await generateVariantImage(db, cfg, log, variant.id, {}, deps);
+
+    assert.equal(row.image_url, 'https://cdn.example.com/variant-gen.png');
+    assert.equal(calls.imageApi[0].reference_image_urls, undefined);
+    assert.equal(calls.imageApi[0].system_prompt, undefined);
   });
 });

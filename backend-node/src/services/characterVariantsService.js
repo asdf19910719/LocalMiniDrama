@@ -3,6 +3,7 @@ const path = require('path');
 const storageLayout = require('./storageLayout');
 const { aspectRatioToSize } = require('./imageService');
 const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 
 /** 解析行内 extra_images JSON 字符串为数组（解析失败时保留原值） */
 function parseVariantRow(row) {
@@ -291,11 +292,17 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
   } catch (_) {}
   if (!imageSize) imageSize = effectiveCfg?.style?.default_image_size || '1920x1920';
 
-  const fullPrompt = appendPrompt(prompt, style);
+  const assetMode = normalizeAssetMode('character_variant', options.assetMode ?? variant.asset_mode);
+  const fullPrompt = appendPrompt(buildModePrompt('character_variant', assetMode, prompt), style);
   const model = options.model ? String(options.model).trim() || null : null;
   const preferredProvider = !model && effectiveCfg?.ai?.default_image_provider ? effectiveCfg.ai.default_image_provider : null;
   const userNeg = imageClient.resolveAssetUserNegativeForApi(model, variant.negative_prompt || char.negative_prompt);
-  const identityReference = String(char.local_path || char.image_url || '').trim();
+  const useIdentityReference = options.useIdentityReference == null
+    ? variant.use_identity_reference !== 0
+    : options.useIdentityReference === true;
+  const identityReference = useIdentityReference
+    ? String(char.local_path || char.image_url || '').trim()
+    : '';
   const rawStorage = cfg?.storage?.local_path;
   const storagePath = rawStorage
     ? (path.isAbsolute(rawStorage) ? rawStorage : path.join(process.cwd(), rawStorage))
