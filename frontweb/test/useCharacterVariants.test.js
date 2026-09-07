@@ -126,6 +126,21 @@ test('状态工作台设置保存后立即更新当前缓存', async () => {
   assert.equal(api.getVariantsForCharacter(1)[0].asset_mode, 'TURNAROUND')
 })
 
+test('状态工作台设置保存失败时回滚当前缓存', async () => {
+  const variant = { id: 11, character_id: 1, name: '常态', asset_mode: 'SINGLE', use_identity_reference: 1 }
+  const { api, toasts } = buildDeps({
+    listVariants: async () => [variant],
+    updateVariant: async () => { throw new Error('network down') },
+  })
+  await api.loadVariants(1)
+
+  const result = await api.updateVariantGenerationSettings(variant, { asset_mode: 'TURNAROUND' })
+
+  assert.equal(result, null)
+  assert.equal(api.getVariantsForCharacter(1)[0].asset_mode, 'SINGLE')
+  assert.ok(toasts.some((message) => message.includes('network down')))
+})
+
 test('refreshLoadedVariants 只强制刷新已经打开过的人物状态缓存', async () => {
   const reads = []
   const { api } = buildDeps({

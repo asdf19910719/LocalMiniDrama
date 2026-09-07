@@ -254,14 +254,19 @@ export function useCharacterVariants(deps) {
 
   async function updateVariantGenerationSettings(variant, patch) {
     if (!variant?.id) return null
+    const key = Number(variant.character_id)
+    const current = getVariantsForCharacter(key)
+    const previous = current.find((item) => Number(item.id) === Number(variant.id)) || variant
+    variantsByCharacterId.value.set(key, current.map((item) => Number(item.id) === Number(variant.id) ? { ...item, ...patch } : item))
     try {
       const updated = await characterAPI.updateVariant(variant.id, patch)
-      const key = Number(variant.character_id)
-      const current = getVariantsForCharacter(key)
       const authoritative = updated?.id ? updated : { ...variant, ...patch }
-      variantsByCharacterId.value.set(key, current.map((item) => Number(item.id) === Number(variant.id) ? authoritative : item))
+      const latest = getVariantsForCharacter(key)
+      variantsByCharacterId.value.set(key, latest.map((item) => Number(item.id) === Number(variant.id) ? authoritative : item))
       return authoritative
     } catch (e) {
+      const latest = getVariantsForCharacter(key)
+      variantsByCharacterId.value.set(key, latest.map((item) => Number(item.id) === Number(variant.id) ? previous : item))
       notify.error(e?.message || '状态生图设置保存失败')
       return null
     }

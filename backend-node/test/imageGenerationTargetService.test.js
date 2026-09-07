@@ -234,6 +234,21 @@ describe('image generation target adapters and binding', () => {
     assert.deepEqual(generation.references, []);
   });
 
+  it('reuses the persisted reference manifest instead of re-resolving changed asset preferences', () => {
+    db.prepare(`INSERT INTO character_variants
+      (id, character_id, source_key, name, image_prompt, asset_mode, use_identity_reference, is_default, deleted_at)
+      VALUES (12, 1, 'snapshot', '快照状态', '黑色风衣', 'SINGLE', 1, 0, NULL)`).run();
+
+    const generation = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'character_variant',
+      target_id: 12,
+      reference_manifest: '[]',
+    });
+
+    assert.deepEqual(generation.references, []);
+  });
+
   it('records image_updated_at on asset and storyboard rows when binding', () => {
     targets.bindResult(db, { drama_id: 7, target_type: 'character', target_id: 1 }, 50);
     targets.bindResult(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }, 53);

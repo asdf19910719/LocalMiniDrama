@@ -154,6 +154,7 @@ function collectStoryboardReferences(db, target) {
 function buildGenerationInput(db, task) {
   const target = resolveTarget(db, task);
   const { dramaId } = targetValues(task);
+  const hasReferenceSnapshot = task.reference_manifest != null || task.referenceManifest != null;
   let prompt = '';
   const references = [];
   let frameType = null;
@@ -166,7 +167,10 @@ function buildGenerationInput(db, task) {
   } else if (target.target_type === 'character_variant') {
     assetMode = normalizeAssetMode('character_variant', task.asset_mode ?? task.assetMode ?? target.asset_mode);
     prompt = target.image_prompt || target.appearance || target.description || target.name || '';
-    if (target.use_identity_reference !== 0) {
+    const useIdentityReference = task.use_identity_reference == null
+      ? target.use_identity_reference !== 0
+      : task.use_identity_reference === true || task.use_identity_reference === 1;
+    if (useIdentityReference) {
       const identityUrl = addressableReferenceUrl(db, {
         local_path: target.character_local_path,
         image_url: target.character_image_url,
@@ -218,7 +222,9 @@ function buildGenerationInput(db, task) {
   return {
     target,
     prompt: appendPrompt(modePrompt, stylePrompt),
-    references,
+    references: hasReferenceSnapshot
+      ? parseList(task.reference_manifest ?? task.referenceManifest)
+      : references,
     frameType,
     assetMode,
     negativePrompt,

@@ -40,6 +40,7 @@ module.exports = (db, log = console) => {
       target_id: input.targetId,
       prompt_snapshot: input.prompt,
       asset_mode: input.assetMode ?? input.asset_mode,
+      use_identity_reference: input.useIdentityReference ?? input.use_identity_reference,
     });
     const requestedChannel = resolveChannel(input.dramaId, input.generationChannel || input.generation_channel);
     let task = tasks.createTask(db, {

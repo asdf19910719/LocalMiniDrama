@@ -3092,6 +3092,9 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
       assetMode: ['character', 'character_variant', 'scene'].includes(targetType)
         ? normalizeAssetGenerationMode(targetType, target?.asset_mode)
         : undefined,
+      useIdentityReference: targetType === 'character_variant'
+        ? target?.use_identity_reference !== 0 && target?.use_identity_reference !== false
+        : undefined,
     })
     return task
   } catch (error) {
