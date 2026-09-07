@@ -20,6 +20,7 @@ describe('image generation target adapters and binding', () => {
       CREATE TABLE storyboard_character_variants (id INTEGER PRIMARY KEY, storyboard_id INTEGER, character_id INTEGER, variant_id INTEGER, reference_role TEXT, sort_order INTEGER, framing_note TEXT);
       CREATE TABLE storyboard_props (storyboard_id INTEGER, prop_id INTEGER);
       CREATE TABLE external_generation_results (id TEXT PRIMARY KEY, image_generation_id INTEGER);
+      CREATE TABLE dramas (id INTEGER PRIMARY KEY, style TEXT, metadata TEXT, deleted_at TEXT);
     `);
     db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL,NULL)").run();
     db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL,NULL)").run();
@@ -32,20 +33,66 @@ describe('image generation target adapters and binding', () => {
     ]) db.prepare("INSERT INTO image_generations (id,storyboard_id,drama_id,scene_id,character_id,provider,prompt,image_url,local_path,status) VALUES (?,?,?,?,?,'external:chatgpt-web','p',?,?,'completed')")
       .run(...row, `/new-${row[0]}.png`, `new-${row[0]}.png`);
     db.exec('ALTER TABLE scenes ADD COLUMN state TEXT; ALTER TABLE storyboards ADD COLUMN characters TEXT;');
+    db.exec(`
+      ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
+      ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
+      ALTER TABLE character_variants ADD COLUMN asset_mode TEXT DEFAULT 'SINGLE';
+      ALTER TABLE character_variants ADD COLUMN use_identity_reference INTEGER DEFAULT 1;
+      ALTER TABLE scenes ADD COLUMN asset_mode TEXT DEFAULT 'NORMAL';
+      ALTER TABLE scenes ADD COLUMN negative_prompt TEXT;
+      ALTER TABLE props ADD COLUMN negative_prompt TEXT;
+    `);
+    db.prepare('INSERT INTO dramas (id, style, metadata) VALUES (?, ?, ?)').run(7, 'cinematic', '{}');
   });
 
   afterEach(() => db.close());
 
   it('builds authoritative prompts for every resource kind', () => {
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, '角色润色');
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'scene', target_id: 2 }).prompt, '场景单图');
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'prop', target_id: 3 }).prompt, '道具润色');
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }).prompt, '分镜润色');
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, /角色润色/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, /正面、正侧面、背面/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'scene', target_id: 2 }).prompt, /^场景单图/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'prop', target_id: 3 }).prompt, /^道具润色/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }).prompt, /^分镜润色/);
+  });
+
+  it('resolves mode-specific prompts plus negative and project style snapshots', () => {
+    db.prepare("UPDATE characters SET asset_mode='SINGLE', negative_prompt='duplicate person' WHERE id=1").run();
+    db.prepare("UPDATE scenes SET asset_mode='QUAD_GRID', negative_prompt='text watermark' WHERE id=2").run();
+    db.prepare("UPDATE dramas SET metadata=? WHERE id=7").run(JSON.stringify({
+      style_prompt_zh: '写实电影光影，冷青色调',
+      style_prompt_en: 'cinematic realistic lighting, cyan shadows',
+    }));
+
+    const character = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'character',
+      target_id: 1,
+    });
+    assert.equal(character.assetMode, 'SINGLE');
+    assert.doesNotMatch(character.prompt, /正面、正侧面、背面/);
+    assert.match(character.prompt, /cinematic realistic lighting/);
+    assert.equal(character.negativePrompt, 'duplicate person');
+    assert.deepEqual(character.styleSnapshot, {
+      style: 'cinematic',
+      style_prompt_zh: '写实电影光影，冷青色调',
+      style_prompt_en: 'cinematic realistic lighting, cyan shadows',
+    });
+
+    const scene = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'scene',
+      target_id: 2,
+    });
+    assert.equal(scene.assetMode, 'QUAD_GRID');
+    assert.match(scene.prompt, /四宫格/);
+    assert.equal(scene.negativePrompt, 'text watermark');
   });
 
   it('never falls back to a character background description when building an image prompt', () => {
     db.prepare('UPDATE characters SET polished_prompt=NULL WHERE id=1').run();
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, '黑发少年');
+    const prompt = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt;
+    assert.match(prompt, /黑发少年/);
+    assert.doesNotMatch(prompt, /角色背景叙事/);
   });
 
   it('does not reuse a character output image as an implicit text-to-image reference', () => {
@@ -56,7 +103,7 @@ describe('image generation target adapters and binding', () => {
       prompt_snapshot: '新的角色外观提示词',
     });
 
-    assert.equal(generation.prompt, '新的角色外观提示词');
+    assert.match(generation.prompt, /新的角色外观提示词/);
     assert.deepEqual(generation.references, []);
   });
 
@@ -94,8 +141,8 @@ describe('image generation target adapters and binding', () => {
   it('uses the matching frame prompt for first and last targets', () => {
     db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'first', '专业首帧提示', '2026-01-01')").run();
     db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'last', '专业尾帧提示', '2026-01-02')").run();
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, '专业首帧提示');
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, '专业尾帧提示');
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, /^专业首帧提示/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, /^专业尾帧提示/);
   });
 
   it('uses canonical scene, selected character variant, and prop references in slot order', () => {
@@ -153,13 +200,13 @@ describe('image generation target adapters and binding', () => {
       VALUES (1, 1, 'char_lin_default', '默认状态', '日常造型', '黑发束起', '状态生图提示词', '/old-variant.png', 'old-variant.png', NULL, 1, NULL, NULL)`).run();
 
     const generation = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 });
-    assert.equal(generation.prompt, '状态生图提示词');
+    assert.match(generation.prompt, /^状态生图提示词/);
     assert.deepEqual(generation.references, [
       { role: 'character_identity', sourceId: 1, url: '/static/old-char.png' },
     ]);
 
     db.prepare('UPDATE character_variants SET image_prompt=NULL WHERE id=1').run();
-    assert.equal(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, '黑发束起');
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, /^黑发束起/);
 
     targets.bindResult(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }, 50);
     const variant = db.prepare('SELECT * FROM character_variants WHERE id=1').get();
@@ -169,6 +216,22 @@ describe('image generation target adapters and binding', () => {
     assert.ok(variant.updated_at);
 
     assert.throws(() => targets.bindResult(db, { drama_id: 8, target_type: 'character_variant', target_id: 1 }, 50), /drama/i);
+  });
+
+  it('honors variant mode and optional identity-reference preference', () => {
+    db.prepare(`INSERT INTO character_variants
+      (id, character_id, source_key, name, image_prompt, asset_mode, use_identity_reference, is_default, deleted_at)
+      VALUES (11, 1, 'battle', '战损', '破损外套，面部擦伤', 'TURNAROUND', 0, 0, NULL)`).run();
+
+    const generation = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'character_variant',
+      target_id: 11,
+    });
+
+    assert.equal(generation.assetMode, 'TURNAROUND');
+    assert.match(generation.prompt, /正面、正侧面、背面/);
+    assert.deepEqual(generation.references, []);
   });
 
   it('records image_updated_at on asset and storyboard rows when binding', () => {

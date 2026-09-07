@@ -93,15 +93,21 @@ function insertTask(db, input) {
   const id = input.id || crypto.randomUUID();
   db.prepare(`INSERT INTO image_generation_tasks
     (id, drama_id, target_type, target_id, generation_channel, provider, model,
-     prompt_snapshot, reference_manifest, aspect_ratio, frame_type, status,
-     batch_id, queue_position, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+     prompt_snapshot, reference_manifest, aspect_ratio, frame_type, asset_mode,
+     negative_prompt_snapshot, style_snapshot, status, batch_id, queue_position,
+     created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       id, dramaId, targetType, targetId, channel, input.provider || null, input.model || null,
       input.promptSnapshot ?? input.prompt_snapshot ?? null,
       input.referenceManifest ? JSON.stringify(input.referenceManifest) : (input.reference_manifest || null),
       input.aspectRatio ?? input.aspect_ratio ?? null,
       input.frameType ?? input.frame_type ?? null,
+      input.assetMode ?? input.asset_mode ?? null,
+      input.negativePromptSnapshot ?? input.negative_prompt_snapshot ?? null,
+      input.styleSnapshot
+        ? JSON.stringify(input.styleSnapshot)
+        : (input.style_snapshot || null),
       status, input.batchId ?? input.batch_id ?? null,
       input.queuePosition ?? input.queue_position ?? null, timestamp, timestamp,
     );

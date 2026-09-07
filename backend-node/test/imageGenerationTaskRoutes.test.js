@@ -20,6 +20,13 @@ it('reports channel-specific image generation environment readiness without crea
     INSERT INTO character_variants VALUES (2, 1, 'night', '夜间状态', NULL, '湿发白衬衫', '状态提示词', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL);
     INSERT INTO ai_service_configs VALUES (1, 'image', 'openai', 'https://api.test', 'key', 'img-1', '["img-1"]', 1, 1, NULL);
   `);
+  db.exec(`
+    ALTER TABLE dramas ADD COLUMN style TEXT;
+    ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
+    ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
+    ALTER TABLE character_variants ADD COLUMN asset_mode TEXT DEFAULT 'SINGLE';
+    ALTER TABLE character_variants ADD COLUMN use_identity_reference INTEGER DEFAULT 1;
+  `);
   const app = express(); app.use(express.json()); app.use('/api/v1', routes(db, console));
   const server = app.listen(0); const base = `http://127.0.0.1:${server.address().port}/api/v1`;
   try {
@@ -49,6 +56,14 @@ it('creates a unified task and exposes one drama summary', async () => {
     INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
     INSERT INTO characters VALUES (1, 7, '林默', '黑发少年', '角色提示', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   `);
+  db.exec(`
+    ALTER TABLE dramas ADD COLUMN style TEXT;
+    ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
+    ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
+    ALTER TABLE image_generation_tasks ADD COLUMN asset_mode TEXT;
+    ALTER TABLE image_generation_tasks ADD COLUMN negative_prompt_snapshot TEXT;
+    ALTER TABLE image_generation_tasks ADD COLUMN style_snapshot TEXT;
+  `);
   db.exec(fs.readFileSync('migrations/24_external_web_generation.sql', 'utf8'));
   db.exec('ALTER TABLE external_generation_results ADD COLUMN selected INTEGER NOT NULL DEFAULT 0');
   const app = express();
@@ -69,7 +84,9 @@ it('creates a unified task and exposes one drama summary', async () => {
     });
     assert.equal(createdResponse.status, 200);
     const created = (await createdResponse.json()).data;
-    assert.equal(created.prompt_snapshot, '角色提示');
+    assert.match(created.prompt_snapshot, /角色提示/);
+    assert.match(created.prompt_snapshot, /正面、正侧面、背面/);
+    assert.equal(created.asset_mode, 'TURNAROUND');
     assert.deepEqual(JSON.parse(created.reference_manifest), []);
     assert.equal(created.status, 'queued');
     assert.ok(created.external_job_id);
@@ -189,6 +206,14 @@ it('queues fresh chatgpt tasks and claims them serially', async () => {
     CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
     INSERT INTO characters VALUES (1, 7, '林默', '黑发少年', '角色提示', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  `);
+  db.exec(`
+    ALTER TABLE dramas ADD COLUMN style TEXT;
+    ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
+    ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
+    ALTER TABLE image_generation_tasks ADD COLUMN asset_mode TEXT;
+    ALTER TABLE image_generation_tasks ADD COLUMN negative_prompt_snapshot TEXT;
+    ALTER TABLE image_generation_tasks ADD COLUMN style_snapshot TEXT;
   `);
   db.exec(fs.readFileSync('migrations/24_external_web_generation.sql', 'utf8'));
   db.exec('ALTER TABLE external_generation_results ADD COLUMN selected INTEGER NOT NULL DEFAULT 0');

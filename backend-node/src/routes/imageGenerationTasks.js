@@ -39,6 +39,7 @@ module.exports = (db, log = console) => {
       target_type: input.targetType,
       target_id: input.targetId,
       prompt_snapshot: input.prompt,
+      asset_mode: input.assetMode ?? input.asset_mode,
     });
     const requestedChannel = resolveChannel(input.dramaId, input.generationChannel || input.generation_channel);
     let task = tasks.createTask(db, {
@@ -49,6 +50,9 @@ module.exports = (db, log = console) => {
       // stale client manifest, which can belong to another shot or asset.
       referenceManifest: generation.references,
       frameType: generation.frameType,
+      assetMode: generation.assetMode,
+      negativePromptSnapshot: generation.negativePrompt,
+      styleSnapshot: generation.styleSnapshot,
     });
     if (task.generation_channel === 'chatgpt_web') {
       const job = createExternalJob(db, {
