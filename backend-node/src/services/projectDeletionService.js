@@ -153,7 +153,7 @@ function projectStorageSummary(cfg, project) {
 function previewProjectDeletion(db, cfg, dramaId, { includeDeleted = false } = {}) {
   const id = Number(dramaId);
   if (!Number.isInteger(id) || id <= 0) return null;
-  const project = db.prepare(`SELECT * FROM dramas WHERE id = ?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`).get(id);
+  const project = db.prepare(`SELECT * FROM dramas WHERE id = ?${includeDeleted === true ? '' : ' AND deleted_at IS NULL'}`).get(id);
   if (!project) return null;
   const owned = discoverProjectOwnedIds(db, id);
   const counts = emptyCounts();

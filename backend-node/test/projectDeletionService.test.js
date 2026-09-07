@@ -176,3 +176,16 @@ test('soft-deleted projects require explicit includeDeleted opt-in', (t) => {
   assert.equal(count(db, 'dramas', 'id = ?', 3), 0);
   assert.equal(fs.existsSync(legacyProjectDir), false);
 });
+
+test('soft-deleted projects reject truthy non-boolean includeDeleted values', (t) => {
+  const { db, storageRoot, legacyProjectDir } = setup();
+  t.after(() => { db.close(); fs.rmSync(storageRoot, { recursive: true, force: true }); });
+  const cfg = { storage: { local_path: storageRoot } };
+
+  for (const includeDeleted of ['false', 'true', 1]) {
+    assert.equal(previewProjectDeletion(db, cfg, 3, { includeDeleted }), null);
+    assert.equal(deleteProjectPermanently(db, cfg, { error() {} }, 3, { includeDeleted }), null);
+    assert.equal(count(db, 'dramas', 'id = ?', 3), 1);
+    assert.equal(fs.existsSync(legacyProjectDir), true);
+  }
+});
