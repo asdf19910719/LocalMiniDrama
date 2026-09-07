@@ -66,9 +66,23 @@ function discoverProjectOwnedIds(db, dramaId) {
   const propIds = selectIds(db, 'props', 'drama_id = ?', [dramaId]);
   const variantIds = characterIds.length ? selectIds(db, 'character_variants', `character_id IN (${placeholders(characterIds)})`, characterIds) : [];
   const externalJobIds = selectIds(db, 'external_generation_jobs', 'drama_id = ?', [dramaId]);
-  const videoMergeIds = tableExists(db, 'video_merges')
-    ? ids(db.prepare(`SELECT id FROM video_merges WHERE drama_id = ?${episodeIds.length ? ` OR episode_id IN (${placeholders(episodeIds)})` : ''}`).all(dramaId, ...episodeIds))
-    : [];
+  let videoMergeIds = [];
+  if (tableExists(db, 'video_merges')) {
+    const mergeClauses = [];
+    const mergeParams = [];
+    if (columnExists(db, 'video_merges', 'drama_id')) {
+      mergeClauses.push('drama_id = ?');
+      mergeParams.push(dramaId);
+    }
+    if (episodeIds.length && columnExists(db, 'video_merges', 'episode_id')) {
+      appendInClause(mergeClauses, mergeParams, 'episode_id', episodeIds);
+    }
+    if (mergeClauses.length) {
+      const hasMergeDramaId = columnExists(db, 'video_merges', 'drama_id');
+      const mergeRows = db.prepare(`SELECT id, ${hasMergeDramaId ? 'drama_id' : 'NULL AS drama_id'} FROM video_merges WHERE ${mergeClauses.join(' OR ')}`).all(...mergeParams);
+      videoMergeIds = ids(mergeRows.filter((row) => !hasMergeDramaId || row.drama_id == null || Number(row.drama_id) === dramaId));
+    }
+  }
   const upscaleJobIds = tableExists(db, 'video_upscale_jobs')
     ? ids(db.prepare(`SELECT id FROM video_upscale_jobs WHERE ${episodeIds.length ? `episode_id IN (${placeholders(episodeIds)})` : '0'}${videoMergeIds.length ? `${episodeIds.length ? ' OR ' : ''}video_merge_id IN (${placeholders(videoMergeIds)})` : ''}`).all(...episodeIds, ...videoMergeIds))
     : [];
@@ -79,7 +93,10 @@ function discoverProjectOwnedIds(db, dramaId) {
     if (columnExists(db, table, 'storyboard_id')) appendInClause(clauses, params, 'storyboard_id', storyboardIds);
     if (columnExists(db, table, 'character_id')) appendInClause(clauses, params, 'character_id', characterIds);
     if (columnExists(db, table, 'scene_id')) appendInClause(clauses, params, 'scene_id', sceneIds);
-    return clauses.length ? selectIds(db, table, clauses.join(' OR '), params) : [];
+    if (!clauses.length) return [];
+    const hasDramaId = columnExists(db, table, 'drama_id');
+    const rows = db.prepare(`SELECT id, ${hasDramaId ? 'drama_id' : 'NULL AS drama_id'} FROM ${table} WHERE ${clauses.join(' OR ')}`).all(...params);
+    return ids(rows.filter((row) => !hasDramaId || row.drama_id == null || Number(row.drama_id) === dramaId));
   };
   const imageGenerationIds = generationIdsFor('image_generations');
   const imageTaskRows = [];

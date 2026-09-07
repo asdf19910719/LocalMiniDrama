@@ -352,6 +352,7 @@ function deleteCharacter(db, log, characterId) {
     const hasEpisodeOwnership = Boolean(
       db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'episodes'").get()
       && db.prepare('PRAGMA table_info(storyboards)').all().some((column) => column.name === 'episode_id')
+      && db.prepare('PRAGMA table_info(episodes)').all().some((column) => column.name === 'drama_id')
     );
     const storyboards = hasEpisodeOwnership
       ? db.prepare(
