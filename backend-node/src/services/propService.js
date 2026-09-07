@@ -96,7 +96,7 @@ function deleteById(db, log, id) {
     if (!drama) return false;
 
     db.prepare('DELETE FROM storyboard_props WHERE prop_id = ?').run(propId);
-    db.prepare('UPDATE props SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), propId);
+    db.prepare('DELETE FROM props WHERE id = ?').run(propId);
     log.info('Prop deleted', { prop_id: id });
     return true;
   })();

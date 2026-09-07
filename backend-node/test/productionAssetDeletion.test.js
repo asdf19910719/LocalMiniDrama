@@ -31,7 +31,8 @@ function insertFixture(db) {
     INSERT INTO dramas (id) VALUES (1), (2);
     INSERT INTO characters (id, drama_id) VALUES (11, 1), (12, 1), (21, 2);
     INSERT INTO character_libraries (id, drama_id, name) VALUES (11, 1, '角色库同编号条目');
-    INSERT INTO character_variants (id, character_id) VALUES (111, 11), (112, 12), (121, 21);
+    INSERT INTO character_variants (id, character_id, deleted_at) VALUES
+      (111, 11, NULL), (113, 11, '2026-09-06T00:00:00.000Z'), (112, 12, NULL), (121, 21, NULL);
     INSERT INTO episode_characters (episode_id, character_id) VALUES (101, 11), (101, 12), (201, 21);
     INSERT INTO scenes (id, drama_id) VALUES (31, 1), (32, 1), (41, 2);
     INSERT INTO props (id, drama_id) VALUES (51, 1), (52, 1), (61, 2);
@@ -52,7 +53,7 @@ test('character deletion clears only its episode, storyboard, and variant associ
 
   assert.deepEqual(deleteCharacter(db, log, 11), { ok: true });
 
-  assert.ok(db.prepare('SELECT deleted_at FROM characters WHERE id = 11').get().deleted_at);
+  assert.equal(db.prepare('SELECT id FROM characters WHERE id = 11').get(), undefined);
   assert.deepEqual(db.prepare('SELECT character_id FROM episode_characters ORDER BY character_id').all(), [
     { character_id: 12 }, { character_id: 21 },
   ]);
@@ -64,7 +65,8 @@ test('character deletion clears only its episode, storyboard, and variant associ
   assert.deepEqual(db.prepare('SELECT character_id FROM storyboard_character_variants ORDER BY character_id').all(), [
     { character_id: 12 }, { character_id: 21 },
   ]);
-  assert.ok(db.prepare('SELECT deleted_at FROM character_variants WHERE id = 111').get().deleted_at);
+  assert.equal(db.prepare('SELECT id FROM character_variants WHERE id = 111').get(), undefined);
+  assert.deepEqual(db.prepare('SELECT id FROM character_variants WHERE character_id = 11').all(), []);
   assert.equal(db.prepare('SELECT deleted_at FROM character_variants WHERE id = 112').get().deleted_at, null);
   assert.deepEqual(db.prepare(
     `SELECT sc.storyboard_id, sc.character_id, cl.name
@@ -78,8 +80,8 @@ test('character deletion rolls back association cleanup when asset deletion fail
   const db = createDb();
   insertFixture(db);
   db.exec(`
-    CREATE TRIGGER reject_character_delete BEFORE UPDATE OF deleted_at ON characters
-    WHEN NEW.id = 11 BEGIN SELECT RAISE(ABORT, 'reject character delete'); END;
+    CREATE TRIGGER reject_character_delete BEFORE DELETE ON characters
+    WHEN OLD.id = 11 BEGIN SELECT RAISE(ABORT, 'reject character delete'); END;
   `);
 
   assert.throws(() => deleteCharacter(db, log, 11), /reject character delete/);
@@ -96,7 +98,7 @@ test('scene deletion nulls only matching storyboard scene references', () => {
 
   assert.deepEqual(deleteScene(db, log, 31), { ok: true });
 
-  assert.ok(db.prepare('SELECT deleted_at FROM scenes WHERE id = 31').get().deleted_at);
+  assert.equal(db.prepare('SELECT id FROM scenes WHERE id = 31').get(), undefined);
   assert.equal(db.prepare('SELECT scene_id FROM storyboards WHERE id = 1001').get().scene_id, null);
   assert.equal(db.prepare('SELECT scene_id FROM storyboards WHERE id = 1002').get().scene_id, 32);
   assert.equal(db.prepare('SELECT scene_id FROM storyboards WHERE id = 2001').get().scene_id, 41);
@@ -108,7 +110,7 @@ test('prop deletion removes only matching storyboard prop links', () => {
 
   assert.equal(deleteProp(db, log, 51), true);
 
-  assert.ok(db.prepare('SELECT deleted_at FROM props WHERE id = 51').get().deleted_at);
+  assert.equal(db.prepare('SELECT id FROM props WHERE id = 51').get(), undefined);
   assert.deepEqual(db.prepare('SELECT prop_id FROM storyboard_props ORDER BY prop_id').all(), [
     { prop_id: 52 }, { prop_id: 61 },
   ]);

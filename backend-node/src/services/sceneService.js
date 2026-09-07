@@ -60,7 +60,7 @@ function deleteScene(db, log, sceneId) {
     if (!drama) return { ok: false, error: 'unauthorized' };
 
     db.prepare('UPDATE storyboards SET scene_id = NULL WHERE scene_id = ?').run(id);
-    db.prepare('UPDATE scenes SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+    db.prepare('DELETE FROM scenes WHERE id = ?').run(id);
     log.info('Scene deleted', { scene_id: sceneId });
     return { ok: true };
   })();

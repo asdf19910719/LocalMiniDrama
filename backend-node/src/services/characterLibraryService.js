@@ -347,9 +347,7 @@ function deleteCharacter(db, log, characterId) {
 
     db.prepare('DELETE FROM episode_characters WHERE character_id = ?').run(id);
     db.prepare('DELETE FROM storyboard_character_variants WHERE character_id = ?').run(id);
-    db.prepare('UPDATE character_variants SET deleted_at = ? WHERE character_id = ? AND deleted_at IS NULL').run(
-      new Date().toISOString(), id
-    );
+    db.prepare('DELETE FROM character_variants WHERE character_id = ?').run(id);
 
     const storyboards = db.prepare('SELECT id, characters FROM storyboards WHERE characters IS NOT NULL').all();
     const updateCharacters = db.prepare('UPDATE storyboards SET characters = ? WHERE id = ?');
@@ -369,8 +367,7 @@ function deleteCharacter(db, log, characterId) {
       }
     }
 
-    const now = new Date().toISOString();
-    db.prepare('UPDATE characters SET deleted_at = ? WHERE id = ?').run(now, id);
+    db.prepare('DELETE FROM characters WHERE id = ?').run(id);
     log.info('Character deleted', { id: characterId });
     return { ok: true };
   })();
