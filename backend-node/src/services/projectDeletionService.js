@@ -294,11 +294,8 @@ function discoverEpisodeOwnedIds(db, episodeId) {
   const storyboardIds = selectIds(db, 'storyboards', 'episode_id = ?', [episodeId]);
   const sceneIds = selectIds(db, 'scenes', 'episode_id = ?', [episodeId]);
   const propIds = selectIds(db, 'props', 'episode_id = ?', [episodeId]);
-  const externalJobIds = storyboardIds.length
+  const storyboardExternalJobIds = storyboardIds.length
     ? selectIds(db, 'external_generation_jobs', `storyboard_id IN (${placeholders(storyboardIds)})`, storyboardIds)
-    : [];
-  const externalAttemptIds = externalJobIds.length
-    ? selectIds(db, 'external_generation_attempts', `job_id IN (${placeholders(externalJobIds)})`, externalJobIds)
     : [];
   const videoMergeIds = selectIds(db, 'video_merges', 'episode_id = ?', [episodeId]);
   const upscaleClauses = []; const upscaleParams = [];
@@ -320,7 +317,7 @@ function discoverEpisodeOwnedIds(db, episodeId) {
     if (columnExists(db, table, 'scene_id')) appendInClause(clauses, params, 'scene_id', sceneIds);
     return clauses.length ? selectIds(db, table, clauses.join(' OR '), params) : [];
   };
-  const imageGenerationIds = generationIdsFor('image_generations');
+  const initialImageGenerationIds = generationIdsFor('image_generations');
   const videoGenerationIds = generationIdsFor('video_generations');
   const directorGroupIds = storyboardIds.length
     ? selectIds(db, 'director_candidate_groups', `shot_id IN (${placeholders(storyboardIds)})`, storyboardIds.map(String))
@@ -334,8 +331,8 @@ function discoverEpisodeOwnedIds(db, episodeId) {
     directorArtifactIds.push(...selectIds(db, 'director_artifacts', `job_id IN (${placeholders(directorJobIds)})`, directorJobIds));
   }
   const imageTaskClauses = []; const imageTaskParams = [];
-  if (imageGenerationIds.length && columnExists(db, 'image_generation_tasks', 'image_generation_id')) {
-    appendInClause(imageTaskClauses, imageTaskParams, 'image_generation_id', imageGenerationIds);
+  if (initialImageGenerationIds.length && columnExists(db, 'image_generation_tasks', 'image_generation_id')) {
+    appendInClause(imageTaskClauses, imageTaskParams, 'image_generation_id', initialImageGenerationIds);
   }
   if (storyboardIds.length && columnExists(db, 'image_generation_tasks', 'target_id') && columnExists(db, 'image_generation_tasks', 'target_type')) {
     imageTaskClauses.push(`(target_type LIKE 'storyboard%' AND target_id IN (${placeholders(storyboardIds)}))`);
@@ -345,11 +342,29 @@ function discoverEpisodeOwnedIds(db, episodeId) {
     imageTaskClauses.push(`(target_type LIKE 'scene%' AND target_id IN (${placeholders(sceneIds)}))`);
     imageTaskParams.push(...sceneIds);
   }
+  if (propIds.length && columnExists(db, 'image_generation_tasks', 'target_id') && columnExists(db, 'image_generation_tasks', 'target_type')) {
+    imageTaskClauses.push(`(target_type LIKE 'prop%' AND target_id IN (${placeholders(propIds)}))`);
+    imageTaskParams.push(...propIds);
+  }
   const imageTaskRows = imageTaskClauses.length && tableExists(db, 'image_generation_tasks')
-    ? db.prepare(`SELECT id, batch_id FROM image_generation_tasks WHERE ${imageTaskClauses.join(' OR ')}`).all(...imageTaskParams)
+    ? db.prepare(`SELECT id, batch_id, image_generation_id, external_job_id FROM image_generation_tasks WHERE ${imageTaskClauses.join(' OR ')}`).all(...imageTaskParams)
     : [];
   const imageTaskIds = ids(imageTaskRows);
   const imageBatchIds = [...new Set(imageTaskRows.map((row) => row.batch_id).filter(Boolean))];
+  const imageGenerationIds = [...new Set([
+    ...initialImageGenerationIds,
+    ...imageTaskRows.map((row) => row.image_generation_id).filter((id) => id != null),
+  ])];
+  const externalJobIds = [...new Set([
+    ...storyboardExternalJobIds,
+    ...imageTaskRows.map((row) => row.external_job_id).filter(Boolean),
+    ...(imageTaskIds.length && columnExists(db, 'external_generation_jobs', 'image_generation_task_id')
+      ? selectIds(db, 'external_generation_jobs', `image_generation_task_id IN (${placeholders(imageTaskIds)})`, imageTaskIds)
+      : []),
+  ])];
+  const externalAttemptIds = externalJobIds.length
+    ? selectIds(db, 'external_generation_attempts', `job_id IN (${placeholders(externalJobIds)})`, externalJobIds)
+    : [];
   const packageTaskIds = tableExists(db, 'external_ai_package_tasks') && columnExists(db, 'external_ai_package_tasks', 'target_episode_id')
     ? selectIds(db, 'external_ai_package_tasks', 'target_episode_id = ?', [episodeId])
     : [];
