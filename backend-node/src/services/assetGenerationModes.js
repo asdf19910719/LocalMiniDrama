@@ -10,6 +10,12 @@ const TURNAROUND_INSTRUCTION = [
   '使用干净中性背景，不要文字、标识、分镜格说明或额外人物。',
 ].join('\n');
 
+const QUAD_GRID_INSTRUCTION = [
+  '【场景四宫格版式】在一张图片中生成同一场景的四宫格视角设定图。',
+  '四格必须保持空间结构、建筑材质、陈设位置、时间、天气和光照连续一致，并提供主视角、反向视角、俯视角和补充视角。',
+  '每格只改变观察机位，不得变成四个不同地点；不要文字、边框标题、水印或人物特写。',
+].join('\n');
+
 function configFor(targetType) {
   const config = MODE_CONFIG[String(targetType || '').trim().toLowerCase()];
   if (!config) throw new Error(`Unsupported asset generation target type: ${targetType}`);
@@ -40,7 +46,12 @@ function buildModePrompt(targetType, mode, prompt) {
   const normalizedMode = normalizeAssetMode(normalizedType, mode);
   const base = String(prompt || '').trim();
   if ((normalizedType === 'character' || normalizedType === 'character_variant') && normalizedMode === 'TURNAROUND') {
+    if (base.includes('【角色三/四视图版式】')) return base;
     return [TURNAROUND_INSTRUCTION, base].filter(Boolean).join('\n\n');
+  }
+  if (normalizedType === 'scene' && normalizedMode === 'QUAD_GRID') {
+    if (base.includes('【场景四宫格版式】')) return base;
+    return [QUAD_GRID_INSTRUCTION, base].filter(Boolean).join('\n\n');
   }
   return base;
 }

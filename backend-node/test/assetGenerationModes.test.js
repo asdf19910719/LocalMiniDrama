@@ -40,5 +40,11 @@ describe('asset generation modes', () => {
     assert.equal(single, '白色衬衫，湿发');
     assert.match(turnaround, /正面、正侧面、背面/);
     assert.match(turnaround, /白色衬衫，湿发/);
+    assert.equal(buildModePrompt('character_variant', 'TURNAROUND', turnaround), turnaround);
+    const quad = buildModePrompt('scene', 'QUAD_GRID', '雨夜老街，霓虹灯反光');
+    assert.match(quad, /四宫格/);
+    assert.match(quad, /同一场景/);
+    assert.equal(buildModePrompt('scene', 'QUAD_GRID', quad), quad);
+    assert.equal(buildModePrompt('scene', 'NORMAL', '雨夜老街'), '雨夜老街');
   });
 });

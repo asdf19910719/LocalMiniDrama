@@ -236,7 +236,10 @@ export function useCharacterVariants(deps) {
     if (!id || generatingVariantId.value != null) return
     generatingVariantId.value = id
     try {
-      const updated = await characterAPI.generateVariantImage(id)
+      const updated = await characterAPI.generateVariantImage(id, {
+        asset_mode: variant?.asset_mode,
+        use_identity_reference: variant?.use_identity_reference !== false && variant?.use_identity_reference !== 0,
+      })
       const characterId = updated?.character_id ?? (typeof variant === 'object' ? variant?.character_id : null)
       if (Number.isFinite(Number(characterId))) {
         await loadVariants(characterId, { force: true })
@@ -246,6 +249,21 @@ export function useCharacterVariants(deps) {
       notify.error(e?.message || '生成失败')
     } finally {
       generatingVariantId.value = null
+    }
+  }
+
+  async function updateVariantGenerationSettings(variant, patch) {
+    if (!variant?.id) return null
+    try {
+      const updated = await characterAPI.updateVariant(variant.id, patch)
+      const key = Number(variant.character_id)
+      const current = getVariantsForCharacter(key)
+      const authoritative = updated?.id ? updated : { ...variant, ...patch }
+      variantsByCharacterId.value.set(key, current.map((item) => Number(item.id) === Number(variant.id) ? authoritative : item))
+      return authoritative
+    } catch (e) {
+      notify.error(e?.message || '状态生图设置保存失败')
+      return null
     }
   }
 
@@ -410,6 +428,7 @@ export function useCharacterVariants(deps) {
     saveVariant,
     removeVariant,
     generateVariantImage,
+    updateVariantGenerationSettings,
     setVariantDefault,
     selectVariantCandidate,
     // 分镜状态选择

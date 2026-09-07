@@ -7,6 +7,7 @@ import { generationAPI } from '@/api/generation'
 import { uploadAPI } from '@/api/upload'
 import { useGenerationTaskStore, GEN_RESOURCE } from '@/stores/generationTaskStore'
 import { buildExtractTaskMeta, isEpisodeExtractRunning } from '@/composables/useGenerationTaskSync'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 
 /**
  * 角色管理 Composable
@@ -343,7 +344,8 @@ export function useCharacters(deps) {
     generatingCharIds.add(char.id)
     genStore.markRunning(meta)
     try {
-      const res = await characterAPI.generateImage(char.id, undefined, getSelectedStyle())
+      const assetMode = normalizeAssetGenerationMode('character', char.asset_mode)
+      const res = await characterAPI.generateImage(char.id, undefined, getSelectedStyle(), assetMode)
       const taskId = res?.image_generation?.task_id ?? res?.task_id
       if (taskId) {
         const pollRes = await pollTask(taskId, () => loadDrama(), meta)
@@ -368,6 +370,19 @@ export function useCharacters(deps) {
     } finally {
       generatingCharIds.delete(char.id)
       genStore.markDone(meta)
+    }
+  }
+
+  async function saveCharacterAssetMode(char, value) {
+    if (!char?.id) return
+    const previous = char.asset_mode
+    const assetMode = normalizeAssetGenerationMode('character', value)
+    char.asset_mode = assetMode
+    try {
+      await characterAPI.update(char.id, { asset_mode: assetMode })
+    } catch (e) {
+      char.asset_mode = previous
+      ElMessage.error(e?.message || '角色生图模式保存失败')
     }
   }
 
@@ -849,6 +864,7 @@ export function useCharacters(deps) {
     onCloseCharDialog,
     onDeleteCharacter,
     onGenerateCharacterImage,
+    saveCharacterAssetMode,
     onSd2CertifyCharacter,
     onSd2CertifyRefresh,
     sd2ActionLabel,

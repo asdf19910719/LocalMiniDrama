@@ -652,6 +652,12 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
+                      <AssetGenerationModeSelect
+                        :model-value="char.asset_mode"
+                        target-type="character"
+                        compact
+                        @change="saveCharacterAssetMode(char, $event)"
+                      />
                       <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingCharIds.has(char.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'character', char, () => onGenerateCharacterImage(char))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'char-' + char.id" @click="onUploadResourceClick('character', char.id)">
                         <el-icon v-if="uploadingResourceId !== 'char-' + char.id"><Upload /></el-icon>
@@ -776,9 +782,6 @@
                 <el-button size="small" :disabled="!dramaId" @click="openAddScene">添加场景</el-button>
                 <el-button size="small" @click="showSceneLibrary = true">本剧场景库</el-button>
               </div>
-              <div class="scene-gen-mode" style="margin: 8px 0; font-size: 13px;">
-                <el-checkbox v-model="sceneUseQuadGrid">生成四宫格场景（默认单图）</el-checkbox>
-              </div>
               <div class="asset-list asset-list-two">
                 <div v-for="scene in scenes" :key="scene.id" class="asset-item asset-item-left-right">
                   <div class="asset-info">
@@ -846,9 +849,13 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
-                      <el-tooltip :content="sceneUseQuadGrid ? '四宫格场景（正/侧/俯/仰）' : '单图场景'" placement="top">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene, sceneUseQuadGrid))" />
-                      </el-tooltip>
+                      <AssetGenerationModeSelect
+                        :model-value="scene.asset_mode"
+                        target-type="scene"
+                        compact
+                        @change="saveSceneAssetMode(scene, $event)"
+                      />
+                      <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'scene-' + scene.id" @click="onUploadResourceClick('scene', scene.id)">
                         <el-icon v-if="uploadingResourceId !== 'scene-' + scene.id"><Upload /></el-icon>
                         上传
@@ -2787,6 +2794,8 @@
       @storyboard="scrollToStoryboard"
       @regenerate="onVariantStudioRegenerate"
       @select-channel="onSelectImageChannel"
+      @update-mode="onVariantStudioModeChange"
+      @update-identity-reference="onVariantStudioIdentityReferenceChange"
     />
     <EpisodeImportSourceDialog
       v-model="importSourceVisible"
@@ -2857,6 +2866,7 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import AssetGenerationModeSelect from '@/components/imageGeneration/AssetGenerationModeSelect.vue'
 import CharacterVariantStudio from '@/components/CharacterVariantStudio.vue'
 import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
@@ -2882,6 +2892,7 @@ import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import { findVariantAffectedStoryboards } from '@/utils/characterVariantStudio'
 import { resolveSbMainImageRecord, resolveSbVideoRecord, videoCandidateLabel } from '@/utils/storyboardMedia'
 import { refreshSelectedStoryboardVideo } from '@/utils/directorPersistence'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 
 const route = useRoute()
 const router = useRouter()
@@ -3078,6 +3089,9 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
       generationChannel: channel,
       prompt: resolveImageGenerationPrompt(targetType, target, prompt),
       aspectRatio: projectAspectRatio.value,
+      assetMode: ['character', 'character_variant', 'scene'].includes(targetType)
+        ? normalizeAssetGenerationMode(targetType, target?.asset_mode)
+        : undefined,
     })
     return task
   } catch (error) {
@@ -3086,9 +3100,9 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
 }
 
 // 人物状态生图与其它资产一致:按当前生图通道分发(chatgpt_web 走网页生图任务,否则走同步接口)
-function onGenerateVariantImage(variant) {
+function onGenerateVariantImage(variant, channel = imageGenerationDefaultChannel.value) {
   return generateUnifiedImage(
-    imageGenerationDefaultChannel.value,
+    channel,
     'character_variant',
     variant,
     () => generateVariantImage(variant)
@@ -3245,6 +3259,7 @@ const {
   openEditCharLibrary, submitEditCharLibrary,
   onDeleteCharLibrary, onAddCharacterToLibrary, onAddCharacterToMaterialLibrary,
   onAddCharFromLibrary, onAddDramaCharToEpisode,
+  saveCharacterAssetMode,
 } = useCharacters({ store, dramaId, currentEpisodeId, getSelectedStyle, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage })
 
 // ── Composable: Props ──────────────────────────────────
@@ -3289,6 +3304,7 @@ const {
   openEditSceneLibrary, submitEditSceneLibrary,
   onDeleteSceneLibrary, onAddSceneToLibrary, onAddSceneToMaterialLibrary,
   onAddSceneFromLibrary, onAddDramaSceneToEpisode,
+  saveSceneAssetMode,
 } = useScenes({ store, dramaId, currentEpisodeId, getSelectedStyle, scriptLanguage, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage, dramaAPI })
 
 // ── Composable: Character Variants（人物状态） ──────────
@@ -3297,7 +3313,7 @@ const {
   loadVariants, refreshLoadedVariants, getVariantsForCharacter, variantOptionLabel,
   variantPanelCharacterId, toggleVariantPanel,
   showVariantEditor, variantEditorForm, variantEditorSaving,
-  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault, selectVariantCandidate,
+  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, updateVariantGenerationSettings, setVariantDefault, selectVariantCandidate,
   sbVariantLinksSaving, hydrateSbVariantLinks, getSbVariantId, getSbSelectedVariant, ensureSbVariantsLoaded, onSbVariantChange,
 } = useCharacterVariants({
   characterAPI,
@@ -3328,6 +3344,16 @@ async function openVariantStudio(character, variant) {
 
 function openVariantFromStudioEdit(variant) {
   openVariantEditor(variantStudioCharacterId.value, variant)
+}
+
+function onVariantStudioModeChange(variant, assetMode) {
+  return updateVariantGenerationSettings(variant, {
+    asset_mode: normalizeAssetGenerationMode('character_variant', assetMode),
+  })
+}
+
+function onVariantStudioIdentityReferenceChange(variant, enabled) {
+  return updateVariantGenerationSettings(variant, { use_identity_reference: !!enabled })
 }
 
 async function onVariantStudioChooseCandidate(variant, candidatePath) {
@@ -3396,7 +3422,6 @@ const resourcePanelCollapsed = ref(false)
 const charactersBlockCollapsed = ref(false)
 const propsBlockCollapsed = ref(false)
 const scenesBlockCollapsed = ref(false)
-const sceneUseQuadGrid = ref(false)
 const propUseQuadGrid = ref(false)  // 道具四视图（与场景四宫格同级选项）
 
 // 分镜行内编辑状态（按 storyboard id 存储）
@@ -8120,7 +8145,8 @@ async function runOneClickPipeline(textOnly = false) {
         try {
           const stepName = '角色图 ' + (char.name || char.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const res = await characterAPI.generateImage(char.id, undefined, style)
+            const assetMode = normalizeAssetGenerationMode('character', char.asset_mode)
+            const res = await characterAPI.generateImage(char.id, undefined, style, assetMode)
             const taskId = res?.image_generation?.task_id ?? res?.task_id
             if (taskId) {
               const result = await pollTaskWithPause(taskId, () => loadDrama())
@@ -8155,8 +8181,8 @@ async function runOneClickPipeline(textOnly = false) {
         try {
           const stepName = '场景图 ' + (scene.location || scene.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const useQuad = !!sceneUseQuadGrid.value
-            const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, use_quad_grid: useQuad })
+            const assetMode = normalizeAssetGenerationMode('scene', scene.asset_mode)
+            const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, asset_mode: assetMode })
             const taskId = res?.image_generation?.task_id ?? res?.task_id
             if (taskId) {
               const result = await pollTaskWithPause(taskId, () => loadDrama())
@@ -8422,7 +8448,8 @@ async function runRepairPipeline() {
         await checkPause()
         const stepName = '角色图 ' + (char.name || char.id)
         const ok = await pipelineWithRetry(stepName, async () => {
-          const res = await characterAPI.generateImage(char.id, undefined, style)
+          const assetMode = normalizeAssetGenerationMode('character', char.asset_mode)
+          const res = await characterAPI.generateImage(char.id, undefined, style, assetMode)
           const taskId = res?.image_generation?.task_id ?? res?.task_id
           if (taskId) {
             const result = await pollTaskWithPause(taskId, () => loadDrama())
@@ -8470,8 +8497,8 @@ async function runRepairPipeline() {
         await checkPause()
         const stepName = '场景图 ' + (scene.location || scene.id)
         const ok = await pipelineWithRetry(stepName, async () => {
-          const useQuad = !!sceneUseQuadGrid.value
-          const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, use_quad_grid: useQuad })
+          const assetMode = normalizeAssetGenerationMode('scene', scene.asset_mode)
+          const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, asset_mode: assetMode })
           const taskId = res?.image_generation?.task_id ?? res?.task_id
           if (taskId) {
             const result = await pollTaskWithPause(taskId, () => loadDrama())

@@ -60,8 +60,8 @@ function createDeferred() {
   return { promise, resolve }
 }
 
-function buildDeps({ listVariants, getSbCharacterIds = () => [], updateVariant = async () => ({}) }) {
-  const calls = { updateVariantLinks: [], updateVariant: [] }
+function buildDeps({ listVariants, getSbCharacterIds = () => [], updateVariant = async () => ({}), generateVariantImage = async () => ({}) }) {
+  const calls = { updateVariantLinks: [], updateVariant: [], generateVariantImage: [] }
   const toasts = []
   const notify = {
     error: (m) => toasts.push(String(m)),
@@ -81,10 +81,50 @@ function buildDeps({ listVariants, getSbCharacterIds = () => [], updateVariant =
       calls.updateVariant.push({ variantId, payload })
       return updateVariant(variantId, payload)
     },
+    generateVariantImage: async (variantId, payload) => {
+      calls.generateVariantImage.push({ variantId, payload })
+      return generateVariantImage(variantId, payload)
+    },
   }
   const api = useCharacterVariants({ characterAPI, storyboardsAPI, getSbCharacterIds, notify })
   return { api, calls, toasts }
 }
+
+test('状态生图把自己的模式和身份引用偏好传给后端', async () => {
+  const variant = {
+    id: 11,
+    character_id: 1,
+    name: '雨夜',
+    asset_mode: 'TURNAROUND',
+    use_identity_reference: 0,
+  }
+  const { api, calls } = buildDeps({
+    listVariants: async () => [variant],
+    generateVariantImage: async () => variant,
+  })
+  await api.loadVariants(1)
+
+  await api.generateVariantImage(variant)
+
+  assert.deepEqual(calls.generateVariantImage, [{
+    variantId: 11,
+    payload: { asset_mode: 'TURNAROUND', use_identity_reference: false },
+  }])
+})
+
+test('状态工作台设置保存后立即更新当前缓存', async () => {
+  const variant = { id: 11, character_id: 1, name: '常态', asset_mode: 'SINGLE', use_identity_reference: 1 }
+  const { api, calls } = buildDeps({
+    listVariants: async () => [variant],
+    updateVariant: async (_id, payload) => ({ ...variant, ...payload }),
+  })
+  await api.loadVariants(1)
+
+  await api.updateVariantGenerationSettings(variant, { asset_mode: 'TURNAROUND' })
+
+  assert.deepEqual(calls.updateVariant, [{ variantId: 11, payload: { asset_mode: 'TURNAROUND' } }])
+  assert.equal(api.getVariantsForCharacter(1)[0].asset_mode, 'TURNAROUND')
+})
 
 test('refreshLoadedVariants 只强制刷新已经打开过的人物状态缓存', async () => {
   const reads = []
