@@ -52,8 +52,8 @@ function createVariant(db, input = {}) {
     }
     const now = new Date().toISOString();
     const info = db.prepare(
-      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, asset_mode, use_identity_reference, is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       cid,
       sourceKey,
@@ -62,6 +62,8 @@ function createVariant(db, input = {}) {
       input.appearance ?? null,
       input.image_prompt ?? null,
       input.negative_prompt ?? null,
+      input.asset_mode || 'SINGLE',
+      input.use_identity_reference === false || input.use_identity_reference === 0 ? 0 : 1,
       isDefault,
       now,
       now
@@ -73,6 +75,7 @@ function createVariant(db, input = {}) {
 const VARIANT_UPDATE_FIELDS = [
   'name', 'description', 'appearance', 'image_prompt', 'negative_prompt',
   'is_default', 'image_url', 'local_path', 'extra_images', 'source_key',
+  'asset_mode', 'use_identity_reference',
 ];
 
 /** 更新状态；仅接受白名单字段，is_default=1 时先清掉同人物其它默认。
@@ -92,6 +95,9 @@ function updateVariant(db, id, patch = {}) {
       if (key === 'is_default') {
         updates.push('is_default = ?');
         params.push(patch.is_default ? 1 : 0);
+      } else if (key === 'use_identity_reference') {
+        updates.push('use_identity_reference = ?');
+        params.push(patch.use_identity_reference ? 1 : 0);
       } else if (key === 'extra_images') {
         updates.push('extra_images = ?');
         params.push(Array.isArray(patch.extra_images) ? JSON.stringify(patch.extra_images) : patch.extra_images);

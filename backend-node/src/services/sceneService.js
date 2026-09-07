@@ -29,6 +29,7 @@ function updateScene(db, log, sceneId, req) {
   if (req.prompt != null) { updates.push('prompt = ?'); params.push(req.prompt); }
   if (req.atmosphere !== undefined) { updates.push('atmosphere = ?'); params.push(req.atmosphere ?? null); }
   if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt ?? null); }
+  if (req.asset_mode !== undefined) { updates.push('asset_mode = ?'); params.push(req.asset_mode); }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   if (req.polished_prompt_single != null) { updates.push('polished_prompt_single = ?'); params.push(req.polished_prompt_single); }
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
@@ -136,6 +137,7 @@ function listByDramaId(db, dramaId) {
     polished_prompt_single: row.polished_prompt_single || null,
     description: row.description || null,
     negative_prompt: row.negative_prompt || null,
+    asset_mode: row.asset_mode || 'NORMAL',
     image_url: row.image_url,
     local_path: row.local_path,
     extra_images: row.extra_images || null,
@@ -159,6 +161,7 @@ function getSceneById(db, id) {
     polished_prompt: row.polished_prompt || null,
     polished_prompt_single: row.polished_prompt_single || null,
     negative_prompt: row.negative_prompt || null,
+    asset_mode: row.asset_mode || 'NORMAL',
     image_url: row.image_url,
     local_path: row.local_path,
     extra_images: row.extra_images || null,

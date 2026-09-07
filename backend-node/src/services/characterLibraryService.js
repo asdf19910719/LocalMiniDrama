@@ -324,6 +324,7 @@ function updateCharacter(db, log, characterId, req) {
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   // stages 已废弃(人物造型改由 character_variants 承载):不再接收/写入,数据库列保留但停止读写
   if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt); }
+  if (req.asset_mode !== undefined) { updates.push('asset_mode = ?'); params.push(req.asset_mode); }
   if (updates.length === 0) return { ok: true };
   if (req.image_url != null || req.local_path != null) {
     seedance2AssetGuards.markStaleOnCharacterMainImageDrift(db, log, charRow, {

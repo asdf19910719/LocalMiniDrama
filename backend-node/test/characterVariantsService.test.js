@@ -40,6 +40,8 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       extra_images TEXT,
+      asset_mode TEXT DEFAULT 'SINGLE',
+      use_identity_reference INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
@@ -134,6 +136,24 @@ describe('characterVariantsService', () => {
       assert.equal(row.image_prompt, 'wet coat, night');
       assert.equal(row.negative_prompt, 'blurry');
       assert.equal(row.is_default, 0);
+    });
+
+    it('persists an independent generation mode and identity reference preference', () => {
+      const row = createVariant(db, {
+        character_id: characterId,
+        name: '雨夜',
+        asset_mode: 'TURNAROUND',
+        use_identity_reference: false,
+      });
+      assert.equal(row.asset_mode, 'TURNAROUND');
+      assert.equal(row.use_identity_reference, 0);
+
+      const updated = updateVariant(db, row.id, {
+        asset_mode: 'SINGLE',
+        use_identity_reference: true,
+      });
+      assert.equal(updated.asset_mode, 'SINGLE');
+      assert.equal(updated.use_identity_reference, 1);
     });
 
     it('creating a new default clears the previous default of the same character', () => {
