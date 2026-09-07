@@ -13,6 +13,7 @@ function createDb() {
   db.exec(`
     CREATE TABLE dramas (id INTEGER PRIMARY KEY, deleted_at TEXT);
     CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER NOT NULL, deleted_at TEXT);
+    CREATE TABLE character_libraries (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT NOT NULL, deleted_at TEXT);
     CREATE TABLE character_variants (id INTEGER PRIMARY KEY, character_id INTEGER NOT NULL, deleted_at TEXT);
     CREATE TABLE episode_characters (episode_id INTEGER NOT NULL, character_id INTEGER NOT NULL);
     CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER NOT NULL, deleted_at TEXT);
@@ -29,13 +30,14 @@ function insertFixture(db) {
   db.exec(`
     INSERT INTO dramas (id) VALUES (1), (2);
     INSERT INTO characters (id, drama_id) VALUES (11, 1), (12, 1), (21, 2);
+    INSERT INTO character_libraries (id, drama_id, name) VALUES (11, 1, '角色库同编号条目');
     INSERT INTO character_variants (id, character_id) VALUES (111, 11), (112, 12), (121, 21);
     INSERT INTO episode_characters (episode_id, character_id) VALUES (101, 11), (101, 12), (201, 21);
     INSERT INTO scenes (id, drama_id) VALUES (31, 1), (32, 1), (41, 2);
     INSERT INTO props (id, drama_id) VALUES (51, 1), (52, 1), (61, 2);
     INSERT INTO storyboards (id, scene_id, characters) VALUES
       (1001, 31, '[11,12]'),
-      (1002, 32, '[12]'),
+      (1002, 32, '[{"id":11,"name":"目标角色"},{"id":12,"name":"保留角色"}]'),
       (2001, 41, '[21]');
     INSERT INTO storyboard_character_variants (storyboard_id, character_id, variant_id) VALUES
       (1001, 11, 111), (1001, 12, 112), (2001, 21, 121);
@@ -55,13 +57,21 @@ test('character deletion clears only its episode, storyboard, and variant associ
     { character_id: 12 }, { character_id: 21 },
   ]);
   assert.deepEqual(JSON.parse(db.prepare('SELECT characters FROM storyboards WHERE id = 1001').get().characters), [12]);
+  assert.deepEqual(JSON.parse(db.prepare('SELECT characters FROM storyboards WHERE id = 1002').get().characters), [
+    { id: 12, name: '保留角色' },
+  ]);
   assert.equal(db.prepare('SELECT scene_id FROM storyboards WHERE id = 1001').get().scene_id, 31);
   assert.deepEqual(db.prepare('SELECT character_id FROM storyboard_character_variants ORDER BY character_id').all(), [
     { character_id: 12 }, { character_id: 21 },
   ]);
   assert.ok(db.prepare('SELECT deleted_at FROM character_variants WHERE id = 111').get().deleted_at);
   assert.equal(db.prepare('SELECT deleted_at FROM character_variants WHERE id = 112').get().deleted_at, null);
-  assert.deepEqual(db.prepare('SELECT * FROM storyboard_characters').all(), [{ storyboard_id: 1001, character_id: 11 }]);
+  assert.deepEqual(db.prepare(
+    `SELECT sc.storyboard_id, sc.character_id, cl.name
+     FROM storyboard_characters sc
+     JOIN character_libraries cl ON cl.id = sc.character_id
+     WHERE cl.deleted_at IS NULL`
+  ).all(), [{ storyboard_id: 1001, character_id: 11, name: '角色库同编号条目' }]);
 });
 
 test('character deletion rolls back association cleanup when asset deletion fails', () => {

@@ -357,7 +357,10 @@ function deleteCharacter(db, log, characterId) {
       try {
         const characters = JSON.parse(storyboard.characters);
         if (!Array.isArray(characters)) continue;
-        const nextCharacters = characters.filter((value) => Number(value) !== id);
+        const nextCharacters = characters.filter((value) => {
+          const characterId = value && typeof value === 'object' ? value.id : value;
+          return Number(characterId) !== id;
+        });
         if (nextCharacters.length !== characters.length) {
           updateCharacters.run(JSON.stringify(nextCharacters), storyboard.id);
         }
