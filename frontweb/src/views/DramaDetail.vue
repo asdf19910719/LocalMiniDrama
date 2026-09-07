@@ -267,6 +267,7 @@
                   <div class="drama-res-desc">{{ (item.description || item.prompt || '').slice(0, 80) }}</div>
                   <div class="drama-res-actions">
                     <el-button size="small" @click="openEditDramaChar(item)">编辑</el-button>
+                    <el-button size="small" type="danger" plain @click="deleteDramaChar(item)">删除制作角色</el-button>
                   </div>
                 </div>
               </div>
@@ -292,6 +293,7 @@
                   <div class="drama-res-desc">{{ (item.description || item.prompt || '').slice(0, 80) }}</div>
                   <div class="drama-res-actions">
                     <el-button size="small" @click="openEditDramaScene(item)">编辑</el-button>
+                    <el-button size="small" type="danger" plain @click="deleteDramaScene(item)">删除制作场景</el-button>
                   </div>
                 </div>
               </div>
@@ -317,6 +319,7 @@
                   <div class="drama-res-desc">{{ (item.description || item.prompt || '').slice(0, 80) }}</div>
                   <div class="drama-res-actions">
                     <el-button size="small" @click="openEditDramaProp(item)">编辑</el-button>
+                    <el-button size="small" type="danger" plain @click="deleteDramaProp(item)">删除制作道具</el-button>
                   </div>
                 </div>
               </div>
@@ -785,6 +788,20 @@ async function saveDramaChar() {
   } catch (e) { ElMessage.error(e.message || '保存失败') }
   finally { editDramaCharSaving.value = false }
 }
+async function deleteDramaChar(item) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除制作角色「${(item.name || '未命名').slice(0, 20)}」？相关分集和分镜关联会一并解除。`,
+      '删除制作角色',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  try {
+    await characterAPI.delete(item.id)
+    ElMessage.success('制作角色已删除')
+    await loadDrama()
+  } catch (e) { ElMessage.error(e.message || '删除失败') }
+}
 async function uploadDramaCharImg(event) {
   const file = event.target?.files?.[0]
   if (event.target) event.target.value = ''
@@ -859,6 +876,20 @@ async function saveDramaScene() {
   } catch (e) { ElMessage.error(e.message || '保存失败') }
   finally { editDramaSceneSaving.value = false }
 }
+async function deleteDramaScene(item) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除制作场景「${(item.location || item.time || '未命名').slice(0, 20)}」？相关分镜将不再引用此场景。`,
+      '删除制作场景',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  try {
+    await sceneAPI.delete(item.id)
+    ElMessage.success('制作场景已删除')
+    await loadDrama()
+  } catch (e) { ElMessage.error(e.message || '删除失败') }
+}
 async function uploadDramaSceneImg(event) {
   const file = event.target?.files?.[0]
   if (event.target) event.target.value = ''
@@ -930,6 +961,20 @@ async function saveDramaProp() {
     loadDrama()
   } catch (e) { ElMessage.error(e.message || '保存失败') }
   finally { editDramaPropSaving.value = false }
+}
+async function deleteDramaProp(item) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除制作道具「${(item.name || '未命名').slice(0, 20)}」？相关分镜将不再关联此道具。`,
+      '删除制作道具',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  try {
+    await propAPI.delete(item.id)
+    ElMessage.success('制作道具已删除')
+    await loadDrama()
+  } catch (e) { ElMessage.error(e.message || '删除失败') }
 }
 async function uploadDramaPropImg(event) {
   const file = event.target?.files?.[0]

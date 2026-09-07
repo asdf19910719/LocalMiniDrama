@@ -338,14 +338,39 @@ function updateCharacter(db, log, characterId, req) {
 }
 
 function deleteCharacter(db, log, characterId) {
-  const charRow = db.prepare('SELECT id, drama_id FROM characters WHERE id = ? AND deleted_at IS NULL').get(Number(characterId));
-  if (!charRow) return { ok: false, error: 'character not found' };
-  const drama = db.prepare('SELECT id FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
-  if (!drama) return { ok: false, error: 'unauthorized' };
-  const now = new Date().toISOString();
-  db.prepare('UPDATE characters SET deleted_at = ? WHERE id = ?').run(now, Number(characterId));
-  log.info('Character deleted', { id: characterId });
-  return { ok: true };
+  const id = Number(characterId);
+  return db.transaction(() => {
+    const charRow = db.prepare('SELECT id, drama_id FROM characters WHERE id = ? AND deleted_at IS NULL').get(id);
+    if (!charRow) return { ok: false, error: 'character not found' };
+    const drama = db.prepare('SELECT id FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
+    if (!drama) return { ok: false, error: 'unauthorized' };
+
+    db.prepare('DELETE FROM episode_characters WHERE character_id = ?').run(id);
+    db.prepare('DELETE FROM storyboard_character_variants WHERE character_id = ?').run(id);
+    db.prepare('UPDATE character_variants SET deleted_at = ? WHERE character_id = ? AND deleted_at IS NULL').run(
+      new Date().toISOString(), id
+    );
+
+    const storyboards = db.prepare('SELECT id, characters FROM storyboards WHERE characters IS NOT NULL').all();
+    const updateCharacters = db.prepare('UPDATE storyboards SET characters = ? WHERE id = ?');
+    for (const storyboard of storyboards) {
+      try {
+        const characters = JSON.parse(storyboard.characters);
+        if (!Array.isArray(characters)) continue;
+        const nextCharacters = characters.filter((value) => Number(value) !== id);
+        if (nextCharacters.length !== characters.length) {
+          updateCharacters.run(JSON.stringify(nextCharacters), storyboard.id);
+        }
+      } catch (_) {
+        // 保留历史上无法解析的角色字段，避免删除资源时破坏分镜内容。
+      }
+    }
+
+    const now = new Date().toISOString();
+    db.prepare('UPDATE characters SET deleted_at = ? WHERE id = ?').run(now, id);
+    log.info('Character deleted', { id: characterId });
+    return { ok: true };
+  })();
 }
 
 /**

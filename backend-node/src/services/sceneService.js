@@ -52,11 +52,18 @@ function updateScenePrompt(db, log, sceneId, req) {
 }
 
 function deleteScene(db, log, sceneId) {
-  const now = new Date().toISOString();
-  const result = db.prepare('UPDATE scenes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL').run(now, Number(sceneId));
-  if (result.changes === 0) return { ok: false, error: 'scene not found' };
-  log.info('Scene deleted', { scene_id: sceneId });
-  return { ok: true };
+  const id = Number(sceneId);
+  return db.transaction(() => {
+    const scene = db.prepare('SELECT id, drama_id FROM scenes WHERE id = ? AND deleted_at IS NULL').get(id);
+    if (!scene) return { ok: false, error: 'scene not found' };
+    const drama = db.prepare('SELECT id FROM dramas WHERE id = ? AND deleted_at IS NULL').get(scene.drama_id);
+    if (!drama) return { ok: false, error: 'unauthorized' };
+
+    db.prepare('UPDATE storyboards SET scene_id = NULL WHERE scene_id = ?').run(id);
+    db.prepare('UPDATE scenes SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+    log.info('Scene deleted', { scene_id: sceneId });
+    return { ok: true };
+  })();
 }
 
 function createScene(db, log, dramaId, req) {

@@ -88,11 +88,18 @@ function update(db, log, id, updates) {
 }
 
 function deleteById(db, log, id) {
-  const now = new Date().toISOString();
-  const result = db.prepare('UPDATE props SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL').run(now, id);
-  if (result.changes === 0) return false;
-  log.info('Prop deleted', { prop_id: id });
-  return true;
+  const propId = Number(id);
+  return db.transaction(() => {
+    const prop = db.prepare('SELECT id, drama_id FROM props WHERE id = ? AND deleted_at IS NULL').get(propId);
+    if (!prop) return false;
+    const drama = db.prepare('SELECT id FROM dramas WHERE id = ? AND deleted_at IS NULL').get(prop.drama_id);
+    if (!drama) return false;
+
+    db.prepare('DELETE FROM storyboard_props WHERE prop_id = ?').run(propId);
+    db.prepare('UPDATE props SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), propId);
+    log.info('Prop deleted', { prop_id: id });
+    return true;
+  })();
 }
 
 /** 软删除本集「从剧本提取」写入的道具（props.episode_id），避免再次提取时与旧数据累加 */
