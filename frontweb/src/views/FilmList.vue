@@ -681,7 +681,7 @@ async function submitNew() {
     showNewDialog.value = false
     ElMessage.success('项目已创建')
     loadList()
-    router.push('/film/' + drama.id)
+    router.push('/drama/' + drama.id)
   } catch (e) {
     ElMessage.error(e.message || '创建失败')
   } finally {

@@ -2966,6 +2966,9 @@ const novelAiSummarize = ref(false)
 const novelImporting = ref(false)
 const scriptTitle = ref('')
 const selectedEpisodeId = ref(null)
+let routeLoadSerial = 0
+let dramaLoadSerial = 0
+let suspendEpisodeQuerySync = false
 /** 保存剧本后用于恢复选中集（后端重插后 id 会变，用 episode_number 匹配） */
 const savedCurrentEpisodeNumber = ref(1)
 const scriptLanguage = ref('zh')
@@ -4218,9 +4221,11 @@ function getSbResumableFailedVideo(storyboardId) {
   return list.find((i) => i.status === 'failed' && i.can_resume_poll) || null
 }
 
-async function loadStoryboardMedia() {
+async function loadStoryboardMedia(loadSerial = null, loadingDramaId = null) {
+  if (loadSerial != null && !canApplyDramaLoad(loadingDramaId, loadSerial)) return
   const boards = store.storyboards || []
   if (boards.length === 0) {
+    if (loadSerial != null && !canApplyDramaLoad(loadingDramaId, loadSerial)) return
     sbImages.value = {}
     sbVideos.value = {}
     return
@@ -4242,10 +4247,12 @@ async function loadStoryboardMedia() {
       }
     })
   )
+  if (loadSerial != null && !canApplyDramaLoad(loadingDramaId, loadSerial)) return
   sbImages.value = nextImages
   sbVideos.value = nextVideos
   // 从后端恢复主图选择
-  restoreSelectionsFromBackend()
+  if (loadSerial != null && !canApplyDramaLoad(loadingDramaId, loadSerial)) return
+  restoreSelectionsFromBackend(loadSerial, loadingDramaId)
 }
 
 function getGeneratingSetsBag() {
@@ -4354,9 +4361,10 @@ const sbImageUploadSlotById = ref({})
  * 从后端 storyboard.image_url / local_path 恢复主图选择状态。
  * 与 image_generation 记录比对，找到匹配的记录并恢复 sbSelectedImgId。
  */
-function restoreSelectionsFromBackend() {
+function restoreSelectionsFromBackend(loadSerial = null, loadingDramaId = null) {
   const boards = store.storyboards || []
   for (const sb of boards) {
+    if (loadSerial != null && !canApplyDramaLoad(loadingDramaId, loadSerial)) return
     const images = getSbAllImages(sb.id)
     if (sbSelectedImgId.value[sb.id] == null) {
       if (sb.first_frame_image_id != null) {
@@ -4985,11 +4993,18 @@ function onEpisodeSelect(epId) {
   recoverAndSyncEpisodeTasks(epId)
 }
 
-async function loadDrama() {
-  if (!store.dramaId) return
+function canApplyDramaLoad(loadingDramaId, loadSerial) {
+  return loadSerial === dramaLoadSerial && Number(store.dramaId) === Number(loadingDramaId)
+}
+
+async function loadDrama(loadingDramaId = store.dramaId) {
+  const loadSerial = ++dramaLoadSerial
+  if (!loadingDramaId) return
   try {
-    let d = await dramaAPI.get(store.dramaId)
-    d = await backfillDramaStylePromptMetadataIfNeeded(dramaAPI, store.dramaId, d)
+    let d = await dramaAPI.get(loadingDramaId)
+    if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
+    d = await backfillDramaStylePromptMetadataIfNeeded(dramaAPI, loadingDramaId, d)
+    if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
     store.setDrama(d)
     // 恢复「故事生成」框的梗概（项目 description 存的是故事梗概）
     storyInput.value = (d.description || '').toString().trim()
@@ -5011,9 +5026,18 @@ async function loadDrama() {
       gridMode.value = 'single'
     }
     const list = d.episodes || []
-    // 优先保持当前选中的集（按 id 在最新列表中查找），避免 AI 生成角色等操作后误切到其他集
+    const requestedEpisode = route.query.episode != null
+      ? list.find((e) => Number(e.id) === Number(route.query.episode))
+      : null
+    if (route.query.episode != null && !requestedEpisode) {
+      const nextQuery = { ...route.query }
+      delete nextQuery.episode
+      await router.replace({ query: nextQuery }).catch(() => {})
+      if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
+    }
+    // Prefer a valid URL episode, then retain the selected episode during a refresh.
     const currentId = selectedEpisodeId.value
-    let ep = currentId != null ? list.find((e) => Number(e.id) === Number(currentId)) : null
+    let ep = requestedEpisode || (currentId != null ? list.find((e) => Number(e.id) === Number(currentId)) : null)
     if (!ep) {
       const wantNum = savedCurrentEpisodeNumber.value
       ep = list.find((e) => Number(e.episode_number) === Number(wantNum)) || list[0] || null
@@ -5029,10 +5053,14 @@ async function loadDrama() {
       selectedEpisodeId.value = null
     }
     syncStoryboardStateFromEpisode(ep)
-    await loadStoryboardMedia()
+    await loadStoryboardMedia(loadSerial, loadingDramaId)
+    if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
     await recoverAndSyncEpisodeTasks(ep?.id)
+    if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
   } catch (e) {
-    ElMessage.error(e.message || '加载失败')
+    if (canApplyDramaLoad(loadingDramaId, loadSerial)) {
+      ElMessage.error(e.message || '加载失败')
+    }
   }
 }
 
@@ -8678,15 +8706,26 @@ async function runRepairPipeline() {
 onBeforeUnmount(() => {
 })
 
-function applyRouteToStore() {
+async function applyRouteToStore() {
+  const serial = ++routeLoadSerial
+  dramaLoadSerial += 1
   const id = route.params.id
   if (id && id !== 'new') {
-    store.setDrama({ id: Number(id) })
-    if (route.query.episode) {
-      selectedEpisodeId.value = Number(route.query.episode)
+    suspendEpisodeQuerySync = true
+    selectedEpisodeId.value = null
+    storyInput.value = ''
+    scriptTitle.value = ''
+    store.beginDramaLoad(Number(id))
+    try {
+      await loadDrama(Number(id))
+    } finally {
+      await nextTick()
+      if (serial === routeLoadSerial) {
+        suspendEpisodeQuerySync = false
+      }
     }
-    loadDrama()
   } else {
+    suspendEpisodeQuerySync = false
     store.reset()
     storyInput.value = ''
     scriptTitle.value = ''
@@ -8721,7 +8760,7 @@ watch(() => route.params.id, () => {
 watch(
   () => selectedEpisodeId.value,
   (newId) => {
-    if (!dramaId.value) return
+    if (!dramaId.value || suspendEpisodeQuerySync) return
     const currentInQuery = route.query.episode != null ? Number(route.query.episode) : null
     const desired = newId != null ? Number(newId) : null
     if (currentInQuery !== desired) {

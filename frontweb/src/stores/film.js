@@ -53,6 +53,18 @@ export const useFilmStore = defineStore('film', () => {
     drama.value = d
   }
 
+  /**
+   * Start loading another drama without leaving the previous episode visible.
+   * Progress watchers derive their request target from currentEpisode, so it
+   * must be cleared before the new loading drama id becomes observable.
+   */
+  function beginDramaLoad(id) {
+    currentEpisode.value = null
+    storyInput.value = ''
+    scriptContent.value = ''
+    drama.value = { id }
+  }
+
   function setCurrentEpisode(ep) {
     currentEpisode.value = ep
   }
@@ -120,6 +132,7 @@ export const useFilmStore = defineStore('film', () => {
     props,
     storyboards,
     setDrama,
+    beginDramaLoad,
     setCurrentEpisode,
     setStoryInput,
     setScriptContent,
