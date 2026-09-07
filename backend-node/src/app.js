@@ -7,6 +7,19 @@ const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
 
+function classifyHttpError(err) {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return { status: 413, code: 'FILE_TOO_LARGE', message: '图片大小不能超过 16MB，请压缩后重试' };
+  }
+  if (err?.type === 'entity.too.large' || err?.status === 413) {
+    return { status: 413, code: 'PAYLOAD_TOO_LARGE', message: '请求体超过 10MB 限制' };
+  }
+  if (err?.type === 'entity.parse.failed' || (err instanceof SyntaxError && Object.prototype.hasOwnProperty.call(err, 'body'))) {
+    return { status: 400, code: 'INVALID_JSON', message: '请求体不是合法 JSON' };
+  }
+  return { status: 500, code: 'INTERNAL_ERROR', message: err?.message || '服务器错误' };
+}
+
 function createApp() {
   const config = loadConfig();
   const db = getDb(config.database);
@@ -101,16 +114,18 @@ function createApp() {
   });
 
   app.use((err, req, res, next) => {
-    log.errorw('Unhandled error', { error: err.message, path: req.path });
+    const classified = classifyHttpError(err);
+    log.errorw('Unhandled error', { error: err.message, path: req.path, code: classified.code });
     if (!res.headersSent) {
-      const isFileTooLarge = err.code === 'LIMIT_FILE_SIZE' || (err.message && err.message.includes('File too large'));
-      const status = isFileTooLarge ? 413 : 500;
-      const message = isFileTooLarge ? '图片大小不能超过 16MB，请压缩后重试' : (err.message || '服务器错误');
-      res.status(status).json({ success: false, error: { code: isFileTooLarge ? 'FILE_TOO_LARGE' : 'INTERNAL_ERROR', message }, timestamp: new Date().toISOString() });
+      res.status(classified.status).json({
+        success: false,
+        error: { code: classified.code, message: classified.message },
+        timestamp: new Date().toISOString(),
+      });
     }
   });
 
   return { app, config, db };
 }
 
-module.exports = { createApp };
+module.exports = { createApp, classifyHttpError };

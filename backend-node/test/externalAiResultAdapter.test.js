@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 
 const { adaptExternalAiResult } = require('../src/services/externalAiResultAdapter');
+const { validateBusinessRules } = require('../src/services/episodePackageValidator');
 const { validExternalAiResult: validResult } = require('./fixtures/externalAiResultFixture');
 
 function createDb() {
@@ -50,6 +51,34 @@ describe('externalAiResultAdapter', () => {
     assert.equal(adapted.package.storyboards[0].scene_ref, 'scene_store');
     assert.equal(adapted.package.storyboards[0].character_refs[0].variant_ref, 'variant_lin_wan_default');
     assert.equal(adapted.package.storyboards[0].source_key.startsWith('ai_task1_'), true);
+  });
+
+  it('converts semantic universal prompt references to canonical image slots', () => {
+    const db = createDb();
+    const value = validResult();
+    value.storyboards[0].universal_segment_text =
+      '@场景 scene_store；@人物 char_lin_wan/variant_lin_wan_default 正面；@道具 prop_ledger。';
+
+    const adapted = adaptExternalAiResult(db, value, task());
+
+    assert.equal(
+      adapted.package.storyboards[0].universal_segment_text,
+      '@图片1；@图片2 正面；@图片3。',
+    );
+    assert.equal(
+      validateBusinessRules(adapted.package).warnings.some((item) => item.code === 'UNIVERSAL_DRAFT_SLOT_GAP'),
+      false,
+    );
+  });
+
+  it('converts display-name references from an external prompt', () => {
+    const db = createDb();
+    const value = validResult();
+    value.storyboards[0].universal_segment_text = '@便利店里，@林晚拿起@残缺账本。';
+
+    const adapted = adaptExternalAiResult(db, value, task());
+
+    assert.equal(adapted.package.storyboards[0].universal_segment_text, '@图片1里，@图片2拿起@图片3。');
   });
 
   it('maps new local refs and attaches a new variant to an existing character', () => {

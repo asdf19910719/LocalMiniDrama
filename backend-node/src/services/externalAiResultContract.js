@@ -143,7 +143,10 @@ const storyboardSchema = strictObject({
   audio_description: audioDescriptionSchema,
   transition: transitionSchema,
   image_prompt: str(true),
-  universal_segment_text: str(true),
+  universal_segment_text: {
+    ...str(true),
+    description: '万能提示词草稿。参考图必须使用规范槽位 @图片1、@图片2……：@图片1 为场景，随后按 character_refs.sort_order 为人物状态，最后为 prop_refs；禁止用 @场景/@人物/@道具或资产名称代替槽位。',
+  },
   is_primary: bool,
   notes: str(false),
 }, [

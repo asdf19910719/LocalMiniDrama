@@ -135,6 +135,82 @@ function defaultAudioPlan() {
   };
 }
 
+/**
+ * 外部 AI 常把万能提示词中的参考图写成可读的语义 token（@场景/@人物/@道具），
+ * 而项目内部和视频提交统一使用按槽位编号的 @图片N。导入时按同一套槽位顺序
+ * 做确定性转换，避免预览误报“未引用槽位”，也避免语义 token 在 H3 提交时失效。
+ */
+function normalizeUniversalSegmentText(text, storyboard, aliases = {}) {
+  if (typeof text !== 'string' || !text.trim() || !storyboard || typeof storyboard !== 'object') return text;
+
+  const slots = [];
+  if (clean(storyboard.scene_ref)) slots.push({ type: 'scene', ref: clean(storyboard.scene_ref), index: slots.length + 1 });
+  const characterRefs = Array.isArray(storyboard.character_refs) ? storyboard.character_refs : [];
+  characterRefs
+    .map((ref, originalIndex) => ({ ref, originalIndex }))
+    .filter(({ ref }) => ref && typeof ref === 'object' && !Array.isArray(ref))
+    .sort((a, b) => {
+      const left = Number.isFinite(a.ref.sort_order) ? a.ref.sort_order : Number.POSITIVE_INFINITY;
+      const right = Number.isFinite(b.ref.sort_order) ? b.ref.sort_order : Number.POSITIVE_INFINITY;
+      return left - right || a.originalIndex - b.originalIndex;
+    })
+    .forEach(({ ref }) => slots.push({
+      type: 'character',
+      ref: clean(ref.character_ref),
+      variant: clean(ref.variant_ref),
+      index: slots.length + 1,
+    }));
+  for (const ref of Array.isArray(storyboard.prop_refs) ? storyboard.prop_refs : []) {
+    slots.push({ type: 'prop', ref: clean(ref), index: slots.length + 1 });
+  }
+
+  const scene = slots.find((slot) => slot.type === 'scene');
+  const chars = slots.filter((slot) => slot.type === 'character');
+  const props = slots.filter((slot) => slot.type === 'prop');
+  const slotFor = (type, ref, variant) => {
+    const normalizedRef = clean(ref);
+    if (!normalizedRef) return null;
+    if (type === 'scene') return scene && (!normalizedRef || scene.ref === normalizedRef) ? scene : null;
+    if (type === 'prop') return props.find((slot) => slot.ref === normalizedRef) || null;
+    return chars.find((slot) => slot.ref === normalizedRef && (!variant || slot.variant === clean(variant)))
+      || chars.find((slot) => slot.ref === normalizedRef)
+      || null;
+  };
+
+  let normalized = text;
+  normalized = normalized.replace(/@场景(?:\s+([A-Za-z][A-Za-z0-9_.:-]*))?/g, (token, ref) => {
+    const slot = slotFor('scene', ref) || scene;
+    return slot ? `@图片${slot.index}` : token;
+  });
+  normalized = normalized.replace(/@人物(?:\s+([A-Za-z][A-Za-z0-9_.:-]*)(?:\/([A-Za-z][A-Za-z0-9_.:-]*))?)?/g, (token, ref, variant) => {
+    const slot = slotFor('character', ref, variant) || chars[0];
+    return slot ? `@图片${slot.index}` : token;
+  });
+  normalized = normalized.replace(/@道具(?:\s+([A-Za-z][A-Za-z0-9_.:-]*))?/g, (token, ref) => {
+    const slot = slotFor('prop', ref);
+    return slot ? `@图片${slot.index}` : token;
+  });
+  const aliasEntries = [];
+  for (const [alias, ref] of Object.entries(aliases.scenes || {})) {
+    const slot = slotFor('scene', ref);
+    if (slot && clean(alias)) aliasEntries.push([clean(alias), slot.index]);
+  }
+  for (const [alias, ref] of Object.entries(aliases.characters || {})) {
+    const slot = slotFor('character', ref.character_ref, ref.variant_ref);
+    if (slot && clean(alias)) aliasEntries.push([clean(alias), slot.index]);
+  }
+  for (const [alias, ref] of Object.entries(aliases.props || {})) {
+    const slot = slotFor('prop', ref);
+    if (slot && clean(alias)) aliasEntries.push([clean(alias), slot.index]);
+  }
+  aliasEntries.sort((left, right) => right[0].length - left[0].length);
+  for (const [alias, index] of aliasEntries) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    normalized = normalized.replace(new RegExp(`@${escaped}(?![A-Za-z0-9_])`, 'g'), `@图片${index}`);
+  }
+  return normalized;
+}
+
 function adaptExternalAiResult(db, result, task) {
   const validation = validateExternalAiResult(result);
   if (!validation.ok) {
@@ -308,11 +384,29 @@ function adaptExternalAiResult(db, result, task) {
   }));
   for (const ref of usedExistingProps) props.push(existingPropToPackage(currentRows.props.get(ref)));
 
+  const aliases = { scenes: {}, characters: {}, props: {} };
+  for (const scene of assets.scenes) aliases.scenes[scene.name] = scene.local_ref;
+  for (const character of assets.characters) {
+    aliases.characters[character.name] = { character_ref: character.local_ref };
+    for (const variant of character.variants) {
+      aliases.characters[variant.name] = { character_ref: character.local_ref, variant_ref: variant.local_ref };
+    }
+  }
+  for (const prop of assets.props) aliases.props[prop.name] = prop.local_ref;
+  for (const [ref, row] of currentRows.scenes) aliases.scenes[row.location] = ref;
+  for (const [ref, row] of currentRows.characters) aliases.characters[row.name] = { character_ref: ref };
+  for (const [ref, row] of currentRows.variants) aliases.characters[row.name] = {
+    character_ref: row.character_source_key,
+    variant_ref: ref,
+  };
+  for (const [ref, row] of currentRows.props) aliases.props[row.name] = ref;
+
   const storyboards = result.storyboards.map((storyboard) => ({
     ...storyboard,
     source_key: resolve(storyboard.local_ref),
     local_ref: undefined,
     scene_ref: resolve(storyboard.scene_ref),
+    universal_segment_text: normalizeUniversalSegmentText(storyboard.universal_segment_text, storyboard, aliases),
     character_refs: storyboard.character_refs.map((ref) => ({
       ...ref,
       character_ref: resolve(ref.character_ref),

@@ -319,7 +319,8 @@ function buildInstructions(drama, target, packageId) {
     '3. 新人物、既有人物的新状态、新场景和新道具只能放在 new_assets。',
     '4. 新人物必须完整提供性格、外貌、基础生图提示词、负向提示词、声音设定和至少一个状态。',
     '5. 分镜编号必须从 1 连续递增，所有引用必须指向已有 source_key 或本结果中的 local_ref。',
-    '6. package_id 必须原样返回。',
+    '6. universal_segment_text 中如需引用参考图，必须使用规范槽位 @图片1、@图片2……：@图片1 对应场景，随后按 character_refs 的 sort_order 对应人物状态，最后对应 prop_refs；不要写 @场景/@人物/@道具或资产名称来代替槽位。',
+    '7. package_id 必须原样返回。',
   ].join('\n');
 }
 
