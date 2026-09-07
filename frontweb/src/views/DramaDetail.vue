@@ -1110,16 +1110,7 @@ async function onDeleteEpisode(ep) {
   } catch { return }
   deletingEpisodeId.value = ep.id
   try {
-    const remaining = episodes.value
-      .filter((e) => e.id !== ep.id)
-      .map((e, i) => ({
-        episode_number: e.episode_number ?? i + 1,
-        title: e.title || '第' + (e.episode_number ?? i + 1) + '集',
-        script_content: e.script_content || '',
-        description: e.description ?? null,
-        duration: e.duration ?? 0,
-      }))
-    await dramaAPI.saveEpisodes(dramaId, remaining)
+    await dramaAPI.deleteEpisode(ep.id)
     ElMessage.success(`${label} 已删除`)
     await loadDrama()
   } catch (e) {

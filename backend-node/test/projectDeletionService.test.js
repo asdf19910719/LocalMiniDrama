@@ -9,6 +9,7 @@ const { runMigrationsAndEnsure } = require('../src/db/migrate');
 const {
   previewProjectDeletion,
   deleteProjectPermanently,
+  deleteEpisodePermanently,
 } = require('../src/services/projectDeletionService');
 
 function setup() {
@@ -188,4 +189,53 @@ test('soft-deleted projects reject truthy non-boolean includeDeleted values', (t
     assert.equal(count(db, 'dramas', 'id = ?', 3), 1);
     assert.equal(fs.existsSync(legacyProjectDir), true);
   }
+});
+
+test('permanent episode deletion removes only episode descendants and preserves project assets and sibling episodes', (t) => {
+  const { db, storageRoot } = setup();
+  t.after(() => { db.close(); fs.rmSync(storageRoot, { recursive: true, force: true }); });
+  const now = '2026-09-07T00:00:00.000Z';
+  const insert = (sql, ...params) => db.prepare(sql).run(...params);
+
+  insert("INSERT INTO episodes (id, drama_id, episode_number, title, status, created_at, updated_at) VALUES (12, 1, 2, '同项目保留集', 'draft', ?, ?)", now, now);
+  insert("INSERT INTO storyboards (id, episode_id, storyboard_number, status, created_at, updated_at) VALUES (112, 12, 1, 'draft', ?, ?)", now, now);
+  insert("INSERT INTO scenes (id, drama_id, episode_id, location, created_at, updated_at) VALUES (113, 1, 12, '同项目保留场景', ?, ?)", now, now);
+  insert("INSERT INTO props (id, drama_id, episode_id, name, created_at, updated_at) VALUES (114, 1, 12, '同项目保留道具', ?, ?)", now, now);
+  insert("INSERT INTO image_generations (id, drama_id, storyboard_id, scene_id, task_id, status, created_at, updated_at) VALUES (116, 1, 112, 113, 'image-task-sibling', 'completed', ?, ?), (117, 1, NULL, NULL, 'image-task-project', 'completed', ?, ?)", now, now, now, now);
+  insert("INSERT INTO video_generations (id, drama_id, storyboard_id, scene_id, task_id, status, created_at, updated_at) VALUES (117, 1, 112, 113, 'video-task-sibling', 'completed', ?, ?), (118, 1, NULL, NULL, 'video-task-project', 'completed', ?, ?)", now, now, now, now);
+  insert("INSERT INTO video_merges (id, drama_id, episode_id, task_id, status, created_at) VALUES (19, 1, 12, 'merge-task-sibling', 'completed', ?), (20, 1, NULL, 'merge-task-project', 'completed', ?)", now, now);
+  insert("INSERT INTO async_tasks (id, type, status, resource_id, created_at, updated_at) VALUES ('image-task-sibling', 'image', 'completed', '116', ?, ?), ('image-task-project', 'image', 'completed', '117', ?, ?), ('video-task-sibling', 'video', 'completed', '117', ?, ?), ('video-task-project', 'video', 'completed', '118', ?, ?), ('merge-task-sibling', 'merge', 'completed', '19', ?, ?), ('merge-task-project', 'merge', 'completed', '20', ?, ?)", now, now, now, now, now, now, now, now, now, now, now, now);
+
+  const result = deleteEpisodePermanently(db, { error() {} }, 11);
+
+  assert.equal(result.deleted, true);
+  assert.equal(result.drama_id, 1);
+  assert.equal(result.episode_id, 11);
+  assert.equal(result.counts.episodes, 1);
+  assert.equal(result.counts.storyboards, 1);
+  assert.equal(result.counts.scenes, 1);
+  assert.equal(result.counts.props, 1);
+  assert.equal(count(db, 'episodes', 'id = ?', 11), 0);
+  assert.equal(count(db, 'storyboards', 'id = ?', 111), 0);
+  assert.equal(count(db, 'scenes', 'id = ?', 13), 0);
+  assert.equal(count(db, 'props', 'id = ?', 14), 0);
+  assert.equal(count(db, 'image_generations', 'id = ?', 16), 0);
+  assert.equal(count(db, 'video_generations', 'id = ?', 17), 0);
+  assert.equal(count(db, 'video_merges', 'id = ?', 18), 0);
+  assert.equal(count(db, 'episodes', 'id = ?', 12), 1);
+  assert.equal(count(db, 'storyboards', 'id = ?', 112), 1);
+  assert.equal(count(db, 'scenes', 'id = ?', 113), 1);
+  assert.equal(count(db, 'props', 'id = ?', 114), 1);
+  assert.equal(count(db, 'image_generations', 'id = ?', 116), 1);
+  assert.equal(count(db, 'video_generations', 'id = ?', 117), 1);
+  assert.equal(count(db, 'video_merges', 'id = ?', 19), 1);
+  assert.equal(count(db, 'image_generations', 'id = ?', 117), 1);
+  assert.equal(count(db, 'video_generations', 'id = ?', 118), 1);
+  assert.equal(count(db, 'video_merges', 'id = ?', 20), 1);
+  assert.equal(count(db, 'characters', 'id = ?', 12), 1);
+  assert.equal(count(db, 'character_libraries', 'drama_id = ?', 1), 1);
+  assert.equal(count(db, 'scene_libraries', 'drama_id = ?', 1), 1);
+  assert.equal(count(db, 'prop_libraries', 'drama_id = ?', 1), 1);
+  assert.equal(count(db, 'assets', 'drama_id = ?', 1), 1);
+  assert.equal(count(db, 'dramas', 'id = ?', 1), 1);
 });

@@ -194,6 +194,19 @@ function deleteDrama(db, cfg, log) {
   };
 }
 
+function deleteEpisode(db, log) {
+  return (req, res) => {
+    try {
+      const result = projectDeletionService.deleteEpisodePermanently(db, log, req.params.id);
+      if (!result) return response.notFound(res, '剧集不存在');
+      response.success(res, result);
+    } catch (error) {
+      log.error('Delete episode permanently failed', { episode_id: req.params.id, error: error.message });
+      response.internalError(res, error.message || '删除失败');
+    }
+  };
+}
+
 function getDramaStats(db, log) {
   return (req, res) => {
     try {
@@ -413,6 +426,7 @@ module.exports = function dramaRoutes(db, cfg, log) {
     listDramas: listDramas(db, log),
     updateDrama: updateDrama(db, log),
     deleteDrama: deleteDrama(db, cfg, log),
+    deleteEpisode: deleteEpisode(db, log),
     getDramaStats: getDramaStats(db, log),
     saveOutline: saveOutline(db, log),
     getCharacters: getCharacters(db),

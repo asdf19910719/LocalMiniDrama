@@ -229,6 +229,7 @@ function setupRouter(cfg, db, log) {
   r.get('/dramas/:id', drama.getDrama);
   r.put('/dramas/:id', drama.updateDrama);
   r.delete('/dramas/:id', drama.deleteDrama);
+  r.delete('/episodes/:id', drama.deleteEpisode);
 
   // ---------- ai-configs ----------
   r.get('/ai-configs', aiConfig.list);

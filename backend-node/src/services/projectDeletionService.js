@@ -290,4 +290,142 @@ function deleteProjectPermanently(db, cfg, log, dramaId, { includeDeleted = fals
   return { deleted: true, counts, storage };
 }
 
-module.exports = { previewProjectDeletion, deleteProjectPermanently };
+function discoverEpisodeOwnedIds(db, episodeId) {
+  const storyboardIds = selectIds(db, 'storyboards', 'episode_id = ?', [episodeId]);
+  const sceneIds = selectIds(db, 'scenes', 'episode_id = ?', [episodeId]);
+  const propIds = selectIds(db, 'props', 'episode_id = ?', [episodeId]);
+  const externalJobIds = storyboardIds.length
+    ? selectIds(db, 'external_generation_jobs', `storyboard_id IN (${placeholders(storyboardIds)})`, storyboardIds)
+    : [];
+  const externalAttemptIds = externalJobIds.length
+    ? selectIds(db, 'external_generation_attempts', `job_id IN (${placeholders(externalJobIds)})`, externalJobIds)
+    : [];
+  const videoMergeIds = selectIds(db, 'video_merges', 'episode_id = ?', [episodeId]);
+  const upscaleClauses = []; const upscaleParams = [];
+  if (columnExists(db, 'video_upscale_jobs', 'episode_id')) {
+    upscaleClauses.push('episode_id = ?');
+    upscaleParams.push(episodeId);
+  }
+  if (videoMergeIds.length && columnExists(db, 'video_upscale_jobs', 'video_merge_id')) {
+    appendInClause(upscaleClauses, upscaleParams, 'video_merge_id', videoMergeIds);
+  }
+  const upscaleJobIds = upscaleClauses.length
+    ? selectIds(db, 'video_upscale_jobs', upscaleClauses.join(' OR '), upscaleParams)
+    : [];
+  const generationIdsFor = (table) => {
+    if (!tableExists(db, table)) return [];
+    const clauses = []; const params = [];
+    if (columnExists(db, table, 'episode_id')) { clauses.push('episode_id = ?'); params.push(episodeId); }
+    if (columnExists(db, table, 'storyboard_id')) appendInClause(clauses, params, 'storyboard_id', storyboardIds);
+    if (columnExists(db, table, 'scene_id')) appendInClause(clauses, params, 'scene_id', sceneIds);
+    return clauses.length ? selectIds(db, table, clauses.join(' OR '), params) : [];
+  };
+  const imageGenerationIds = generationIdsFor('image_generations');
+  const videoGenerationIds = generationIdsFor('video_generations');
+  const directorGroupIds = storyboardIds.length
+    ? selectIds(db, 'director_candidate_groups', `shot_id IN (${placeholders(storyboardIds)})`, storyboardIds.map(String))
+    : [];
+  const directorCandidateRows = directorGroupIds.length && tableExists(db, 'director_candidates')
+    ? db.prepare(`SELECT id, job_id, artifact_id FROM director_candidates WHERE group_id IN (${placeholders(directorGroupIds)})`).all(...directorGroupIds)
+    : [];
+  const directorJobIds = [...new Set(directorCandidateRows.map((row) => row.job_id).filter(Boolean))];
+  const directorArtifactIds = [...new Set(directorCandidateRows.map((row) => row.artifact_id).filter(Boolean))];
+  if (directorJobIds.length && tableExists(db, 'director_artifacts')) {
+    directorArtifactIds.push(...selectIds(db, 'director_artifacts', `job_id IN (${placeholders(directorJobIds)})`, directorJobIds));
+  }
+  const imageTaskClauses = []; const imageTaskParams = [];
+  if (imageGenerationIds.length && columnExists(db, 'image_generation_tasks', 'image_generation_id')) {
+    appendInClause(imageTaskClauses, imageTaskParams, 'image_generation_id', imageGenerationIds);
+  }
+  if (storyboardIds.length && columnExists(db, 'image_generation_tasks', 'target_id') && columnExists(db, 'image_generation_tasks', 'target_type')) {
+    imageTaskClauses.push(`(target_type LIKE 'storyboard%' AND target_id IN (${placeholders(storyboardIds)}))`);
+    imageTaskParams.push(...storyboardIds);
+  }
+  if (sceneIds.length && columnExists(db, 'image_generation_tasks', 'target_id') && columnExists(db, 'image_generation_tasks', 'target_type')) {
+    imageTaskClauses.push(`(target_type LIKE 'scene%' AND target_id IN (${placeholders(sceneIds)}))`);
+    imageTaskParams.push(...sceneIds);
+  }
+  const imageTaskRows = imageTaskClauses.length && tableExists(db, 'image_generation_tasks')
+    ? db.prepare(`SELECT id, batch_id FROM image_generation_tasks WHERE ${imageTaskClauses.join(' OR ')}`).all(...imageTaskParams)
+    : [];
+  const imageTaskIds = ids(imageTaskRows);
+  const imageBatchIds = [...new Set(imageTaskRows.map((row) => row.batch_id).filter(Boolean))];
+  const packageTaskIds = tableExists(db, 'external_ai_package_tasks') && columnExists(db, 'external_ai_package_tasks', 'target_episode_id')
+    ? selectIds(db, 'external_ai_package_tasks', 'target_episode_id = ?', [episodeId])
+    : [];
+  const asyncTaskIds = [...new Set([
+    ...selectColumnValues(db, 'image_generations', 'task_id', imageGenerationIds),
+    ...selectColumnValues(db, 'video_generations', 'task_id', videoGenerationIds),
+    ...selectColumnValues(db, 'video_merges', 'task_id', videoMergeIds),
+    ...selectColumnValues(db, 'video_upscale_jobs', 'async_task_id', upscaleJobIds),
+  ])];
+  return {
+    storyboardIds, sceneIds, propIds, externalJobIds, externalAttemptIds,
+    videoMergeIds, upscaleJobIds, imageGenerationIds, videoGenerationIds,
+    directorGroupIds, directorJobIds, directorArtifactIds: [...new Set(directorArtifactIds)],
+    imageTaskIds, imageBatchIds, packageTaskIds, asyncTaskIds,
+  };
+}
+
+function deleteEpisodePermanently(db, log, episodeId) {
+  const id = Number(episodeId);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const episode = db.prepare('SELECT id, drama_id FROM episodes WHERE id = ? AND deleted_at IS NULL').get(id);
+  if (!episode) return null;
+  const owned = discoverEpisodeOwnedIds(db, id);
+  const counts = emptyCounts();
+  const removeByIds = (table, column, values) => {
+    if (values.length) deleteWhere(db, counts, table, `${column} IN (${placeholders(values)})`, values);
+  };
+
+  db.transaction(() => {
+    removeByIds('external_generation_events', 'attempt_id', owned.externalAttemptIds);
+    removeByIds('external_generation_results', 'attempt_id', owned.externalAttemptIds);
+    removeByIds('external_generation_attempts', 'job_id', owned.externalJobIds);
+    removeByIds('video_upscale_segments', 'job_id', owned.upscaleJobIds);
+    removeByIds('video_upscale_jobs', 'id', owned.upscaleJobIds);
+    removeByIds('storyboard_character_variants', 'storyboard_id', owned.storyboardIds);
+    removeByIds('storyboard_characters', 'storyboard_id', owned.storyboardIds);
+    removeByIds('storyboard_props', 'storyboard_id', owned.storyboardIds);
+    removeByIds('storyboard_h3_prompt_drafts', 'storyboard_id', owned.storyboardIds);
+    removeByIds('frame_prompts', 'storyboard_id', owned.storyboardIds);
+    removeByIds('episode_characters', 'episode_id', [id]);
+    removeByIds('episode_imports', 'episode_id', [id]);
+    removeByIds('image_generation_tasks', 'id', owned.imageTaskIds);
+    removeByIds('image_generations', 'id', owned.imageGenerationIds);
+    removeByIds('video_generations', 'id', owned.videoGenerationIds);
+    removeByIds('video_merges', 'id', owned.videoMergeIds);
+    removeByIds('external_generation_jobs', 'id', owned.externalJobIds);
+    removeByIds('external_ai_package_tasks', 'id', owned.packageTaskIds);
+    removeByIds('director_candidates', 'group_id', owned.directorGroupIds);
+    removeByIds('director_candidate_groups', 'id', owned.directorGroupIds);
+
+    const survivingArtifactIds = owned.directorArtifactIds.length && tableExists(db, 'director_candidates')
+      ? new Set(db.prepare(`SELECT artifact_id FROM director_candidates WHERE artifact_id IN (${placeholders(owned.directorArtifactIds)})`).all(...owned.directorArtifactIds).map((row) => row.artifact_id))
+      : new Set();
+    const artifactIdsToDelete = owned.directorArtifactIds.filter((artifactId) => !survivingArtifactIds.has(artifactId));
+    if (artifactIdsToDelete.length) {
+      const artifactParams = [...artifactIdsToDelete, ...artifactIdsToDelete];
+      deleteWhere(db, counts, 'director_anchors', `source_artifact_id IN (${placeholders(artifactIdsToDelete)}) OR derived_artifact_id IN (${placeholders(artifactIdsToDelete)})`, artifactParams);
+      removeByIds('director_artifacts', 'id', artifactIdsToDelete);
+    }
+    const survivingJobIds = owned.directorJobIds.length && tableExists(db, 'director_candidates')
+      ? new Set(db.prepare(`SELECT job_id FROM director_candidates WHERE job_id IN (${placeholders(owned.directorJobIds)})`).all(...owned.directorJobIds).map((row) => row.job_id))
+      : new Set();
+    removeByIds('director_jobs', 'id', owned.directorJobIds.filter((jobId) => !survivingJobIds.has(jobId)));
+
+    removeByIds('storyboards', 'id', owned.storyboardIds);
+    removeByIds('scenes', 'id', owned.sceneIds);
+    removeByIds('props', 'id', owned.propIds);
+    if (owned.imageBatchIds.length && tableExists(db, 'image_generation_batches')) {
+      const orphanedBatchIds = owned.imageBatchIds.filter((batchId) => !db.prepare('SELECT 1 FROM image_generation_tasks WHERE batch_id = ?').get(batchId));
+      removeByIds('image_generation_batches', 'id', orphanedBatchIds);
+    }
+    if (owned.asyncTaskIds.length) removeByIds('async_tasks', 'id', owned.asyncTaskIds);
+    deleteWhere(db, counts, 'episodes', 'id = ?', [id]);
+  })();
+  log?.info?.('Episode permanently deleted', { drama_id: episode.drama_id, episode_id: id, counts });
+  return { deleted: true, drama_id: episode.drama_id, episode_id: id, counts };
+}
+
+module.exports = { previewProjectDeletion, deleteProjectPermanently, deleteEpisodePermanently };

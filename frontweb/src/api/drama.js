@@ -16,6 +16,9 @@ export const dramaAPI = {
   delete(id) {
     return request.delete(`/dramas/${id}`)
   },
+  deleteEpisode(id) {
+    return request.delete(`/episodes/${id}`)
+  },
   saveEpisodes(id, episodes) {
     return request.put(`/dramas/${id}/episodes`, { episodes })
   },
