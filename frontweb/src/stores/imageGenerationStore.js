@@ -35,11 +35,16 @@ const BRIDGE_TIMEOUT_MS = 60000
 const SEND_BRIDGE_TIMEOUT_MS = 300000
 async function sendChatGPTAttempt(prepared) {
   const job = prepared.external_job
+  const references = parseReferenceManifest(prepared.task.reference_manifest)
   await sendImageGenerationBridgeMessage({
     action: 'prepare', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
     conversationId: job.conversation_id,
-    prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type),
-    references: parseReferenceManifest(prepared.task.reference_manifest),
+    prompt: buildChatGPTImageGenerationPrompt(prepared.task.prompt_snapshot, prepared.task.target_type, {
+      hasReferences: references.length > 0,
+      hasIdentityReference: references.some((item) => item?.role === 'character_identity' && item?.url),
+      negativePrompt: prepared.task.negative_prompt_snapshot,
+    }),
+    references,
   }, BRIDGE_TIMEOUT_MS)
   await sendImageGenerationBridgeMessage({
     action: 'send', dramaId: prepared.task.drama_id, site: 'chatgpt', jobId: job.id,
