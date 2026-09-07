@@ -182,6 +182,7 @@ function adaptExternalAiResult(db, result, task) {
   const usedExistingCharacters = new Set();
   const usedExistingScenes = new Set();
   const usedExistingProps = new Set();
+  const usedExistingCharacterVariants = [];
   const currentRows = { characters: new Map(), variants: new Map(), scenes: new Map(), props: new Map() };
 
   const requireExistingCharacter = (ref) => {
@@ -266,6 +267,12 @@ function adaptExternalAiResult(db, result, task) {
   }));
   for (const characterRef of usedExistingCharacters) {
     const expanded = existingCharacterToPackage(db, currentRows.characters.get(characterRef));
+    for (const variant of expanded.variants) {
+      usedExistingCharacterVariants.push({
+        character_ref: characterRef,
+        variant_ref: variant.source_key,
+      });
+    }
     for (const variant of assets.character_variants.filter((item) => item.character_ref === characterRef)) {
       expanded.variants.push({
         source_key: resolve(variant.local_ref),
@@ -342,6 +349,14 @@ function adaptExternalAiResult(db, result, task) {
       scenes,
       props,
       storyboards,
+    },
+    validationContext: {
+      trustedExistingAssets: {
+        characters: [...usedExistingCharacters],
+        characterVariants: usedExistingCharacterVariants,
+        scenes: [...usedExistingScenes],
+        props: [...usedExistingProps],
+      },
     },
     warnings,
     assetDigestStatus: current.assetsDigest === task.assets_digest ? 'current' : 'changed',

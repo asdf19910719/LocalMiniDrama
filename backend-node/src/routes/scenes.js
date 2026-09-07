@@ -18,14 +18,21 @@ function routes(db, log, cfg) {
     generatePrompt: async (req, res) => {
       try {
         const body = req.body || {};
-        const out = await sceneService.generateScenePromptOnly(
+        const singleImageMode = body.mode === 'single';
+        const generatePrompt = singleImageMode
+          ? sceneService.generateSceneSinglePromptOnly
+          : sceneService.generateScenePromptOnly;
+        const out = await generatePrompt(
           db, log, cfg, req.params.scene_id, body.model || undefined, body.style || undefined
         );
         if (!out.ok) {
           if (out.error === 'scene not found') return response.notFound(res, '场景不存在');
           return response.badRequest(res, out.error);
         }
-        response.success(res, { message: '提示词已生成', polished_prompt: out.polished_prompt });
+        response.success(res, singleImageMode
+          ? { message: '单图提示词已生成', polished_prompt_single: out.polished_prompt_single }
+          : { message: '提示词已生成', polished_prompt: out.polished_prompt }
+        );
       } catch (err) {
         log.error('scenes generatePrompt', { error: err.message });
         response.internalError(res, err.message);
@@ -91,7 +98,11 @@ function routes(db, log, cfg) {
         const body = req.body || {};
         const sceneId = body.scene_id != null ? Number(body.scene_id) : null;
         if (sceneId == null) return response.badRequest(res, '缺少 scene_id');
-        const out = await sceneService.generateSceneFourViewImage(
+        const useQuadGrid = body.use_quad_grid === true;
+        const generateImage = useQuadGrid
+          ? sceneService.generateSceneFourViewImage
+          : sceneService.generateSceneSingleImage;
+        const out = await generateImage(
           db, log, cfg, sceneId, body.model || undefined, body.style || undefined
         );
         if (!out.ok) {
@@ -100,7 +111,7 @@ function routes(db, log, cfg) {
           return response.badRequest(res, out.error);
         }
         response.success(res, {
-          message: '场景四视图生成任务已提交',
+          message: useQuadGrid ? '场景四视图生成任务已提交' : '场景单图生成任务已提交',
           image_generation: out.image_generation,
         });
       } catch (err) {

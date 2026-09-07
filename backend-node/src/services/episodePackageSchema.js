@@ -675,21 +675,31 @@ function requireObject(errors, path, value) {
   return true;
 }
 
-function validateVariant(errors, basePath, variant) {
+function validateVariant(errors, basePath, variant, trustedExisting = false) {
   if (!requireObject(errors, basePath, variant)) return;
-  for (const field of ['source_key', 'name', 'description', 'appearance', 'image_prompt']) {
+  const fields = trustedExisting
+    ? ['source_key', 'name']
+    : ['source_key', 'name', 'description', 'appearance', 'image_prompt'];
+  for (const field of fields) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, variant[field]);
   }
 }
 
-function validateCharacter(errors, basePath, character, strictNewPackage = false) {
+function validateCharacter(errors, basePath, character, {
+  strictNewPackage = false,
+  trustedExisting = false,
+  trustedExistingVariants = new Set(),
+} = {}) {
   if (!requireObject(errors, basePath, character)) return;
-  for (const field of ['source_key', 'name', 'description']) {
+  const identityFields = trustedExisting ? ['source_key', 'name'] : ['source_key', 'name', 'description'];
+  for (const field of identityFields) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
   }
-  for (const field of ['appearance', 'image_prompt', 'negative_prompt', 'voice_profile']) {
-    if (strictNewPackage) pushNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
-    else pushOptionalNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
+  if (!trustedExisting) {
+    for (const field of ['appearance', 'image_prompt', 'negative_prompt', 'voice_profile']) {
+      if (strictNewPackage) pushNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
+      else pushOptionalNonEmptyStringError(errors, `${basePath}.${field}`, character[field]);
+    }
   }
   if (!Array.isArray(character.variants) || character.variants.length < 1) {
     errors.push({
@@ -699,22 +709,33 @@ function validateCharacter(errors, basePath, character, strictNewPackage = false
     return;
   }
   character.variants.forEach((variant, index) => {
-    validateVariant(errors, `${basePath}.variants[${index}]`, variant);
+    const variantKey = JSON.stringify([character.source_key, variant?.source_key]);
+    validateVariant(
+      errors,
+      `${basePath}.variants[${index}]`,
+      variant,
+      trustedExistingVariants.has(variantKey),
+    );
   });
 }
 
-function validateScene(errors, basePath, scene) {
+function validateScene(errors, basePath, scene, trustedExisting = false) {
   if (!requireObject(errors, basePath, scene)) return;
-  for (const field of ['source_key', 'name', 'state', 'description', 'image_prompt']) {
+  const fields = trustedExisting
+    ? ['source_key', 'name']
+    : ['source_key', 'name', 'state', 'description', 'image_prompt'];
+  for (const field of fields) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, scene[field]);
   }
 }
 
-function validateProp(errors, basePath, prop, strictProjectionPackage = false) {
+function validateProp(errors, basePath, prop, strictProjectionPackage = false, trustedExisting = false) {
   if (!requireObject(errors, basePath, prop)) return;
-  for (const field of ['source_key', 'name', 'description', 'image_prompt']) {
+  const fields = trustedExisting ? ['source_key', 'name'] : ['source_key', 'name', 'description', 'image_prompt'];
+  for (const field of fields) {
     pushNonEmptyStringError(errors, `${basePath}.${field}`, prop[field]);
   }
+  if (trustedExisting) return;
   if (strictProjectionPackage) pushNonEmptyStringError(errors, `${basePath}.type`, prop.type);
   else pushOptionalNonEmptyStringError(errors, `${basePath}.type`, prop.type);
 }
@@ -854,19 +875,15 @@ function validateStoryboard(errors, basePath, storyboard, options = {}) {
   });
 }
 
-const ASSET_ARRAY_VALIDATORS = {
-  characters: validateCharacter,
-  scenes: validateScene,
-  props: validateProp,
-};
-
 /**
  * 结构校验:任何输入都不抛异常。
  * @param {*} pkg 待校验的制作包(通常为 JSON.parse 结果)
+ * @param {object} options 仅由项目绑定的外部 AI 适配器提供可信已有资产键；普通制作包不得自行放宽。
  * @returns {{ ok: boolean, errors: Array<{ path: string, message: string }> }}
  */
-function validatePackageStructure(pkg) {
+function validatePackageStructure(pkg, options = {}) {
   const errors = [];
+  const { trustedExistingAssets = {} } = options || {};
 
   if (!isPlainObject(pkg)) {
     errors.push({ path: '', message: '制作包必须是一个 JSON 对象' });
@@ -882,6 +899,15 @@ function validatePackageStructure(pkg) {
 
   const strictNewPackage = pkg.generation_profile?.contract_profile === 'complete_av_v1';
   const strictProjectionPackage = pkg.version === '1.1';
+  const trustedExisting = {
+    characters: new Set(Array.isArray(trustedExistingAssets.characters) ? trustedExistingAssets.characters : []),
+    characterVariants: new Set(
+      (Array.isArray(trustedExistingAssets.characterVariants) ? trustedExistingAssets.characterVariants : [])
+        .map((ref) => JSON.stringify([ref?.character_ref, ref?.variant_ref])),
+    ),
+    scenes: new Set(Array.isArray(trustedExistingAssets.scenes) ? trustedExistingAssets.scenes : []),
+    props: new Set(Array.isArray(trustedExistingAssets.props) ? trustedExistingAssets.props : []),
+  };
 
   if (pkg.generator !== undefined) {
     requireObject(errors, 'generator', pkg.generator);
@@ -992,17 +1018,28 @@ function validatePackageStructure(pkg) {
     }
     list.forEach((item, index) => {
       if (field === 'characters') {
-        validateCharacter(errors, `${field}[${index}]`, item, strictNewPackage);
+        const isTrustedExisting = trustedExisting.characters.has(item?.source_key);
+        validateCharacter(errors, `${field}[${index}]`, item, {
+          strictNewPackage,
+          trustedExisting: isTrustedExisting,
+          trustedExistingVariants: trustedExisting.characterVariants,
+        });
         if (strictProjectionPackage && isPlainObject(item)) {
           if (!['main', 'supporting', 'minor'].includes(item.role)) {
             errors.push({ path: `${field}[${index}].role`, message: `${field}[${index}].role 无效` });
           }
-          pushNonEmptyStringError(errors, `${field}[${index}].personality`, item.personality);
+          if (!isTrustedExisting) pushNonEmptyStringError(errors, `${field}[${index}].personality`, item.personality);
         }
       } else if (field === 'props') {
-        validateProp(errors, `${field}[${index}]`, item, strictProjectionPackage);
+        validateProp(
+          errors,
+          `${field}[${index}]`,
+          item,
+          strictProjectionPackage,
+          trustedExisting.props.has(item?.source_key),
+        );
       } else {
-        ASSET_ARRAY_VALIDATORS[field](errors, `${field}[${index}]`, item);
+        validateScene(errors, `${field}[${index}]`, item, trustedExisting.scenes.has(item?.source_key));
       }
     });
   }

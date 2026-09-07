@@ -547,29 +547,29 @@ describe('Episode package routes', () => {
       assert.equal(res.body.error.code, 'PACKAGE_INVALID');
     });
 
-    it('previews and imports an incremental external AI result while preserving reused assets and task provenance', () => {
+    it('previews and imports an incremental result when reused historical assets have incomplete optional metadata', () => {
       const target = insertEpisode(db, { drama_id: 1, episode_number: 2, title: '第二集' });
       db.prepare(`
         INSERT INTO characters (
           id, drama_id, source_key, name, role, description, personality, appearance,
           polished_prompt, negative_prompt, voice_style, created_at, updated_at
-        ) VALUES (21, 1, 'char_lin_wan', '林晚', 'main', '调查记者', '冷静克制',
-          '二十七岁，黑色短发', '林晚定妆照', '避免改脸', '清冷女声', ?, ?)
+        ) VALUES (21, 1, 'char_lin_wan', '林晚', 'main', '', '',
+          '', '', '', '', ?, ?)
       `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
       db.prepare(`
         INSERT INTO character_variants (
           id, character_id, source_key, name, description, appearance, image_prompt,
           negative_prompt, is_default, created_at, updated_at
-        ) VALUES (31, 21, 'variant_lin_wan_default', '默认状态', '日常状态',
-          '深灰风衣', '深灰风衣定妆', '避免改脸', 1, ?, ?)
+        ) VALUES (31, 21, 'variant_lin_wan_default', '默认状态', '',
+          '', '', '', 1, ?, ?)
       `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
       db.prepare(`
         INSERT INTO scenes (id, drama_id, episode_id, source_key, location, state, description, prompt, atmosphere, negative_prompt, created_at, updated_at)
-        VALUES (41, 1, 1, 'scene_store', '便利店', '雨夜', '冷白灯便利店', '便利店空镜', '紧张', '人物', ?, ?)
+        VALUES (41, 1, 1, 'scene_store', '便利店', '', '', '', '', '', ?, ?)
       `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
       db.prepare(`
         INSERT INTO props (id, drama_id, episode_id, source_key, name, type, description, prompt, negative_prompt, created_at, updated_at)
-        VALUES (51, 1, 1, 'prop_ledger', '残缺账本', '线索', '缺少末页', '账本棚拍', '手', ?, ?)
+        VALUES (51, 1, 1, 'prop_ledger', '残缺账本', '', '', '', '', ?, ?)
       `).run(new Date().toISOString(), '2026-09-01T00:00:00.000Z');
       const task = createTaskBundle(db, 1, { targetEpisodeId: target });
       const result = validExternalAiResult();
@@ -603,7 +603,10 @@ describe('Episode package routes', () => {
         },
       });
       assert.equal(imported.statusCode, 200);
-      assert.equal(db.prepare('SELECT personality FROM characters WHERE id = 21').get().personality, '冷静克制');
+      const reusedCharacter = db.prepare('SELECT personality, voice_style FROM characters WHERE id = 21').get();
+      assert.equal(reusedCharacter.personality, '');
+      assert.equal(reusedCharacter.voice_style, '');
+      assert.equal(db.prepare('SELECT type FROM props WHERE id = 51').get().type, '');
       const source = db.prepare('SELECT * FROM episode_imports WHERE episode_id = ?').get(target);
       assert.equal(source.schema_name, 'local-mini-drama.external-ai-result');
       assert.equal(source.task_package_id, task.package_id);

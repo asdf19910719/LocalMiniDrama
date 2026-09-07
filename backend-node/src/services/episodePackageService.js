@@ -141,6 +141,7 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
       pkg: parsed.pkg,
       parseErrors: parsed.errors,
       adapterWarnings: [],
+      validationContext: null,
       targetEpisodeId,
       targetEpisodeNumber: null,
       task: null,
@@ -180,6 +181,7 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
     pkg: adapted.package,
     parseErrors: [],
     adapterWarnings: adapted.warnings,
+    validationContext: adapted.validationContext,
     targetEpisodeId: task.target_episode_id || targetEpisodeId,
     targetEpisodeNumber: task.target_episode_number,
     task,
@@ -189,8 +191,8 @@ function prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnErr
 }
 
 /** 结构 + 业务双重校验;返回统一为 { code, path, message } 的错误/警告列表 */
-function validatePackage(pkg) {
-  const structure = validatePackageStructure(pkg);
+function validatePackage(pkg, validationContext) {
+  const structure = validatePackageStructure(pkg, validationContext);
   const errors = structure.errors.map((e) => ({ code: 'PACKAGE_INVALID', path: e.path, message: e.message }));
   if (structure.ok) {
     const business = validateBusinessRules(pkg);
@@ -441,7 +443,7 @@ function previewPackageImport(db, { rawText, filename, dramaId, targetEpisodeId 
   targetEpisodeId = prepared.targetEpisodeId;
   let validation = { errors: [], warnings: [] };
   if (pkg !== null) {
-    validation = validatePackage(pkg);
+    validation = validatePackage(pkg, prepared.validationContext);
   }
 
   // target_status:给定目标集 → blank 判定;仅 dramaId → 新建集
@@ -566,7 +568,7 @@ function importEpisodePackage(db, { rawText, sourceSha256, dramaId, targetEpisod
     const prepared = prepareInputPackage(db, { rawText, dramaId, targetEpisodeId, throwOnError: true });
     let pkg = prepared.pkg;
     targetEpisodeId = prepared.targetEpisodeId;
-    const { errors } = validatePackage(pkg);
+    const { errors } = validatePackage(pkg, prepared.validationContext);
     if (errors.length > 0) {
       const first = errors.slice(0, 5).map((e) => `${e.path || '(root)'}: ${e.message}`).join('; ');
       throwCode('PACKAGE_INVALID', `制作包校验失败(${errors.length} 个错误):${first}`);

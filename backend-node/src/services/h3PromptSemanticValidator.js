@@ -35,6 +35,14 @@ function pushError(errors, code, message, details = {}) {
   }
 }
 
+function bodyUsesSubjectBoundToPicture(definitions, referenceBody, pictureLabel) {
+  return String(definitions || '').split(/\r?\n/).some((line) => {
+    if (!line.includes(pictureLabel)) return false;
+    const subjectDefinition = line.match(/^\s*(<Subject\s+\d+>)/);
+    return Boolean(subjectDefinition && referenceBody.includes(subjectDefinition[1]));
+  });
+}
+
 function validateH3PromptSemantics(compiledPrompt, context = {}, options = {}) {
   const errors = [];
   const prompt = String(compiledPrompt || '');
@@ -101,7 +109,10 @@ function validateH3PromptSemantics(compiledPrompt, context = {}, options = {}) {
     if (reference.image_url) {
       const pictureLabel = `<Picture ${reference.slot}>`;
       if (!definitions.includes(pictureLabel)) referenceProblems.push(`${pictureLabel} is missing from subject_definitions`);
-      if (!referenceBody.includes(pictureLabel)) referenceProblems.push(`${pictureLabel} is missing from the prompt body`);
+      if (!referenceBody.includes(pictureLabel)
+        && !bodyUsesSubjectBoundToPicture(definitions, referenceBody, pictureLabel)) {
+        referenceProblems.push(`${pictureLabel} is missing from the prompt body`);
+      }
     }
     if (reference.audio_url && reference.audio_label) {
       const audioLabel = `<${reference.audio_label}>`;

@@ -253,6 +253,59 @@ test('reference labels remain valid when Chinese metadata is described semantica
   assert.equal(validateH3PromptSemantics(prompt, context).ok, true);
 });
 
+test('picture reference remains valid when its bound subject is used in the prompt body', () => {
+  const context = makeContext({
+    references: [{
+      slot: 1,
+      entity_name: '酒店走廊',
+      reference_role: 'environment_reference',
+      image_url: '/hotel-corridor.png',
+    }],
+  });
+  const prompt = validH3Prompt({
+    body: '[Shot 1] <Subject 1> is shown as a dim hotel corridor while the camera slowly pushes forward.',
+  }).replace(
+    '<Subject 1> is a doorway.',
+    '<Subject 1> is the dim hotel corridor environment defined by <Picture 1>.',
+  );
+
+  assert.equal(validateH3PromptSemantics(prompt, context).ok, true);
+});
+
+test('picture reference remains invalid when neither it nor its bound subject is used in the prompt body', () => {
+  const context = makeContext({
+    references: [{ slot: 1, entity_name: '酒店走廊', image_url: '/hotel-corridor.png' }],
+  });
+  const prompt = validH3Prompt({
+    body: '[Shot 1] An unrelated <Subject 2> crosses the frame.',
+  }).replace(
+    '<Subject 1> is a doorway.',
+    '<Subject 1> is the dim hotel corridor environment defined by <Picture 1>.',
+  );
+
+  const result = validateH3PromptSemantics(prompt, context);
+
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Picture 1.*missing from the prompt body/);
+});
+
+test('picture mention outside a subject definition cannot create an indirect binding', () => {
+  const context = makeContext({
+    references: [{ slot: 1, entity_name: '酒店走廊', image_url: '/hotel-corridor.png' }],
+  });
+  const prompt = validH3Prompt({
+    body: '[Shot 1] <Subject 1> fills the frame.',
+  }).replace(
+    '<Subject 1> is a doorway.',
+    'Note: <Picture 1> maps to <Subject 1>, but this is not a subject definition.',
+  );
+
+  const result = validateH3PromptSemantics(prompt, context);
+
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Picture 1.*missing from the prompt body/);
+});
+
 test('semantic review cannot claim coverage from the wrong section', async () => {
   const service = createH3PromptSemanticReviewService({
     generateText: async () => JSON.stringify({ events: [{
