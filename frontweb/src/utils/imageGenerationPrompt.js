@@ -30,20 +30,27 @@ export function resolveImageGenerationPrompt(targetType, target = {}, override =
 }
 
 /** Add ChatGPT-only execution instructions without changing the audited business prompt. */
-export function buildChatGPTImageGenerationPrompt(prompt, targetType) {
+export function buildChatGPTImageGenerationPrompt(prompt, targetType, options = {}) {
   const businessPrompt = text(prompt)
   if (!businessPrompt) return ''
   const normalizedType = text(targetType).toLowerCase()
   const targetLabel = CHATGPT_TARGET_LABELS[normalizedType] || '图片'
-  const referenceInstruction = normalizedType === 'character_variant'
+  const hasIdentityReference = options.hasIdentityReference === true
+  const hasReferences = options.hasReferences === true || hasIdentityReference
+  const referenceInstruction = normalizedType === 'character_variant' && hasIdentityReference
     ? `\n本次附带的图片是基础人物身份参考图：只用于保留同一人物的脸部、年龄和体型。\n不要照搬参考图的服装、发型状态、姿势和版式；必须按照状态提示词改变造型。`
     : ''
+  const negativePrompt = text(options.negativePrompt)
+  const negativeBlock = negativePrompt ? `\n\n【必须避免】\n${negativePrompt}` : ''
+  const sourceInstruction = hasReferences
+    ? '只依据本条消息和本次附带的参考图片生成。'
+    : '只依据本条消息生成。'
   return `这是一个全新的、彼此独立的图片生成任务。
 忽略本会话此前所有人物、场景、道具、图片和提示词。
 不得延续、引用或混合之前任务的设定。
-只依据本条消息和本次附带的参考图片生成。
+${sourceInstruction}
 请直接生成${targetLabel}，不要仅回复文字或复述提示词。${referenceInstruction}
 
 【本次唯一有效的生图提示词】
-${businessPrompt}`
+${businessPrompt}${negativeBlock}`
 }

@@ -40,6 +40,7 @@ async function submitTask(db, log = console, taskId, options = {}) {
       storyboard_id: prepared.target_type.startsWith('storyboard_') ? prepared.target_id : undefined,
       scene_id: input.target.scene_id || undefined,
       prompt: input.prompt,
+      negative_prompt: input.negativePrompt || undefined,
       reference_images: input.references,
       aspect_ratio: prepared.aspect_ratio || undefined,
       frame_type: input.frameType || prepared.frame_type || undefined,

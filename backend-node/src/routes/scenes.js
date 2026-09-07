@@ -2,6 +2,7 @@ const response = require('../response');
 const sceneService = require('../services/sceneService');
 const sceneLibraryService = require('../services/sceneLibraryService');
 const imageService = require('../services/imageService');
+const { normalizeAssetMode } = require('../services/assetGenerationModes');
 
 function routes(db, log, cfg) {
   return {
@@ -57,6 +58,7 @@ function routes(db, log, cfg) {
         if (!out.ok) return response.notFound(res, '场景不存在');
         response.success(res, { message: '保存成功' });
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('scenes update', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -89,6 +91,7 @@ function routes(db, log, cfg) {
         const scene = sceneService.createScene(db, log, dramaId, body);
         response.created(res, scene);
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('scenes create', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -98,7 +101,20 @@ function routes(db, log, cfg) {
         const body = req.body || {};
         const sceneId = body.scene_id != null ? Number(body.scene_id) : null;
         if (sceneId == null) return response.badRequest(res, '缺少 scene_id');
-        const useQuadGrid = body.use_quad_grid === true;
+        const scene = db.prepare(
+          'SELECT id, asset_mode FROM scenes WHERE id = ? AND deleted_at IS NULL'
+        ).get(sceneId);
+        if (!scene) return response.notFound(res, '场景不存在');
+        const requestedMode = body.asset_mode != null
+          ? body.asset_mode
+          : (body.use_quad_grid != null ? (body.use_quad_grid === true ? 'QUAD_GRID' : 'NORMAL') : scene.asset_mode);
+        let assetMode;
+        try {
+          assetMode = normalizeAssetMode('scene', requestedMode);
+        } catch (err) {
+          return response.badRequest(res, err.message);
+        }
+        const useQuadGrid = assetMode === 'QUAD_GRID';
         const generateImage = useQuadGrid
           ? sceneService.generateSceneFourViewImage
           : sceneService.generateSceneSingleImage;
@@ -113,6 +129,7 @@ function routes(db, log, cfg) {
         response.success(res, {
           message: useQuadGrid ? '场景四视图生成任务已提交' : '场景单图生成任务已提交',
           image_generation: out.image_generation,
+          asset_mode: assetMode,
         });
       } catch (err) {
         log.error('scenes generateImage', { error: err.message });

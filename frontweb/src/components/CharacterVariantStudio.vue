@@ -58,8 +58,16 @@
                 <img v-if="identityImageUrl" :src="identityImageUrl" alt="角色身份参考图" />
                 <span v-else class="identity-reference-empty"><el-icon><User /></el-icon></span>
                 <div>
-                  <strong>身份参考：{{ character?.name || '未命名人物' }}</strong>
-                  <p>只锁定脸部、年龄和体型；基础人物图不会覆盖当前状态图。</p>
+                  <div class="identity-reference-title">
+                    <strong>引用基础人物：{{ character?.name || '未命名人物' }}</strong>
+                    <el-switch
+                      :model-value="activeVariant.use_identity_reference !== 0 && activeVariant.use_identity_reference !== false"
+                      aria-label="生成时引用基础人物身份"
+                      @change="emit('update-identity-reference', activeVariant, $event)"
+                    />
+                  </div>
+                  <p v-if="identityImageUrl">开启后只锁定脸部、年龄和体型；不会覆盖当前状态造型。</p>
+                  <p v-else>基础人物暂无图片；可保持开启，生成时会自动跳过缺失的参考图。</p>
                 </div>
               </div>
             </section>
@@ -67,7 +75,7 @@
             <section class="variant-candidate-column">
               <div class="variant-prompt-head">
                 <label>状态生图提示词</label>
-                <span>身份图自动作为角色参考</span>
+                <span>{{ identityReferenceHint }}</span>
               </div>
               <el-input
                 :model-value="activeVariant.image_prompt || activeVariant.appearance || ''"
@@ -77,11 +85,16 @@
                 placeholder="请先在状态设定中填写生图提示词"
               />
               <div class="variant-generate-row">
+                <AssetGenerationModeSelect
+                  :model-value="activeVariant.asset_mode"
+                  target-type="character_variant"
+                  @change="emit('update-mode', activeVariant, $event)"
+                />
                 <ImageGenerateSplitButton
                   :default-channel="defaultChannel"
                   :loading="Number(generatingVariantId) === Number(activeVariant.id)"
                   @select-channel="(channel) => emit('select-channel', channel)"
-                  @generate="() => emit('generate', activeVariant)"
+                  @generate="(channel) => emit('generate', activeVariant, channel)"
                 />
                 <el-button @click="emit('edit', activeVariant)"><el-icon><Edit /></el-icon>编辑设定</el-button>
               </div>
@@ -152,6 +165,8 @@
               <el-descriptions-item label="状态名称">{{ activeVariant.name || '未命名' }}</el-descriptions-item>
               <el-descriptions-item label="外观描述">{{ activeVariant.appearance || '未填写' }}</el-descriptions-item>
               <el-descriptions-item label="负向提示词">{{ activeVariant.negative_prompt || '未填写' }}</el-descriptions-item>
+              <el-descriptions-item label="生图模式">{{ assetGenerationModeLabel('character_variant', activeVariant.asset_mode) }}</el-descriptions-item>
+              <el-descriptions-item label="身份参考">{{ activeVariant.use_identity_reference !== 0 && activeVariant.use_identity_reference !== false ? '开启' : '关闭' }}</el-descriptions-item>
               <el-descriptions-item label="默认状态">{{ activeVariant.is_default ? '是' : '否' }}</el-descriptions-item>
             </el-descriptions>
             <div class="variant-settings-actions">
@@ -174,8 +189,10 @@
 import { computed, ref, watch } from 'vue'
 import { Close, Edit, Picture, StarFilled, User } from '@element-plus/icons-vue'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
+import AssetGenerationModeSelect from '@/components/imageGeneration/AssetGenerationModeSelect.vue'
 import { assetImageUrl } from '@/utils/mediaUrl'
 import { buildVariantImageCandidates, findVariantAffectedStoryboards } from '@/utils/characterVariantStudio'
+import { assetGenerationModeLabel } from '@/constants/assetGenerationModes'
 
 const props = defineProps({
   visible: Boolean,
@@ -192,6 +209,7 @@ const props = defineProps({
 const emit = defineEmits([
   'close', 'select-variant', 'generate', 'edit', 'set-default', 'choose-candidate',
   'preview', 'storyboard', 'regenerate', 'select-channel',
+  'update-mode', 'update-identity-reference',
 ])
 
 const activeTab = ref('candidates')
@@ -202,6 +220,10 @@ const currentCandidatePath = computed(() => candidates.value.find((candidate) =>
 const currentImageUrl = computed(() => activeVariant.value ? assetImageUrl(activeVariant.value) : '')
 const identityImageUrl = computed(() => props.character ? assetImageUrl(props.character) : '')
 const affectedStoryboards = computed(() => findVariantAffectedStoryboards(props.storyboards, activeVariant.value?.id))
+const identityReferenceHint = computed(() => {
+  if (activeVariant.value?.use_identity_reference === 0 || activeVariant.value?.use_identity_reference === false) return '不引用基础人物'
+  return identityImageUrl.value ? '将附带基础人物身份参考' : '基础人物图缺失，将无参考生成'
+})
 const selectedCandidateDescription = computed(() => {
   if (!selectedCandidatePath.value) return '选择一张候选图查看操作'
   if (selectedCandidatePath.value === currentCandidatePath.value) return '这张图正在作为当前状态图使用'
@@ -240,6 +262,7 @@ watch([activeVariant, candidates], () => {
 .identity-reference-card { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 9px; border-radius: 9px; background: var(--el-color-primary-light-9); }
 .identity-reference-card img,.identity-reference-empty { width: 58px; height: 74px; object-fit: cover; border-radius: 6px; background: var(--el-fill-color); display: grid; place-items: center; }
 .identity-reference-card strong { font-size: 12px; }
+.identity-reference-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .identity-reference-card p { margin: 7px 0 0; color: var(--el-text-color-secondary); font-size: 11px; line-height: 1.55; }
 .variant-prompt-head,.variant-candidate-heading,.variant-candidate-actions,.variant-impact-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .variant-prompt-head { margin-bottom: 7px; font-size: 12px; }

@@ -5,13 +5,14 @@ const characterLibraryService = require('../services/characterLibraryService');
 const characterVariantsService = require('../services/characterVariantsService');
 const storageLayout = require('../services/storageLayout');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
+const { normalizeAssetMode } = require('../services/assetGenerationModes');
 
 function routes(db, cfg, log, uploadService) {
   return {
     getOne: (req, res) => {
       try {
         const row = db.prepare(
-          'SELECT id, drama_id, name, role, appearance, description, personality, voice_style, image_url, local_path, polished_prompt, four_view_image_url, identity_anchors, seedance2_asset, seedance2_voice_asset, negative_prompt, updated_at FROM characters WHERE id = ? AND deleted_at IS NULL'
+          'SELECT id, drama_id, name, role, appearance, description, personality, voice_style, image_url, local_path, polished_prompt, four_view_image_url, identity_anchors, seedance2_asset, seedance2_voice_asset, negative_prompt, asset_mode, updated_at FROM characters WHERE id = ? AND deleted_at IS NULL'
         ).get(Number(req.params.id));
         if (!row) return response.notFound(res, '角色不存在');
         if (row.seedance2_asset) {
@@ -47,6 +48,7 @@ function routes(db, cfg, log, uploadService) {
         }
         response.success(res, { message: '保存成功' });
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('characters update', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -98,7 +100,20 @@ function routes(db, cfg, log, uploadService) {
     generateImage: async (req, res) => {
       try {
         const body = req.body || {};
-        const out = await characterLibraryService.generateCharacterFourViewImage(
+        const character = db.prepare(
+          'SELECT id, asset_mode FROM characters WHERE id = ? AND deleted_at IS NULL'
+        ).get(Number(req.params.id));
+        if (!character) return response.notFound(res, '角色不存在');
+        let assetMode;
+        try {
+          assetMode = normalizeAssetMode('character', body.asset_mode ?? character.asset_mode);
+        } catch (err) {
+          return response.badRequest(res, err.message);
+        }
+        const generator = assetMode === 'SINGLE'
+          ? characterLibraryService.generateCharacterImage
+          : characterLibraryService.generateCharacterFourViewImage;
+        const out = await generator(
           db,
           log,
           cfg,
@@ -112,8 +127,9 @@ function routes(db, cfg, log, uploadService) {
           return response.badRequest(res, out.error);
         }
         response.success(res, {
-          message: '角色四视图生成任务已提交',
+          message: assetMode === 'SINGLE' ? '角色单图生成任务已提交' : '角色转面图生成任务已提交',
           image_generation: out.image_generation,
+          asset_mode: assetMode,
         });
       } catch (err) {
         log.error('characters generate-image', { error: err.message });
@@ -456,6 +472,8 @@ function routes(db, cfg, log, uploadService) {
         const row = await characterVariantsService.generateVariantImage(db, cfg, log, req.params.variantId, {
           model: body.model != null ? String(body.model).trim() : undefined,
           style: body.style != null ? String(body.style).trim() : undefined,
+          assetMode: body.asset_mode,
+          useIdentityReference: body.use_identity_reference,
         });
         response.success(res, row);
       } catch (err) {

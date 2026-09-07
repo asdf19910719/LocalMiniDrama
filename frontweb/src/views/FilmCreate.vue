@@ -652,6 +652,12 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
+                      <AssetGenerationModeSelect
+                        :model-value="char.asset_mode"
+                        target-type="character"
+                        compact
+                        @change="saveCharacterAssetMode(char, $event)"
+                      />
                       <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingCharIds.has(char.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'character', char, () => onGenerateCharacterImage(char))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'char-' + char.id" @click="onUploadResourceClick('character', char.id)">
                         <el-icon v-if="uploadingResourceId !== 'char-' + char.id"><Upload /></el-icon>
@@ -776,9 +782,6 @@
                 <el-button size="small" :disabled="!dramaId" @click="openAddScene">添加场景</el-button>
                 <el-button size="small" @click="showSceneLibrary = true">本剧场景库</el-button>
               </div>
-              <div class="scene-gen-mode" style="margin: 8px 0; font-size: 13px;">
-                <el-checkbox v-model="sceneUseQuadGrid">生成四宫格场景（默认单图）</el-checkbox>
-              </div>
               <div class="asset-list asset-list-two">
                 <div v-for="scene in scenes" :key="scene.id" class="asset-item asset-item-left-right">
                   <div class="asset-info">
@@ -846,9 +849,13 @@
                       </div>
                     </div>
                     <div class="asset-cover-actions">
-                      <el-tooltip :content="sceneUseQuadGrid ? '四宫格场景（正/侧/俯/仰）' : '单图场景'" placement="top">
-                        <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene, sceneUseQuadGrid))" />
-                      </el-tooltip>
+                      <AssetGenerationModeSelect
+                        :model-value="scene.asset_mode"
+                        target-type="scene"
+                        compact
+                        @change="saveSceneAssetMode(scene, $event)"
+                      />
+                      <ImageGenerateSplitButton :default-channel="imageGenerationDefaultChannel" :loading="generatingSceneIds.has(scene.id)" @select-channel="onSelectImageChannel" @generate="(channel) => generateUnifiedImage(channel, 'scene', scene, () => onGenerateSceneImage(scene))" />
                       <el-button type="success" size="small" :loading="uploadingResourceId === 'scene-' + scene.id" @click="onUploadResourceClick('scene', scene.id)">
                         <el-icon v-if="uploadingResourceId !== 'scene-' + scene.id"><Upload /></el-icon>
                         上传
@@ -2787,6 +2794,8 @@
       @storyboard="scrollToStoryboard"
       @regenerate="onVariantStudioRegenerate"
       @select-channel="onSelectImageChannel"
+      @update-mode="onVariantStudioModeChange"
+      @update-identity-reference="onVariantStudioIdentityReferenceChange"
     />
     <EpisodeImportSourceDialog
       v-model="importSourceVisible"
@@ -2857,6 +2866,7 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import AssetGenerationModeSelect from '@/components/imageGeneration/AssetGenerationModeSelect.vue'
 import CharacterVariantStudio from '@/components/CharacterVariantStudio.vue'
 import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
@@ -2877,11 +2887,12 @@ import { useProps as usePropsComposable } from '@/composables/filmCreate/useProp
 import { useScenes } from '@/composables/filmCreate/useScenes'
 import { useCharacterVariants } from '@/composables/filmCreate/useCharacterVariants'
 import { useImageGeneration } from '@/composables/useImageGeneration'
-import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { imageGenerationTaskAPI } from '@/api/imageGenerationTasks'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import { findVariantAffectedStoryboards } from '@/utils/characterVariantStudio'
 import { resolveSbMainImageRecord, resolveSbVideoRecord, videoCandidateLabel } from '@/utils/storyboardMedia'
 import { refreshSelectedStoryboardVideo } from '@/utils/directorPersistence'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 
 const route = useRoute()
 const router = useRouter()
@@ -3069,15 +3080,30 @@ function framePromptForUnified(sb, slot) {
 }
 
 async function generateUnifiedImage(channel, targetType, target, legacyGenerate, prompt = '') {
-  if (channel !== 'chatgpt_web') return legacyGenerate?.()
+  // 分镜的四/九宫格仍由专用生成器编译多帧提示词；资产模式不经过该旧路径。
+  if (channel === 'api' && targetType === 'storyboard_main' && gridMode.value !== 'single') {
+    return legacyGenerate?.()
+  }
   try {
+    const stylePromptEn = getSelectedStylePrompt()
+    const stylePromptZh = getSelectedStylePromptZh()
     const task = await openImageGenerationTask({
       dramaId: dramaId.value,
       targetType,
       targetId: target?.id,
       generationChannel: channel,
-      prompt: resolveImageGenerationPrompt(targetType, target, prompt),
       aspectRatio: projectAspectRatio.value,
+      styleSnapshot: stylePromptEn || stylePromptZh ? {
+        style: generationStyle.value || null,
+        style_prompt_zh: stylePromptZh || null,
+        style_prompt_en: stylePromptEn || null,
+      } : undefined,
+      assetMode: ['character', 'character_variant', 'scene'].includes(targetType)
+        ? normalizeAssetGenerationMode(targetType, target?.asset_mode)
+        : undefined,
+      useIdentityReference: targetType === 'character_variant'
+        ? target?.use_identity_reference !== 0 && target?.use_identity_reference !== false
+        : undefined,
     })
     return task
   } catch (error) {
@@ -3086,9 +3112,9 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
 }
 
 // 人物状态生图与其它资产一致:按当前生图通道分发(chatgpt_web 走网页生图任务,否则走同步接口)
-function onGenerateVariantImage(variant) {
+function onGenerateVariantImage(variant, channel = imageGenerationDefaultChannel.value) {
   return generateUnifiedImage(
-    imageGenerationDefaultChannel.value,
+    channel,
     'character_variant',
     variant,
     () => generateVariantImage(variant)
@@ -3245,6 +3271,7 @@ const {
   openEditCharLibrary, submitEditCharLibrary,
   onDeleteCharLibrary, onAddCharacterToLibrary, onAddCharacterToMaterialLibrary,
   onAddCharFromLibrary, onAddDramaCharToEpisode,
+  saveCharacterAssetMode,
 } = useCharacters({ store, dramaId, currentEpisodeId, getSelectedStyle, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage })
 
 // ── Composable: Props ──────────────────────────────────
@@ -3289,6 +3316,7 @@ const {
   openEditSceneLibrary, submitEditSceneLibrary,
   onDeleteSceneLibrary, onAddSceneToLibrary, onAddSceneToMaterialLibrary,
   onAddSceneFromLibrary, onAddDramaSceneToEpisode,
+  saveSceneAssetMode,
 } = useScenes({ store, dramaId, currentEpisodeId, getSelectedStyle, scriptLanguage, loadDrama, pollTask, pollUntilResourceHasImage, hasAssetImage, dramaAPI })
 
 // ── Composable: Character Variants（人物状态） ──────────
@@ -3297,7 +3325,7 @@ const {
   loadVariants, refreshLoadedVariants, getVariantsForCharacter, variantOptionLabel,
   variantPanelCharacterId, toggleVariantPanel,
   showVariantEditor, variantEditorForm, variantEditorSaving,
-  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, setVariantDefault, selectVariantCandidate,
+  openVariantEditor, closeVariantEditor, saveVariant, removeVariant, generateVariantImage, updateVariantGenerationSettings, setVariantDefault, selectVariantCandidate,
   sbVariantLinksSaving, hydrateSbVariantLinks, getSbVariantId, getSbSelectedVariant, ensureSbVariantsLoaded, onSbVariantChange,
 } = useCharacterVariants({
   characterAPI,
@@ -3328,6 +3356,16 @@ async function openVariantStudio(character, variant) {
 
 function openVariantFromStudioEdit(variant) {
   openVariantEditor(variantStudioCharacterId.value, variant)
+}
+
+function onVariantStudioModeChange(variant, assetMode) {
+  return updateVariantGenerationSettings(variant, {
+    asset_mode: normalizeAssetGenerationMode('character_variant', assetMode),
+  })
+}
+
+function onVariantStudioIdentityReferenceChange(variant, enabled) {
+  return updateVariantGenerationSettings(variant, { use_identity_reference: !!enabled })
 }
 
 async function onVariantStudioChooseCandidate(variant, candidatePath) {
@@ -3396,7 +3434,6 @@ const resourcePanelCollapsed = ref(false)
 const charactersBlockCollapsed = ref(false)
 const propsBlockCollapsed = ref(false)
 const scenesBlockCollapsed = ref(false)
-const sceneUseQuadGrid = ref(false)
 const propUseQuadGrid = ref(false)  // 道具四视图（与场景四宫格同级选项）
 
 // 分镜行内编辑状态（按 storyboard id 存储）
@@ -7821,6 +7858,46 @@ function pollTaskWithPause(taskId, onDone, meta = {}) {
   })
 }
 
+function currentImageStyleSnapshot() {
+  const stylePromptEn = getSelectedStylePrompt()
+  const stylePromptZh = getSelectedStylePromptZh()
+  if (!stylePromptEn && !stylePromptZh) return undefined
+  return {
+    style: generationStyle.value || null,
+    style_prompt_zh: stylePromptZh || null,
+    style_prompt_en: stylePromptEn || null,
+  }
+}
+
+/** API 生图也使用统一任务：保存与 ChatGPT 相同的模式、画风、负面词和引用快照。 */
+async function submitUnifiedApiImageTask({ targetType, targetId, assetMode }, onDone) {
+  const created = await imageGenerationTaskAPI.create({
+    dramaId: dramaId.value,
+    targetType,
+    targetId,
+    generationChannel: 'api',
+    aspectRatio: projectAspectRatio.value || '16:9',
+    assetMode,
+    styleSnapshot: currentImageStyleSnapshot(),
+  })
+  const submitted = await imageGenerationTaskAPI.submit(created.id)
+  const maxAttempts = 450
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (pipelineAbortRequested.value) throw Object.assign(new Error('全流程已取消'), { pipelineAborted: true })
+    if (pipelinePaused.value) return { paused: true }
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    const task = await imageGenerationTaskAPI.get(submitted.id)
+    if (task.status === 'completed') {
+      if (onDone) await onDone()
+      return { status: 'completed', task }
+    }
+    if (task.status === 'failed' || task.status === 'cancelled') {
+      return { status: task.status, error: task.error_message || '图片生成失败' }
+    }
+  }
+  return { status: 'timeout', error: '图片任务查询超时（超过15分钟）' }
+}
+
 function waitForResume() {
   return new Promise((resolve) => {
     pipelineResolveResume = resolve
@@ -8120,20 +8197,10 @@ async function runOneClickPipeline(textOnly = false) {
         try {
           const stepName = '角色图 ' + (char.name || char.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const res = await characterAPI.generateImage(char.id, undefined, style)
-            const taskId = res?.image_generation?.task_id ?? res?.task_id
-            if (taskId) {
-              const result = await pollTaskWithPause(taskId, () => loadDrama())
-              if (result?.paused) return { paused: true }
-              if (result?.error) throw new Error(result.error)
-            } else {
-              await loadDrama()
-              await pollUntilResourceHasImage(() => {
-                const list = store.currentEpisode?.characters ?? []
-                const c = list.find((x) => Number(x.id) === Number(char.id))
-                return !!(c && (c.image_url || c.local_path))
-              })
-            }
+            const assetMode = normalizeAssetGenerationMode('character', char.asset_mode)
+            const result = await submitUnifiedApiImageTask({ targetType: 'character', targetId: char.id, assetMode }, () => loadDrama())
+            if (result?.paused) return { paused: true }
+            if (result?.error) throw new Error(result.error)
           })
           if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
         } finally {
@@ -8155,21 +8222,10 @@ async function runOneClickPipeline(textOnly = false) {
         try {
           const stepName = '场景图 ' + (scene.location || scene.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const useQuad = !!sceneUseQuadGrid.value
-            const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, use_quad_grid: useQuad })
-            const taskId = res?.image_generation?.task_id ?? res?.task_id
-            if (taskId) {
-              const result = await pollTaskWithPause(taskId, () => loadDrama())
-              if (result?.paused) return { paused: true }
-              if (result?.error) throw new Error(result.error)
-            } else {
-              await loadDrama()
-              await pollUntilResourceHasImage(() => {
-                const list = store.currentEpisode?.scenes ?? []
-                const s = list.find((x) => Number(x.id) === Number(scene.id))
-                return !!(s && (s.image_url || s.local_path))
-              })
-            }
+            const assetMode = normalizeAssetGenerationMode('scene', scene.asset_mode)
+            const result = await submitUnifiedApiImageTask({ targetType: 'scene', targetId: scene.id, assetMode }, () => loadDrama())
+            if (result?.paused) return { paused: true }
+            if (result?.error) throw new Error(result.error)
           })
           if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
         } finally {
@@ -8191,20 +8247,9 @@ async function runOneClickPipeline(textOnly = false) {
         try {
           const stepName = '道具图 ' + (prop.name || prop.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const res = await propAPI.generateImage(prop.id, undefined, style)
-            const taskId = res?.image_generation?.task_id ?? res?.task_id
-            if (taskId) {
-              const result = await pollTaskWithPause(taskId, () => loadDrama())
-              if (result?.paused) return { paused: true }
-              if (result?.error) throw new Error(result.error)
-            } else {
-              await loadDrama()
-              await pollUntilResourceHasImage(() => {
-                const list = store.props ?? []
-                const p = list.find((x) => Number(x.id) === Number(prop.id))
-                return !!(p && (p.image_url || p.local_path))
-              })
-            }
+            const result = await submitUnifiedApiImageTask({ targetType: 'prop', targetId: prop.id }, () => loadDrama())
+            if (result?.paused) return { paused: true }
+            if (result?.error) throw new Error(result.error)
           })
           if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
         } finally {
@@ -8238,26 +8283,30 @@ async function runOneClickPipeline(textOnly = false) {
           const stepName = '分镜图 #' + (sb.storyboard_number ?? sb.id)
           const ok = await pipelineWithRetry(stepName, async () => {
             const useFirstLast = storyboardUseFirstLastFrame.value && !isSbUniversalMode(sb.id)
-            let prompt = sb.polished_prompt || sb.image_prompt || sb.description || ''
-            let frameTypeForCreate = undefined
+            let targetType = 'storyboard_main'
             if (useFirstLast) {
-              prompt = await ensureProfessionalFramePrompt(sb, 'first')
-              frameTypeForCreate = 'storyboard_first'
+              await ensureProfessionalFramePrompt(sb, 'first')
+              targetType = 'storyboard_first'
             }
-            const res = await imagesAPI.create({
-              storyboard_id: sb.id,
-              drama_id: dramaIdVal,
-              prompt,
-              model: undefined,
-              style,
-              frame_type: frameTypeForCreate,
-              aspect_ratio: projectAspectRatio.value || '16:9',
-            })
-            if (res?.task_id) {
-              const result = await pollTaskWithPause(res.task_id, () => loadSingleStoryboardMedia(sb.id))
-              if (result?.paused) return { paused: true }
-              if (result?.error) throw new Error(result.error)
-            } else await loadSingleStoryboardMedia(sb.id)
+            let result
+            if (!useFirstLast && gridMode.value !== 'single') {
+              const legacy = await imagesAPI.create({
+                storyboard_id: sb.id,
+                drama_id: dramaIdVal,
+                prompt: sb.polished_prompt || sb.image_prompt || sb.description || '',
+                model: undefined,
+                style,
+                frame_type: gridMode.value,
+                aspect_ratio: projectAspectRatio.value || '16:9',
+              })
+              result = legacy?.task_id
+                ? await pollTaskWithPause(legacy.task_id, () => loadSingleStoryboardMedia(sb.id))
+                : { status: 'completed' }
+            } else {
+              result = await submitUnifiedApiImageTask({ targetType, targetId: sb.id }, () => loadSingleStoryboardMedia(sb.id))
+            }
+            if (result?.paused) return { paused: true }
+            if (result?.error) throw new Error(result.error)
           })
           if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
         } finally {
@@ -8422,20 +8471,10 @@ async function runRepairPipeline() {
         await checkPause()
         const stepName = '角色图 ' + (char.name || char.id)
         const ok = await pipelineWithRetry(stepName, async () => {
-          const res = await characterAPI.generateImage(char.id, undefined, style)
-          const taskId = res?.image_generation?.task_id ?? res?.task_id
-          if (taskId) {
-            const result = await pollTaskWithPause(taskId, () => loadDrama())
-            if (result?.paused) return { paused: true }
-            if (result?.error) throw new Error(result.error)
-          } else {
-            await loadDrama()
-            await pollUntilResourceHasImage(() => {
-              const list = store.currentEpisode?.characters ?? []
-              const c = list.find((x) => Number(x.id) === Number(char.id))
-              return !!(c && (c.image_url || c.local_path))
-            })
-          }
+          const assetMode = normalizeAssetGenerationMode('character', char.asset_mode)
+          const result = await submitUnifiedApiImageTask({ targetType: 'character', targetId: char.id, assetMode }, () => loadDrama())
+          if (result?.paused) return { paused: true }
+          if (result?.error) throw new Error(result.error)
         })
         if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
       }, { getLabel: (char) => '角色图 ' + (char.name || char.id) })
@@ -8470,21 +8509,10 @@ async function runRepairPipeline() {
         await checkPause()
         const stepName = '场景图 ' + (scene.location || scene.id)
         const ok = await pipelineWithRetry(stepName, async () => {
-          const useQuad = !!sceneUseQuadGrid.value
-          const res = await sceneAPI.generateImage({ scene_id: scene.id, model: undefined, style, use_quad_grid: useQuad })
-          const taskId = res?.image_generation?.task_id ?? res?.task_id
-          if (taskId) {
-            const result = await pollTaskWithPause(taskId, () => loadDrama())
-            if (result?.paused) return { paused: true }
-            if (result?.error) throw new Error(result.error)
-          } else {
-            await loadDrama()
-            await pollUntilResourceHasImage(() => {
-              const list = store.currentEpisode?.scenes ?? []
-              const s = list.find((x) => Number(x.id) === Number(scene.id))
-              return !!(s && (s.image_url || s.local_path))
-            })
-          }
+          const assetMode = normalizeAssetGenerationMode('scene', scene.asset_mode)
+          const result = await submitUnifiedApiImageTask({ targetType: 'scene', targetId: scene.id, assetMode }, () => loadDrama())
+          if (result?.paused) return { paused: true }
+          if (result?.error) throw new Error(result.error)
         })
         if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
       }, { getLabel: (scene) => '场景图 ' + (scene.location || scene.id) })
@@ -8521,20 +8549,9 @@ async function runRepairPipeline() {
         try {
           const stepName = '道具图 ' + (prop.name || prop.id)
           const ok = await pipelineWithRetry(stepName, async () => {
-            const res = await propAPI.generateImage(prop.id, undefined, style)
-            const taskId = res?.image_generation?.task_id ?? res?.task_id
-            if (taskId) {
-              const result = await pollTaskWithPause(taskId, () => loadDrama())
-              if (result?.paused) return { paused: true }
-              if (result?.error) throw new Error(result.error)
-            } else {
-              await loadDrama()
-              await pollUntilResourceHasImage(() => {
-                const list = store.props ?? []
-                const p = list.find((x) => Number(x.id) === Number(prop.id))
-                return !!(p && (p.image_url || p.local_path))
-              })
-            }
+            const result = await submitUnifiedApiImageTask({ targetType: 'prop', targetId: prop.id }, () => loadDrama())
+            if (result?.paused) return { paused: true }
+            if (result?.error) throw new Error(result.error)
           })
           if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
         } finally {
@@ -8595,26 +8612,30 @@ async function runRepairPipeline() {
         const stepName = '分镜图 #' + (sb.storyboard_number ?? sb.id)
         const ok = await pipelineWithRetry(stepName, async () => {
           const useFirstLast = storyboardUseFirstLastFrame.value && !isSbUniversalMode(sb.id)
-          let prompt = sb.polished_prompt || sb.image_prompt || sb.description || ''
-          let frameTypeForCreate = undefined
+          let targetType = 'storyboard_main'
           if (useFirstLast) {
-            prompt = await ensureProfessionalFramePrompt(sb, 'first')
-            frameTypeForCreate = 'storyboard_first'
+            await ensureProfessionalFramePrompt(sb, 'first')
+            targetType = 'storyboard_first'
           }
-          const res = await imagesAPI.create({
-            storyboard_id: sb.id,
-            drama_id: dramaIdVal,
-            prompt,
-            model: undefined,
-            style,
-            frame_type: frameTypeForCreate,
-            aspect_ratio: projectAspectRatio.value || '16:9',
-          })
-          if (res?.task_id) {
-            const result = await pollTaskWithPause(res.task_id, () => loadSingleStoryboardMedia(sb.id))
-            if (result?.paused) return { paused: true }
-            if (result?.error) throw new Error(result.error)
-          } else await loadSingleStoryboardMedia(sb.id)
+          let result
+          if (!useFirstLast && gridMode.value !== 'single') {
+            const legacy = await imagesAPI.create({
+              storyboard_id: sb.id,
+              drama_id: dramaIdVal,
+              prompt: sb.polished_prompt || sb.image_prompt || sb.description || '',
+              model: undefined,
+              style,
+              frame_type: gridMode.value,
+              aspect_ratio: projectAspectRatio.value || '16:9',
+            })
+            result = legacy?.task_id
+              ? await pollTaskWithPause(legacy.task_id, () => loadSingleStoryboardMedia(sb.id))
+              : { status: 'completed' }
+          } else {
+            result = await submitUnifiedApiImageTask({ targetType, targetId: sb.id }, () => loadSingleStoryboardMedia(sb.id))
+          }
+          if (result?.paused) return { paused: true }
+          if (result?.error) throw new Error(result.error)
         })
         if (ok && typeof ok === 'object' && ok.paused) return { paused: true }
       }, { getLabel: (sb) => '分镜图 #' + (sb.storyboard_number ?? sb.id) })
@@ -8718,6 +8739,10 @@ async function applyRouteToStore() {
     store.beginDramaLoad(Number(id))
     try {
       await loadDrama(Number(id))
+      if (serial === routeLoadSerial && route.query.asset === 'states' && route.query.character != null) {
+        const character = (characters.value || []).find((item) => Number(item.id) === Number(route.query.character))
+        if (character) await openVariantStudio(character)
+      }
     } finally {
       await nextTick()
       if (serial === routeLoadSerial) {

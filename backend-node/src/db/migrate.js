@@ -216,6 +216,7 @@ function ensureAllColumns(database) {
     { name: 'seedance2_asset', type: 'TEXT' },   // JSON: 即梦/Seedance2 素材库认证 hub_asset_id / asset_url 等
     { name: 'seedance2_voice_asset', type: 'TEXT' }, // JSON: Seedance 2.0 音色参考音频（仅 SD2 模型有效）
     { name: 'negative_prompt', type: 'TEXT' },
+    { name: 'asset_mode', type: "TEXT DEFAULT 'TURNAROUND'" },
     { name: 'source_key',        type: 'TEXT' },   // 单集制作包导入:包内角色来源 key
     { name: 'created_at',        type: 'TEXT' },
     { name: 'updated_at',        type: 'TEXT' },
@@ -237,6 +238,7 @@ function ensureAllColumns(database) {
     { name: 'extra_images',     type: 'TEXT' },
     { name: 'ref_image',        type: 'TEXT' },  // 用户上传的参考图（本地相对路径或 URL）
     { name: 'negative_prompt',  type: 'TEXT' },
+    { name: 'asset_mode',       type: "TEXT DEFAULT 'NORMAL'" },
     { name: 'storyboard_count', type: 'INTEGER DEFAULT 0' },
     { name: 'error_msg',        type: 'TEXT' },
     { name: 'source_key',       type: 'TEXT' },     // 单集制作包导入:包内场景来源 key
@@ -600,6 +602,11 @@ function ensureAllColumns(database) {
   )`);
   database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_drama_status ON image_generation_tasks(drama_id, status, created_at)');
   database.exec('CREATE INDEX IF NOT EXISTS idx_image_generation_tasks_batch_queue ON image_generation_tasks(batch_id, queue_position)');
+  ensureColumns(database, 'image_generation_tasks', [
+    { name: 'asset_mode', type: 'TEXT' },
+    { name: 'negative_prompt_snapshot', type: 'TEXT' },
+    { name: 'style_snapshot', type: 'TEXT' },
+  ]);
   ensureColumns(database, 'external_generation_jobs', [
     { name: 'image_generation_task_id', type: 'TEXT' },
   ]);
@@ -624,6 +631,10 @@ function ensureAllColumns(database) {
       deleted_at TEXT
     )`);
   } catch (_) {}
+  ensureColumns(database, 'character_variants', [
+    { name: 'asset_mode', type: "TEXT DEFAULT 'SINGLE'" },
+    { name: 'use_identity_reference', type: 'INTEGER DEFAULT 1' },
+  ]);
 
   // --- 单集制作包导入:分镜-角色变体关联表 ---
   try {

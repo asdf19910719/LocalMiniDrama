@@ -5,6 +5,7 @@ const AdmZip = require('adm-zip');
 const { randomUUID } = require('crypto');
 const storageLayout = require('./storageLayout');
 const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
+const { normalizeAssetMode } = require('./assetGenerationModes');
 
 function toJsonText(value) {
   if (value == null || value === '') return null;
@@ -191,9 +192,9 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'characters', files, c.image_file, 'char_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'characters', files, c.extra_image_files, 'char_extra_imp');
     const info = db.prepare(
-      `INSERT INTO characters (drama_id, name, role, description, personality, appearance, voice_style, polished_prompt, source_key, local_path, extra_images, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(dramaId, c.name, c.role || null, c.description || null, c.personality || null, c.appearance || null, c.voice_style || null, c.polished_prompt || null, c.source_key || null, localPath, extraImagesJson, i, now, now);
+      `INSERT INTO characters (drama_id, name, role, description, personality, appearance, voice_style, polished_prompt, negative_prompt, source_key, local_path, extra_images, asset_mode, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(dramaId, c.name, c.role || null, c.description || null, c.personality || null, c.appearance || null, c.voice_style || null, c.polished_prompt || null, c.negative_prompt || null, c.source_key || null, localPath, extraImagesJson, normalizeAssetMode('character', c.asset_mode), i, now, now);
     const charId = info.lastInsertRowid;
     charNewIds.push(charId);
 
@@ -204,8 +205,8 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
       const vLocalPath = saveMediaFile(storagePath, projectDir, 'characters', files, v.image_file, 'char_var_imp');
       const vExtrasJson = saveExtraImages(storagePath, projectDir, 'characters', files, v.extra_image_files, 'char_var_extra_imp');
       const vInfo = db.prepare(
-        `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, image_url, local_path, extra_images, is_default, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, image_url, local_path, extra_images, asset_mode, use_identity_reference, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         charId,
         v.source_key || null,
@@ -217,6 +218,8 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
         null, // image_url：远端 URL 不随 ZIP 迁移，与首尾帧导入一致，置空由 local_path 承载
         vLocalPath,
         vExtrasJson,
+        normalizeAssetMode('character_variant', v.asset_mode),
+        v.use_identity_reference === 0 ? 0 : 1,
         v.is_default ? 1 : 0,
         now,
         now
@@ -276,8 +279,8 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     const localPath = saveMediaFile(storagePath, projectDir, 'scenes', files, s.image_file, 'scene_imp');
     const extraImagesJson = saveExtraImages(storagePath, projectDir, 'scenes', files, s.extra_image_files, 'scene_extra_imp');
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, source_key, state, atmosphere, negative_prompt, local_path, extra_images, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, polished_prompt, source_key, state, atmosphere, negative_prompt, local_path, extra_images, asset_mode, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       dramaId,
       epId,
@@ -291,6 +294,7 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
       s.negative_prompt || null,
       localPath,
       extraImagesJson,
+      normalizeAssetMode('scene', s.asset_mode),
       now,
       now,
     );

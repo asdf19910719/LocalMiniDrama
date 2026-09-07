@@ -26,6 +26,7 @@ describe('unified image generation task service', () => {
       id TEXT PRIMARY KEY, drama_id INTEGER NOT NULL, target_type TEXT NOT NULL,
       target_id INTEGER NOT NULL, generation_channel TEXT NOT NULL, provider TEXT, model TEXT,
       prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT,
+      asset_mode TEXT, negative_prompt_snapshot TEXT, style_snapshot TEXT,
       status TEXT NOT NULL, batch_id TEXT, queue_position INTEGER, image_generation_id INTEGER,
       external_job_id TEXT, error_code TEXT, error_message TEXT, created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL, completed_at TEXT
@@ -50,6 +51,27 @@ describe('unified image generation task service', () => {
     assert.equal(task.generation_channel, 'chatgpt_web');
     assert.equal(task.status, 'draft');
     assert.equal(service.getDefaultChannel(db, 7), 'chatgpt_web');
+  });
+
+  it('persists the resolved mode, negative prompt, and style snapshot used by generation', () => {
+    const styleSnapshot = {
+      style: 'cinematic',
+      style_prompt_zh: '写实电影质感，低饱和色彩',
+      style_prompt_en: 'cinematic realism, low saturation',
+    };
+    const task = service.createTask(db, {
+      dramaId: 7,
+      targetType: 'character_variant',
+      targetId: 19,
+      generationChannel: 'chatgpt_web',
+      assetMode: 'TURNAROUND',
+      negativePromptSnapshot: 'extra limbs, inconsistent face',
+      styleSnapshot,
+    });
+
+    assert.equal(task.asset_mode, 'TURNAROUND');
+    assert.equal(task.negative_prompt_snapshot, 'extra limbs, inconsistent face');
+    assert.deepEqual(JSON.parse(task.style_snapshot), styleSnapshot);
   });
 
   it('rejects invalid channels and target types', () => {

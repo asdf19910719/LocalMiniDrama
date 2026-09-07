@@ -1,6 +1,8 @@
 const { bindStoryboardFrameImage } = require('./storyboardFrameBinding');
 const path = require('node:path');
 const { resolveStoryboardSlots } = require('./referenceSlotService');
+const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
+const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
 
 const TABLES = {
   character: { table: 'characters', name: 'name' },
@@ -27,6 +29,50 @@ function parseList(value) {
   }
 }
 
+function parseObject(value) {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return { ...value };
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function appendPrompt(base, extra) {
+  const current = String(base || '').trim();
+  const add = String(extra || '').trim();
+  if (!add || current.toLowerCase().includes(add.toLowerCase())) return current;
+  return current ? `${current}\n\n【项目画风】${add}` : add;
+}
+
+function resolveStyleSnapshot(db, dramaId, task) {
+  const supplied = parseObject(task.style_snapshot ?? task.styleSnapshot);
+  if (Object.keys(supplied).length) {
+    const merged = mergeCfgStyleWithDrama({}, {
+      style: supplied.style,
+      metadata: {
+        style_prompt_zh: supplied.style_prompt_zh,
+        style_prompt_en: supplied.style_prompt_en,
+      },
+    });
+    return {
+      style: supplied.style || null,
+      style_prompt_zh: merged.style?.default_style_zh || null,
+      style_prompt_en: merged.style?.default_style_en || null,
+    };
+  }
+  const drama = db.prepare('SELECT style, metadata FROM dramas WHERE id=? AND deleted_at IS NULL').get(dramaId);
+  if (!drama) return {};
+  const merged = mergeCfgStyleWithDrama({}, drama);
+  return {
+    style: drama.style || null,
+    style_prompt_zh: merged.style?.default_style_zh || null,
+    style_prompt_en: merged.style?.default_style_en || null,
+  };
+}
+
 function appendHistory(row) {
   const old = row.local_path || row.image_url;
   const history = parseList(row.extra_images);
@@ -44,7 +90,8 @@ function resolveTarget(db, task) {
   }
   if (targetType === 'character_variant') {
     const row = db.prepare(`SELECT cv.*, c.drama_id, c.name AS character_name,
-      c.image_url AS character_image_url, c.local_path AS character_local_path
+      c.image_url AS character_image_url, c.local_path AS character_local_path,
+      c.negative_prompt AS character_negative_prompt
       FROM character_variants cv
       JOIN characters c ON c.id = cv.character_id WHERE cv.id=? AND cv.deleted_at IS NULL`).get(targetId);
     if (!row) throw new Error(`Image generation ${targetType} target not found`);
@@ -120,21 +167,36 @@ function collectStoryboardReferences(db, target) {
 
 function buildGenerationInput(db, task) {
   const target = resolveTarget(db, task);
+  const { dramaId } = targetValues(task);
+  const hasReferenceSnapshot = task.reference_manifest != null || task.referenceManifest != null;
   let prompt = '';
   const references = [];
   let frameType = null;
+  let assetMode = null;
   if (target.target_type === 'character') {
-    prompt = target.polished_prompt || target.appearance || target.description || target.name || '';
+    assetMode = normalizeAssetMode('character', task.asset_mode ?? task.assetMode ?? target.asset_mode);
+    prompt = assetMode === 'SINGLE'
+      ? (target.appearance || target.description || target.name || '')
+      : (target.polished_prompt || target.appearance || target.description || target.name || '');
   } else if (target.target_type === 'character_variant') {
+    assetMode = normalizeAssetMode('character_variant', task.asset_mode ?? task.assetMode ?? target.asset_mode);
     prompt = target.image_prompt || target.appearance || target.description || target.name || '';
-    const identityUrl = addressableReferenceUrl(db, {
-      local_path: target.character_local_path,
-      image_url: target.character_image_url,
-    });
-    const identityReference = reference('character_identity', target.character_id, identityUrl);
-    if (identityReference) references.push(identityReference);
+    const useIdentityReference = task.use_identity_reference == null
+      ? target.use_identity_reference !== 0
+      : task.use_identity_reference === true || task.use_identity_reference === 1;
+    if (useIdentityReference) {
+      const identityUrl = addressableReferenceUrl(db, {
+        local_path: target.character_local_path,
+        image_url: target.character_image_url,
+      });
+      const identityReference = reference('character_identity', target.character_id, identityUrl);
+      if (identityReference) references.push(identityReference);
+    }
   } else if (target.target_type === 'scene') {
-    prompt = target.polished_prompt_single || target.polished_prompt || target.prompt || target.location || '';
+    assetMode = normalizeAssetMode('scene', task.asset_mode ?? task.assetMode ?? target.asset_mode);
+    prompt = assetMode === 'QUAD_GRID'
+      ? (target.polished_prompt || target.prompt || target.location || '')
+      : (target.polished_prompt_single || target.prompt || target.polished_prompt || target.location || '');
   } else if (target.target_type === 'prop') {
     prompt = target.polished_prompt || target.prompt || target.description || target.name || '';
   } else {
@@ -160,7 +222,33 @@ function buildGenerationInput(db, task) {
       if (ref) references.push(ref);
     }
   }
-  return { target, prompt: String(task.prompt_snapshot || prompt).trim(), references, frameType };
+  const styleSnapshot = resolveStyleSnapshot(db, dramaId, task);
+  const persistedPrompt = task.prompt_snapshot ?? task.promptSnapshot;
+  const requestedPrompt = String(persistedPrompt ?? prompt).trim();
+  const modePrompt = persistedPrompt != null
+    ? requestedPrompt
+    : (assetMode ? buildModePrompt(target.target_type, assetMode, requestedPrompt) : requestedPrompt);
+  const stylePrompt = styleSnapshot.style_prompt_en || styleSnapshot.style_prompt_zh || styleSnapshot.style || '';
+  const negativePrompt = String(
+    task.negative_prompt_snapshot
+      ?? task.negativePromptSnapshot
+      ?? target.negative_prompt
+      ?? target.character_negative_prompt
+      ?? ''
+  ).trim();
+  return {
+    target,
+    // prompt_snapshot is the already compiled, immutable execution prompt. It
+    // must not receive mode/style instructions again when an API task submits.
+    prompt: persistedPrompt != null ? modePrompt : appendPrompt(modePrompt, stylePrompt),
+    references: hasReferenceSnapshot
+      ? parseList(task.reference_manifest ?? task.referenceManifest)
+      : references,
+    frameType,
+    assetMode,
+    negativePrompt,
+    styleSnapshot,
+  };
 }
 
 function bindAsset(db, table, targetId, image) {

@@ -3,6 +3,7 @@ const path = require('path');
 const storageLayout = require('./storageLayout');
 const { aspectRatioToSize } = require('./imageService');
 const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 
 /** 解析行内 extra_images JSON 字符串为数组（解析失败时保留原值） */
 function parseVariantRow(row) {
@@ -52,8 +53,8 @@ function createVariant(db, input = {}) {
     }
     const now = new Date().toISOString();
     const info = db.prepare(
-      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, asset_mode, use_identity_reference, is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       cid,
       sourceKey,
@@ -62,6 +63,8 @@ function createVariant(db, input = {}) {
       input.appearance ?? null,
       input.image_prompt ?? null,
       input.negative_prompt ?? null,
+      normalizeAssetMode('character_variant', input.asset_mode),
+      input.use_identity_reference === false || input.use_identity_reference === 0 ? 0 : 1,
       isDefault,
       now,
       now
@@ -73,6 +76,7 @@ function createVariant(db, input = {}) {
 const VARIANT_UPDATE_FIELDS = [
   'name', 'description', 'appearance', 'image_prompt', 'negative_prompt',
   'is_default', 'image_url', 'local_path', 'extra_images', 'source_key',
+  'asset_mode', 'use_identity_reference',
 ];
 
 /** 更新状态；仅接受白名单字段，is_default=1 时先清掉同人物其它默认。
@@ -92,9 +96,15 @@ function updateVariant(db, id, patch = {}) {
       if (key === 'is_default') {
         updates.push('is_default = ?');
         params.push(patch.is_default ? 1 : 0);
+      } else if (key === 'use_identity_reference') {
+        updates.push('use_identity_reference = ?');
+        params.push(patch.use_identity_reference ? 1 : 0);
       } else if (key === 'extra_images') {
         updates.push('extra_images = ?');
         params.push(Array.isArray(patch.extra_images) ? JSON.stringify(patch.extra_images) : patch.extra_images);
+      } else if (key === 'asset_mode') {
+        updates.push('asset_mode = ?');
+        params.push(normalizeAssetMode('character_variant', patch.asset_mode));
       } else {
         updates.push(key + ' = ?');
         params.push(patch[key]);
@@ -285,11 +295,17 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
   } catch (_) {}
   if (!imageSize) imageSize = effectiveCfg?.style?.default_image_size || '1920x1920';
 
-  const fullPrompt = appendPrompt(prompt, style);
+  const assetMode = normalizeAssetMode('character_variant', options.assetMode ?? variant.asset_mode);
+  const fullPrompt = appendPrompt(buildModePrompt('character_variant', assetMode, prompt), style);
   const model = options.model ? String(options.model).trim() || null : null;
   const preferredProvider = !model && effectiveCfg?.ai?.default_image_provider ? effectiveCfg.ai.default_image_provider : null;
   const userNeg = imageClient.resolveAssetUserNegativeForApi(model, variant.negative_prompt || char.negative_prompt);
-  const identityReference = String(char.local_path || char.image_url || '').trim();
+  const useIdentityReference = options.useIdentityReference == null
+    ? variant.use_identity_reference !== 0
+    : options.useIdentityReference === true;
+  const identityReference = useIdentityReference
+    ? String(char.local_path || char.image_url || '').trim()
+    : '';
   const rawStorage = cfg?.storage?.local_path;
   const storagePath = rawStorage
     ? (path.isAbsolute(rawStorage) ? rawStorage : path.join(process.cwd(), rawStorage))

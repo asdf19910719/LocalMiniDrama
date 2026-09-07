@@ -67,22 +67,25 @@ function seedSourceDb(db, storageDir) {
   db.prepare("UPDATE sqlite_sequence SET seq = seq + 10 WHERE name = 'character_variants'").run();
 
   const charId = Number(db.prepare(
-    `INSERT INTO characters (drama_id, name, role, description, appearance, source_key, local_path, extra_images, sort_order, created_at, updated_at)
-     VALUES (?, '林晚', '主角', '女主角', '黑长直少女', 'char_linwan', ?, ?, 0, ?, ?)`
+    `INSERT INTO characters (drama_id, name, role, description, appearance, source_key, local_path, extra_images, asset_mode, sort_order, created_at, updated_at)
+     VALUES (?, '林晚', '主角', '女主角', '黑长直少女', 'char_linwan', ?, ?, 'SINGLE', 0, ?, ?)`
   ).run(dramaId, media.charMain, JSON.stringify([media.charExtra]), now, now).lastInsertRowid);
 
   const insertVariant = (v) => Number(db.prepare(
-    `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, local_path, extra_images, is_default, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO character_variants (character_id, source_key, name, description, appearance, image_prompt, negative_prompt, local_path, extra_images, asset_mode, use_identity_reference, is_default, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     charId, v.source_key, v.name, v.description, v.appearance, v.image_prompt, v.negative_prompt,
-    v.local_path, v.extra_images ? JSON.stringify(v.extra_images) : null, v.is_default, now, now
+    v.local_path, v.extra_images ? JSON.stringify(v.extra_images) : null,
+    v.asset_mode || 'SINGLE', v.use_identity_reference == null ? 1 : v.use_identity_reference,
+    v.is_default, now, now
   ).lastInsertRowid);
 
   const variantDefaultId = insertVariant({
     source_key: 'default', name: '常态', description: '日常校服', appearance: '白衬衫',
     image_prompt: 'white shirt school uniform', negative_prompt: 'lowres',
     local_path: media.varDefault, extra_images: [media.varDefaultExtra], is_default: 1,
+    asset_mode: 'TURNAROUND', use_identity_reference: 0,
   });
   const variantInjuredId = insertVariant({
     source_key: 'injured', name: '受伤', description: '手臂缠绷带', appearance: '绷带',
@@ -91,8 +94,8 @@ function seedSourceDb(db, storageDir) {
   });
 
   const sceneId = Number(db.prepare(
-    `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, source_key, state, atmosphere, negative_prompt, created_at, updated_at)
-     VALUES (?, ?, '废弃教学楼', '雨夜', '昏暗走廊', 'scene_corridor_rain', 'night', '湿冷压抑', 'sunlight', ?, ?)`
+    `INSERT INTO scenes (drama_id, episode_id, location, time, prompt, source_key, state, atmosphere, negative_prompt, asset_mode, created_at, updated_at)
+     VALUES (?, ?, '废弃教学楼', '雨夜', '昏暗走廊', 'scene_corridor_rain', 'night', '湿冷压抑', 'sunlight', 'QUAD_GRID', ?, ?)`
   ).run(dramaId, epId, now, now).lastInsertRowid);
 
   const propId = Number(db.prepare(
@@ -164,8 +167,11 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
     const project = parseProjectJson(buffer);
     const exportedChar = project.characters[0];
     assert.equal(exportedChar.source_key, 'char_linwan');
+    assert.equal(exportedChar.asset_mode, 'SINGLE');
     assert.deepEqual(exportedChar.variants.map((v) => v.source_key), ['default', 'injured']);
     assert.equal(exportedChar.variants[0].is_default, 1);
+    assert.equal(exportedChar.variants[0].asset_mode, 'TURNAROUND');
+    assert.equal(exportedChar.variants[0].use_identity_reference, 0);
     assert.ok(exportedChar.variants[0].image_file, 'variant 主图应打包进 ZIP');
     const sb1Export = project.episodes[0].storyboards[0];
     const sb2Export = project.episodes[0].storyboards[1];
@@ -189,6 +195,7 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
     assert.equal(project.scenes[0].source_key, 'scene_corridor_rain');
     assert.equal(project.scenes[0].atmosphere, '湿冷压抑');
     assert.equal(project.scenes[0].negative_prompt, 'sunlight');
+    assert.equal(project.scenes[0].asset_mode, 'QUAD_GRID');
     assert.equal(project.props[0].negative_prompt, 'oversized');
 
     // 导入到全新库
@@ -208,6 +215,7 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
       assert.equal(newChar.name, '林晚');
       assert.equal(newChar.source_key, 'char_linwan');
       assert.notEqual(newChar.id, srcIds.charId);
+      assert.equal(newChar.asset_mode, 'SINGLE');
 
       // 状态：数量、source_key、字段，新 id ≠ 旧 id
       const newVariants = dstDb.prepare(
@@ -219,6 +227,8 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
       assert.deepEqual(newVariants.map((v) => v.is_default), [1, 0]);
       assert.deepEqual(newVariants.map((v) => v.image_prompt), ['white shirt school uniform', 'bandaged arm']);
       assert.deepEqual(newVariants.map((v) => v.negative_prompt), ['lowres', null]);
+      assert.equal(newVariants[0].asset_mode, 'TURNAROUND');
+      assert.equal(newVariants[0].use_identity_reference, 0);
       const oldVariantIds = [srcIds.variantDefaultId, srcIds.variantInjuredId];
       for (const v of newVariants) {
         assert.ok(!oldVariantIds.includes(Number(v.id)), `新 variant id ${v.id} 不应与源库 id 相同`);
@@ -249,6 +259,7 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
       assert.equal(newScene.location, '废弃教学楼');
       assert.equal(newScene.atmosphere, '湿冷压抑');
       assert.equal(newScene.negative_prompt, 'sunlight');
+      assert.equal(newScene.asset_mode, 'QUAD_GRID');
       const newProp = dstDb.prepare('SELECT * FROM props WHERE deleted_at IS NULL').get();
       assert.equal(newProp.source_key, 'prop_brass_key');
       assert.equal(newProp.negative_prompt, 'oversized');

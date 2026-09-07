@@ -17,6 +17,7 @@ export function normalizeImageGenerationTask(task) {
 }
 
 export function shouldPollImageGenerationTask(task) {
+  if (task?.generation_channel === 'api') return task?.status === 'generating'
   return task?.generation_channel === 'chatgpt_web' && POLLING_STATUSES.has(task?.status)
 }
 

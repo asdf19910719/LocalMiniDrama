@@ -5,6 +5,7 @@ import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { uploadAPI } from '@/api/upload'
 import { useGenerationTaskStore, GEN_RESOURCE } from '@/stores/generationTaskStore'
 import { buildExtractTaskMeta, isEpisodeExtractRunning } from '@/composables/useGenerationTaskSync'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 
 /**
  * 场景管理 Composable
@@ -321,18 +322,19 @@ export function useScenes(deps) {
     }
   }
 
-  async function onGenerateSceneImage(scene, useQuadGrid = false) {
+  async function onGenerateSceneImage(scene) {
     scene.errorMsg = ''
     scene.error_msg = ''
     const meta = buildSceneImageMeta(scene)
     generatingSceneIds.add(scene.id)
     genStore.markRunning(meta)
     try {
+      const assetMode = normalizeAssetGenerationMode('scene', scene.asset_mode)
       const res = await sceneAPI.generateImage({
         scene_id: scene.id,
         model: undefined,
         style: getSelectedStyle(),
-        use_quad_grid: !!useQuadGrid
+        asset_mode: assetMode
       })
       const taskId = res?.image_generation?.task_id ?? res?.task_id
       if (taskId) {
@@ -358,6 +360,19 @@ export function useScenes(deps) {
     } finally {
       generatingSceneIds.delete(scene.id)
       genStore.markDone(meta)
+    }
+  }
+
+  async function saveSceneAssetMode(scene, value) {
+    if (!scene?.id) return
+    const previous = scene.asset_mode
+    const assetMode = normalizeAssetGenerationMode('scene', value)
+    scene.asset_mode = assetMode
+    try {
+      await sceneAPI.update(scene.id, { asset_mode: assetMode })
+    } catch (e) {
+      scene.asset_mode = previous
+      ElMessage.error(e?.message || '场景生图模式保存失败')
     }
   }
 
@@ -634,6 +649,7 @@ export function useScenes(deps) {
     onCloseSceneDialog,
     onDeleteScene,
     onGenerateSceneImage,
+    saveSceneAssetMode,
     loadSceneLibraryList,
     debouncedLoadSceneLibrary,
     loadDramaAllSceneList,
