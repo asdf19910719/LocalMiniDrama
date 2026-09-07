@@ -158,3 +158,21 @@ test('permanent deletion removes episode import and upscale leaf records', (t) =
   assert.equal(count(db, 'async_tasks', "id = 'upscale-task-target'"), 0);
   assert.equal(count(db, 'async_tasks', "id = 'upscale-task-keep'"), 1);
 });
+
+test('soft-deleted projects require explicit includeDeleted opt-in', (t) => {
+  const { db, storageRoot, legacyProjectDir } = setup();
+  t.after(() => { db.close(); fs.rmSync(storageRoot, { recursive: true, force: true }); });
+  const cfg = { storage: { local_path: storageRoot } };
+
+  assert.equal(previewProjectDeletion(db, cfg, 3), null);
+  assert.equal(deleteProjectPermanently(db, cfg, { error() {} }, 3), null);
+  assert.equal(count(db, 'dramas', 'id = ?', 3), 1);
+  assert.equal(fs.existsSync(legacyProjectDir), true);
+
+  const preview = previewProjectDeletion(db, cfg, 3, { includeDeleted: true });
+  assert.equal(preview.project.id, 3);
+  const result = deleteProjectPermanently(db, cfg, { error() {} }, 3, { includeDeleted: true });
+  assert.equal(result.deleted, true);
+  assert.equal(count(db, 'dramas', 'id = ?', 3), 0);
+  assert.equal(fs.existsSync(legacyProjectDir), false);
+});

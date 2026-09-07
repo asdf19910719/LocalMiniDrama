@@ -59,3 +59,18 @@ test('DELETE drama returns 404 when the project does not exist', (t) => {
   assert.equal(res.statusCode, 404);
   assert.equal(res.body.error.code, 'NOT_FOUND');
 });
+
+test('DELETE drama returns 404 for a soft-deleted project', (t) => {
+  const { db, storageRoot, projectDir } = setup();
+  t.after(() => { db.close(); fs.rmSync(storageRoot, { recursive: true, force: true }); });
+  db.prepare("UPDATE dramas SET deleted_at = '2026-09-07T00:00:00.000Z' WHERE id = 1").run();
+  const routes = createDramaRoutes(db, { storage: { local_path: storageRoot } }, { error() {}, info() {} });
+  const res = responseCapture();
+
+  routes.deleteDrama({ params: { id: '1' } }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.error.code, 'NOT_FOUND');
+  assert.equal(db.prepare('SELECT COUNT(*) AS total FROM dramas WHERE id = 1').get().total, 1);
+  assert.equal(fs.existsSync(projectDir), true);
+});

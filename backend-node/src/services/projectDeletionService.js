@@ -150,10 +150,10 @@ function projectStorageSummary(cfg, project) {
   return summary;
 }
 
-function previewProjectDeletion(db, cfg, dramaId) {
+function previewProjectDeletion(db, cfg, dramaId, { includeDeleted = false } = {}) {
   const id = Number(dramaId);
   if (!Number.isInteger(id) || id <= 0) return null;
-  const project = db.prepare('SELECT * FROM dramas WHERE id = ?').get(id);
+  const project = db.prepare(`SELECT * FROM dramas WHERE id = ?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`).get(id);
   if (!project) return null;
   const owned = discoverProjectOwnedIds(db, id);
   const counts = emptyCounts();
@@ -277,8 +277,8 @@ function cleanupProjectDirectory(storage) {
   }
 }
 
-function deleteProjectPermanently(db, cfg, log, dramaId) {
-  const preview = previewProjectDeletion(db, cfg, dramaId);
+function deleteProjectPermanently(db, cfg, log, dramaId, { includeDeleted = false } = {}) {
+  const preview = previewProjectDeletion(db, cfg, dramaId, { includeDeleted });
   if (!preview) return null;
   const owned = discoverProjectOwnedIds(db, Number(dramaId));
   const counts = emptyCounts();
