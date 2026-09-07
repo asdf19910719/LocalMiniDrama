@@ -22,6 +22,7 @@ function setup() {
     VALUES (1, '删除目标', ?, 'draft', ?, ?), (2, '保留项目', ?, 'draft', ?, ?)`,
   JSON.stringify({ storage_folder_label: 'target' }), now, now,
   JSON.stringify({ storage_folder_label: 'keep' }), now, now);
+  insert("INSERT INTO dramas (id, title, metadata, status, created_at, updated_at, deleted_at) VALUES (3, '历史软删除项目', ?, 'draft', ?, ?, ?)", JSON.stringify({ storage_folder_label: 'legacy' }), now, now, now);
   insert("INSERT INTO episodes (id, drama_id, episode_number, title, status, created_at, updated_at) VALUES (11, 1, 1, '目标集', 'draft', ?, ?), (21, 2, 1, '保留集', 'draft', ?, ?)", now, now, now, now);
   insert("INSERT INTO storyboards (id, episode_id, storyboard_number, status, created_at, updated_at) VALUES (111, 11, 1, 'draft', ?, ?), (211, 21, 1, 'draft', ?, ?)", now, now, now, now);
   insert("INSERT INTO characters (id, drama_id, name, created_at, updated_at) VALUES (12, 1, '目标角色', ?, ?), (22, 2, '保留角色', ?, ?)", now, now, now, now);
@@ -38,9 +39,9 @@ function setup() {
   insert("INSERT INTO scene_libraries (drama_id, location, created_at, updated_at) VALUES (1, '目标库场景', ?, ?), (2, '保留库场景', ?, ?), (NULL, '公共场景', ?, ?)", now, now, now, now, now, now);
   insert("INSERT INTO prop_libraries (drama_id, name, created_at, updated_at) VALUES (1, '目标库道具', ?, ?), (2, '保留库道具', ?, ?), (NULL, '公共道具', ?, ?)", now, now, now, now, now, now);
   insert("INSERT INTO assets (drama_id, name, created_at, updated_at) VALUES (1, '目标素材', ?, ?), (2, '保留素材', ?, ?), (NULL, '公共素材', ?, ?)", now, now, now, now, now, now);
-  insert("INSERT INTO image_generations (id, drama_id, storyboard_id, character_id, scene_id, status, created_at, updated_at) VALUES (16, 1, 111, 12, 13, 'completed', ?, ?), (26, 2, 211, 22, 23, 'completed', ?, ?)", now, now, now, now);
-  insert("INSERT INTO video_generations (id, drama_id, storyboard_id, scene_id, status, created_at, updated_at) VALUES (17, 1, 111, 13, 'completed', ?, ?), (27, 2, 211, 23, 'completed', ?, ?)", now, now, now, now);
-  insert("INSERT INTO video_merges (id, drama_id, episode_id, status, created_at) VALUES (18, 1, 11, 'completed', ?), (28, 2, 21, 'completed', ?)", now, now);
+  insert("INSERT INTO image_generations (id, drama_id, storyboard_id, character_id, scene_id, task_id, status, created_at, updated_at) VALUES (16, 1, 111, 12, 13, 'image-task-target', 'completed', ?, ?), (26, 2, 211, 22, 23, 'image-task-keep', 'completed', ?, ?)", now, now, now, now);
+  insert("INSERT INTO video_generations (id, drama_id, storyboard_id, scene_id, task_id, status, created_at, updated_at) VALUES (17, 1, 111, 13, 'video-task-target', 'completed', ?, ?), (27, 2, 211, 23, 'video-task-keep', 'completed', ?, ?)", now, now, now, now);
+  insert("INSERT INTO video_merges (id, drama_id, episode_id, task_id, status, created_at) VALUES (18, 1, 11, 'merge-task-target', 'completed', ?), (28, 2, 21, 'merge-task-keep', 'completed', ?)", now, now);
   insert("INSERT INTO image_generation_batches (id, drama_id, resource_scope, generation_channel, created_at, updated_at) VALUES ('batch-1', 1, 'project', 'local', ?, ?), ('batch-2', 2, 'project', 'local', ?, ?)", now, now, now, now);
   insert("INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, batch_id, created_at, updated_at) VALUES ('task-1', 1, 'storyboard_main', 111, 'local', 'batch-1', ?, ?), ('task-2', 2, 'storyboard_main', 211, 'local', 'batch-2', ?, ?)", now, now, now, now);
   insert("INSERT INTO external_generation_jobs (id, drama_id, storyboard_id, site, prompt_snapshot, prompt_hash, created_at, updated_at) VALUES ('job-1', 1, 111, 'site', '目标', 'hash', ?, ?), ('job-2', 2, 211, 'site', '保留', 'hash', ?, ?)", now, now, now, now);
@@ -49,13 +50,25 @@ function setup() {
   insert("INSERT INTO external_generation_events (id, attempt_id, idempotency_key, sequence, event_type, created_at) VALUES ('event-1', 'attempt-1', 'idem-1', 1, 'done', ?), ('event-2', 'attempt-2', 'idem-2', 1, 'done', ?)", now, now);
   insert("INSERT INTO external_generation_sessions (id, drama_id, site, created_at, updated_at) VALUES ('session-1', 1, 'site', ?, ?), ('session-2', 2, 'site', ?, ?)", now, now, now, now);
   insert("INSERT INTO external_ai_package_tasks (package_id, drama_id, target_episode_number, assets_digest, context_markdown, instructions_markdown, asset_manifest_json, asset_snapshot_json, response_schema_json, created_at) VALUES ('package-1', 1, 1, 'digest', 'context', 'instructions', '{}', '{}', '{}', ?), ('package-2', 2, 1, 'digest', 'context', 'instructions', '{}', '{}', '{}', ?)", now, now);
-  insert("INSERT INTO async_tasks (id, type, status, resource_id, created_at, updated_at) VALUES ('async-1', 'image', 'completed', '16', ?, ?), ('async-2', 'image', 'completed', '26', ?, ?)", now, now, now, now);
+  insert("INSERT INTO director_jobs (id, status, created_at, updated_at) VALUES ('director-job-target', 'ready', ?, ?), ('director-job-keep', 'ready', ?, ?)", now, now, now, now);
+  insert("INSERT INTO director_artifacts (id, job_id, attempt_number, version, artifact_path, sha256, file_size, manifest_json, created_at) VALUES ('artifact-target', 'director-job-target', 1, 1, 'target.mp4', 'hash', 1, '{}', ?), ('artifact-null-job', 'orphaned-director-job', 1, 1, 'target-null.mp4', 'hash', 1, '{}', ?), ('artifact-keep', 'director-job-keep', 1, 1, 'keep.mp4', 'hash', 1, '{}', ?)", now, now, now);
+  insert("INSERT INTO director_candidate_groups (id, shot_id, created_at, updated_at) VALUES ('group-target', '111', ?, ?), ('group-keep', '211', ?, ?)", now, now, now, now);
+  insert("INSERT INTO director_candidates (id, group_id, artifact_id, job_id, created_at, updated_at) VALUES ('candidate-target', 'group-target', 'artifact-target', 'director-job-target', ?, ?), ('candidate-null-job', 'group-target', 'artifact-null-job', NULL, ?, ?), ('candidate-keep', 'group-keep', 'artifact-keep', 'director-job-keep', ?, ?)", now, now, now, now, now, now);
+  insert("INSERT INTO director_anchors (id, source_artifact_id, derived_artifact_id, frame_number, reference_role, reference_use, source_sha256, parameters_json, created_at) VALUES ('anchor-target-source', 'artifact-target', 'foreign-artifact', 1, 'source', 'reference', 'hash', '{}', ?), ('anchor-target-derived', 'foreign-artifact', 'artifact-null-job', 1, 'source', 'reference', 'hash', '{}', ?), ('anchor-keep', 'artifact-keep', 'foreign-artifact', 1, 'source', 'reference', 'hash', '{}', ?)", now, now, now);
+  insert("INSERT INTO external_generation_idempotency (idempotency_key, operation, response_json, created_at) VALUES ('global-idempotency', 'global', '{}', ?)", now);
+  insert("INSERT INTO async_tasks (id, type, status, resource_id, created_at, updated_at) VALUES ('image-task-target', 'image', 'completed', '16', ?, ?), ('video-task-target', 'video', 'completed', '17', ?, ?), ('merge-task-target', 'merge', 'completed', '18', ?, ?), ('async-resource-collision', 'global', 'completed', '16', ?, ?), ('image-task-keep', 'image', 'completed', '26', ?, ?), ('video-task-keep', 'video', 'completed', '27', ?, ?), ('merge-task-keep', 'merge', 'completed', '28', ?, ?)", now, now, now, now, now, now, now, now, now, now, now, now, now, now);
 
   const projectDir = path.join(storageRoot, 'projects', '0001_20260907_target');
   fs.mkdirSync(path.join(projectDir, 'nested'), { recursive: true });
   fs.writeFileSync(path.join(projectDir, 'cover.txt'), 'cover');
   fs.writeFileSync(path.join(projectDir, 'nested', 'clip.bin'), '1234');
-  return { db, storageRoot, projectDir };
+  const neighboringProjectDir = path.join(storageRoot, 'projects', '0002_20260907_keep');
+  fs.mkdirSync(neighboringProjectDir, { recursive: true });
+  fs.writeFileSync(path.join(neighboringProjectDir, 'keep.txt'), 'keep');
+  const legacyProjectDir = path.join(storageRoot, 'projects', '0003_20260907_legacy');
+  fs.mkdirSync(legacyProjectDir, { recursive: true });
+  fs.writeFileSync(path.join(legacyProjectDir, 'legacy.txt'), 'legacy');
+  return { db, storageRoot, projectDir, neighboringProjectDir, legacyProjectDir };
 }
 
 function count(db, table, where = '', ...params) {
@@ -63,7 +76,7 @@ function count(db, table, where = '', ...params) {
 }
 
 test('preview is non-mutating and permanent deletion removes only target project ownership', (t) => {
-  const { db, storageRoot, projectDir } = setup();
+  const { db, storageRoot, projectDir, neighboringProjectDir, legacyProjectDir } = setup();
   t.after(() => {
     db.close();
     fs.rmSync(storageRoot, { recursive: true, force: true });
@@ -76,32 +89,50 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(preview.counts.episodes, 1);
   assert.equal(preview.counts.external_generation_jobs, 1);
   assert.equal(preview.counts.external_generation_events, 1);
-  assert.equal(preview.counts.async_tasks, 1);
+  assert.equal(preview.counts.async_tasks, 3);
+  assert.equal(preview.counts.director_anchors, 2);
+  assert.equal(preview.counts.director_artifacts, 2);
   assert.equal(preview.storage.directory, projectDir);
   assert.equal(preview.storage.file_count, 2);
   assert.equal(preview.storage.bytes, 9);
-  assert.equal(count(db, 'dramas'), 2);
+  assert.equal(count(db, 'dramas'), 3);
   assert.equal(count(db, 'external_generation_jobs'), 2);
   assert.equal(fs.existsSync(projectDir), true);
+  assert.equal(fs.existsSync(neighboringProjectDir), true);
 
   const result = deleteProjectPermanently(db, cfg, { error() {} }, 1);
   assert.equal(result.deleted, true);
   assert.equal(result.counts.dramas, 1);
   assert.equal(result.counts.episodes, 1);
   assert.equal(result.counts.external_generation_jobs, 1);
+  assert.equal(result.counts.async_tasks, 3);
+  assert.equal(result.counts.director_anchors, 2);
+  assert.equal(result.counts.director_artifacts, 2);
   assert.equal(result.storage.cleanup_status, 'deleted');
   assert.equal(fs.existsSync(projectDir), false);
+  assert.equal(fs.existsSync(neighboringProjectDir), true);
   for (const table of [
-    'dramas', 'episodes', 'storyboards', 'characters', 'scenes', 'props', 'frame_prompts',
+    'episodes', 'storyboards', 'characters', 'scenes', 'props', 'frame_prompts',
     'character_variants', 'image_generations', 'video_generations', 'video_merges',
     'external_generation_jobs', 'external_generation_attempts', 'external_generation_results',
     'external_generation_events', 'external_generation_sessions', 'external_ai_package_tasks',
   ]) assert.equal(count(db, table), 1, `${table} should retain only the other project`);
-  assert.equal(count(db, 'character_libraries'), 2);
-  assert.equal(count(db, 'scene_libraries'), 2);
-  assert.equal(count(db, 'prop_libraries'), 2);
+  assert.equal(count(db, 'dramas'), 2);
+  assert.equal(count(db, 'dramas', 'id = ?', 3), 1);
+  assert.equal(fs.existsSync(legacyProjectDir), true);
+  assert.deepEqual(db.prepare('SELECT name FROM character_libraries ORDER BY name').all(), [{ name: '保留库角色' }, { name: '公共角色' }]);
+  assert.deepEqual(db.prepare('SELECT location FROM scene_libraries ORDER BY location').all(), [{ location: '保留库场景' }, { location: '公共场景' }]);
+  assert.deepEqual(db.prepare('SELECT name FROM prop_libraries ORDER BY name').all(), [{ name: '保留库道具' }, { name: '公共道具' }]);
   assert.equal(count(db, 'assets'), 2);
-  assert.equal(count(db, 'async_tasks'), 1);
+  assert.deepEqual(db.prepare('SELECT id FROM async_tasks ORDER BY id').all(), [
+    { id: 'async-resource-collision' }, { id: 'image-task-keep' }, { id: 'merge-task-keep' }, { id: 'video-task-keep' },
+  ]);
+  assert.equal(count(db, 'director_anchors'), 1);
+  assert.equal(count(db, 'director_artifacts'), 1);
+  assert.equal(count(db, 'director_candidates'), 1);
+  assert.equal(count(db, 'director_candidate_groups'), 1);
+  assert.equal(count(db, 'director_jobs'), 1);
+  assert.equal(count(db, 'external_generation_idempotency'), 1);
   assert.equal(count(db, 'image_generation_batches'), 1);
   assert.equal(count(db, 'image_generation_tasks'), 1);
   assert.equal(deleteProjectPermanently(db, cfg, { error() {} }, 1), null);
@@ -114,6 +145,8 @@ test('permanent deletion removes episode import and upscale leaf records', (t) =
   db.prepare("INSERT INTO episode_imports (episode_id, schema_name, imported_at) VALUES (11, 'episode-package', ?), (21, 'episode-package', ?)").run(now, now);
   db.prepare(`INSERT INTO video_upscale_jobs (id, episode_id, video_merge_id, method, workflow_id, source_path, created_at, updated_at)
     VALUES ('upscale-target', 11, 18, 'cloud', 'workflow', 'target.mp4', ?, ?), ('upscale-keep', 21, 28, 'cloud', 'workflow', 'keep.mp4', ?, ?)`).run(now, now, now, now);
+  db.prepare("UPDATE video_upscale_jobs SET async_task_id = 'upscale-task-target' WHERE id = 'upscale-target'").run();
+  db.prepare("INSERT INTO async_tasks (id, type, status, resource_id, created_at, updated_at) VALUES ('upscale-task-target', 'upscale', 'completed', '18', ?, ?), ('upscale-task-keep', 'upscale', 'completed', '28', ?, ?)").run(now, now, now, now);
   db.prepare(`INSERT INTO video_upscale_segments (job_id, segment_index, start_frame, requested_frame_count, created_at, updated_at)
     VALUES ('upscale-target', 0, 0, 10, ?, ?), ('upscale-keep', 0, 0, 10, ?, ?)`).run(now, now, now, now);
 
@@ -122,4 +155,6 @@ test('permanent deletion removes episode import and upscale leaf records', (t) =
   assert.equal(count(db, 'episode_imports'), 1);
   assert.equal(count(db, 'video_upscale_jobs'), 1);
   assert.equal(count(db, 'video_upscale_segments'), 1);
+  assert.equal(count(db, 'async_tasks', "id = 'upscale-task-target'"), 0);
+  assert.equal(count(db, 'async_tasks', "id = 'upscale-task-keep'"), 1);
 });

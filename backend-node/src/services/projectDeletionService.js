@@ -36,6 +36,12 @@ function selectIds(db, table, where, params) {
   return ids(db.prepare(`SELECT id FROM ${table} WHERE ${where}`).all(...params));
 }
 
+function selectColumnValues(db, table, column, idValues) {
+  if (!idValues.length || !columnExists(db, table, column)) return [];
+  return [...new Set(db.prepare(`SELECT ${column} AS value FROM ${table} WHERE id IN (${placeholders(idValues)}) AND ${column} IS NOT NULL AND ${column} != ''`)
+    .all(...idValues).map((row) => row.value))];
+}
+
 function appendInClause(clauses, params, column, values) {
   if (!values.length) return;
   clauses.push(`${column} IN (${placeholders(values)})`);
@@ -89,12 +95,19 @@ function discoverProjectOwnedIds(db, dramaId) {
   if (directorJobIds.length && tableExists(db, 'director_artifacts')) {
     directorArtifactIds.push(...selectIds(db, 'director_artifacts', `job_id IN (${placeholders(directorJobIds)})`, directorJobIds));
   }
+  const imageGenerationIds = generationIdsFor('image_generations');
+  const videoGenerationIds = generationIdsFor('video_generations');
+  const asyncTaskIds = [...new Set([
+    ...selectColumnValues(db, 'image_generations', 'task_id', imageGenerationIds),
+    ...selectColumnValues(db, 'video_generations', 'task_id', videoGenerationIds),
+    ...selectColumnValues(db, 'video_merges', 'task_id', videoMergeIds),
+    ...selectColumnValues(db, 'video_upscale_jobs', 'async_task_id', upscaleJobIds),
+  ])];
   return {
     episodeIds, storyboardIds, characterIds, sceneIds, propIds, variantIds,
     externalJobIds, externalAttemptIds, externalResultIds, videoMergeIds,
     upscaleJobIds,
-    imageGenerationIds: generationIdsFor('image_generations'),
-    videoGenerationIds: generationIdsFor('video_generations'),
+    imageGenerationIds, videoGenerationIds, asyncTaskIds,
     directorGroupIds, directorCandidateIds, directorJobIds,
     directorArtifactIds: [...new Set(directorArtifactIds)],
   };
@@ -166,6 +179,10 @@ function previewProjectDeletion(db, cfg, dramaId) {
   counts.director_candidates = owned.directorCandidateIds.length;
   counts.director_jobs = owned.directorJobIds.length;
   counts.director_artifacts = owned.directorArtifactIds.length;
+  if (owned.directorArtifactIds.length && tableExists(db, 'director_anchors')) {
+    const anchorParams = [...owned.directorArtifactIds, ...owned.directorArtifactIds];
+    counts.director_anchors = db.prepare(`SELECT COUNT(*) AS total FROM director_anchors WHERE source_artifact_id IN (${placeholders(owned.directorArtifactIds)}) OR derived_artifact_id IN (${placeholders(owned.directorArtifactIds)})`).get(...anchorParams).total;
+  }
   for (const table of ['character_libraries', 'scene_libraries', 'prop_libraries', 'assets', 'image_generation_batches', 'image_generation_tasks', 'external_generation_sessions', 'external_ai_package_tasks']) {
     if (tableExists(db, table) && columnExists(db, table, 'drama_id')) {
       counts[table] = db.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE drama_id = ?`).get(id).total;
@@ -185,12 +202,8 @@ function previewProjectDeletion(db, cfg, dramaId) {
     if (!tableExists(db, table)) continue;
     counts[table] = table === 'image_generations' ? owned.imageGenerationIds.length : owned.videoGenerationIds.length;
   }
-  const asyncResourceIds = [
-    ...owned.externalJobIds, ...owned.externalAttemptIds, ...owned.externalResultIds,
-    ...owned.imageGenerationIds, ...owned.videoGenerationIds,
-  ].map(String);
-  if (asyncResourceIds.length && tableExists(db, 'async_tasks')) {
-    counts.async_tasks = db.prepare(`SELECT COUNT(*) AS total FROM async_tasks WHERE resource_id IN (${placeholders(asyncResourceIds)})`).get(...asyncResourceIds).total;
+  if (owned.asyncTaskIds.length && tableExists(db, 'async_tasks')) {
+    counts.async_tasks = db.prepare(`SELECT COUNT(*) AS total FROM async_tasks WHERE id IN (${placeholders(owned.asyncTaskIds)})`).get(...owned.asyncTaskIds).total;
   }
   return { project, counts, storage: projectStorageSummary(cfg, project) };
 }
@@ -205,7 +218,11 @@ function deleteProjectRows(db, dramaId, owned, counts) {
   deleteWhere(db, counts, 'external_generation_sessions', 'drama_id = ?', [dramaId]);
   removeByIds('video_upscale_segments', 'job_id', owned.upscaleJobIds);
   removeByIds('video_upscale_jobs', 'id', owned.upscaleJobIds);
-  removeByIds('director_anchors', 'source_artifact_id', owned.directorArtifactIds);
+  if (owned.directorArtifactIds.length) {
+    const artifactParams = [...owned.directorArtifactIds, ...owned.directorArtifactIds];
+    deleteWhere(db, counts, 'director_anchors', `source_artifact_id IN (${placeholders(owned.directorArtifactIds)}) OR derived_artifact_id IN (${placeholders(owned.directorArtifactIds)})`, artifactParams);
+  }
+  removeByIds('director_artifacts', 'id', owned.directorArtifactIds);
   removeByIds('director_artifacts', 'job_id', owned.directorJobIds);
   removeByIds('director_candidates', 'group_id', owned.directorGroupIds);
   removeByIds('director_candidate_groups', 'id', owned.directorGroupIds);
@@ -236,12 +253,8 @@ function deleteProjectRows(db, dramaId, owned, counts) {
   removeByIds('characters', 'id', owned.characterIds);
   removeByIds('scenes', 'id', owned.sceneIds);
   removeByIds('props', 'id', owned.propIds);
-  const asyncResourceIds = [
-    ...owned.externalJobIds, ...owned.externalAttemptIds, ...owned.externalResultIds,
-    ...owned.imageGenerationIds, ...owned.videoGenerationIds,
-  ];
   if (tableExists(db, 'async_tasks')) {
-    if (asyncResourceIds.length) deleteWhere(db, counts, 'async_tasks', `resource_id IN (${placeholders(asyncResourceIds)})`, asyncResourceIds.map(String));
+    if (owned.asyncTaskIds.length) deleteWhere(db, counts, 'async_tasks', `id IN (${placeholders(owned.asyncTaskIds)})`, owned.asyncTaskIds);
   }
   deleteWhere(db, counts, 'dramas', 'id = ?', [dramaId]);
 }
