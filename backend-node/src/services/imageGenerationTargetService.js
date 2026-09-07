@@ -2,6 +2,7 @@ const { bindStoryboardFrameImage } = require('./storyboardFrameBinding');
 const path = require('node:path');
 const { resolveStoryboardSlots } = require('./referenceSlotService');
 const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
+const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
 
 const TABLES = {
   character: { table: 'characters', name: 'name' },
@@ -48,14 +49,27 @@ function appendPrompt(base, extra) {
 
 function resolveStyleSnapshot(db, dramaId, task) {
   const supplied = parseObject(task.style_snapshot ?? task.styleSnapshot);
-  if (Object.keys(supplied).length) return supplied;
+  if (Object.keys(supplied).length) {
+    const merged = mergeCfgStyleWithDrama({}, {
+      style: supplied.style,
+      metadata: {
+        style_prompt_zh: supplied.style_prompt_zh,
+        style_prompt_en: supplied.style_prompt_en,
+      },
+    });
+    return {
+      style: supplied.style || null,
+      style_prompt_zh: merged.style?.default_style_zh || null,
+      style_prompt_en: merged.style?.default_style_en || null,
+    };
+  }
   const drama = db.prepare('SELECT style, metadata FROM dramas WHERE id=? AND deleted_at IS NULL').get(dramaId);
   if (!drama) return {};
-  const metadata = parseObject(drama.metadata);
+  const merged = mergeCfgStyleWithDrama({}, drama);
   return {
     style: drama.style || null,
-    style_prompt_zh: metadata.style_prompt_zh || null,
-    style_prompt_en: metadata.style_prompt_en || null,
+    style_prompt_zh: merged.style?.default_style_zh || null,
+    style_prompt_en: merged.style?.default_style_en || null,
   };
 }
 
@@ -209,8 +223,11 @@ function buildGenerationInput(db, task) {
     }
   }
   const styleSnapshot = resolveStyleSnapshot(db, dramaId, task);
-  const requestedPrompt = String(task.prompt_snapshot || prompt).trim();
-  const modePrompt = assetMode ? buildModePrompt(target.target_type, assetMode, requestedPrompt) : requestedPrompt;
+  const persistedPrompt = task.prompt_snapshot ?? task.promptSnapshot;
+  const requestedPrompt = String(persistedPrompt ?? prompt).trim();
+  const modePrompt = persistedPrompt != null
+    ? requestedPrompt
+    : (assetMode ? buildModePrompt(target.target_type, assetMode, requestedPrompt) : requestedPrompt);
   const stylePrompt = styleSnapshot.style_prompt_en || styleSnapshot.style_prompt_zh || styleSnapshot.style || '';
   const negativePrompt = String(
     task.negative_prompt_snapshot
@@ -221,7 +238,9 @@ function buildGenerationInput(db, task) {
   ).trim();
   return {
     target,
-    prompt: appendPrompt(modePrompt, stylePrompt),
+    // prompt_snapshot is the already compiled, immutable execution prompt. It
+    // must not receive mode/style instructions again when an API task submits.
+    prompt: persistedPrompt != null ? modePrompt : appendPrompt(modePrompt, stylePrompt),
     references: hasReferenceSnapshot
       ? parseList(task.reference_manifest ?? task.referenceManifest)
       : references,

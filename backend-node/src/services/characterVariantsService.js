@@ -63,7 +63,7 @@ function createVariant(db, input = {}) {
       input.appearance ?? null,
       input.image_prompt ?? null,
       input.negative_prompt ?? null,
-      input.asset_mode || 'SINGLE',
+      normalizeAssetMode('character_variant', input.asset_mode),
       input.use_identity_reference === false || input.use_identity_reference === 0 ? 0 : 1,
       isDefault,
       now,
@@ -102,6 +102,9 @@ function updateVariant(db, id, patch = {}) {
       } else if (key === 'extra_images') {
         updates.push('extra_images = ?');
         params.push(Array.isArray(patch.extra_images) ? JSON.stringify(patch.extra_images) : patch.extra_images);
+      } else if (key === 'asset_mode') {
+        updates.push('asset_mode = ?');
+        params.push(normalizeAssetMode('character_variant', patch.asset_mode));
       } else {
         updates.push(key + ' = ?');
         params.push(patch[key]);

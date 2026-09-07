@@ -156,6 +156,19 @@ describe('characterVariantsService', () => {
       assert.equal(updated.use_identity_reference, 1);
     });
 
+    it('rejects unsupported modes on both create and update', () => {
+      assert.throws(
+        () => createVariant(db, { character_id: characterId, name: '非法状态', asset_mode: 'PANORAMA' }),
+        (error) => error.code === 'INVALID_ASSET_MODE'
+      );
+      const row = createVariant(db, { character_id: characterId, name: '正常状态' });
+      assert.throws(
+        () => updateVariant(db, row.id, { asset_mode: 'QUAD_GRID' }),
+        (error) => error.code === 'INVALID_ASSET_MODE'
+      );
+      assert.equal(updateVariant(db, row.id, {}).asset_mode, 'SINGLE');
+    });
+
     it('creating a new default clears the previous default of the same character', () => {
       const a = createVariant(db, { character_id: characterId, name: '常态', is_default: 1 });
       const b = createVariant(db, { character_id: characterId, name: '受伤', is_default: 1 });

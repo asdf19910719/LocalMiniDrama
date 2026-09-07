@@ -38,6 +38,35 @@ function modeDb(characterMode = 'TURNAROUND', sceneMode = 'NORMAL') {
 }
 
 describe('asset generation route mode dispatch', () => {
+  it('dispatches every batch character with its own persisted mode', async () => {
+    const calls = [];
+    const db = {
+      prepare(sql) {
+        assert.match(sql, /SELECT id, asset_mode FROM characters/);
+        return { all: () => [{ id: 7, asset_mode: 'SINGLE' }, { id: 8, asset_mode: 'TURNAROUND' }] };
+      },
+    };
+    const out = characterLibraryService.batchGenerateCharacterImages(
+      db, log, {}, [7, 8], undefined, undefined,
+      {
+        generateCharacterImage: async (_db, _log, _cfg, id) => {
+          calls.push({ id: String(id), mode: 'SINGLE' });
+          return { ok: true, image_generation: { id: 1 } };
+        },
+        generateCharacterFourViewImage: async (_db, _log, _cfg, id) => {
+          calls.push({ id: String(id), mode: 'TURNAROUND' });
+          return { ok: true, image_generation: { id: 2 } };
+        },
+      }
+    );
+    assert.equal(out.ok, true);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [
+      { id: '7', mode: 'SINGLE' },
+      { id: '8', mode: 'TURNAROUND' },
+    ]);
+  });
+
   it('dispatches a character SINGLE request to the single-image generator', async () => {
     const originalSingle = characterLibraryService.generateCharacterImage;
     const originalTurnaround = characterLibraryService.generateCharacterFourViewImage;

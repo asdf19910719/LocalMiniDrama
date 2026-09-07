@@ -2,6 +2,7 @@ import request from '@/utils/request'
 
 export const imageGenerationTaskAPI = {
   create(data) { return request.post('/image-generation-tasks', data) },
+  submit(id) { return request.post(`/image-generation-tasks/${encodeURIComponent(id)}/submit`) },
   get(taskId) { return request.get(`/image-generation-tasks/${encodeURIComponent(taskId)}`) },
   summary(dramaId) { return request.get(`/dramas/${encodeURIComponent(dramaId)}/image-generation-summary`) },
   environment(dramaId, params = {}) {

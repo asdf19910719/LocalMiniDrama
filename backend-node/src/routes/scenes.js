@@ -58,6 +58,7 @@ function routes(db, log, cfg) {
         if (!out.ok) return response.notFound(res, '场景不存在');
         response.success(res, { message: '保存成功' });
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('scenes update', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -90,6 +91,7 @@ function routes(db, log, cfg) {
         const scene = sceneService.createScene(db, log, dramaId, body);
         response.created(res, scene);
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('scenes create', { error: err.message });
         response.internalError(res, err.message);
       }

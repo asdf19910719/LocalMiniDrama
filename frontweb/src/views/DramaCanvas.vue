@@ -379,14 +379,12 @@ const {
 async function generateCanvasImage(channel = imageGenerationDefaultChannel.value) {
   const storyboard = (drama.value?.storyboards || []).find((item) => Number(item.id) === Number(selectedStoryboardIds.value[0]))
   if (!storyboard) return ElMessage.warning('请先选择一个分镜')
-  if (channel !== 'chatgpt_web') return batchGenerateImages()
   try {
     const task = await openImageGenerationTask({
       dramaId: drama.value.id,
       targetType: 'storyboard_main',
       targetId: storyboard.id,
       generationChannel: channel,
-      prompt: storyboard.polished_prompt || storyboard.image_prompt || storyboard.description || storyboard.title || '',
     })
     return task
   } catch (error) {

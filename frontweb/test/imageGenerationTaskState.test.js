@@ -28,12 +28,14 @@ test('flattens imported external results into drawer candidates', () => {
   assert.deepEqual(task.candidates.map((item) => item.id), ['result-1', 'result-2'])
 })
 
-test('polls only active ChatGPT tasks waiting for a result', () => {
+test('polls active tasks according to their channel lifecycle', () => {
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'submitted' }), true)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'generating' }), true)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review', error_code: 'result_timeout' }), false)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'chatgpt_web', status: 'needs_review' }), false)
   assert.equal(shouldPollImageGenerationTask({ generation_channel: 'api', status: 'submitted' }), false)
+  assert.equal(shouldPollImageGenerationTask({ generation_channel: 'api', status: 'generating' }), true)
+  assert.equal(shouldPollImageGenerationTask({ generation_channel: 'api', status: 'completed' }), false)
 })
 
 test('offers result recovery for active, timed-out, and capture-failed ChatGPT tasks only', () => {

@@ -274,4 +274,15 @@ describe('generateVariantImage', () => {
     assert.equal(calls.imageApi[0].reference_image_urls, undefined);
     assert.equal(calls.imageApi[0].system_prompt, undefined);
   });
+
+  it('updateCharacter 拒绝不受支持的生图模式且不污染数据库', () => {
+    const db = createDb();
+    insertDrama(db);
+    const charId = insertCharacter(db);
+    assert.throws(
+      () => characterLibraryService.updateCharacter(db, log, charId, { asset_mode: 'QUAD_GRID' }),
+      (error) => error.code === 'INVALID_ASSET_MODE'
+    );
+    assert.equal(db.prepare('SELECT asset_mode FROM characters WHERE id=?').get(charId).asset_mode, 'TURNAROUND');
+  });
 });

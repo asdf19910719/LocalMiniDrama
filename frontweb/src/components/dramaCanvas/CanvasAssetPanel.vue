@@ -139,11 +139,10 @@ import { characterAPI } from '@/api/characters'
 import { sceneAPI } from '@/api/scenes'
 import { propAPI } from '@/api/props'
 import { useCanvasContext } from '@/composables/useCanvasContext'
-import { generateAssetReferenceImage } from '@/composables/useCanvasAssetGenerate'
 import { assetImageUrl } from '@/utils/mediaUrl'
 import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerateSplitButton.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
-import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 
 const props = defineProps({
   kind: { type: String, required: true },
@@ -285,24 +284,16 @@ async function deleteAsset() {
 async function generateImage(channel = imageGeneration.defaultChannel.value) {
   generating.value = true
   try {
-    if (channel === 'chatgpt_web') {
-      const dramaValue = ctx?.drama?.value || ctx?.drama
-      const task = await imageGeneration.open({
-        dramaId: dramaValue?.id,
-        targetType: props.kind,
-        targetId: props.entity.id,
-        generationChannel: channel,
-        prompt: resolveImageGenerationPrompt(props.kind, props.entity, form.prompt),
-      })
-      await imageGeneration.sendToChatGPT(task)
-      return
-    }
-    await generateAssetReferenceImage(ctx, {
-      kind: props.kind,
-      entity: props.entity,
-      nodeId: props.nodeId,
+    const dramaValue = ctx?.drama?.value || ctx?.drama
+    await imageGeneration.open({
+      dramaId: dramaValue?.id,
+      targetType: props.kind,
+      targetId: props.entity.id,
+      generationChannel: channel,
+      assetMode: ['character', 'scene'].includes(props.kind)
+        ? normalizeAssetGenerationMode(props.kind, props.entity.asset_mode)
+        : undefined,
     })
-    ElMessage.success('参考图已生成')
   } catch (e) {
     ElMessage.error(e?.message || '生成失败')
   } finally {

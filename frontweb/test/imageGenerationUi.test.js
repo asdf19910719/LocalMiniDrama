@@ -37,6 +37,7 @@ test('shared image generation controls expose concise channel copy and one summa
   assert.match(store, /loadSummary\(input\.dramaId,\s*\{\s*reattach:\s*false\s*\}\)/)
   assert.match(store, /loadSummary\(prepared\.task\.drama_id,\s*\{\s*reattach:\s*false\s*\}\)/)
   assert.match(store, /loadSummary\(currentTask\.value\.drama_id,\s*\{\s*reattach:\s*false\s*\}\)/)
+  assert.match(store, /generation_channel === 'api'[\s\S]{0,220}imageGenerationTaskAPI\.submit/)
   assert.match(store, /buildChatGPTImageGenerationPrompt/)
   assert.match(store, /resolveChatGPTPrepareAction/)
 })
@@ -105,5 +106,5 @@ test('failed requeue shows a spinner: store requeueTask drives the shared loadin
   const store = read('src/stores/imageGenerationStore.js')
 
   assert.match(store, /async function requeueTask\(task\) \{[\s\S]{0,160}loading\.value = true/)
-  assert.match(store, /async function requeueTask\(task\) \{[\s\S]{0,700}finally \{\s*loading\.value = false\s*\}/)
+  assert.match(store, /async function requeueTask\(task\) \{[\s\S]{0,900}finally \{\s*loading\.value = false\s*\}/)
 })

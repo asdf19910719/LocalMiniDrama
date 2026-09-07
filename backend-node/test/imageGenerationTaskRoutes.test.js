@@ -79,6 +79,12 @@ it('creates a unified task and exposes one drama summary', async () => {
         targetType: 'character',
         targetId: 1,
         generationChannel: 'chatgpt_web',
+        prompt: '来自旧前端的错误单图提示词',
+        styleSnapshot: {
+          style: 'custom',
+          style_prompt_zh: '用户当前选择的水墨电影画风',
+          style_prompt_en: 'current ink wash cinematic style',
+        },
         referenceImages: [{ role: 'character', sourceId: 999, url: '/wrong-character.png' }],
       }),
     });
@@ -86,7 +92,14 @@ it('creates a unified task and exposes one drama summary', async () => {
     const created = (await createdResponse.json()).data;
     assert.match(created.prompt_snapshot, /角色提示/);
     assert.match(created.prompt_snapshot, /正面、正侧面、背面/);
+    assert.match(created.prompt_snapshot, /current ink wash cinematic style/);
+    assert.doesNotMatch(created.prompt_snapshot, /错误单图提示词/);
     assert.equal(created.asset_mode, 'TURNAROUND');
+    assert.deepEqual(JSON.parse(created.style_snapshot), {
+      style: 'custom',
+      style_prompt_zh: '用户当前选择的水墨电影画风',
+      style_prompt_en: 'current ink wash cinematic style',
+    });
     assert.deepEqual(JSON.parse(created.reference_manifest), []);
     assert.equal(created.status, 'queued');
     assert.ok(created.external_job_id);

@@ -30,7 +30,10 @@ describe('asset generation modes', () => {
     assert.equal(modes.normalizeAssetMode('scene', 'quad_grid'), 'QUAD_GRID');
     assert.deepEqual(modes.allowedAssetModes('scene'), ['NORMAL', 'QUAD_GRID']);
     assert.throws(() => modes.normalizeAssetMode('scene', 'TURNAROUND'), /Unsupported asset generation mode/);
-    assert.throws(() => modes.normalizeAssetMode('character', 'PANORAMA'), /Unsupported asset generation mode/);
+    assert.throws(
+      () => modes.normalizeAssetMode('character', 'PANORAMA'),
+      (error) => error.code === 'INVALID_ASSET_MODE' && /Unsupported asset generation mode/.test(error.message)
+    );
   });
 
   it('adds multi-view layout rules only to turnaround prompts', () => {

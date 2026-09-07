@@ -88,6 +88,20 @@ describe('image generation target adapters and binding', () => {
     assert.equal(scene.negativePrompt, 'text watermark');
   });
 
+  it('expands a legacy project style key into the complete prompt snapshot', () => {
+    db.prepare("UPDATE dramas SET style='cinematic', metadata='{}' WHERE id=7").run();
+    const generation = targets.buildGenerationInput(db, {
+      drama_id: 7,
+      target_type: 'character',
+      target_id: 1,
+    });
+    assert.equal(generation.styleSnapshot.style, 'cinematic');
+    assert.match(generation.styleSnapshot.style_prompt_en, /anamorphic lens/);
+    assert.match(generation.styleSnapshot.style_prompt_zh, /电影级大片画面/);
+    assert.notEqual(generation.styleSnapshot.style_prompt_en, 'cinematic');
+    assert.match(generation.prompt, /anamorphic lens/);
+  });
+
   it('never falls back to a character background description when building an image prompt', () => {
     db.prepare('UPDATE characters SET polished_prompt=NULL WHERE id=1').run();
     const prompt = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt;

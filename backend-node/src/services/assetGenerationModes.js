@@ -36,7 +36,9 @@ function normalizeAssetMode(targetType, value) {
     ? config.defaultMode
     : String(value).trim().toUpperCase();
   if (!config.allowed.includes(normalized)) {
-    throw new Error(`Unsupported asset generation mode for ${targetType}: ${normalized}`);
+    const error = new Error(`Unsupported asset generation mode for ${targetType}: ${normalized}`);
+    error.code = 'INVALID_ASSET_MODE';
+    throw error;
   }
   return normalized;
 }

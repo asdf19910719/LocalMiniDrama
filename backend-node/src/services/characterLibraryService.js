@@ -10,6 +10,7 @@ const jimengMaterialHubService = require('./jimengMaterialHubService');
 const modelArkAssetConfigService = require('./modelArkAssetConfigService');
 const uploadService = require('./uploadService');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
+const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 const {
   appendSourceIdFilters,
   findExistingLibraryItem,
@@ -324,7 +325,10 @@ function updateCharacter(db, log, characterId, req) {
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   // stages 已废弃(人物造型改由 character_variants 承载):不再接收/写入,数据库列保留但停止读写
   if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt); }
-  if (req.asset_mode !== undefined) { updates.push('asset_mode = ?'); params.push(req.asset_mode); }
+  if (req.asset_mode !== undefined) {
+    updates.push('asset_mode = ?');
+    params.push(normalizeAssetMode('character', req.asset_mode));
+  }
   if (updates.length === 0) return { ok: true };
   if (req.image_url != null || req.local_path != null) {
     seedance2AssetGuards.markStaleOnCharacterMainImageDrift(db, log, charRow, {
@@ -389,28 +393,40 @@ function deleteCharacter(db, log, characterId) {
 /**
  * 批量生成角色图片（与 Go BatchGenerateCharacterImages 对齐：为每个角色单独起一个异步任务并发生成）
  */
-function batchGenerateCharacterImages(db, log, cfg, characterIds, modelName, style) {
+function batchGenerateCharacterImages(db, log, cfg, characterIds, modelName, style, deps = {}) {
   const ids = Array.isArray(characterIds) ? characterIds.map((id) => String(id)) : [];
   if (ids.length === 0) return { ok: false, error: 'character_ids 不能为空' };
   if (ids.length > 10) return { ok: false, error: '单次最多生成10个角色' };
-  log.info('Starting batch character four-view generation', { count: ids.length, model: modelName, character_ids: ids });
+  const rows = ids.length
+    ? db.prepare(`SELECT id, asset_mode FROM characters WHERE id IN (${ids.map(() => '?').join(',')}) AND deleted_at IS NULL`).all(...ids)
+    : [];
+  const modeById = new Map(rows.map((row) => [String(row.id), normalizeAssetMode('character', row.asset_mode)]));
+  log.info('Starting batch character generation', { count: ids.length, model: modelName, character_ids: ids });
   // 每个角色单独起一个异步任务，不阻塞响应
   for (const characterId of ids) {
     const charId = characterId;
     setImmediate(async () => {
       try {
-        const out = await generateCharacterFourViewImage(db, log, cfg, charId, modelName, style);
-        if (!out.ok) {
-          log.warn('Batch character four-view skip', { character_id: charId, error: out.error });
+        const assetMode = modeById.get(String(charId));
+        if (!assetMode) {
+          log.warn('Batch character skip', { character_id: charId, error: 'character not found' });
           return;
         }
-        log.info('Batch character four-view submitted', { character_id: charId, image_gen_id: out.image_generation ? out.image_generation.id : null });
+        const generator = assetMode === 'SINGLE'
+          ? (deps.generateCharacterImage || generateCharacterImage)
+          : (deps.generateCharacterFourViewImage || generateCharacterFourViewImage);
+        const out = await generator(db, log, cfg, charId, modelName, style);
+        if (!out.ok) {
+          log.warn('Batch character skip', { character_id: charId, asset_mode: assetMode, error: out.error });
+          return;
+        }
+        log.info('Batch character submitted', { character_id: charId, asset_mode: assetMode, image_gen_id: out.image_generation ? out.image_generation.id : null });
       } catch (err) {
-        log.error('Batch character four-view failed', { character_id: charId, error: err.message });
+        log.error('Batch character failed', { character_id: charId, error: err.message });
       }
     });
   }
-  log.info('Batch character four-view tasks queued', { total: ids.length });
+  log.info('Batch character tasks queued', { total: ids.length });
   return { ok: true, count: ids.length };
 }
 
@@ -626,6 +642,7 @@ async function generateCharacterFourViewImage(db, log, cfg, characterId, modelNa
     log.info('[四视图] Step1 完成，开始Step2生图', { character_id: characterId });
   }
 
+  imagePrompt = buildModePrompt('character', 'TURNAROUND', imagePrompt);
   const userNeg = imageClient.resolveAssetUserNegativeForApi(modelName, charRow.negative_prompt);
   const imageGen = imageClient.createAndGenerateImage(db, log, {
     drama_id: charRow.drama_id,

@@ -28,10 +28,15 @@ test('normalizes stored modes and falls back safely for missing or invalid value
 
 test('project cards and variant studio expose per-asset mode controls without a global scene toggle', () => {
   const film = fs.readFileSync(path.join(root, 'src/views/FilmCreate.vue'), 'utf8')
+  const detail = fs.readFileSync(path.join(root, 'src/views/DramaDetail.vue'), 'utf8')
   const studio = fs.readFileSync(path.join(root, 'src/components/CharacterVariantStudio.vue'), 'utf8')
   assert.match(film, /AssetGenerationModeSelect/)
   assert.match(film, /saveCharacterAssetMode/)
   assert.match(film, /saveSceneAssetMode/)
+  assert.match(detail, /saveDramaAssetMode/)
+  assert.match(detail, /openCharacterStates/)
+  assert.match(detail, /人物状态/)
+  assert.match(film, /route\.query\.asset === 'states'/)
   assert.doesNotMatch(film, /sceneUseQuadGrid/)
   assert.match(studio, /use_identity_reference/)
   assert.match(studio, /update-identity-reference/)

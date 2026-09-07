@@ -266,6 +266,19 @@
                   </div>
                   <div class="drama-res-desc">{{ (item.description || item.prompt || '').slice(0, 80) }}</div>
                   <div class="drama-res-actions">
+                    <AssetGenerationModeSelect
+                      :model-value="item.asset_mode"
+                      target-type="character"
+                      size="small"
+                      @change="saveDramaAssetMode(item, 'character', $event)"
+                    />
+                    <ImageGenerateSplitButton
+                      :default-channel="imageGenerationDefaultChannel"
+                      :loading="imageGenerationSending"
+                      @select-channel="onSelectImageChannel"
+                      @generate="(channel) => generateUnifiedDramaImage(channel, 'character', item)"
+                    />
+                    <el-button size="small" type="primary" plain @click="openCharacterStates(item)">人物状态</el-button>
                     <el-button size="small" @click="openEditDramaChar(item)">编辑</el-button>
                     <el-button size="small" type="danger" plain @click="deleteDramaChar(item)">删除制作角色</el-button>
                   </div>
@@ -292,6 +305,18 @@
                   </div>
                   <div class="drama-res-desc">{{ (item.description || item.prompt || '').slice(0, 80) }}</div>
                   <div class="drama-res-actions">
+                    <AssetGenerationModeSelect
+                      :model-value="item.asset_mode"
+                      target-type="scene"
+                      size="small"
+                      @change="saveDramaAssetMode(item, 'scene', $event)"
+                    />
+                    <ImageGenerateSplitButton
+                      :default-channel="imageGenerationDefaultChannel"
+                      :loading="imageGenerationSending"
+                      @select-channel="onSelectImageChannel"
+                      @generate="(channel) => generateUnifiedDramaImage(channel, 'scene', item)"
+                    />
                     <el-button size="small" @click="openEditDramaScene(item)">编辑</el-button>
                     <el-button size="small" type="danger" plain @click="deleteDramaScene(item)">删除制作场景</el-button>
                   </div>
@@ -582,6 +607,7 @@ import ImageGenerateSplitButton from '@/components/imageGeneration/ImageGenerate
 import ImageGenerationTaskPill from '@/components/imageGeneration/ImageGenerationTaskPill.vue'
 import ImageGenerationDrawer from '@/components/imageGeneration/ImageGenerationDrawer.vue'
 import ImageGenerationChannelSetting from '@/components/imageGeneration/ImageGenerationChannelSetting.vue'
+import AssetGenerationModeSelect from '@/components/imageGeneration/AssetGenerationModeSelect.vue'
 import { ArrowLeft, VideoPlay, Plus, Delete, Sunny, Moon, PictureFilled, Grid, Upload } from '@element-plus/icons-vue'
 import EpisodeBatchImportDialog from '@/components/EpisodeBatchImportDialog.vue'
 import EpisodePackageImportDialog from '@/components/EpisodePackageImportDialog.vue'
@@ -600,12 +626,14 @@ import { characterAPI } from '@/api/characters'
 import { sceneAPI } from '@/api/scenes'
 import { propAPI } from '@/api/props'
 import { useImageGeneration } from '@/composables/useImageGeneration'
-import { resolveImageGenerationPrompt } from '@/utils/imageGenerationPrompt'
+import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import { hasImportSource } from '@/utils/episodeImportSource'
 import {
   generationStyleOptions,
   stylePromptMetadataForSave,
+  getStylePromptEn,
+  getStylePromptZh,
   backfillDramaStylePromptMetadataIfNeeded,
   CUSTOM_STYLE_VALUE,
 } from '@/constants/styleOptions'
@@ -631,19 +659,50 @@ async function onSelectImageChannel(channel) {
 }
 
 async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
-  if (channel !== 'chatgpt_web') return legacy()
   try {
+    const customStyle = infoForm.style === CUSTOM_STYLE_VALUE ? infoForm.customStylePrompt.trim() : ''
+    const stylePromptEn = customStyle || getStylePromptEn(infoForm.style)
+    const stylePromptZh = customStyle || getStylePromptZh(infoForm.style)
     const task = await imageGeneration.open({
       dramaId,
       targetType,
       targetId: form?.id,
       generationChannel: channel,
-      prompt: resolveImageGenerationPrompt(targetType, form),
+      assetMode: ['character', 'scene'].includes(targetType)
+        ? normalizeAssetGenerationMode(targetType, form?.asset_mode)
+        : undefined,
+      styleSnapshot: stylePromptEn || stylePromptZh ? {
+        style: infoForm.style || null,
+        style_prompt_zh: stylePromptZh || null,
+        style_prompt_en: stylePromptEn || null,
+      } : undefined,
     })
     return task
   } catch (error) {
     ElMessage.error(error?.message || '图片生成任务创建失败')
   }
+}
+
+async function saveDramaAssetMode(item, targetType, value) {
+  if (!item?.id) return
+  const previous = item.asset_mode
+  const assetMode = normalizeAssetGenerationMode(targetType, value)
+  item.asset_mode = assetMode
+  try {
+    const api = targetType === 'character' ? characterAPI : sceneAPI
+    await api.update(item.id, { asset_mode: assetMode })
+  } catch (error) {
+    item.asset_mode = previous
+    ElMessage.error(error?.message || '生图模式保存失败')
+  }
+}
+
+function openCharacterStates(item) {
+  if (!item?.id) return
+  router.push({
+    path: `/film/${dramaId}`,
+    query: { asset: 'states', character: String(item.id) },
+  })
 }
 
 async function onImageGenerationSend(task) {
@@ -763,6 +822,7 @@ function openEditDramaChar(item) {
     description: item.description ?? '', personality: item.personality ?? '',
     appearance: item.appearance ?? '', voice_style: item.voice_style ?? '',
     polished_prompt: item.polished_prompt ?? '', negative_prompt: item.negative_prompt ?? '',
+    asset_mode: item.asset_mode ?? 'TURNAROUND',
     image_url: item.image_url ?? '', local_path: item.local_path ?? null,
     imgUploading: false, imgGenerating: false
   }
@@ -852,6 +912,7 @@ function openEditDramaScene(item) {
     id: item.id, location: item.location ?? '', time: item.time ?? '',
     state: item.state ?? '', description: item.description ?? '', atmosphere: item.atmosphere ?? '',
     prompt: item.prompt ?? '', negative_prompt: item.negative_prompt ?? '',
+    asset_mode: item.asset_mode ?? 'NORMAL',
     image_url: item.image_url ?? '', local_path: item.local_path ?? null,
     imgUploading: false, imgGenerating: false
   }

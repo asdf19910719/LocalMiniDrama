@@ -8,6 +8,7 @@ const { createExternalJob, getExternalJob, createGenerationAttempt } = require('
 const settingsService = require('../services/settingsService');
 const selection = require('../services/imageGenerationResultSelection');
 const { checkImageGenerationEnvironment } = require('../services/imageGenerationEnvironmentService');
+const apiTasks = require('../services/imageGenerationApiTaskService');
 
 module.exports = (db, log = console) => {
   const router = express.Router();
@@ -38,9 +39,9 @@ module.exports = (db, log = console) => {
       drama_id: input.dramaId,
       target_type: input.targetType,
       target_id: input.targetId,
-      prompt_snapshot: input.prompt,
       asset_mode: input.assetMode ?? input.asset_mode,
       use_identity_reference: input.useIdentityReference ?? input.use_identity_reference,
+      style_snapshot: input.styleSnapshot ?? input.style_snapshot,
     });
     const requestedChannel = resolveChannel(input.dramaId, input.generationChannel || input.generation_channel);
     let task = tasks.createTask(db, {
@@ -71,7 +72,7 @@ module.exports = (db, log = console) => {
   }));
 
   router.get('/image-generation-tasks/:taskId', (req, res) => handle(res, () => {
-    const task = tasks.getTask(db, req.params.taskId);
+    const task = apiTasks.reconcileTask(db, tasks.getTask(db, req.params.taskId));
     if (!task) throw new Error('Image generation task not found');
     return task.external_job_id ? { ...task, external_job: getExternalJob(db, task.external_job_id) } : task;
   }));

@@ -3,6 +3,7 @@ const imageClient = require('./imageClient');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
 const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 
 function applySceneStyleOverride(cfg, styleOverride) {
   const o = (styleOverride || '').toString().trim();
@@ -29,7 +30,10 @@ function updateScene(db, log, sceneId, req) {
   if (req.prompt != null) { updates.push('prompt = ?'); params.push(req.prompt); }
   if (req.atmosphere !== undefined) { updates.push('atmosphere = ?'); params.push(req.atmosphere ?? null); }
   if (req.negative_prompt !== undefined) { updates.push('negative_prompt = ?'); params.push(req.negative_prompt ?? null); }
-  if (req.asset_mode !== undefined) { updates.push('asset_mode = ?'); params.push(req.asset_mode); }
+  if (req.asset_mode !== undefined) {
+    updates.push('asset_mode = ?');
+    params.push(normalizeAssetMode('scene', req.asset_mode));
+  }
   if (req.polished_prompt != null) { updates.push('polished_prompt = ?'); params.push(req.polished_prompt); }
   if (req.polished_prompt_single != null) { updates.push('polished_prompt_single = ?'); params.push(req.polished_prompt_single); }
   if (req.image_url != null) { updates.push('image_url = ?'); params.push(req.image_url); }
@@ -72,8 +76,8 @@ function createScene(db, log, dramaId, req) {
   const episodeId = req.episode_id != null ? Number(req.episode_id) : null;
   try {
     const info = db.prepare(
-      `INSERT INTO scenes (drama_id, episode_id, location, time, state, description, prompt, atmosphere, negative_prompt, image_url, local_path, storyboard_count, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
+      `INSERT INTO scenes (drama_id, episode_id, location, time, state, description, prompt, atmosphere, negative_prompt, asset_mode, image_url, local_path, storyboard_count, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`
     ).run(
       Number(dramaId),
       episodeId,
@@ -84,6 +88,7 @@ function createScene(db, log, dramaId, req) {
       req.prompt || '',
       req.atmosphere ?? null,
       req.negative_prompt ?? null,
+      normalizeAssetMode('scene', req.asset_mode),
       req.image_url ?? null,
       req.local_path ?? null,
       now,
@@ -337,7 +342,7 @@ async function generateSceneSinglePromptOnly(db, log, cfg, sceneId, modelName, s
  */
 async function generateSceneFourViewImage(db, log, cfg, sceneId, modelName, style) {
   const sceneRow = db.prepare(
-    'SELECT id, drama_id, location, time, prompt, polished_prompt FROM scenes WHERE id = ? AND deleted_at IS NULL'
+    'SELECT id, drama_id, location, time, prompt, polished_prompt, negative_prompt FROM scenes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
   const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
@@ -391,6 +396,8 @@ async function generateSceneFourViewImage(db, log, cfg, sceneId, modelName, styl
     log.info('[场景四视图] Step1 完成，开始Step2生图', { scene_id: sceneId });
   }
 
+  imagePrompt = buildModePrompt('scene', 'QUAD_GRID', imagePrompt);
+  const userNeg = imageClient.resolveAssetUserNegativeForApi(modelName, sceneRow.negative_prompt);
   const imageGen = imageClient.createAndGenerateImage(db, log, {
     drama_id: sceneRow.drama_id,
     scene_id: sceneId,
@@ -399,6 +406,7 @@ async function generateSceneFourViewImage(db, log, cfg, sceneId, modelName, styl
     size: '1792x1024',
     quality: 'standard',
     provider: 'openai',
+    user_negative_prompt: userNeg || undefined,
   });
 
   log.info('[场景四视图] Step2 图片生成任务已提交', { scene_id: sceneId, image_gen_id: imageGen?.id });
@@ -413,7 +421,7 @@ async function generateSceneFourViewImage(db, log, cfg, sceneId, modelName, styl
  */
 async function generateSceneSingleImage(db, log, cfg, sceneId, modelName, style) {
   const sceneRow = db.prepare(
-    'SELECT id, drama_id, location, time, prompt, polished_prompt, polished_prompt_single FROM scenes WHERE id = ? AND deleted_at IS NULL'
+    'SELECT id, drama_id, location, time, prompt, polished_prompt, polished_prompt_single, negative_prompt FROM scenes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
   const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
@@ -468,6 +476,7 @@ async function generateSceneSingleImage(db, log, cfg, sceneId, modelName, style)
     log.info('[场景单图] Step1 完成，开始Step2生图', { scene_id: sceneId });
   }
 
+  const userNeg = imageClient.resolveAssetUserNegativeForApi(modelName, sceneRow.negative_prompt);
   const imageGen = imageClient.createAndGenerateImage(db, log, {
     drama_id: sceneRow.drama_id,
     scene_id: sceneId,
@@ -476,6 +485,7 @@ async function generateSceneSingleImage(db, log, cfg, sceneId, modelName, style)
     size: '1792x1024',
     quality: 'standard',
     provider: 'openai',
+    user_negative_prompt: userNeg || undefined,
   });
 
   log.info('[场景单图] Step2 图片生成任务已提交', { scene_id: sceneId, image_gen_id: imageGen?.id });

@@ -48,6 +48,7 @@ function routes(db, cfg, log, uploadService) {
         }
         response.success(res, { message: '保存成功' });
       } catch (err) {
+        if (err && err.code === 'INVALID_ASSET_MODE') return response.error(res, 400, err.code, err.message);
         log.error('characters update', { error: err.message });
         response.internalError(res, err.message);
       }

@@ -155,6 +155,10 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
       }
       currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.create(input))
       drawerVisible.value = true
+      if (currentTask.value.generation_channel === 'api') {
+        currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.submit(currentTask.value.id))
+        startTaskPolling()
+      }
       await loadSummary(input.dramaId, { reattach: false })
       return currentTask.value
     } finally { loading.value = false }
@@ -162,9 +166,14 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
   async function refreshTask() {
     if (!currentTask.value?.id) return null
     const taskId = currentTask.value.id
+    const previousStatus = currentTask.value.status
     const refreshed = normalizeImageGenerationTask(await imageGenerationTaskAPI.get(taskId))
     if (currentTask.value?.id !== taskId) return currentTask.value
     currentTask.value = refreshed
+    if (previousStatus !== refreshed?.status && ['completed', 'failed', 'needs_review'].includes(refreshed?.status)) {
+      generationSettledTick.value += 1
+      await loadSummary(refreshed.drama_id, { reattach: false })
+    }
     startTaskPolling()
     return currentTask.value
   }
@@ -358,6 +367,9 @@ export const useImageGenerationStore = defineStore('imageGeneration', () => {
     errorMessage.value = ''
     try {
       currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.retry(task.id))
+      if (currentTask.value.generation_channel === 'api') {
+        currentTask.value = normalizeImageGenerationTask(await imageGenerationTaskAPI.submit(currentTask.value.id))
+      }
       startTaskPolling(0)
       await loadSummary(task.drama_id ?? dramaId.value, { reattach: false })
       return currentTask.value
