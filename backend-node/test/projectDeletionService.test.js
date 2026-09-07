@@ -94,10 +94,10 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(preview.project.id, 1);
   assert.equal(preview.counts.dramas, 1);
   assert.equal(preview.counts.episodes, 1);
-  assert.equal(preview.counts.external_generation_jobs, 2);
-  assert.equal(preview.counts.external_generation_events, 2);
-  assert.equal(preview.counts.image_generation_tasks, 2);
-  assert.equal(preview.counts.image_generation_batches, 2);
+  assert.equal(preview.counts.external_generation_jobs, 1);
+  assert.equal(preview.counts.external_generation_events, 1);
+  assert.equal(preview.counts.image_generation_tasks, 1);
+  assert.equal(preview.counts.image_generation_batches, 1);
   assert.equal(preview.counts.async_tasks, 3);
   assert.equal(preview.counts.director_anchors, 2);
   assert.equal(preview.counts.director_artifacts, 2);
@@ -113,7 +113,7 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(result.deleted, true);
   assert.equal(result.counts.dramas, 1);
   assert.equal(result.counts.episodes, 1);
-  assert.equal(result.counts.external_generation_jobs, 2);
+  assert.equal(result.counts.external_generation_jobs, 1);
   assert.equal(result.counts.async_tasks, 3);
   assert.equal(result.counts.director_anchors, 2);
   assert.equal(result.counts.director_artifacts, 2);
@@ -123,9 +123,11 @@ test('preview is non-mutating and permanent deletion removes only target project
   for (const table of [
     'episodes', 'storyboards', 'characters', 'scenes', 'props', 'frame_prompts',
     'character_variants', 'image_generations', 'video_generations', 'video_merges',
-    'external_generation_jobs', 'external_generation_attempts', 'external_generation_results',
-    'external_generation_events', 'external_generation_sessions', 'external_ai_package_tasks',
+    'external_generation_sessions', 'external_ai_package_tasks',
   ]) assert.equal(count(db, table), 1, `${table} should retain only the other project`);
+  for (const table of ['external_generation_jobs', 'external_generation_attempts', 'external_generation_results', 'external_generation_events']) {
+    assert.equal(count(db, table), 2, `${table} should retain the other project's direct and stale-link records`);
+  }
   assert.equal(count(db, 'dramas'), 2);
   assert.equal(count(db, 'dramas', 'id = ?', 3), 1);
   assert.equal(fs.existsSync(legacyProjectDir), true);
@@ -142,14 +144,14 @@ test('preview is non-mutating and permanent deletion removes only target project
   assert.equal(count(db, 'director_candidate_groups'), 1);
   assert.equal(count(db, 'director_jobs'), 1);
   assert.equal(count(db, 'external_generation_idempotency'), 1);
-  assert.equal(count(db, 'image_generation_batches'), 1);
-  assert.equal(count(db, 'image_generation_tasks'), 1);
-  assert.equal(count(db, 'image_generation_batches', 'id = ?', 'batch-indirect'), 0);
-  assert.equal(count(db, 'image_generation_tasks', 'id = ?', 'task-indirect'), 0);
-  assert.equal(count(db, 'external_generation_jobs', 'id = ?', 'job-indirect'), 0);
-  assert.equal(count(db, 'external_generation_attempts', 'id = ?', 'attempt-indirect'), 0);
-  assert.equal(count(db, 'external_generation_results', 'id = ?', 'result-indirect'), 0);
-  assert.equal(count(db, 'external_generation_events', 'id = ?', 'event-indirect'), 0);
+  assert.equal(count(db, 'image_generation_batches'), 2);
+  assert.equal(count(db, 'image_generation_tasks'), 2);
+  assert.equal(count(db, 'image_generation_batches', 'id = ?', 'batch-indirect'), 1);
+  assert.equal(count(db, 'image_generation_tasks', 'id = ?', 'task-indirect'), 1);
+  assert.equal(count(db, 'external_generation_jobs', 'id = ?', 'job-indirect'), 1);
+  assert.equal(count(db, 'external_generation_attempts', 'id = ?', 'attempt-indirect'), 1);
+  assert.equal(count(db, 'external_generation_results', 'id = ?', 'result-indirect'), 1);
+  assert.equal(count(db, 'external_generation_events', 'id = ?', 'event-indirect'), 1);
   assert.equal(deleteProjectPermanently(db, cfg, { error() {} }, 1), null);
 });
 

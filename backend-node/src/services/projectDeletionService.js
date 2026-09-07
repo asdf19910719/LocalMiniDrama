@@ -101,10 +101,13 @@ function discoverProjectOwnedIds(db, dramaId) {
     }
     if (taskClauses.length) {
       const taskSelect = ['id'];
+      taskSelect.push(columnExists(db, 'image_generation_tasks', 'drama_id') ? 'drama_id' : 'NULL AS drama_id');
       for (const column of ['batch_id', 'image_generation_id', 'external_job_id']) {
         taskSelect.push(columnExists(db, 'image_generation_tasks', column) ? column : `NULL AS ${column}`);
       }
-      imageTaskRows.push(...db.prepare(`SELECT ${taskSelect.join(', ')} FROM image_generation_tasks WHERE ${taskClauses.join(' OR ')}`).all(...taskParams));
+      const candidateTaskRows = db.prepare(`SELECT ${taskSelect.join(', ')} FROM image_generation_tasks WHERE ${taskClauses.join(' OR ')}`).all(...taskParams);
+      const hasTaskDramaId = columnExists(db, 'image_generation_tasks', 'drama_id');
+      imageTaskRows.push(...candidateTaskRows.filter((row) => !hasTaskDramaId || row.drama_id == null || Number(row.drama_id) === dramaId));
     }
   }
   const imageTaskIds = ids(imageTaskRows);
@@ -126,7 +129,14 @@ function discoverProjectOwnedIds(db, dramaId) {
     if (taskExternalJobIds.length) {
       appendInClause(clauses, params, 'id', taskExternalJobIds);
     }
-    if (clauses.length) linkedExternalJobIds.push(...selectIds(db, 'external_generation_jobs', clauses.join(' OR '), params));
+    if (clauses.length) {
+      const linkedRows = db.prepare(
+        `SELECT id, ${columnExists(db, 'external_generation_jobs', 'drama_id') ? 'drama_id' : 'NULL AS drama_id'}
+         FROM external_generation_jobs WHERE ${clauses.join(' OR ')}`
+      ).all(...params);
+      const hasJobDramaId = columnExists(db, 'external_generation_jobs', 'drama_id');
+      linkedExternalJobIds.push(...linkedRows.filter((row) => !hasJobDramaId || row.drama_id == null || Number(row.drama_id) === dramaId).map((row) => row.id));
+    }
   }
   const allExternalJobIds = [...new Set([...externalJobIds, ...linkedExternalJobIds])];
   const externalAttemptIds = allExternalJobIds.length
