@@ -10063,9 +10063,14 @@ html.light .section-desc { color: #6b7280; }
 }
 .asset-cover-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 8px;
   border-top: 1px solid rgba(255,255,255,0.06);
+}
+.asset-cover-actions :deep(.asset-generation-mode-select) {
+  flex: 0 0 100%;
+  width: 100%;
 }
 .asset-cover-actions .el-button { flex: 1; justify-content: center; }
 html.light .asset-cover-actions { border-top-color: rgba(139,92,246,0.1); }

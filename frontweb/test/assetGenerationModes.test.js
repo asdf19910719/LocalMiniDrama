@@ -42,3 +42,9 @@ test('project cards and variant studio expose per-asset mode controls without a 
   assert.match(studio, /update-identity-reference/)
   assert.match(studio, /update-mode/)
 })
+
+test('FilmCreate keeps the per-asset mode readable inside the narrow media action column', () => {
+  const film = fs.readFileSync(path.join(root, 'src/views/FilmCreate.vue'), 'utf8')
+  assert.match(film, /\.asset-cover-actions\s*\{[^}]*flex-wrap:\s*wrap/s)
+  assert.match(film, /\.asset-cover-actions\s+:deep\(\.asset-generation-mode-select\)\s*\{[^}]*flex:\s*0\s+0\s+100%/s)
+})
