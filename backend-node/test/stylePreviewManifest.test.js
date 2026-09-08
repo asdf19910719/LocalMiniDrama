@@ -15,7 +15,7 @@ test('preview manifest accounts for every catalog style with verified local file
   assert.deepEqual(new Set(manifest.entries.map((entry) => entry.styleId)), new Set(catalog.styles.map((style) => style.id)));
 
   for (const entry of manifest.entries) {
-    assert.ok(['runninghub-api', 'runninghub-screenshot', 'fallback'].includes(entry.status));
+    assert.equal(entry.status, 'runninghub-authenticated-page');
     assert.match(entry.localPath, /^\/style-thumbs\/runninghub\/[a-zA-Z0-9-]+\.webp$/);
     const absolute = path.resolve(publicRoot, entry.localPath.slice(1));
     assert.ok(absolute.startsWith(path.join(publicRoot, 'style-thumbs', 'runninghub') + path.sep));
@@ -23,7 +23,8 @@ test('preview manifest accounts for every catalog style with verified local file
     const hash = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
     assert.equal(hash, entry.sha256);
     assert.ok(entry.width > 0 && entry.height > 0);
-    if (entry.status === 'runninghub-api') assert.match(entry.sourceUrl, /^https:\/\//);
+    assert.match(entry.sourceUrl, /^https:\/\/rh-manju-files-1252422369\.cos\.ap-beijing\.myqcloud\.com\/aivideo\//);
+    assert.doesNotMatch(entry.sourceUrl, /[?&](?:sign|q-signature|q-ak)=/i);
   }
 });
 

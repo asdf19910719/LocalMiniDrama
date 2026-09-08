@@ -19,7 +19,7 @@
 5. 主图片任务和视频任务会在调用供应商前保存最终提示词、负向词、StyleSpec 版本、引用清单、模型配置与能力校验快照。历史任务不会因项目之后切换风格而变化。
 6. 外部 AI JSON 已升级为 v2 `prompt_contract: base_prompt`。外部结果只负责 `base_image_prompt` / `base_video_prompt`，不能携带风格覆盖或最终提示词；预览与导入均不会创建生成任务。
 7. 前端风格库采用四列视觉卡片、全部/真人/3D/2D/我的分类、搜索、选中态、详情抽屉和结构化自定义风格；详情可查看中文说明及实际中英文提示词。
-8. RunningHub 预览图采用本地清单治理：12 张来自已核验真实画风库截图裁图，157 张是明确标记的回退图。由于登录标签属于另一个浏览器会话，自动化无法读取其网络响应，故未把回退图标记为 RunningHub 原图。
+8. RunningHub 预览图采用本地清单治理：已在登录态“全部”风格库中完整加载并核验 169 张独立预览资源，全部按风格顺序映射、本地化为 640×384 WebP，并标记为 `runninghub-authenticated-page`；运行时不热链原站，版本库也不保存临时 COS 签名。
 
 当前完整可导出的程序风格目录见 [LocalMiniDrama风格目录v1.json](./LocalMiniDrama风格目录v1.json)，预览证据状态见 `backend-node/src/catalog/stylePreviewManifest.v1.json`。
 
