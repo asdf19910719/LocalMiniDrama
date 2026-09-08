@@ -11,7 +11,11 @@ const {
   serializeCanonicalJson,
 } = require('../services/storyboardAvContractService');
 const { ensureEpisodeAudioPlan } = require('../services/episodeAudioPlanService');
-const { projectEpisodeRow, projectStoryboardRow } = require('../services/storyboardCanonicalRepository');
+const {
+  projectEpisodeRow,
+  projectStoryboardRow,
+  patchStoryboard,
+} = require('../services/storyboardCanonicalRepository');
 
 function validateEpisodeBgmPath(value, cfg) {
   if (value == null || String(value).trim() === '') return null;
@@ -44,6 +48,26 @@ function loadEpisodeAudioResponse(db, episodeId) {
     'SELECT * FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL ORDER BY storyboard_number, id',
   ).all(Number(episodeId)).map((row) => projectStoryboardRow(row));
   return { episode: projectEpisodeRow(episodeRow), storyboards };
+}
+
+function reconcileShotMusicCuesWithEpisodePlan(db, episodeId, bgmMode, now) {
+  if (bgmMode === 'per_segment') return;
+  const rows = db.prepare(
+    'SELECT * FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL',
+  ).all(Number(episodeId));
+  for (const row of rows) {
+    const cue = projectStoryboardRow(row).audio_description?.music_cue;
+    if (cue?.mode === 'mute' && cue.prompt == null && Number(cue.intensity || 0) === 0) continue;
+    patchStoryboard(db, row.id, {
+      audio_description: {
+        music_cue: { mode: 'mute', prompt: null, intensity: 0 },
+      },
+    }, {
+      source: 'episode_audio_plan',
+      lock: false,
+      now,
+    });
+  }
 }
 
 function updateEpisodeAudioPlan(db, log, cfg) {
@@ -98,8 +122,11 @@ function updateEpisodeAudioPlan(db, log, cfg) {
         };
       }
       plan.provenance = { ...(plan.provenance || {}), source: 'manual', updated_at: now };
-      db.prepare('UPDATE episodes SET audio_plan = ?, updated_at = ? WHERE id = ?')
-        .run(serializeCanonicalJson(plan), now, Number(req.params.id));
+      db.transaction(() => {
+        db.prepare('UPDATE episodes SET audio_plan = ?, updated_at = ? WHERE id = ?')
+          .run(serializeCanonicalJson(plan), now, Number(req.params.id));
+        reconcileShotMusicCuesWithEpisodePlan(db, req.params.id, plan.bgm.mode, now);
+      })();
       response.success(res, loadEpisodeAudioResponse(db, req.params.id));
     } catch (error) {
       log.error('Update episode audio plan failed', { code: error.code, error: error.message });

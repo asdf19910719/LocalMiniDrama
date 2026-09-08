@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 
 const { runMigrationsAndEnsure } = require('../src/db/migrate');
-const { saveCanonicalStoryboard } = require('../src/services/storyboardCanonicalRepository');
+const { saveCanonicalStoryboard, patchStoryboard } = require('../src/services/storyboardCanonicalRepository');
 const {
   buildStoryboardGenerationContext,
   generationContextFingerprint,
@@ -88,4 +88,22 @@ test('structured request overrides merge only explicit audio and transition leav
   assert.equal(context.audio.music_cue.mode, 'mute');
   assert.equal(context.transition.audio_bridge.mode, 'carry');
   assert.equal(context.transition.audio_bridge.duration_ms, 900);
+});
+
+test('episode-level BGM disable reconciles a stale shot stinger before H3 generation', (t) => {
+  const { db, storyboardId } = createDb();
+  t.after(() => db.close());
+
+  db.prepare('UPDATE episodes SET audio_plan = ? WHERE id = 2')
+    .run(JSON.stringify({ bgm: { mode: 'none' } }));
+  patchStoryboard(db, storyboardId, {
+    audio_description: { music_cue: { mode: 'stinger', prompt: 'single low hit' } },
+  }, { source: 'manual', lock: true, now: '2026-09-05T00:01:00.000Z' });
+
+  const context = buildStoryboardGenerationContext(db, storyboardId);
+
+  assert.equal(context.episode.audio_plan.bgm.mode, 'none');
+  assert.equal(context.audio.music_cue.mode, 'mute');
+  assert.equal(context.audio.music_cue.prompt, null);
+  assert.equal(context.storyboard.audio_description.music_cue.mode, 'mute');
 });

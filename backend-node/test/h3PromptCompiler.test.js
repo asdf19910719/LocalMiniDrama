@@ -133,6 +133,7 @@ describe('H3 prompt compiler', () => {
     const result = await compiler.compile({}, {}, { context, prompt: 'legacy fallback' });
     assert.equal(result.promptFormat, 'Ref2VA');
     assert.match(calls[0].sourceBundle, /AUDIO_PLAN:/);
+    assert.match(calls[0].sourceBundle, /BGM_POLICY_RULE:.*non_diegetic_music.*N\/A/i);
     assert.match(calls[0].sourceBundle, /metal door scrape/);
     assert.match(calls[0].sourceBundle, /<Audio 1>/);
     assert.equal(result.compiledPrompt, contextualPrompt);

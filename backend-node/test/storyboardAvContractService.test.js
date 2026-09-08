@@ -6,6 +6,7 @@ const {
   normalizeStoryboardAudioDescription,
   normalizeStoryboardTransition,
   normalizeFieldState,
+  reconcileStoryboardAudioWithEpisodePlan,
   serializeCanonicalJson,
 } = require('../src/services/storyboardAvContractService');
 
@@ -92,4 +93,23 @@ test('explicit null is distinct from a missing legacy value', () => {
   assert.equal(normalizeStoryboardAudioDescription(null), null);
   assert.equal(normalizeStoryboardTransition(null), null);
   assert.equal(normalizeEpisodeAudioPlan(null).bgm.mode, 'none');
+});
+
+test('episode BGM policy determines the effective per-shot cue', () => {
+  const stinger = normalizeStoryboardAudioDescription({
+    ambience: ['rain'],
+    music_cue: { mode: 'stinger', prompt: 'single low hit', intensity: 0.8 },
+  });
+
+  for (const mode of ['none', 'episode_track']) {
+    const audio = reconcileStoryboardAudioWithEpisodePlan(stinger, { bgm: { mode } });
+    assert.deepEqual(audio.ambience, ['rain']);
+    assert.deepEqual(audio.music_cue, {
+      mode: 'mute', prompt: null, intensity: 0, start: null, end: null,
+    });
+  }
+  assert.equal(
+    reconcileStoryboardAudioWithEpisodePlan(stinger, { bgm: { mode: 'per_segment' } }).music_cue.mode,
+    'stinger',
+  );
 });

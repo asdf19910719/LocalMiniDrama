@@ -78,6 +78,19 @@ function validateH3Prompt(prompt, { durationSeconds, mode } = {}) {
   return value;
 }
 
+function bgmPolicyRule(context) {
+  if (!context) return null;
+  const bgm = context.episode?.audio_plan?.bgm || {};
+  const mode = bgm.mode || 'none';
+  const cue = context.audio?.music_cue || {};
+  const cueMode = cue.mode || (mode === 'per_segment' ? 'inherit' : 'mute');
+  if (mode !== 'per_segment' || cueMode === 'mute') {
+    return `BGM_POLICY_RULE: Episode mode ${mode} with cue ${cueMode} forbids audience-only score in this generated clip. Set non_diegetic_music to N/A; do not convert mood, ambience, sound effects, or diegetic music into a score.`;
+  }
+  const prompt = ['override', 'stinger'].includes(cueMode) ? cue.prompt : bgm.prompt;
+  return `BGM_POLICY_RULE: Generate the ${cueMode} per-segment cue in non_diegetic_music using only this intent: ${String(prompt || '').trim()}.`;
+}
+
 function sourceBundle(input, mode) {
   const context = input.context && typeof input.context === 'object' ? input.context : null;
   const contextReferences = context?.references || [];
@@ -109,6 +122,7 @@ function sourceBundle(input, mode) {
       : null,
     context ? `AUDIO_PLAN: ${serializeCanonicalJson(context.episode?.audio_plan || {})}` : null,
     context ? `AUDIO_DESCRIPTION: ${serializeCanonicalJson(context.audio || {})}` : null,
+    bgmPolicyRule(context),
     context ? `TRANSITION_PLAN: ${serializeCanonicalJson(context.transition)}` : null,
     visualBindings.length ? `REFERENCE_VISUAL_BINDINGS:\n${visualBindings.join('\n')}` : null,
     audioBindings.length ? `REFERENCE_AUDIO_BINDINGS:\n${audioBindings.join('\n')}` : null,

@@ -141,3 +141,33 @@ test('storyboard AI mapping preserves planned per-segment music through H3 compi
   patchStoryboard(db, saved.id, { audio_description: { music_cue: { intensity: 0.2 } } }, { source: 'manual', now: '2026-09-06T00:05:00.000Z' });
   assert.notEqual(generationContextFingerprint(buildStoryboardGenerationContext(db, saved.id)), fingerprint);
 });
+
+test('stale shot stinger is removed from a none-policy H3 source bundle and compiles as N/A', async (t) => {
+  const db = createDb();
+  t.after(() => db.close());
+  const now = '2026-09-06T00:00:00.000Z';
+  db.prepare("INSERT INTO episodes (id, drama_id, episode_number, title, audio_plan, status, created_at, updated_at) VALUES (30, 1, 2, 'Silent Score', ?, 'draft', ?, ?)")
+    .run(serializeCanonicalJson({ bgm: { mode: 'none' } }), now, now);
+  const saved = saveCanonicalStoryboard(db, 30, {
+    storyboard_number: 2,
+    title: 'Door opens',
+    duration: 5,
+    video_prompt: 'A woman opens a door in a quiet hallway.',
+    audio_description: {
+      ambience: ['quiet room tone'],
+      music_cue: { mode: 'stinger', prompt: 'single low hit', intensity: 0.8 },
+    },
+  }, { source: 'legacy_import', lock: false, now });
+
+  const context = buildStoryboardGenerationContext(db, saved.id);
+  assert.equal(context.audio.music_cue.mode, 'mute');
+  assert.equal(context.storyboard.audio_description.music_cue.mode, 'mute');
+
+  const compiled = await compileFixture(context, 'N/A', (source) => {
+    assert.match(source, /"mode":"none"/);
+    assert.match(source, /"music_cue":\{[^}]*"intensity":0[^}]*"mode":"mute"[^}]*"prompt":null/);
+    assert.match(source, /BGM_POLICY_RULE:.*non_diegetic_music.*N\/A/i);
+    assert.doesNotMatch(source, /single low hit/i);
+  });
+  assert.match(compiled.compiledPrompt, /non_diegetic_music:\s*N\/A/i);
+});

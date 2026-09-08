@@ -7,6 +7,7 @@ const {
 const {
   normalizeStoryboardAudioDescription,
   normalizeStoryboardTransition,
+  reconcileStoryboardAudioWithEpisodePlan,
   serializeCanonicalJson,
 } = require('./storyboardAvContractService');
 const { resolveStoryboardSlots } = require('./referenceSlotService');
@@ -136,10 +137,11 @@ function buildStoryboardGenerationContext(db, storyboardId, options = {}) {
     audio_url: slot.audio_url ?? null,
     audio_version: slot.audio_version ?? null,
   }));
-  const audio = storyboard.audio_description || normalizeStoryboardAudioDescription({}, {
+  const audio = reconcileStoryboardAudioWithEpisodePlan(storyboard.audio_description || normalizeStoryboardAudioDescription({}, {
     source: 'default',
     bgmMode: episode.audio_plan.bgm.mode,
-  });
+  }), episode.audio_plan);
+  storyboard.audio_description = audio;
 
   return {
     version: 1,

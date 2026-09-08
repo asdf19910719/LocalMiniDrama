@@ -210,6 +210,20 @@ function normalizeStoryboardAudioDescription(value, options = {}) {
   };
 }
 
+function reconcileStoryboardAudioWithEpisodePlan(audio, episodeAudioPlan) {
+  if (!audio || episodeAudioPlan?.bgm?.mode === 'per_segment') return audio;
+  const cue = audio.music_cue || {};
+  return {
+    ...audio,
+    music_cue: {
+      ...cue,
+      mode: 'mute',
+      prompt: null,
+      intensity: 0,
+    },
+  };
+}
+
 function normalizeTransitionType(value) {
   if (value == null || value === '') return { type: 'cut', visualDescription: null };
   const normalized = String(value).trim().toLowerCase();
@@ -283,6 +297,7 @@ module.exports = {
   SPEECH_OWNERS,
   normalizeEpisodeAudioPlan,
   normalizeStoryboardAudioDescription,
+  reconcileStoryboardAudioWithEpisodePlan,
   normalizeStoryboardTransition,
   normalizeFieldState,
   serializeCanonicalJson,

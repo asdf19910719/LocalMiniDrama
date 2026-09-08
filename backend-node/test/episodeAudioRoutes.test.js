@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const { runMigrationsAndEnsure } = require('../src/db/migrate');
 const createDramaRoutes = require('../src/routes/drama');
 const { serializeCanonicalJson } = require('../src/services/storyboardAvContractService');
-const { saveCanonicalStoryboard } = require('../src/services/storyboardCanonicalRepository');
+const { saveCanonicalStoryboard, patchStoryboard } = require('../src/services/storyboardCanonicalRepository');
 
 const log = { info() {}, warn() {}, error() {}, errorw() {} };
 
@@ -64,4 +64,45 @@ test('audio-plan PATCH rejects a BGM path outside project media storage', (t) =>
   routes.updateEpisodeAudioPlan({ params: { id: 2 }, body: { audio_plan: { bgm: { mode: 'episode_track', local_path: outside } } } }, res);
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.error.code, 'EPISODE_AUDIO_PATH_INVALID');
+});
+
+test('audio-plan PATCH mutes stale cues on every shot for episode_track', (t) => {
+  const { db, routes } = setup();
+  t.after(() => db.close());
+  const shot = db.prepare('SELECT id FROM storyboards WHERE episode_id = 2 LIMIT 1').get();
+  patchStoryboard(db, shot.id, {
+    audio_description: { music_cue: { mode: 'stinger', prompt: 'single low hit', intensity: 0.8 } },
+  }, { source: 'manual', lock: false, now: '2026-09-05T00:01:00.000Z' });
+  saveCanonicalStoryboard(db, 2, {
+    storyboard_number: 2,
+    title: 'Shot 2',
+    audio_description: { music_cue: { mode: 'override', prompt: 'low strings', intensity: 0.6 } },
+  }, { source: 'manual', lock: false, now: '2026-09-05T00:01:00.000Z' });
+
+  const res = responseCapture();
+  routes.updateEpisodeAudioPlan({ params: { id: 2 }, body: { audio_plan: { bgm: { mode: 'episode_track' } } } }, res);
+
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.body.data.storyboards.length, 2);
+  for (const storyboard of res.body.data.storyboards) {
+    assert.equal(storyboard.audio_description.music_cue.mode, 'mute');
+    assert.equal(storyboard.audio_description.music_cue.prompt, null);
+    assert.equal(storyboard.audio_description.music_cue.intensity, 0);
+  }
+});
+
+test('audio-plan PATCH preserves shot stingers for per_segment', (t) => {
+  const { db, routes } = setup();
+  t.after(() => db.close());
+  const shot = db.prepare('SELECT id FROM storyboards WHERE episode_id = 2 LIMIT 1').get();
+  patchStoryboard(db, shot.id, {
+    audio_description: { music_cue: { mode: 'stinger', prompt: 'single low hit', intensity: 0.8 } },
+  }, { source: 'manual', lock: false, now: '2026-09-05T00:01:00.000Z' });
+
+  const res = responseCapture();
+  routes.updateEpisodeAudioPlan({ params: { id: 2 }, body: { audio_plan: { bgm: { mode: 'per_segment' } } } }, res);
+
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.body.data.storyboards[0].audio_description.music_cue.mode, 'stinger');
+  assert.equal(res.body.data.storyboards[0].audio_description.music_cue.prompt, 'single low hit');
 });
