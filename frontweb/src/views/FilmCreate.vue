@@ -386,10 +386,9 @@
           </el-select>
           <StylePickerButton
             v-model="generationStyle"
-            v-model:custom-prompt="customStylePrompt"
-            :options="generationStyleOptions"
             @change="() => saveProjectSettings(true)"
           />
+          <ProjectStyleSummary class="pipeline-style-summary" :style-id="generationStyle" />
           <ImageGenerationChannelSetting v-if="dramaId" v-model="imageGenerationDefaultChannel" :drama-id="dramaId" />
           <ImageGenerationTaskPill :drama-id="dramaId" />
           <el-button
@@ -2859,6 +2858,7 @@ import { exportStoryboardSheet } from '@/utils/exportStoryboardSheet'
 import { isPlayableVideoGenerationStatus } from '@/utils/videoLifecycleStatus'
 import { slotReferenceFallbackPolicy, universalVideoCompatibility } from '@/utils/videoModeCompatibility.js'
 import StylePickerButton from '@/components/StylePickerButton.vue'
+import ProjectStyleSummary from '@/components/ProjectStyleSummary.vue'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import UniversalSegmentOmniAtEditor from '@/components/UniversalSegmentOmniAtEditor.vue'
 import VideoGenerationPanel from '@/components/video/VideoGenerationPanel.vue'
@@ -2872,14 +2872,6 @@ import ImageUpdatedAt from '@/components/ImageUpdatedAt.vue'
 import EpisodeGenerationProgress from '@/components/EpisodeGenerationProgress.vue'
 import AudioPlanPanel from '@/components/episode/AudioPlanPanel.vue'
 import EpisodeImportSourceDialog from '@/components/EpisodeImportSourceDialog.vue'
-import {
-  generationStyleOptions,
-  getStylePromptEn,
-  getStylePromptZh,
-  stylePromptMetadataForSave,
-  backfillDramaStylePromptMetadataIfNeeded,
-  CUSTOM_STYLE_VALUE,
-} from '@/constants/styleOptions'
 import { useNavigation } from '@/composables/filmCreate/useNavigation'
 import { runGenerateStoryFromPremise } from '@/composables/useStoryGeneration'
 import { useCharacters } from '@/composables/filmCreate/useCharacters'
@@ -2991,50 +2983,28 @@ const isStoryGenRunning = computed(() => {
     (t) => Number(t.dramaId) === Number(dramaId.value) && t.resourceType === GEN_RESOURCE.GENERATE_STORY
   )
 })
-const generationStyle = ref('')
+const generationStyle = ref('rh-101-cinematic')
 const customStylePrompt = ref('')
 const projectAspectRatio = ref('16:9')
 const videoClipDuration = ref(5)
 
 /** 根据 value 查找样式选项对象 */
-function _findStyleOption(val) {
-  for (const group of generationStyleOptions) {
-    const found = group.options.find(o => o.value === val)
-    if (found) return found
-  }
-  return null
-}
+function _findStyleOption() { return null }
 
 /** 传给图像/视频 AI 用的英文 prompt（效果最好）；
  *  找不到 promptEn 时降级到 prompt，再降级到原始值；
  *  custom 时返回用户填写的自定义描述，避免把字面量 "custom" 写入提示词 */
 function getSelectedStylePrompt() {
-  const val = (generationStyle.value || '').toString().trim()
-  if (!val) return undefined
-  if (val === CUSTOM_STYLE_VALUE) {
-    const text = (customStylePrompt.value || '').toString().trim()
-    return text || undefined
-  }
-  const opt = _findStyleOption(val)
-  if (opt) return opt.promptEn || opt.prompt || val
-  return val
+  return undefined
 }
 
 /** 中文风格描述（用于界面展示或中文场景提示词拼接） */
 function getSelectedStylePromptZh() {
-  const val = (generationStyle.value || '').toString().trim()
-  if (!val) return undefined
-  if (val === CUSTOM_STYLE_VALUE) {
-    const text = (customStylePrompt.value || '').toString().trim()
-    return text || undefined
-  }
-  const opt = _findStyleOption(val)
-  if (opt) return opt.prompt || opt.promptEn || val
-  return val
+  return undefined
 }
 
 function projectStylePromptMetadata() {
-  return stylePromptMetadataForSave(generationStyle.value, customStylePrompt.value)
+  return {}
 }
 
 const scriptContent = computed({
@@ -3085,19 +3055,12 @@ async function generateUnifiedImage(channel, targetType, target, legacyGenerate,
     return legacyGenerate?.()
   }
   try {
-    const stylePromptEn = getSelectedStylePrompt()
-    const stylePromptZh = getSelectedStylePromptZh()
     const task = await openImageGenerationTask({
       dramaId: dramaId.value,
       targetType,
       targetId: target?.id,
       generationChannel: channel,
       aspectRatio: projectAspectRatio.value,
-      styleSnapshot: stylePromptEn || stylePromptZh ? {
-        style: generationStyle.value || null,
-        style_prompt_zh: stylePromptZh || null,
-        style_prompt_en: stylePromptEn || null,
-      } : undefined,
       assetMode: ['character', 'character_variant', 'scene'].includes(targetType)
         ? normalizeAssetGenerationMode(targetType, target?.asset_mode)
         : undefined,
@@ -4751,7 +4714,6 @@ async function onGenerateSbFrameImage(sb, slot) {
       drama_id: dramaId.value,
       prompt,
       model: undefined,
-      style: getSelectedStyle(),
       frame_type: frameTypeForSlot(slot),
       aspect_ratio: projectAspectRatio.value || '16:9',
       reference_images: refImagesForCreate,
@@ -4835,7 +4797,6 @@ async function onGenerateSbImage(sb) {
       drama_id: dramaId.value,
       prompt: sb.polished_prompt || sb.image_prompt || sb.description || '',
       model: undefined,
-      style: getSelectedStyle(),
       frame_type: gridMode.value !== 'single' ? gridMode.value : undefined,
       aspect_ratio: projectAspectRatio.value || '16:9',
     })
@@ -5038,21 +4999,15 @@ async function loadDrama(loadingDramaId = store.dramaId) {
   const loadSerial = ++dramaLoadSerial
   if (!loadingDramaId) return
   try {
-    let d = await dramaAPI.get(loadingDramaId)
-    if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
-    d = await backfillDramaStylePromptMetadataIfNeeded(dramaAPI, loadingDramaId, d)
+    const d = await dramaAPI.get(loadingDramaId)
     if (!canApplyDramaLoad(loadingDramaId, loadSerial)) return
     store.setDrama(d)
     // 恢复「故事生成」框的梗概（项目 description 存的是故事梗概）
     storyInput.value = (d.description || '').toString().trim()
     storyStyle.value = (d.metadata && d.metadata.story_style) ? d.metadata.story_style : ''
     storyType.value = d.genre || ''
-    generationStyle.value = d.style || ''
-    if ((d.style || '') === CUSTOM_STYLE_VALUE) {
-      customStylePrompt.value = (d.metadata?.style_prompt_zh || d.metadata?.style_prompt_en || '').toString()
-    } else {
-      customStylePrompt.value = ''
-    }
+    generationStyle.value = d.style_id || 'rh-101-cinematic'
+    customStylePrompt.value = ''
     projectAspectRatio.value = (d.metadata && d.metadata.aspect_ratio) ? d.metadata.aspect_ratio : '16:9'
     videoClipDuration.value = (d.metadata && d.metadata.video_clip_duration) ? Number(d.metadata.video_clip_duration) : 5
     storyboardIncludeNarration.value = !!(d.metadata && d.metadata.storyboard_include_narration)
@@ -5304,7 +5259,6 @@ async function onRegenAffectedSbImages(assetKey, affectedBoards) {
           storyboard_id: sb.id,
           drama_id: dramaId.value,
           prompt,
-          style: getSelectedStyle(),
           frame_type: frameTypeForCreate,
           aspect_ratio: projectAspectRatio.value || '16:9',
         })
@@ -5370,7 +5324,7 @@ async function saveScriptToBackend(content) {
       title: scriptTitle.value || '新故事',
       description: storyInput.value?.trim() || trimmed.slice(0, 200),
       genre: storyType.value || undefined,
-      style: generationStyle.value || undefined,
+      style_id: generationStyle.value || 'rh-101-cinematic',
       metadata: {
         ...projectStylePromptMetadata(),
         story_style: storyStyle.value || undefined,
@@ -5408,7 +5362,7 @@ async function saveScriptToBackend(content) {
       await dramaAPI.saveOutline(dramaId, {
         summary: storyInput.value.trim(),
         genre: storyType.value || undefined,
-        style: generationStyle.value || undefined,
+        style_id: generationStyle.value || 'rh-101-cinematic',
         metadata: {
           ...projectStylePromptMetadata(),
           story_style: storyStyle.value || undefined,
@@ -5446,7 +5400,7 @@ async function saveScriptToBackend(content) {
     await dramaAPI.saveOutline(dramaId, {
       summary: storyInput.value.trim(),
       genre: storyType.value || undefined,
-      style: generationStyle.value || undefined,
+      style_id: generationStyle.value || 'rh-101-cinematic',
       metadata: {
         ...projectStylePromptMetadata(),
         story_style: storyStyle.value || undefined,
@@ -5459,8 +5413,8 @@ async function saveScriptToBackend(content) {
 }
 
 /**
- * @param {boolean} includeGenerationStyle - 仅在选择「画面风格」为 true：写入 dramas.style 与 style_prompt_*。
- * 其它项目设置改为 false，避免界面未刷新时仍用旧的 generationStyle 覆盖外部已更新的画风（如直接调 API PUT outline）。
+ * @param {boolean} includeGenerationStyle - 仅在用户选择项目画风时写入唯一 style_id。
+ * 其它项目设置传 false，避免界面未刷新时覆盖外部已更新的项目风格。
  */
 async function saveProjectSettings(includeGenerationStyle = false) {
   if (!store.dramaId) return
@@ -5481,7 +5435,7 @@ async function saveProjectSettings(includeGenerationStyle = false) {
     metadata,
   }
   if (includeGenerationStyle) {
-    payload.style = generationStyle.value || undefined
+    payload.style_id = generationStyle.value || 'rh-101-cinematic'
   }
   dramaAPI.saveOutline(store.dramaId, payload).catch(e => console.error('Settings auto-save failed', e))
 }
@@ -5586,6 +5540,7 @@ async function onPickScriptFromDialog(sourceId) {
       const created = await dramaAPI.create({
         title,
         description: summary || undefined,
+        style_id: generationStyle.value || 'rh-101-cinematic',
         metadata: {},
       })
       const workId = created.id
@@ -7197,7 +7152,6 @@ async function onGenerateSbVideo(sb) {
       first_frame_url: universalOmniApi ? undefined : (vFirst || absoluteUrl || undefined),
       last_frame_url: universalOmniApi ? undefined : vLast,
       reference_image_urls: referenceUrls,
-      style: getSelectedStyle(),
       aspect_ratio: projectAspectRatio.value || '16:9',
       resolution: videoResolution.value || undefined,
       duration: getSbVideoDurationForApi(sb),
@@ -7379,7 +7333,6 @@ async function onGenerateStoryboard() {
   try {
     const res = await dramaAPI.generateStoryboard(epId, {
       model: undefined,
-      style: getSelectedStyle(),
       storyboard_count: getStoryboardCountForApi(),
       video_duration: getVideoDurationForApi(),
       aspect_ratio: projectAspectRatio.value || '16:9',
@@ -7509,7 +7462,6 @@ async function startBatchImageGeneration() {
             storyboard_id: sb.id,
             drama_id: dramaId.value,
             prompt,
-            style: getSelectedStyle(),
             frame_type: frameTypeForCreate,
             aspect_ratio: projectAspectRatio.value || '16:9',
           })
@@ -7651,7 +7603,6 @@ async function startBatchVideoGeneration() {
             first_frame_url: vFirst,
             last_frame_url: vLast,
             reference_image_urls: refUrls,
-            style: getSelectedStyle(),
             aspect_ratio: projectAspectRatio.value || '16:9',
             resolution: videoResolution.value || undefined,
             duration: getSbVideoDurationForApi(sb),
@@ -7859,14 +7810,7 @@ function pollTaskWithPause(taskId, onDone, meta = {}) {
 }
 
 function currentImageStyleSnapshot() {
-  const stylePromptEn = getSelectedStylePrompt()
-  const stylePromptZh = getSelectedStylePromptZh()
-  if (!stylePromptEn && !stylePromptZh) return undefined
-  return {
-    style: generationStyle.value || null,
-    style_prompt_zh: stylePromptZh || null,
-    style_prompt_en: stylePromptEn || null,
-  }
+  return undefined
 }
 
 /** API 生图也使用统一任务：保存与 ChatGPT 相同的模式、画风、负面词和引用快照。 */
@@ -7878,7 +7822,6 @@ async function submitUnifiedApiImageTask({ targetType, targetId, assetMode }, on
     generationChannel: 'api',
     aspectRatio: projectAspectRatio.value || '16:9',
     assetMode,
-    styleSnapshot: currentImageStyleSnapshot(),
   })
   const submitted = await imageGenerationTaskAPI.submit(created.id)
   const maxAttempts = 450

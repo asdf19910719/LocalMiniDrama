@@ -13,6 +13,11 @@
         <el-input :model-value="task.negative_prompt_snapshot" type="textarea" :rows="2" readonly class="prompt prompt--compact" />
       </template>
       <p v-if="styleSummary" class="style-snapshot"><strong>项目画风快照：</strong>{{ styleSummary }}</p>
+      <el-descriptions v-if="styleDetail" :column="1" size="small" border class="snapshot-meta">
+        <el-descriptions-item label="StyleSpec">{{ styleDetail.id }} · v{{ styleDetail.version }}</el-descriptions-item>
+        <el-descriptions-item label="参考图">{{ referenceCount }} 张（顺序已冻结）</el-descriptions-item>
+        <el-descriptions-item label="编译阶段">已编译并持久化，提交后不随项目设置变化</el-descriptions-item>
+      </el-descriptions>
       <p v-if="task.generation_channel === 'chatgpt_web'">点击“ChatGPT 生成”后会自动加入队列依次发送；此处用于查看进度和选择结果。</p>
       <el-button
         v-if="task.status === 'draft' && task.generation_channel === 'chatgpt_web'"
@@ -69,10 +74,20 @@ const styleSummary = computed(() => {
   if (!value) return ''
   try {
     const parsed = typeof value === 'string' ? JSON.parse(value) : value
-    return parsed?.style_prompt_zh || parsed?.style_prompt_en || parsed?.style || ''
+    return parsed?.labelZh || parsed?.labelEn || parsed?.id || ''
   } catch (_) {
     return String(value)
   }
+})
+const styleDetail = computed(() => {
+  const value = props.task?.style_snapshot
+  if (!value) return null
+  try { return typeof value === 'string' ? JSON.parse(value) : value } catch (_) { return null }
+})
+const referenceCount = computed(() => {
+  const value = props.task?.reference_manifest
+  if (!value) return 0
+  try { return (typeof value === 'string' ? JSON.parse(value) : value)?.length || 0 } catch (_) { return 0 }
 })
 onMounted(() => { store.loadAutoSelect().catch(() => {}) })
 function onAutoSelect(value) { store.setAutoSelect(value).catch(() => {}) }
@@ -87,6 +102,6 @@ const statusText = computed(() => (
 <style scoped>
 .task-tags { display:flex;gap:8px;align-items:center; }
 .snapshot-label { display:block;margin-top:14px;color:var(--el-text-color-secondary);font-size:12px; }
-.prompt { margin: 6px 0 14px; }.prompt--compact { margin-bottom:10px; }.style-snapshot { margin:4px 0 14px;color:var(--el-text-color-secondary);font-size:12px;line-height:1.55; }.results { display:grid;gap:12px;margin-top:16px }.result { display:flex;gap:10px;align-items:center }.result img { width:96px;height:96px;object-fit:cover;border-radius:6px }
+.prompt { margin: 6px 0 14px; }.prompt--compact { margin-bottom:10px; }.style-snapshot { margin:4px 0 14px;color:var(--el-text-color-secondary);font-size:12px;line-height:1.55; }.snapshot-meta { margin-bottom:14px; }.results { display:grid;gap:12px;margin-top:16px }.result { display:flex;gap:10px;align-items:center }.result img { width:96px;height:96px;object-fit:cover;border-radius:6px }
 .auto-select-row { display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--el-text-color-secondary) }
 </style>

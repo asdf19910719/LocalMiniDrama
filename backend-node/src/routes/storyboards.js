@@ -505,17 +505,17 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
           dramaId = ep?.drama_id ?? null;
         } catch (_) {}
 
-        // 画风：mergeCfgStyleWithDrama 会把 dramas.style 的 value（如 cartoon）展开为完整提示词，与图生一致
+        // 画风：只从项目 style_id 解析 StyleSpec，并注入与生图一致的双语风格提示词。
         let styleZh = '';
         let styleEn = '';
         try {
           const loadConfig = require('../config').loadConfig;
-          const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+          const { applyProjectStyleToConfig } = require('../services/projectStyleConfigService');
           let cfg = loadConfig();
           const dr = dramaId
-            ? db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId)
+            ? db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId)
             : null;
-          cfg = mergeCfgStyleWithDrama(cfg, dr || {});
+          cfg = applyProjectStyleToConfig(cfg, dr || {}, db);
           styleEn = (cfg?.style?.default_style_en || cfg?.style?.default_style || '').trim();
           styleZh = (cfg?.style?.default_style_zh || '').trim();
         } catch (_) {}
@@ -892,12 +892,12 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
       let videoRatio = '9:16';
       try {
         const loadConfig = require('../config').loadConfig;
-        const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+        const { applyProjectStyleToConfig } = require('../services/projectStyleConfigService');
         let cfg = loadConfig();
         const dr = dramaId
-          ? db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId)
+          ? db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId)
           : null;
-        cfg = mergeCfgStyleWithDrama(cfg, dr || {});
+        cfg = applyProjectStyleToConfig(cfg, dr || {}, db);
         styleEn = (cfg?.style?.default_style_en || cfg?.style?.default_style || '').trim();
         styleZh = (cfg?.style?.default_style_zh || '').trim();
         try {

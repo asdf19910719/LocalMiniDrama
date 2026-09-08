@@ -13,12 +13,12 @@ export const propAPI = {
   update(id, data) {
     return request.put(`/props/${id}`, data)
   },
-  generatePrompt(id, model, style) {
-    return request.post(`/props/${id}/generate-prompt`, { model, style })
+  generatePrompt(id, model) {
+    return request.post(`/props/${id}/generate-prompt`, { model })
   },
-  generateImage(id, model, style) {
-    const body = { model, style }
-    if (body.model == null && body.style == null) return request.post(`/props/${id}/generate`)
+  generateImage(id, model) {
+    const body = { model }
+    if (body.model == null) return request.post(`/props/${id}/generate`)
     return request.post(`/props/${id}/generate`, body)
   },
   extractFromScript(episodeId) {

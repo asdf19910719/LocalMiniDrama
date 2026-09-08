@@ -1,6 +1,6 @@
 {
   "schema": "local-mini-drama.external-ai-result",
-  "version": "1",
+  "version": "2",
   "package_id": "extai_请替换为项目生成的真实任务ID",
   "generator": {
     "name": "外部 AI",
@@ -48,7 +48,6 @@
         "description": "掌握账本秘密的陌生女孩，推动林晚追查缺页。",
         "personality": "警惕、寡言，面对危险时异常冷静。",
         "appearance": "二十四岁，黑色齐肩湿发，清瘦，左眉尾有浅痣。",
-        "image_prompt": "二十四岁中国女性，黑色齐肩湿发，清瘦脸型，左眉尾浅痣，电影写实人物设定照",
         "negative_prompt": "年龄错误，发色错误，多余人物，五官畸变，卡通",
         "voice_profile": "年轻女中音，音量偏低，语速慢，咬字克制。",
         "variants": [
@@ -57,11 +56,12 @@
             "name": "雨夜初登场",
             "description": "被雨淋透后进入便利店的状态。",
             "appearance": "黑色齐肩湿发贴在脸侧，深灰风衣湿透，肩头有水珠。",
-            "image_prompt": "苏禾雨夜初登场，湿发，深灰湿风衣，肩头水珠，冷色电影光",
             "negative_prompt": "干燥头发，明亮暖光，服装错误，多余饰品",
-            "is_default": true
+            "is_default": true,
+            "base_image_prompt": "苏禾雨夜初登场，湿发，深灰湿风衣，肩头水珠，冷色电影光"
           }
-        ]
+        ],
+        "base_image_prompt": "二十四岁中国女性，黑色齐肩湿发，清瘦脸型，左眉尾浅痣，电影写实人物设定照"
       }
     ],
     "character_variants": [],
@@ -72,8 +72,8 @@
         "state": "营业中，店外暴雨",
         "description": "狭长的街角便利店，柜台后堆着旧账本，玻璃门外雨幕密集。",
         "atmosphere": "冷清、潮湿、逐渐紧张。",
-        "image_prompt": "中国街角便利店室内雨夜，冷白荧光灯，玻璃门外暴雨，柜台旧账本，电影写实",
-        "negative_prompt": "白天，晴天，豪华超市，拥挤人群，卡通"
+        "negative_prompt": "白天，晴天，豪华超市，拥挤人群，卡通",
+        "base_image_prompt": "中国街角便利店室内雨夜，冷白荧光灯，玻璃门外暴雨，柜台旧账本，电影写实"
       }
     ],
     "props": [
@@ -82,8 +82,8 @@
         "name": "旧账本",
         "type": "关键线索",
         "description": "深蓝布面手写账本，最后一页被整齐撕掉。",
-        "image_prompt": "深蓝布面旧账本，泛黄手写内页，末页被整齐撕掉，写实道具特写",
-        "negative_prompt": "崭新笔记本，电子屏，印刷书，卡通"
+        "negative_prompt": "崭新笔记本，电子屏，印刷书，卡通",
+        "base_image_prompt": "深蓝布面旧账本，泛黄手写内页，末页被整齐撕掉，写实道具特写"
       }
     ]
   },
@@ -96,7 +96,9 @@
       "duration_seconds": 6,
       "scene_ref": "new_scene_store_rain_night",
       "character_refs": [],
-      "prop_refs": ["new_prop_old_ledger"],
+      "prop_refs": [
+        "new_prop_old_ledger"
+      ],
       "shot_type": "近景",
       "camera_angle": "平视",
       "camera_movement": "从账本缓慢上移",
@@ -109,8 +111,14 @@
       "dialogue": [],
       "narration": "",
       "audio_description": {
-        "ambience": ["冷柜低鸣", "玻璃门外密集雨声"],
-        "sound_effects": ["翻页声", "清脆门铃声"],
+        "ambience": [
+          "冷柜低鸣",
+          "玻璃门外密集雨声"
+        ],
+        "sound_effects": [
+          "翻页声",
+          "清脆门铃声"
+        ],
         "dialogue_treatment": "无对白，门铃声需要清晰突出。",
         "silence": false,
         "music_cue": {
@@ -131,10 +139,11 @@
           "description": "门铃尾音延续到下一镜。"
         }
       },
-      "image_prompt": "便利店柜台近景，旧账本末页撕痕，雨夜冷白荧光，电影写实",
       "universal_segment_text": "镜头从旧账本的撕痕缓慢上移，门铃响起时拿账本的手迅速将其合上；环境保持雨夜便利店冷白光和压抑悬疑感。",
       "is_primary": true,
-      "notes": "不展示林晚正脸，为下一镜揭示人物保留空间。"
+      "notes": "不展示林晚正脸，为下一镜揭示人物保留空间。",
+      "base_image_prompt": "便利店柜台近景，旧账本末页撕痕，雨夜冷白荧光，电影写实",
+      "base_video_prompt": "一只手翻到旧账本末尾。；手指沿整齐的撕痕缓慢划过，动作突然停住。；门铃响起，手迅速合上账本。"
     },
     {
       "local_ref": "new_sb_02",
@@ -171,8 +180,13 @@
       ],
       "narration": "",
       "audio_description": {
-        "ambience": ["雨声被玻璃门隔得沉闷", "冷柜低鸣"],
-        "sound_effects": ["风衣滴水声"],
+        "ambience": [
+          "雨声被玻璃门隔得沉闷",
+          "冷柜低鸣"
+        ],
+        "sound_effects": [
+          "风衣滴水声"
+        ],
         "dialogue_treatment": "对白近讲清晰，环境声在开口时轻微压低。",
         "silence": false,
         "music_cue": {
@@ -193,10 +207,12 @@
           "description": "低频脉冲随画面停顿淡出。"
         }
       },
-      "image_prompt": "苏禾雨夜走入便利店，中近景，湿发和深灰风衣，冷白荧光，玻璃门雨水背景，电影写实",
       "universal_segment_text": "苏禾推门走入便利店，在冷白荧光下停步，风衣持续滴水；她缓慢抬眼望向柜台，以克制而警告的语气说出对白，镜头轻微缓推并停在她的目光上。",
       "is_primary": true,
-      "notes": "外貌必须严格保持左眉尾浅痣和湿发状态。"
+      "notes": "外貌必须严格保持左眉尾浅痣和湿发状态。",
+      "base_image_prompt": "苏禾雨夜走入便利店，中近景，湿发和深灰风衣，冷白荧光，玻璃门雨水背景，电影写实",
+      "base_video_prompt": "玻璃门被推开，苏禾低头走入店内。；她停下脚步，雨水从风衣袖口滴落。；她缓慢抬眼，目光越过镜头看向柜台。"
     }
-  ]
+  ],
+  "prompt_contract": "base_prompt"
 }

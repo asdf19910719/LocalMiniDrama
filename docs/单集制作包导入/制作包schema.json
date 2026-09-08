@@ -7,6 +7,7 @@
   "required": [
     "schema",
     "version",
+    "prompt_contract",
     "package_id",
     "episode",
     "new_assets",
@@ -18,7 +19,10 @@
       "const": "local-mini-drama.external-ai-result"
     },
     "version": {
-      "const": "1"
+      "const": "2"
+    },
+    "prompt_contract": {
+      "const": "base_prompt"
     },
     "package_id": {
       "type": "string",
@@ -239,7 +243,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "image_prompt": {
+              "base_image_prompt": {
                 "type": "string",
                 "minLength": 1
               },
@@ -273,7 +277,7 @@
                       "type": "string",
                       "minLength": 1
                     },
-                    "image_prompt": {
+                    "base_image_prompt": {
                       "type": "string",
                       "minLength": 1
                     },
@@ -290,7 +294,7 @@
                     "name",
                     "description",
                     "appearance",
-                    "image_prompt",
+                    "base_image_prompt",
                     "negative_prompt",
                     "is_default"
                   ],
@@ -306,7 +310,7 @@
               "description",
               "personality",
               "appearance",
-              "image_prompt",
+              "base_image_prompt",
               "negative_prompt",
               "voice_profile",
               "variants"
@@ -340,7 +344,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "image_prompt": {
+              "base_image_prompt": {
                 "type": "string",
                 "minLength": 1
               },
@@ -358,7 +362,7 @@
               "name",
               "description",
               "appearance",
-              "image_prompt",
+              "base_image_prompt",
               "negative_prompt",
               "is_default"
             ],
@@ -391,7 +395,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "image_prompt": {
+              "base_image_prompt": {
                 "type": "string",
                 "minLength": 1
               },
@@ -406,7 +410,7 @@
               "state",
               "description",
               "atmosphere",
-              "image_prompt",
+              "base_image_prompt",
               "negative_prompt"
             ],
             "additionalProperties": false
@@ -434,7 +438,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "image_prompt": {
+              "base_image_prompt": {
                 "type": "string",
                 "minLength": 1
               },
@@ -448,7 +452,7 @@
               "name",
               "type",
               "description",
-              "image_prompt",
+              "base_image_prompt",
               "negative_prompt"
             ],
             "additionalProperties": false
@@ -736,7 +740,11 @@
             ],
             "additionalProperties": false
           },
-          "image_prompt": {
+          "base_image_prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_video_prompt": {
             "type": "string",
             "minLength": 1
           },
@@ -770,7 +778,8 @@
           "narration",
           "audio_description",
           "transition",
-          "image_prompt",
+          "base_image_prompt",
+          "base_video_prompt",
           "universal_segment_text",
           "is_primary"
         ],

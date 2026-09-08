@@ -101,7 +101,6 @@ export function useScenes(deps) {
     try {
       const res = await dramaAPI.extractBackgrounds(epId, {
         model: undefined,
-        style: getSelectedStyle(),
         language: scriptLanguage.value
       })
       const taskId = res?.task_id
@@ -333,7 +332,6 @@ export function useScenes(deps) {
       const res = await sceneAPI.generateImage({
         scene_id: scene.id,
         model: undefined,
-        style: getSelectedStyle(),
         asset_mode: assetMode
       })
       const taskId = res?.image_generation?.task_id ?? res?.task_id

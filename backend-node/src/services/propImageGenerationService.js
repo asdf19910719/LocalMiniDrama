@@ -32,12 +32,12 @@ async function processPropImageGeneration(db, log, taskId, propId, opts) {
   }
 
   const loadConfig = require('../config').loadConfig;
-  const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+  const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
   let cfg = loadConfig();
   if (prop.drama_id) {
     try {
-      const dr = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(prop.drama_id);
-      cfg = mergeCfgStyleWithDrama(cfg, dr || {});
+      const dr = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(prop.drama_id);
+      cfg = applyProjectStyleToConfig(cfg, dr || {}, db);
     } catch (_) {}
   }
   const styleOverride = (opts && opts.style) ? String(opts.style).trim() : '';

@@ -38,7 +38,6 @@ export async function runImageStep(drama, sb, genOpts) {
     storyboard_id: sb.id,
     drama_id: drama.id,
     prompt,
-    style: genOpts.style || undefined,
     aspect_ratio: genOpts.aspectRatio,
   })
   if (res?.task_id) {
@@ -65,7 +64,6 @@ export async function runVideoStep(drama, sb, genOpts) {
     image_url: absoluteFirst || undefined,
     first_frame_url: absoluteFirst || undefined,
     last_frame_url: absoluteLast,
-    style: genOpts.style || undefined,
     aspect_ratio: genOpts.aspectRatio,
     resolution: genOpts.videoResolution || undefined,
     duration: sb.duration || undefined,

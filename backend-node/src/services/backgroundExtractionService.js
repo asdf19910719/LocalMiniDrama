@@ -73,8 +73,8 @@ async function processBackgroundExtraction(db, cfg, log, taskID, episodeId, mode
   // 合并风格：显式 style 参数优先（一般为前端传来的英文 prompt）；否则用剧集 metadata 中的完整提示词
   let effectiveCfg = cfg;
   try {
-    const dramaRow = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(episode.drama_id);
-    const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+    const dramaRow = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(episode.drama_id);
+    const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
     const paramStyle = (style && String(style).trim()) || '';
     let next = { ...cfg, style: { ...(cfg?.style || {}) } };
     if (dramaRow?.metadata) {
@@ -90,7 +90,7 @@ async function processBackgroundExtraction(db, cfg, log, taskID, episodeId, mode
       };
       effectiveCfg = next;
     } else {
-      effectiveCfg = mergeCfgStyleWithDrama(next, dramaRow);
+      effectiveCfg = applyProjectStyleToConfig(next, dramaRow, db);
     }
     style = paramStyle || effectiveCfg?.style?.default_style_en || effectiveCfg?.style?.default_style || style;
   } catch (_) {}

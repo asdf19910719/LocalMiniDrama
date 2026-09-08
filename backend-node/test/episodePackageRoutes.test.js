@@ -28,6 +28,7 @@ function createDb() {
       description TEXT,
       genre TEXT,
       style TEXT,
+      style_id TEXT,
       metadata TEXT,
       deleted_at TEXT
     );
@@ -153,6 +154,8 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       extra_images TEXT,
+      asset_mode TEXT DEFAULT 'SINGLE',
+      use_identity_reference INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
@@ -202,8 +205,10 @@ function createDb() {
       created_at TEXT NOT NULL,
       imported_at TEXT
     );
+    CREATE TABLE image_generations (id INTEGER PRIMARY KEY);
+    CREATE TABLE video_generations (id INTEGER PRIMARY KEY);
   `);
-  db.prepare(`INSERT INTO dramas (id, title, description, genre, style, metadata) VALUES (1, '雨夜追凶', '记者追查旧案', '悬疑', 'cinematic', ?)`).run(
+  db.prepare(`INSERT INTO dramas (id, title, description, genre, style, style_id, metadata) VALUES (1, '雨夜追凶', '记者追查旧案', '悬疑', 'cinematic', 'rh-101-cinematic', ?)`).run(
     JSON.stringify({ external_ai_continuity_notes: '林晚尚不知道顾川身份。' })
   );
   return db;
@@ -590,6 +595,8 @@ describe('Episode package routes', () => {
       assert.equal(preview.body.data.package_task.package_id, task.package_id);
       assert.ok(preview.body.data.asset_matches.every((item) => item.decision === 'reuse'));
       assert.equal(db.prepare('SELECT source_key FROM props WHERE id = 52').get().source_key, null, 'preview remains read-only');
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM image_generations').get().c, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM video_generations').get().c, 0);
 
       const imported = callRoute(routes, {
         method: 'POST',
@@ -612,6 +619,8 @@ describe('Episode package routes', () => {
       assert.equal(source.task_package_id, task.package_id);
       assert.equal(source.raw_json, raw);
       assert.ok(db.prepare('SELECT imported_at FROM external_ai_package_tasks WHERE package_id = ?').get(task.package_id).imported_at);
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM image_generations').get().c, 0, 'import must not create image tasks');
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM video_generations').get().c, 0, 'import must not create video tasks');
     });
 
     it('creates an unbound task at its frozen episode number and refuses an occupied target', () => {

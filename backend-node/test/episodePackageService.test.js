@@ -164,6 +164,8 @@ function createDb() {
       image_url TEXT,
       local_path TEXT,
       extra_images TEXT,
+      asset_mode TEXT DEFAULT 'SINGLE',
+      use_identity_reference INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,

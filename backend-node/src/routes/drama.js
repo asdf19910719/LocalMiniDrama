@@ -3,6 +3,7 @@ const propService = require('../services/propService');
 const response = require('../response');
 const dramaExportService = require('../services/dramaExportService');
 const dramaImportService = require('../services/dramaImportService');
+const { hasProjectStyleOverride } = require('../services/projectStyleService');
 const projectDeletionService = require('../services/projectDeletionService');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -164,6 +165,9 @@ function createDrama(db, log) {
       response.created(res, drama);
     } catch (err) {
       log.error('Create drama failed', { error: err.message, stack: err.stack });
+      if (err.code && err.code.startsWith('STYLE_') || err.code && err.code.startsWith('PROJECT_STYLE_')) {
+        return response.error(res, 400, err.code, err.message, err.details);
+      }
       response.internalError(res, err.message || '创建失败');
     }
   };
@@ -202,9 +206,16 @@ function listDramas(db, log) {
 
 function updateDrama(db, log) {
   return (req, res) => {
-    const drama = dramaService.updateDrama(db, log, req.params.id, req.body || {});
-    if (!drama) return response.notFound(res, '剧本不存在');
-    response.success(res, drama);
+    try {
+      const drama = dramaService.updateDrama(db, log, req.params.id, req.body || {});
+      if (!drama) return response.notFound(res, '剧本不存在');
+      response.success(res, drama);
+    } catch (error) {
+      if (error.code && (error.code.startsWith('STYLE_') || error.code.startsWith('PROJECT_STYLE_'))) {
+        return response.error(res, 400, error.code, error.message, error.details);
+      }
+      throw error;
+    }
   };
 }
 
@@ -426,12 +437,14 @@ function generateStoryboard(db, log) {
   return async (req, res) => {
     const body = req.body || {};
     try {
+      if (hasProjectStyleOverride(body)) {
+        return response.error(res, 400, 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', '生成风格由项目 style_id 统一决定，当前请求不得覆盖');
+      }
       // 显式处理 model 为空的情况，转为 undefined 以便 service 层触发默认逻辑
       const model = (body.model && String(body.model).trim()) ? body.model : undefined;
       log.info('Generate storyboard request', { episode_id: req.params.episode_id, storyboard_count: body.storyboard_count, video_duration: body.video_duration });
       const resData = await dramaService.generateStoryboard(db, log, req.params.episode_id, {
         model: model,
-        style: body.style,
         storyboard_count: body.storyboard_count,
         video_duration: body.video_duration,
         aspect_ratio: body.aspect_ratio,

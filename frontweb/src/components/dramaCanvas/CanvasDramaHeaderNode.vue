@@ -2,7 +2,7 @@
   <div class="canvas-drama-header">
     <div class="title">{{ data.drama?.title || '未命名项目' }}</div>
     <div class="meta">
-      <span v-if="data.drama?.style">风格 {{ data.drama.style }}</span>
+      <span v-if="data.drama?.style_id">项目风格 {{ data.drama.style_id }}</span>
       <span>{{ (data.drama?.episodes || []).length }} 集</span>
       <span>{{ assetCount }} 素材</span>
       <span>{{ storyboardCount }} 分镜</span>

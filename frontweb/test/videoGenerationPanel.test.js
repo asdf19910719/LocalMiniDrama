@@ -118,7 +118,7 @@ test('accepts zero as a deterministic random seed', () => {
   assert.equal('workflowId' in request.structured, false)
 })
 
-test('preserves the normal editor generation context in the unified candidate payload', async () => {
+test('preserves normal editor context while excluding request-level style overrides', async () => {
   const captured = []
   const generationContext = normalizeVideoGenerationContext({
     mode: 'universal_omni',
@@ -176,11 +176,11 @@ test('preserves the normal editor generation context in the unified candidate pa
         'https://assets.example.test/character.png',
         'https://assets.example.test/prop.png',
       ],
-      style: '电影写实',
       aspectRatio: '9:16',
       resolution: '1080p',
     },
   }])
+  assert.equal('style' in captured[0].structured, false)
 })
 
 test('keeps the newly generated candidates when a stale history refresh returns no groups', async () => {

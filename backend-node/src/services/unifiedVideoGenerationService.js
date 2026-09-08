@@ -22,6 +22,8 @@ const {
   resolveWorkflowParameters,
   validateWorkflowReferences,
 } = require('../director/workflowExecutionPolicy');
+const { validateGenerationCapabilities } = require('./modelCapabilityValidator');
+const { freezeGenerationSnapshot } = require('./generationSnapshotService');
 
 const ACTIVE_STATUSES = new Set(['waiting', 'queued', 'running']);
 const RETRYABLE_STATUSES = new Set(['failed', 'interrupted']);
@@ -118,12 +120,53 @@ function referenceImages(value) {
   }
 }
 
-function appendStyle(prompt, style) {
-  const cleanStyle = String(style || '').trim();
-  if (!cleanStyle) return String(prompt || '');
-  const base = String(prompt || '');
-  if (base.toLowerCase().includes(cleanStyle.toLowerCase())) return base;
-  return base ? `${base}. Style: ${cleanStyle}` : `Style: ${cleanStyle}`;
+function compileCanonicalVideoStyle(db, input, resolved, refs, duration) {
+  let styleId = null;
+  const dramaId = Number(input.drama_id ?? input.dramaId) || 0;
+  if (dramaId) {
+    if (input.style !== undefined || input.style_id !== undefined || input.styleId !== undefined) {
+      const error = new VideoLifecycleError('PROJECT_STYLE_OVERRIDE_FORBIDDEN', '项目内视频生成不能覆盖项目风格', 400);
+      throw error;
+    }
+    try {
+      const drama = db.prepare('SELECT style_id FROM dramas WHERE id=? AND deleted_at IS NULL').get(dramaId);
+      styleId = drama?.style_id || null;
+    } catch (_) {}
+  } else {
+    styleId = input.style_id ?? input.styleId ?? null;
+  }
+  if (!styleId) {
+    const error = new VideoLifecycleError('PROJECT_STYLE_REQUIRED', dramaId ? '项目尚未选择风格' : '自由视频生成必须选择 style_id', 400);
+    throw error;
+  }
+
+  const { createStyleRegistryService } = require('./styleRegistryService');
+  const { resolvePromptLanguage } = require('./promptLanguageResolver');
+  const { createReferenceRegistry } = require('./referenceRegistry');
+  const { compileVideoPrompt } = require('./videoPromptCompiler');
+  const style = createStyleRegistryService({ db }).requireStyle(styleId);
+  const language = resolvePromptLanguage({
+    modelConfig: resolved?.config?.settings || resolved?.config || {},
+    modelCapabilities: resolved?.capabilities || {},
+    style,
+  });
+  const references = createReferenceRegistry(refs.map((url, index) => ({ url, name: `Reference ${index + 1}`, role: 'visual_reference', sortOrder: index })), language);
+  let storyboard = {};
+  const storyboardId = Number(input.storyboard_id ?? input.storyboardId);
+  if (Number.isFinite(storyboardId)) {
+    try { storyboard = db.prepare('SELECT * FROM storyboards WHERE id=? AND deleted_at IS NULL').get(storyboardId) || {}; } catch (_) {}
+  }
+  const compilation = compileVideoPrompt({
+    storyboard,
+    basePrompt: input.prompt,
+    negativePrompt: input.negative_prompt ?? input.negativePrompt,
+    style,
+    language,
+    references,
+    audio: input.audio || {},
+    duration,
+  });
+  return { prompt: compilation.finalPrompt, compilation, style, references };
 }
 
 // H3 配置判定(comfyui + H3 模型命名,或 minimax_h3 协议)。
@@ -161,6 +204,7 @@ function createUnifiedVideoGenerationService({
   h3PromptDraftService = null,
   workflowRegistry = null,
   allowExperimental = false,
+  videoStyleCompiler = compileCanonicalVideoStyle,
 } = {}) {
   if (!db) throw new Error('Unified video generation service requires a database');
   if (!log) throw new Error('Unified video generation service requires a logger');
@@ -952,9 +996,10 @@ function inputFor(row) {
       } catch (_) {}
     }
     if (workflow?.adapter && !(Number(duration) > 0)) duration = 5;
-    const sourcePrompt = appendStyle(input.prompt, input.style);
+    const canonicalStyle = videoStyleCompiler(db, input, resolved, refs, duration);
+    const sourcePrompt = canonicalStyle.prompt;
     let prompt = sourcePrompt;
-    let compiled = null;
+    let compiled = canonicalStyle.compilation;
     let validatedReferenceAudios = Array.isArray(input.reference_audios) ? input.reference_audios : [];
     let validatedAudioEnabled = settings.audio_enabled !== false;
     const requiresDraft = workflow ? workflowRequiresDraft(workflow) : isH3VideoConfig(resolved);
@@ -965,7 +1010,11 @@ function inputFor(row) {
       // H3 分支不再内部编译:消费草稿(spec §11.4)。非 H3 配置完全走旧路径(忽略 h3_prompt_draft_id)。
       const gate = requireH3PromptDraft(input, resolved, storyboardId, workflow);
       prompt = gate.prompt;
-      compiled = gate.compiled;
+      const h3Style = canonicalStyle.compilation
+        ? videoStyleCompiler(db, { ...input, prompt: gate.prompt }, resolved, refs, duration)
+        : null;
+      prompt = h3Style?.prompt || gate.prompt;
+      compiled = { ...(gate.compiled || {}), styleCompilation: h3Style?.compilation || null };
       validatedReferenceAudios = gate.referenceAudios;
       validatedAudioEnabled = gate.audioEnabled;
     }
@@ -996,6 +1045,27 @@ function inputFor(row) {
     if (planCommon) {
       duration = planCommon.durationSeconds;
     }
+    const styleCapabilityValidation = canonicalStyle.compilation
+      ? validateGenerationCapabilities({
+          mediaType: 'video',
+          style: canonicalStyle.style,
+          references: canonicalStyle.references,
+          capabilities: {
+            supportsVideo: resolved?.capabilities?.supportsVideo !== false,
+            allowRealPerson: resolved?.capabilities?.allowRealPerson,
+            maxReferences: workflow?.execution?.references?.max
+              ?? resolved?.capabilities?.maxReferences
+              ?? Infinity,
+            renderTypes: resolved?.capabilities?.renderTypes,
+          },
+        })
+      : null;
+    if (styleCapabilityValidation?.status === 'blocked') {
+      const first = styleCapabilityValidation.errors[0];
+      throw new VideoLifecycleError(first?.code || 'CAPABILITY_VALIDATION_FAILED', first?.message || '视频模型能力校验未通过', 400, {
+        errors: styleCapabilityValidation.errors,
+      });
+    }
     const snapshot = buildVideoConfigSnapshot({
       ...resolved,
       workflow,
@@ -1004,6 +1074,12 @@ function inputFor(row) {
       planHash: planResult?.planHash || null,
       effectiveParameters: planCommon,
     });
+    const styleGenerationSnapshotId = canonicalStyle.compilation ? crypto.randomUUID() : null;
+    if (canonicalStyle.compilation) {
+      snapshot.styleCompilation = canonicalStyle.compilation;
+      snapshot.styleCapabilityValidation = styleCapabilityValidation;
+      snapshot.styleGenerationSnapshotId = styleGenerationSnapshotId;
+    }
     if (requiresDraft) snapshot.settings.audio_enabled = validatedAudioEnabled;
     const snapshotSettings = snapshot.settings || {};
     let createdId;
@@ -1023,7 +1099,7 @@ function inputFor(row) {
         snapshot.provider,
         snapshot.protocol,
         prompt,
-        input.negative_prompt ?? input.negativePrompt ?? null,
+        canonicalStyle.compilation?.negativePrompt ?? input.negative_prompt ?? input.negativePrompt ?? null,
         snapshot.model,
         snapshot.configId,
         JSON.stringify(snapshot),
@@ -1065,6 +1141,22 @@ function inputFor(row) {
       values.push('waiting', task.id, now, now);
       const result = db.prepare(`INSERT INTO video_generations (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`).run(...values);
       createdId = Number(result.lastInsertRowid);
+      if (canonicalStyle.compilation && tableHasColumn('generation_style_snapshots', 'id')) {
+        freezeGenerationSnapshot(db, {
+          id: styleGenerationSnapshotId,
+          dramaId: dramaId || null,
+          targetType: 'storyboard_video',
+          targetId: createdId,
+          mediaType: 'video',
+          style: canonicalStyle.compilation.style,
+          language: canonicalStyle.compilation.language,
+          finalPrompt: prompt,
+          negativePrompt: canonicalStyle.compilation.negativePrompt,
+          references: canonicalStyle.references?.entries || [],
+          sections: canonicalStyle.compilation.sections,
+          capabilityValidation: styleCapabilityValidation,
+        });
+      }
     })();
 
     enqueueOperation(createdId, 'submit');
@@ -1080,7 +1172,9 @@ function inputFor(row) {
     if (!workflow || workflow.execution?.promptContract !== 'h3_director_v1' || !workflowRequiresDraft(workflow)) {
       throw new VideoLifecycleError('H3_PREVIEW_UNSUPPORTED', '当前视频配置不是 ComfyUI H3 工作流', 409);
     }
-    return h3PromptCompiler.compile(db, log, { ...input, prompt: appendStyle(input.prompt, input.style) });
+    const refs = referenceImages(input.reference_image_urls ?? input.referenceUrls);
+    const styled = videoStyleCompiler(db, input, selection.resolved, refs, input.duration);
+    return h3PromptCompiler.compile(db, log, { ...input, prompt: styled.prompt, styleCompilation: styled.compilation });
   }
 
   async function cancelVideoGeneration(id) {
@@ -1311,6 +1405,7 @@ module.exports = {
   TERMINAL_STATUSES,
   VideoLifecycleError,
   createUnifiedVideoGenerationService,
+  compileCanonicalVideoStyle,
   normalizeProviderStatus,
   structuredError,
   isH3VideoConfig,

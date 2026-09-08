@@ -2,6 +2,7 @@ const response = require('../response');
 const imageService = require('../services/imageService');
 const taskService = require('../services/taskService');
 const backgroundExtractionService = require('../services/backgroundExtractionService');
+const { hasProjectStyleOverride } = require('../services/projectStyleService');
 
 function routes(db, cfg, log) {
   return {
@@ -18,10 +19,16 @@ function routes(db, cfg, log) {
     create: (req, res) => {
       try {
         const body = req.body || {};
+        if (hasProjectStyleOverride(body)) {
+          return response.error(res, 400, 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', '生成风格由项目 style_id 统一决定，当前请求不得覆盖');
+        }
         const rec = imageService.create(db, log, body);
         response.created(res, rec);
       } catch (err) {
         log.error('images create', { error: err.message });
+        if (['PROJECT_STYLE_REQUIRED', 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', 'STYLE_NOT_FOUND', 'STYLE_DISABLED'].includes(err.code)) {
+          return response.error(res, 400, err.code, err.message, err.details);
+        }
         response.internalError(res, err.message);
       }
     },
@@ -73,7 +80,7 @@ function routes(db, cfg, log) {
           log,
           req.params.episode_id,
           body.model,
-          body.style,
+          undefined,
           body.language
         );
         response.success(res, { task_id: taskId, status: 'pending', message: '场景提取任务已创建，正在后台处理...' });

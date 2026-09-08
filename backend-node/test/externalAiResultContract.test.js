@@ -33,7 +33,7 @@ describe('externalAiResultContract', () => {
       name: '陌生人',
       role: 'supporting',
       description: '送来账本的神秘访客。',
-      image_prompt: '神秘访客定妆',
+      base_image_prompt: '神秘访客定妆',
       negative_prompt: '模糊',
       voice_profile: '低沉男声',
       variants: [{
@@ -41,7 +41,7 @@ describe('externalAiResultContract', () => {
         name: '默认状态',
         description: '雨夜来访',
         appearance: '湿透的黑色大衣',
-        image_prompt: '黑色大衣访客',
+        base_image_prompt: '黑色大衣访客',
         negative_prompt: '模糊',
         is_default: true,
       }],
@@ -71,11 +71,11 @@ describe('externalAiResultContract', () => {
     value.new_assets.props = [
       {
         local_ref: 'new_prop_key', name: '钥匙', type: '线索', description: '铜钥匙',
-        image_prompt: '铜钥匙棚拍', negative_prompt: '手',
+        base_image_prompt: '铜钥匙棚拍', negative_prompt: '手',
       },
       {
         local_ref: 'new_prop_key', name: '备用钥匙', type: '线索', description: '备用铜钥匙',
-        image_prompt: '备用铜钥匙棚拍', negative_prompt: '手',
+        base_image_prompt: '备用铜钥匙棚拍', negative_prompt: '手',
       },
     ];
     value.storyboards[0].storyboard_number = 2;
@@ -90,5 +90,17 @@ describe('externalAiResultContract', () => {
     const publishedExample = JSON.parse(fs.readFileSync(path.join(docsDir, '制作包示例.json'), 'utf8'));
     assert.deepEqual(publishedSchema, EXTERNAL_AI_RESULT_SCHEMA);
     assert.deepEqual(validateExternalAiResult(publishedExample), { ok: true, errors: [] });
+  });
+
+  it('rejects v1, style overrides, legacy prompt fields, and final prompts', () => {
+    const value = validResult();
+    value.version = '1';
+    value.style_id = 'rh-101-cinematic';
+    value.storyboards[0].image_prompt = 'legacy';
+    value.storyboards[0].final_prompt = 'compiled';
+    const errors = validateExternalAiResult(value).errors;
+    assert.ok(errors.some((item) => item.code === 'LEGACY_SCHEMA_UNSUPPORTED'));
+    assert.ok(errors.some((item) => item.code === 'STYLE_OVERRIDE_FORBIDDEN'));
+    assert.ok(errors.some((item) => item.code === 'FINAL_PROMPT_FORBIDDEN'));
   });
 });

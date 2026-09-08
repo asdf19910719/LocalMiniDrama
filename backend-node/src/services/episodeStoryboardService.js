@@ -1086,9 +1086,9 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
   }
 
   // 获取剧集风格和比例（如果未指定，则从 drama metadata / style 中获取完整提示词）
-  const drama = db.prepare('SELECT style, metadata FROM dramas WHERE id = ?').get(episode.drama_id);
-  const { resolvedStreamStyleFromDrama } = require('../utils/dramaStyleMerge');
-  const finalStyle = resolvedStreamStyleFromDrama(style, drama);
+  const drama = db.prepare('SELECT * FROM dramas WHERE id = ?').get(episode.drama_id);
+  const { resolveProjectStreamStyle } = require('./projectStyleConfigService');
+  const finalStyle = resolveProjectStreamStyle(style, drama, db);
 
   // 图片比例 + 每镜时长：优先用传入值，再从 drama.metadata 读，最后兜底全局配置
   let dramaAspectRatio = null;
@@ -1333,10 +1333,10 @@ function rebuildVideoPromptForStoryboard(db, log, storyboardId) {
   const loadConfig = require('../config').loadConfig;
   const cfg = loadConfig();
   const drama = row.drama_id
-    ? db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(row.drama_id)
+    ? db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(row.drama_id)
     : null;
-  const { resolvedStreamStyleFromDrama } = require('../utils/dramaStyleMerge');
-  const finalStyle = resolvedStreamStyleFromDrama('', drama) || cfg?.style?.default_style || '';
+  const { resolveProjectStreamStyle } = require('./projectStyleConfigService');
+  const finalStyle = resolveProjectStreamStyle('', drama, db) || cfg?.style?.default_style || '';
 
   let dramaAspectRatio = null;
   try {

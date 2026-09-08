@@ -455,6 +455,8 @@ function buildTestService(db, overrides = {}) {
     providerRegistry: { has: () => false },
     schedule: () => {},
     pollIntervalMs: 0,
+    // 本组只验证引用槽位数量策略，隔离项目风格编译。
+    videoStyleCompiler: (_db, input) => ({ prompt: String(input.prompt || ''), compilation: null }),
     ...overrides,
   });
 }

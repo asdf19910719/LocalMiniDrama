@@ -41,7 +41,7 @@ function seedSourceDb(db, storageDir) {
   }
 
   const dramaId = Number(db.prepare(
-    "INSERT INTO dramas (title, description, status, created_at, updated_at) VALUES ('源剧', '测试剧目', 'draft', ?, ?)"
+    "INSERT INTO dramas (title, description, style_id, status, created_at, updated_at) VALUES ('源剧', '测试剧目', 'rh-101-cinematic', 'draft', ?, ?)"
   ).run(now, now).lastInsertRowid);
   const epId = Number(db.prepare(
     "INSERT INTO episodes (drama_id, episode_number, title, duration, audio_plan, production_profile, created_at, updated_at) VALUES (?, 1, '第一集', 0, ?, ?, ?, ?)"
@@ -165,6 +165,9 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
 
     // 导出端：project.json 结构符合约定
     const project = parseProjectJson(buffer);
+    assert.equal(project.version, '1.7');
+    assert.equal(project.drama.style_id, 'rh-101-cinematic');
+    assert.equal(Object.hasOwn(project.drama, 'style'), false);
     const exportedChar = project.characters[0];
     assert.equal(exportedChar.source_key, 'char_linwan');
     assert.equal(exportedChar.asset_mode, 'SINGLE');
@@ -209,6 +212,10 @@ describe('drama zip export/import roundtrip with variants and source keys', () =
         buffer
       );
       assert.ok(result.drama_id, '导入应返回新 drama id');
+      assert.equal(
+        dstDb.prepare('SELECT style_id FROM dramas WHERE id = ?').get(result.drama_id).style_id,
+        'rh-101-cinematic'
+      );
 
       // 人物与 source_key
       const newChar = dstDb.prepare('SELECT * FROM characters WHERE deleted_at IS NULL').get();

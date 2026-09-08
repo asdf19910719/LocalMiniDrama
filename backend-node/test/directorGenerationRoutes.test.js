@@ -107,6 +107,7 @@ function createLifecycle(db) {
     log: { info() {}, warn() {}, error() {} },
     providerRegistry: { has() { return false; }, get() { throw new Error('not scheduled in route tests'); } },
     schedule() {},
+    videoStyleCompiler: (_db, input) => ({ prompt: String(input.prompt || ''), compilation: null }),
   });
 }
 

@@ -9,13 +9,13 @@ const { validExternalAiResult: validResult } = require('./fixtures/externalAiRes
 function createDb() {
   const db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE dramas (id INTEGER PRIMARY KEY, title TEXT, description TEXT, genre TEXT, style TEXT, metadata TEXT, deleted_at TEXT);
+    CREATE TABLE dramas (id INTEGER PRIMARY KEY, title TEXT, description TEXT, genre TEXT, style TEXT, style_id TEXT, metadata TEXT, deleted_at TEXT);
     CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, source_key TEXT, name TEXT, role TEXT, description TEXT, personality TEXT, appearance TEXT, polished_prompt TEXT, negative_prompt TEXT, voice_style TEXT, sort_order INTEGER, updated_at TEXT, deleted_at TEXT);
     CREATE TABLE character_variants (id INTEGER PRIMARY KEY, character_id INTEGER, source_key TEXT, name TEXT, description TEXT, appearance TEXT, image_prompt TEXT, negative_prompt TEXT, is_default INTEGER, updated_at TEXT, deleted_at TEXT);
     CREATE TABLE scenes (id INTEGER PRIMARY KEY, drama_id INTEGER, episode_id INTEGER, source_key TEXT, location TEXT, time TEXT, state TEXT, description TEXT, prompt TEXT, atmosphere TEXT, negative_prompt TEXT, updated_at TEXT, deleted_at TEXT);
     CREATE TABLE props (id INTEGER PRIMARY KEY, drama_id INTEGER, episode_id INTEGER, source_key TEXT, name TEXT, type TEXT, description TEXT, prompt TEXT, negative_prompt TEXT, updated_at TEXT, deleted_at TEXT);
   `);
-  db.prepare(`INSERT INTO dramas VALUES (1, '雨夜追凶', '记者追查旧案', '悬疑', 'cinematic', '{}', NULL)`).run();
+  db.prepare(`INSERT INTO dramas VALUES (1, '雨夜追凶', '记者追查旧案', '悬疑', 'cinematic', 'rh-101-cinematic', '{}', NULL)`).run();
   db.prepare(`INSERT INTO characters VALUES (21, 1, 'char_lin_wan', '林晚', 'main', '调查记者', '冷静克制', '二十七岁，黑色短发', '林晚定妆照', '避免改脸', '清冷女声', 1, '2026-09-01', NULL)`).run();
   db.prepare(`INSERT INTO character_variants VALUES (31, 21, 'variant_lin_wan_default', '默认状态', '日常状态', '深灰风衣', '深灰风衣定妆', '避免改脸', 1, '2026-09-01', NULL)`).run();
   db.prepare(`INSERT INTO scenes VALUES (41, 1, 1, 'scene_store', '便利店', '深夜', '雨夜', '冷白灯便利店', '便利店空镜', '紧张', '人物', '2026-09-01', NULL)`).run();
@@ -90,7 +90,7 @@ describe('externalAiResultAdapter', () => {
       name: '雨夜淋湿',
       description: '短暂淋雨后的状态',
       appearance: '风衣肩部被雨水打湿',
-      image_prompt: '同一林晚，风衣肩部湿透',
+      base_image_prompt: '同一林晚，风衣肩部湿透',
       negative_prompt: '改变五官',
       is_default: false,
     });

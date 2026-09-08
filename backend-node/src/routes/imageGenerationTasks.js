@@ -9,6 +9,7 @@ const settingsService = require('../services/settingsService');
 const selection = require('../services/imageGenerationResultSelection');
 const { checkImageGenerationEnvironment } = require('../services/imageGenerationEnvironmentService');
 const apiTasks = require('../services/imageGenerationApiTaskService');
+const { assertNoStyleOverride } = require('../services/projectStyleService');
 
 module.exports = (db, log = console) => {
   const router = express.Router();
@@ -35,13 +36,13 @@ module.exports = (db, log = console) => {
 
   router.post('/image-generation-tasks', (req, res) => handle(res, () => {
     const input = req.body || {};
+    assertNoStyleOverride(input);
     const generation = targets.buildGenerationInput(db, {
       drama_id: input.dramaId,
       target_type: input.targetType,
       target_id: input.targetId,
       asset_mode: input.assetMode ?? input.asset_mode,
       use_identity_reference: input.useIdentityReference ?? input.use_identity_reference,
-      style_snapshot: input.styleSnapshot ?? input.style_snapshot,
     });
     const requestedChannel = resolveChannel(input.dramaId, input.generationChannel || input.generation_channel);
     let task = tasks.createTask(db, {
@@ -102,14 +103,38 @@ module.exports = (db, log = console) => {
     }));
 
   router.post('/image-generation-batches', (req, res) => handle(res, () => {
-    const channel = resolveChannel(req.body?.dramaId, req.body?.generationChannel || req.body?.generation_channel);
+    const input = req.body || {};
+    assertNoStyleOverride(input);
+    const dramaId = input.dramaId;
+    const channel = resolveChannel(dramaId, input.generationChannel || input.generation_channel);
+    const rawTargets = input.targets || (Array.isArray(input.targetIds)
+      ? input.targetIds.map((targetId) => ({ targetType: input.targetType || 'storyboard_main', targetId }))
+      : []);
+    const compiledTargets = rawTargets.map((target) => {
+      assertNoStyleOverride(target);
+      const generation = targets.buildGenerationInput(db, {
+        drama_id: dramaId,
+        target_type: target.targetType ?? target.target_type,
+        target_id: target.targetId ?? target.target_id,
+        asset_mode: target.assetMode ?? target.asset_mode,
+        use_identity_reference: target.useIdentityReference ?? target.use_identity_reference,
+      });
+      return {
+        targetType: target.targetType ?? target.target_type,
+        targetId: target.targetId ?? target.target_id,
+        promptSnapshot: generation.prompt,
+        referenceManifest: generation.references,
+        frameType: generation.frameType,
+        assetMode: generation.assetMode,
+        negativePromptSnapshot: generation.negativePrompt,
+        styleSnapshot: generation.styleSnapshot,
+      };
+    });
     return tasks.createBatch(db, {
-      dramaId: req.body?.dramaId,
-      resourceScope: req.body?.scope,
+      dramaId,
+      resourceScope: input.scope,
       generationChannel: channel,
-      targets: req.body?.targets || (Array.isArray(req.body?.targetIds)
-        ? req.body.targetIds.map((targetId) => ({ targetType: req.body.targetType || 'storyboard_main', targetId }))
-        : []),
+      targets: compiledTargets,
     });
   }));
 

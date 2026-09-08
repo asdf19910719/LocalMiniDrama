@@ -64,7 +64,6 @@ export function useCanvasEpisodeGenerate(deps) {
       videoDuration = Math.max(10, Math.round(10 + (scriptLen / 600) * 60))
     }
     return {
-      style: gen.style || undefined,
       aspect_ratio: gen.aspectRatio,
       video_duration: videoDuration,
       include_narration: !!meta.storyboard_include_narration,
@@ -173,7 +172,6 @@ export function useCanvasEpisodeGenerate(deps) {
         targets: todo.map((sb) => ({
           targetType: 'storyboard_main',
           targetId: sb.id,
-          prompt: sb.polished_prompt || sb.image_prompt || sb.description || sb.title || '',
         })),
       })
       ElMessage.success(`已创建 ${todo.length} 个 ChatGPT 生图任务`)

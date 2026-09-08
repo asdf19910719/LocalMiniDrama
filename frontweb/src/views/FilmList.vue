@@ -102,7 +102,7 @@
                 <span v-if="d.episodes?.length" class="badge badge-episodes">{{ d.episodes.length }} 集</span>
                 <span v-if="totalStoryboards(d) > 0" class="badge badge-storyboards">{{ totalStoryboards(d) }} 分镜</span>
                 <span v-if="d.metadata?.aspect_ratio" class="badge badge-ratio">{{ d.metadata.aspect_ratio }}</span>
-                <span v-if="d.style" class="badge badge-style">{{ formatStyle(d.style) }}</span>
+                <span v-if="d.style_id" class="badge badge-style">{{ formatStyle(d.style_id) }}</span>
                 <span v-if="d.genre" class="badge badge-genre">{{ formatGenre(d.genre) }}</span>
               </div>
               <p class="project-meta">{{ formatDate(d.updated_at) }}</p>
@@ -127,6 +127,10 @@
         <el-form-item label="描述">
           <el-input v-model="newForm.description" type="textarea" :rows="3" placeholder="输入项目描述（选填）" />
         </el-form-item>
+        <el-form-item label="项目画风" required>
+          <StylePickerButton v-model="newForm.style_id" />
+          <p style="margin: 4px 0 0; font-size: 12px; color: #71717a;">人物、场景、道具、分镜图片与视频统一使用此风格</p>
+        </el-form-item>
         <el-form-item label="画面比例">
           <el-select v-model="newForm.aspect_ratio" style="width: 100%">
             <el-option label="16:9 横屏（默认）" value="16:9" />
@@ -141,7 +145,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showNewDialog = false">取消</el-button>
-        <el-button type="primary" :loading="newSaving" :disabled="!newForm.title?.trim()" @click="submitNew">确定</el-button>
+        <el-button type="primary" :loading="newSaving" :disabled="!newForm.title?.trim() || !newForm.style_id" @click="submitNew">确定</el-button>
       </template>
     </el-dialog>
 
@@ -363,11 +367,12 @@ import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import AIConfigContent from '@/components/AIConfigContent.vue'
+import StylePickerButton from '@/components/StylePickerButton.vue'
 import { uploadAPI } from '@/api/upload'
 import { aiAPI } from '@/api/ai'
 import { imagesAPI } from '@/api/images'
 import { taskAPI } from '@/api/task'
-import { getStyleLabel } from '@/constants/styleOptions'
+import { stylesAPI } from '@/api/styles'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 
 const router = useRouter()
@@ -403,7 +408,7 @@ async function doGenerateLibImg(form, prompt, api, reloadFn) {
   if (!prompt?.trim()) { ElMessage.warning('请先填写名称或描述'); return }
   form.imgGenerating = true
   try {
-    const res = await imagesAPI.create({ prompt: prompt.trim(), drama_id: null })
+    const res = await imagesAPI.create({ prompt: prompt.trim(), drama_id: null, style_id: 'rh-101-cinematic' })
     const imgData = res?.data ?? res
     const taskId = imgData?.task_id
     if (!taskId) throw new Error('未返回任务ID')
@@ -589,7 +594,8 @@ async function onDeletePropLibrary(item) {
 }
 
 const showNewDialog = ref(false)
-const newForm = ref({ title: '', description: '', aspect_ratio: '16:9' })
+const newForm = ref({ title: '', description: '', style_id: 'rh-101-cinematic', aspect_ratio: '16:9' })
+const styleLabels = ref(new Map())
 const newSaving = ref(false)
 const exportingId = ref(null)
 const importing = ref(false)
@@ -638,6 +644,12 @@ function loadList() {
     })
 }
 
+function loadStyleLabels() {
+  stylesAPI.list().then((result) => {
+    styleLabels.value = new Map((result?.items || []).map((style) => [style.id, style.labelZh]))
+  }).catch(() => {})
+}
+
 function formatDate(val) {
   if (!val) return ''
   const d = new Date(val)
@@ -650,9 +662,7 @@ function formatStatus(status) {
 }
 
 function formatStyle(style) {
-  const aliases = { anime: 'anime style', sci_fi: 'sci-fi' }
-  const key = aliases[style] || style
-  return getStyleLabel(key)
+  return styleLabels.value.get(style) || style
 }
 
 function formatGenre(genre) {
@@ -669,7 +679,7 @@ function goNewProject() {
 }
 
 function resetNewForm() {
-  newForm.value = { title: '', description: '', aspect_ratio: '16:9' }
+  newForm.value = { title: '', description: '', style_id: 'rh-101-cinematic', aspect_ratio: '16:9' }
 }
 
 async function submitNew() {
@@ -677,7 +687,12 @@ async function submitNew() {
   if (!title) return
   newSaving.value = true
   try {
-    const drama = await dramaAPI.create({ title, description: newForm.value.description?.trim() || undefined, metadata: { aspect_ratio: newForm.value.aspect_ratio || '16:9' } })
+    const drama = await dramaAPI.create({
+      title,
+      description: newForm.value.description?.trim() || undefined,
+      style_id: newForm.value.style_id,
+      metadata: { aspect_ratio: newForm.value.aspect_ratio || '16:9' },
+    })
     showNewDialog.value = false
     ElMessage.success('项目已创建')
     loadList()
@@ -784,6 +799,7 @@ async function onDelete(d) {
 
 onMounted(async () => {
   loadList()
+  loadStyleLabels()
   loadExamples()
   try {
     const lock = await aiAPI.getVendorLock()

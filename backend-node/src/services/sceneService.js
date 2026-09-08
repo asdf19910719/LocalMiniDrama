@@ -2,7 +2,7 @@
 const imageClient = require('./imageClient');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
 const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 
 function applySceneStyleOverride(cfg, styleOverride) {
@@ -232,8 +232,8 @@ async function generateScenePromptOnly(db, log, cfg, sceneId, modelName, style) 
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
 
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull || {});
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull || {}, db);
   mergedCfg = applySceneStyleOverride(mergedCfg, style);
 
   const location = (sceneRow.location || '').trim();
@@ -289,8 +289,8 @@ async function generateSceneSinglePromptOnly(db, log, cfg, sceneId, modelName, s
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
 
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull || {});
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull || {}, db);
   mergedCfg = applySceneStyleOverride(mergedCfg, style);
 
   const location = (sceneRow.location || '').trim();
@@ -345,10 +345,10 @@ async function generateSceneFourViewImage(db, log, cfg, sceneId, modelName, styl
     'SELECT id, drama_id, location, time, prompt, polished_prompt, negative_prompt FROM scenes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
   if (!dramaFull) return { ok: false, error: 'unauthorized' };
 
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull, db);
   mergedCfg = applySceneStyleOverride(mergedCfg, style);
   let imagePrompt;
 
@@ -424,10 +424,10 @@ async function generateSceneSingleImage(db, log, cfg, sceneId, modelName, style)
     'SELECT id, drama_id, location, time, prompt, polished_prompt, polished_prompt_single, negative_prompt FROM scenes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(sceneId));
   if (!sceneRow) return { ok: false, error: 'scene not found' };
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(sceneRow.drama_id);
   if (!dramaFull) return { ok: false, error: 'unauthorized' };
 
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull, db);
   mergedCfg = applySceneStyleOverride(mergedCfg, style);
   let imagePrompt;
 

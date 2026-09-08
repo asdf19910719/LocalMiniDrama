@@ -1,6 +1,6 @@
 # RunningHub Style System Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the legacy 39-style dual catalog with a 169-style backend-owned registry, unified image/video prompt compilation, immutable snapshots, project-only style inheritance, localized RunningHub previews, custom styles, and external AI JSON v2.
 
@@ -39,7 +39,7 @@
 - Produces: `createStyleRegistryService({ db, catalogPath, previewManifestPath })`
 - Produces: `listStyles(filters)`, `getStyle(id)`, `requireStyle(id)`
 
-- [ ] **Step 1: Write the failing registry test**
+- [x] **Step 1: Write the failing registry test**
 
 ```js
 test('system catalog contains 169 valid bilingual styles', () => {
@@ -56,10 +56,10 @@ test('system catalog contains 169 valid bilingual styles', () => {
 });
 ```
 
-- [ ] **Step 2: Run `cd backend-node && node --test test/styleRegistryService.test.js` and verify failure because the registry does not exist.**
-- [ ] **Step 3: Implement strict StyleSpec validation and deterministic catalog normalization.** English prompts use existing genuine English when present; otherwise the builder emits an English style instruction from English label/key and normalized English keyword groups, with a non-generic style-specific lead sentence.
-- [ ] **Step 4: Generate `stylePresets.v1.json`, run the test, and verify 169/169 entries pass.**
-- [ ] **Step 5: Commit `feat: add canonical 169-style registry`.**
+- [x] **Step 2: Run `cd backend-node && node --test test/styleRegistryService.test.js` and verify failure because the registry does not exist.**
+- [x] **Step 3: Implement strict StyleSpec validation and deterministic catalog normalization.** English prompts use existing genuine English when present; otherwise the builder emits an English style instruction from English label/key and normalized English keyword groups, with a non-generic style-specific lead sentence.
+- [x] **Step 4: Generate `stylePresets.v1.json`, run the test, and verify 169/169 entries pass.**
+- [x] **Step 5: Commit `feat: add canonical 169-style registry`.**
 
 ### Task 2: RunningHub preview extraction and local manifest
 
@@ -73,11 +73,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Consumes: catalog `runningHubId`, `key`, `preview.localPath`
 - Produces: manifest entries `{ runningHubId, styleId, sourceUrl, localPath, sha256, width, height, collectedAt, status }`
 
-- [ ] **Step 1: Write a failing test asserting all 169 manifest IDs exist, downloaded files remain inside `frontweb/public/style-thumbs/runninghub`, hashes match, and fallback status is explicit.**
-- [ ] **Step 2: Run `cd backend-node && node --test test/stylePreviewManifest.test.js` and verify failure.**
-- [ ] **Step 3: Implement safe HTTPS download, MIME/size validation, Sharp WebP conversion, SHA-256, and path-boundary checks.**
-- [ ] **Step 4: Use the authenticated RunningHub page/API to capture preview URLs, execute the script, and retain a fallback entry for any unavailable preview without hotlinking at runtime.**
-- [ ] **Step 5: Re-run the manifest test and commit `feat: localize style preview library`.**
+- [x] **Step 1: Write a failing test asserting all 169 manifest IDs exist, downloaded files remain inside `frontweb/public/style-thumbs/runninghub`, hashes match, and fallback status is explicit.**
+- [x] **Step 2: Run `cd backend-node && node --test test/stylePreviewManifest.test.js` and verify failure.**
+- [x] **Step 3: Implement safe HTTPS download, MIME/size validation, Sharp WebP conversion, SHA-256, and path-boundary checks.**
+- [x] **Step 4: Use the authenticated RunningHub page/API to capture preview URLs, execute the script, and retain a fallback entry for any unavailable preview without hotlinking at runtime.**
+- [x] **Step 5: Re-run the manifest test and commit `feat: localize style preview library`.**
 
 ### Task 3: Custom styles, style API, and database model
 
@@ -94,11 +94,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Produces table: `custom_styles(id, version, spec_json, created_at, updated_at)`
 - Produces project column: `dramas.style_id TEXT`
 
-- [ ] **Step 1: Write failing API tests for system listing, detail, custom CRUD, version increment, and `CUSTOM_STYLE_IN_USE`.**
-- [ ] **Step 2: Run the two focused backend test files and verify missing route/table failures.**
-- [ ] **Step 3: Add tables/columns and implement routes with `{ error: { code, message, details } }` errors.**
-- [ ] **Step 4: Run focused tests and verify pass.**
-- [ ] **Step 5: Commit `feat: add style registry API and custom styles`.**
+- [x] **Step 1: Write failing API tests for system listing, detail, custom CRUD, version increment, and `CUSTOM_STYLE_IN_USE`.**
+- [x] **Step 2: Run the two focused backend test files and verify missing route/table failures.**
+- [x] **Step 3: Add tables/columns and implement routes with `{ error: { code, message, details } }` errors.**
+- [x] **Step 4: Run focused tests and verify pass.**
+- [x] **Step 5: Commit `feat: add style registry API and custom styles`.**
 
 ### Task 4: Project-only style authority
 
@@ -114,11 +114,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Produces project response field: `style_id`
 - Produces error codes: `PROJECT_STYLE_REQUIRED`, `PROJECT_STYLE_OVERRIDE_FORBIDDEN`
 
-- [ ] **Step 1: Write failing tests that create/update requires a valid `style_id` and generation cannot override it.**
-- [ ] **Step 2: Run focused backend tests and verify failure against legacy `style`.**
-- [ ] **Step 3: Change create/read/update to `style_id`, remove metadata prompt persistence, and make generation services resolve through project ownership.**
-- [ ] **Step 4: Replace legacy front/back sync tests with API-contract tests and run them.**
-- [ ] **Step 5: Commit `refactor: make project style the sole authority`.**
+- [x] **Step 1: Write failing tests that create/update requires a valid `style_id` and generation cannot override it.**
+- [x] **Step 2: Run focused backend tests and verify failure against legacy `style`.**
+- [x] **Step 3: Change create/read/update to `style_id`, remove metadata prompt persistence, and make generation services resolve through project ownership.**
+- [x] **Step 4: Replace legacy front/back sync tests with API-contract tests and run them.**
+- [x] **Step 5: Commit `refactor: make project style the sole authority`.**
 
 ### Task 5: Language, reference, capability, and snapshot foundations
 
@@ -138,11 +138,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Produces: `validateGenerationCapabilities(context) -> { status, errors, warnings }`
 - Produces: `freezeGenerationSnapshot(db, input) -> persisted snapshot`
 
-- [ ] **Step 1: Write focused failing tests for language precedence, stable reference order, reference limit/real-person blocking, and snapshot-before-submit invariants.**
-- [ ] **Step 2: Run all four focused tests and verify failures.**
-- [ ] **Step 3: Implement the four isolated services without provider calls.**
-- [ ] **Step 4: Run focused tests and existing video/image snapshot tests.**
-- [ ] **Step 5: Commit `feat: add generation compilation foundations`.**
+- [x] **Step 1: Write focused failing tests for language precedence, stable reference order, reference limit/real-person blocking, and snapshot-before-submit invariants.**
+- [x] **Step 2: Run all four focused tests and verify failures.**
+- [x] **Step 3: Implement the four isolated services without provider calls.**
+- [x] **Step 4: Run focused tests and existing video/image snapshot tests.**
+- [x] **Step 5: Commit `feat: add generation compilation foundations`.**
 
 ### Task 6: Unified image prompt compiler and integrations
 
@@ -161,11 +161,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 **Interfaces:**
 - Produces: `compileImagePrompt({ targetType, mode, basePrompt, negativePrompt, style, language, references }) -> { finalPrompt, negativePrompt, sections }`
 
-- [ ] **Step 1: Write golden failing tests for character turnaround/single, variant, scene normal/multi-view/panorama/top-down, prop, and storyboard frame.**
-- [ ] **Step 2: Run focused tests and verify legacy builders fail the new snapshots.**
-- [ ] **Step 3: Implement the compiler with style-first sections, per-mode templates, negative merging, and duplicate-style detection.**
-- [ ] **Step 4: Route all asset image entry points through the compiler and snapshot service; run focused plus existing asset tests.**
-- [ ] **Step 5: Commit `feat: unify image style compilation`.**
+- [x] **Step 1: Write golden failing tests for character turnaround/single, variant, scene normal/multi-view/panorama/top-down, prop, and storyboard frame.**
+- [x] **Step 2: Run focused tests and verify legacy builders fail the new snapshots.**
+- [x] **Step 3: Implement the compiler with style-first sections, per-mode templates, negative merging, and duplicate-style detection.**
+- [x] **Step 4: Route all asset image entry points through the compiler and snapshot service; run focused plus existing asset tests.**
+- [x] **Step 5: Commit `feat: unify image style compilation`.**
 
 ### Task 7: Unified video prompt compiler and integrations
 
@@ -181,11 +181,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 **Interfaces:**
 - Produces: `compileVideoPrompt({ storyboard, basePrompt, style, language, references, audio, duration }) -> { finalPrompt, negativePrompt, sections }`
 
-- [ ] **Step 1: Write failing golden tests for plain video, multi-reference, first/last frame, Omni, H3, timecodes, Chinese dialogue, and real-person validation.**
-- [ ] **Step 2: Run focused tests and verify `. Style:` output fails.**
-- [ ] **Step 3: Implement style-first video compilation and remove `appendStyle` from provider-bound paths.**
-- [ ] **Step 4: Make H3 consume the same resolved style/reference context before its specialized serialization; run video/H3 tests.**
-- [ ] **Step 5: Commit `feat: unify video style compilation`.**
+- [x] **Step 1: Write failing golden tests for plain video, multi-reference, first/last frame, Omni, H3, timecodes, Chinese dialogue, and real-person validation.**
+- [x] **Step 2: Run focused tests and verify `. Style:` output fails.**
+- [x] **Step 3: Implement style-first video compilation and remove `appendStyle` from provider-bound paths.**
+- [x] **Step 4: Make H3 consume the same resolved style/reference context before its specialized serialization; run video/H3 tests.**
+- [x] **Step 5: Commit `feat: unify video style compilation`.**
 
 ### Task 8: External AI JSON v2 and import-only base prompts
 
@@ -205,11 +205,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Consumes/produces protocol constants: `version: '2'`, `prompt_contract: 'base_prompt'`
 - Produces asset fields: `base_image_prompt`, storyboard field `base_video_prompt`
 
-- [ ] **Step 1: Replace fixtures with v2 and add failing rejection tests for v1, style fields, final prompts, and old `image_prompt`.**
-- [ ] **Step 2: Run focused external AI tests and verify contract failures.**
-- [ ] **Step 3: Implement v2 strict schema, style-pollution lint, task ZIP read-only style context, and base-prompt database projection.**
-- [ ] **Step 4: Verify preview/import never creates generation tasks and transaction rollback remains intact.**
-- [ ] **Step 5: Regenerate docs/schema/example, run all external AI tests, and commit `feat: upgrade external AI import to base-prompt v2`.**
+- [x] **Step 1: Replace fixtures with v2 and add failing rejection tests for v1, style fields, final prompts, and old `image_prompt`.**
+- [x] **Step 2: Run focused external AI tests and verify contract failures.**
+- [x] **Step 3: Implement v2 strict schema, style-pollution lint, task ZIP read-only style context, and base-prompt database projection.**
+- [x] **Step 4: Verify preview/import never creates generation tasks and transaction rollback remains intact.**
+- [x] **Step 5: Regenerate docs/schema/example, run all external AI tests, and commit `feat: upgrade external AI import to base-prompt v2`.**
 
 ### Task 9: Visual-first style picker and persistent project summary
 
@@ -228,11 +228,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Consumes: `GET /styles` and `GET /styles/:id`
 - Emits from picker: `update:modelValue(styleId)` only
 
-- [ ] **Step 1: Write failing source-level UI tests for API ownership, four-column cards, filters/search, selected state, detail drawer, and no local override controls.**
-- [ ] **Step 2: Run focused frontend tests and verify failure.**
-- [ ] **Step 3: Implement lazy-loaded/virtualized card grid, RunningHub local thumbnails, Chinese default details, advanced bilingual prompts, and custom style actions.**
-- [ ] **Step 4: Add persistent summary to settings/storyboard/free canvas and read-only style to external import preview; run focused tests.**
-- [ ] **Step 5: Commit `feat: add visual project style workspace`.**
+- [x] **Step 1: Write failing source-level UI tests for API ownership, four-column cards, filters/search, selected state, detail drawer, and no local override controls.**
+- [x] **Step 2: Run focused frontend tests and verify failure.**
+- [x] **Step 3: Implement lazy-loaded/virtualized card grid, RunningHub local thumbnails, Chinese default details, advanced bilingual prompts, and custom style actions.**
+- [x] **Step 4: Add persistent summary to settings/storyboard/free canvas and read-only style to external import preview; run focused tests.**
+- [x] **Step 5: Commit `feat: add visual project style workspace`.**
 
 ### Task 10: FreeCreate and compiled prompt presentation
 
@@ -249,11 +249,11 @@ test('system catalog contains 169 valid bilingual styles', () => {
 - Standalone free task: required registry `style_id`
 - History display: snapshot language, style/version, references, final prompt, validation stage
 
-- [ ] **Step 1: Write failing tests for bound/standalone rules and read-only compiled prompt history.**
-- [ ] **Step 2: Run focused tests and verify arbitrary style text remains a failure.**
-- [ ] **Step 3: Replace free-text style input with registry selection and expose snapshot detail panels.**
-- [ ] **Step 4: Run focused frontend tests and build.**
-- [ ] **Step 5: Commit `feat: enforce registry styles in free generation`.**
+- [x] **Step 1: Write failing tests for bound/standalone rules and read-only compiled prompt history.**
+- [x] **Step 2: Run focused tests and verify arbitrary style text remains a failure.**
+- [x] **Step 3: Replace free-text style input with registry selection and expose snapshot detail panels.**
+- [x] **Step 4: Run focused frontend tests and build.**
+- [x] **Step 5: Commit `feat: enforce registry styles in free generation`.**
 
 ### Task 11: Remove legacy paths, full verification, and documentation
 
@@ -268,9 +268,9 @@ test('system catalog contains 169 valid bilingual styles', () => {
 **Interfaces:**
 - No remaining runtime reference to legacy `dramas.style`, `style_prompt_zh`, `style_prompt_en`, `appendStyle`, or external result version `1`.
 
-- [ ] **Step 1: Run `rg -n "generationStylePresets|stylePromptMetadataForSave|dramaStyleMerge|style_prompt_zh|style_prompt_en|appendStyle|external-ai-result.*version.*1" backend-node/src frontweb/src` and classify every remaining match.**
-- [ ] **Step 2: Remove obsolete files/branches and update surviving imports; run focused regression tests.**
-- [ ] **Step 3: Run full backend tests: `cd backend-node && node --test test/*.test.js`.**
-- [ ] **Step 4: Run full frontend tests and build: `cd frontweb && node --test test/*.test.js && npm run build`.**
-- [ ] **Step 5: Verify catalog/preview counts, `git diff --check`, UI smoke paths, and update business docs plus `[未发布]` CHANGELOG with verified results only.**
-- [ ] **Step 6: Commit `feat: complete unified RunningHub style system`.**
+- [x] **Step 1: Run `rg -n "generationStylePresets|stylePromptMetadataForSave|dramaStyleMerge|style_prompt_zh|style_prompt_en|appendStyle|external-ai-result.*version.*1" backend-node/src frontweb/src` and classify every remaining match.**
+- [x] **Step 2: Remove obsolete files/branches and update surviving imports; run focused regression tests.**
+- [x] **Step 3: Run full backend tests: `cd backend-node && node --test test/*.test.js`.**
+- [x] **Step 4: Run full frontend tests and build: `cd frontweb && node --test test/*.test.js && npm run build`.**
+- [x] **Step 5: Verify catalog/preview counts, `git diff --check`, UI smoke paths, and update business docs plus `[未发布]` CHANGELOG with verified results only.**
+- [x] **Step 6: Commit `feat: complete unified RunningHub style system`.**

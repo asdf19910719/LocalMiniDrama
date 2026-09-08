@@ -28,6 +28,7 @@ const imageGenerationTaskRoutes = require('./imageGenerationTasks');
 const episodeGenerationProgressRoutes = require('./episodeGenerationProgress');
 const episodePackageRoutes = require('./episodePackage');
 const videoUpscaleRoutes = require('./videoUpscale');
+const styleRoutes = require('./styles');
 const { createVideoUpscaleRuntime } = require('../services/videoUpscale/videoUpscaleRuntime');
 const { loadRegistry } = require('../director/workflowRegistry');
 const { createComfyUIClient } = require('../director/comfyuiClient');
@@ -52,6 +53,7 @@ function setupRouter(cfg, db, log) {
   const stub = stubRoutes(db, cfg, log);
   const sceneModelMap = sceneModelMapRoutes(db, log);
   const episodePackage = episodePackageRoutes(db, cfg, log);
+  const styles = styleRoutes(db, log);
   
   const uploadService = require('../services/uploadService');
   const charLibrary = characterLibraryRoutes(db, cfg, log);
@@ -187,6 +189,13 @@ function setupRouter(cfg, db, log) {
   r.use(imageGenerationTaskRoutes(db, log));
   // 单集制作包导入:精确路径,必须先于各 '/:id' 形参路由注册
   r.use(episodePackage);
+
+  // ---------- canonical styles ----------
+  r.get('/styles', styles.list);
+  r.get('/styles/:id', styles.get);
+  r.post('/styles/custom', styles.create);
+  r.put('/styles/custom/:id', styles.update);
+  r.delete('/styles/custom/:id', styles.remove);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);

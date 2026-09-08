@@ -10,18 +10,17 @@ const taskService = require('../src/services/imageGenerationTaskService');
 it('reports channel-specific image generation environment readiness without creating a task', async () => {
   const db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE dramas (id INTEGER PRIMARY KEY, metadata TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE dramas (id INTEGER PRIMARY KEY, style_id TEXT, metadata TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
     CREATE TABLE character_variants (id INTEGER PRIMARY KEY, character_id INTEGER, source_key TEXT, name TEXT, description TEXT, appearance TEXT, image_prompt TEXT, negative_prompt TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, is_default INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT);
     CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE ai_service_configs (id INTEGER PRIMARY KEY, service_type TEXT, provider TEXT, base_url TEXT, api_key TEXT, default_model TEXT, model TEXT, is_active INTEGER, is_default INTEGER, deleted_at TEXT);
-    INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
+    INSERT INTO dramas VALUES (7, 'rh-101-cinematic', '{}', NULL, NULL);
     INSERT INTO characters VALUES (1, 7, '角色', '外观', '提示词', NULL, NULL, 'characters/base.png', NULL, NULL, NULL, NULL);
     INSERT INTO character_variants VALUES (2, 1, 'night', '夜间状态', NULL, '湿发白衬衫', '状态提示词', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL);
     INSERT INTO ai_service_configs VALUES (1, 'image', 'openai', 'https://api.test', 'key', 'img-1', '["img-1"]', 1, 1, NULL);
   `);
   db.exec(`
-    ALTER TABLE dramas ADD COLUMN style TEXT;
     ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
     ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
     ALTER TABLE character_variants ADD COLUMN asset_mode TEXT DEFAULT 'SINGLE';
@@ -47,17 +46,16 @@ it('reports channel-specific image generation environment readiness without crea
 it('creates a unified task and exposes one drama summary', async () => {
   const db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE dramas (id INTEGER PRIMARY KEY, metadata TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE dramas (id INTEGER PRIMARY KEY, style_id TEXT, metadata TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE characters (id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, polished_prompt TEXT, ref_image TEXT, image_url TEXT, local_path TEXT, extra_images TEXT, deleted_at TEXT, updated_at TEXT, image_updated_at TEXT);
     CREATE TABLE image_generations (id INTEGER PRIMARY KEY, storyboard_id INTEGER, drama_id INTEGER, scene_id INTEGER, character_id INTEGER, provider TEXT, prompt TEXT, frame_type TEXT, image_url TEXT, local_path TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE image_generation_batches (id TEXT PRIMARY KEY, drama_id INTEGER, resource_scope TEXT, generation_channel TEXT, status TEXT, total_count INTEGER, completed_count INTEGER DEFAULT 0, review_count INTEGER DEFAULT 0, failed_count INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT);
     CREATE TABLE image_generation_tasks (id TEXT PRIMARY KEY, drama_id INTEGER, target_type TEXT, target_id INTEGER, generation_channel TEXT, provider TEXT, model TEXT, prompt_snapshot TEXT, reference_manifest TEXT, aspect_ratio TEXT, frame_type TEXT, status TEXT, batch_id TEXT, queue_position INTEGER, image_generation_id INTEGER, external_job_id TEXT, error_code TEXT, error_message TEXT, created_at TEXT, updated_at TEXT, completed_at TEXT);
     CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
-    INSERT INTO dramas VALUES (7, '{}', NULL, NULL);
+    INSERT INTO dramas VALUES (7, 'rh-101-cinematic', '{}', NULL, NULL);
     INSERT INTO characters VALUES (1, 7, '林默', '黑发少年', '角色提示', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   `);
   db.exec(`
-    ALTER TABLE dramas ADD COLUMN style TEXT;
     ALTER TABLE characters ADD COLUMN negative_prompt TEXT;
     ALTER TABLE characters ADD COLUMN asset_mode TEXT DEFAULT 'TURNAROUND';
     ALTER TABLE image_generation_tasks ADD COLUMN asset_mode TEXT;
@@ -80,29 +78,31 @@ it('creates a unified task and exposes one drama summary', async () => {
         targetId: 1,
         generationChannel: 'chatgpt_web',
         prompt: '来自旧前端的错误单图提示词',
-        styleSnapshot: {
-          style: 'custom',
-          style_prompt_zh: '用户当前选择的水墨电影画风',
-          style_prompt_en: 'current ink wash cinematic style',
-        },
         referenceImages: [{ role: 'character', sourceId: 999, url: '/wrong-character.png' }],
       }),
     });
     assert.equal(createdResponse.status, 200);
     const created = (await createdResponse.json()).data;
     assert.match(created.prompt_snapshot, /角色提示/);
-    assert.match(created.prompt_snapshot, /正面、正侧面、背面/);
-    assert.match(created.prompt_snapshot, /current ink wash cinematic style/);
+    assert.match(created.prompt_snapshot, /正面、侧面、背面与三分之四视角/);
+    assert.match(created.prompt_snapshot, /Cinematic Hyper-realistic/);
     assert.doesNotMatch(created.prompt_snapshot, /错误单图提示词/);
     assert.equal(created.asset_mode, 'TURNAROUND');
-    assert.deepEqual(JSON.parse(created.style_snapshot), {
-      style: 'custom',
-      style_prompt_zh: '用户当前选择的水墨电影画风',
-      style_prompt_en: 'current ink wash cinematic style',
-    });
+    assert.equal(JSON.parse(created.style_snapshot).id, 'rh-101-cinematic');
     assert.deepEqual(JSON.parse(created.reference_manifest), []);
     assert.equal(created.status, 'queued');
     assert.ok(created.external_job_id);
+    const forbiddenOverride = await fetch(`${base}/image-generation-tasks`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dramaId: 7,
+        targetType: 'character',
+        targetId: 1,
+        generationChannel: 'chatgpt_web',
+        styleSnapshot: { id: 'rh-101-cinematic' },
+      }),
+    });
+    assert.equal(forbiddenOverride.status, 400);
     assert.equal(db.prepare('SELECT image_generation_task_id FROM external_generation_jobs WHERE id=?').get(created.external_job_id).image_generation_task_id, created.id);
     const detail = (await (await fetch(`${base}/image-generation-tasks/${created.id}`)).json()).data;
     assert.equal(detail.external_job.id, created.external_job_id);
@@ -157,6 +157,9 @@ it('creates a unified task and exposes one drama summary', async () => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ dramaId: 7, scope: 'characters', generationChannel: 'chatgpt_web', targets: [{ targetType: 'character', targetId: 1 }] }),
     })).json()).data;
+    const queuedBatchTask = db.prepare('SELECT * FROM image_generation_tasks WHERE batch_id=?').get(batch.id);
+    assert.match(queuedBatchTask.prompt_snapshot, /Cinematic Hyper-realistic/);
+    assert.equal(JSON.parse(queuedBatchTask.style_snapshot).id, 'rh-101-cinematic');
     const paused = (await (await fetch(`${base}/image-generation-batches/${batch.id}/pause`, { method: 'POST' })).json()).data;
     assert.equal(paused.status, 'paused');
     const resumed = (await (await fetch(`${base}/image-generation-batches/${batch.id}/resume`, { method: 'POST' })).json()).data;

@@ -79,7 +79,7 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
     const epRow = db.prepare('SELECT drama_id FROM episodes WHERE id = ? AND deleted_at IS NULL').get(sb.episode_id);
     dramaId = epRow?.drama_id ?? null;
     if (dramaId) {
-      dramaRow = db.prepare('SELECT title, genre, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId);
+      dramaRow = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId);
     }
   } catch (_) {}
 
@@ -87,9 +87,9 @@ function buildUniversalSegmentUserPromptBundle(db, sbId, reqBody, opts = {}) {
   let styleEn = '';
   try {
     const loadConfig = require('../config').loadConfig;
-    const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+    const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
     let cfg = loadConfig();
-    cfg = mergeCfgStyleWithDrama(cfg, dramaRow || {});
+    cfg = applyProjectStyleToConfig(cfg, dramaRow || {}, db);
     styleEn = (cfg?.style?.default_style_en || cfg?.style?.default_style || '').trim();
     styleZh = (cfg?.style?.default_style_zh || '').trim();
   } catch (_) {}

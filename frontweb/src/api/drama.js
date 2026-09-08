@@ -42,11 +42,10 @@ export const dramaAPI = {
     return request.get(`/episodes/${episodeId}/storyboards`)
   },
   generateStoryboard(episodeId, options) {
-    // 兼容旧调用方式: generateStoryboard(episodeId, model, style)
+    // 兼容旧调用方式只保留模型；项目画风始终由后端根据 style_id 解析。
     let body = {};
     if (arguments.length > 2 || typeof options === 'string') {
        body.model = arguments[1];
-       body.style = arguments[2];
     } else {
        body = options || {};
     }

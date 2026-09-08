@@ -227,6 +227,8 @@ function buildService(db, harness, overrides = {}) {
     schedule: harness.schedule,
     pollIntervalMs: 0,
     prepareVideoOutput: async () => null,
+    // 生命周期用例隔离风格编译；规范风格的黄金测试位于 promptCompilers.test.js。
+    videoStyleCompiler: (_db, input) => ({ prompt: String(input.prompt || ''), compilation: null }),
     ...overrides,
   });
 }

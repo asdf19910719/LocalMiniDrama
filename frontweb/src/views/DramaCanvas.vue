@@ -703,7 +703,7 @@ async function persistCanvasState({ layoutOnly = false, groupsOnly = false } = {
         metadata: updated.metadata,
         updated_at: updated.updated_at,
         title: updated.title ?? drama.value.title,
-        style: updated.style ?? drama.value.style,
+        style_id: updated.style_id ?? drama.value.style_id,
         genre: updated.genre ?? drama.value.genre,
         description: updated.description ?? drama.value.description,
       }

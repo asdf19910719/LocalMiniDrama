@@ -1,7 +1,7 @@
 // 对应 Go application/services/drama_service.go
 
 const storageLayout = require('./storageLayout');
-const { resolveStylePreset } = require('../constants/generationStylePresets');
+const { createStyleRegistryService, styleError } = require('./styleRegistryService');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
 const { listStoryboardVariantLinks } = require('./storyboardVariantService');
 const { getEpisodeImportSummaries } = require('./episodeImportProvenanceService');
@@ -41,6 +41,10 @@ function attachStoryboardVariantLinks(db, storyboards) {
 }
 
 function createDrama(db, log, req) {
+  if (req.style !== undefined) throw styleError('PROJECT_STYLE_OVERRIDE_FORBIDDEN', '不再接受旧 style 字段，请使用 style_id');
+  const styleId = String(req.style_id || '').trim();
+  if (!styleId) throw styleError('PROJECT_STYLE_REQUIRED', '创建项目必须选择风格');
+  createStyleRegistryService({ db }).requireStyle(styleId);
   const now = new Date().toISOString();
   let meta = {};
   if (req.metadata) {
@@ -58,14 +62,14 @@ function createDrama(db, log, req) {
   }
   const metadataStr = Object.keys(meta).length ? JSON.stringify(meta) : null;
   const stmt = db.prepare(`
-    INSERT INTO dramas (title, description, genre, style, metadata, status, created_at, updated_at)
+    INSERT INTO dramas (title, description, genre, style_id, metadata, status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
   `);
   const info = stmt.run(
     req.title || '',
     req.description || null,
     req.genre || null,
-    req.style || 'realistic',
+    styleId,
     metadataStr,
     now,
     now
@@ -268,6 +272,14 @@ function updateDrama(db, log, dramaId, req) {
     updates.push('status = ?');
     params.push(req.status);
   }
+  if (req.style !== undefined) throw styleError('PROJECT_STYLE_OVERRIDE_FORBIDDEN', '不再接受旧 style 字段，请使用 style_id');
+  if (req.style_id !== undefined) {
+    const styleId = String(req.style_id || '').trim();
+    if (!styleId) throw styleError('PROJECT_STYLE_REQUIRED', '项目风格不能为空');
+    createStyleRegistryService({ db }).requireStyle(styleId);
+    updates.push('style_id = ?');
+    params.push(styleId);
+  }
   if (updates.length === 0) return drama;
   params.push(new Date().toISOString(), dramaId);
   db.prepare(
@@ -329,7 +341,7 @@ function rowToDrama(r) {
     title: r.title,
     description: r.description,
     genre: r.genre,
-    style: r.style || 'realistic',
+    style_id: r.style_id || null,
     total_episodes: r.total_episodes ?? 1,
     total_duration: r.total_duration ?? 0,
     status: r.status || 'draft',
@@ -460,39 +472,31 @@ function saveOutline(db, log, dramaId, req) {
   }
   const mergedMetadata = { ...existingMetadata, ...newMetadata };
 
-  // 与 mergeCfgStyleWithDrama 一致：提示词优先读 metadata.style_prompt_*。仅改 dramas.style 而不带画风长文案时，
-  // 若仍保留旧的 metadata 画风，会出现「列表/首页 badge 已是新 style，角色提示词却仍用旧画风」。
-  if (req.style !== undefined) {
-    const styleVal = String(req.style || '').trim();
-    const hasExplicitStylePrompt =
-      req.metadata &&
-      typeof req.metadata === 'object' &&
-      !Array.isArray(req.metadata) &&
-      ('style_prompt_zh' in req.metadata || 'style_prompt_en' in req.metadata);
-    if (!hasExplicitStylePrompt && styleVal) {
-      const preset = resolveStylePreset(styleVal);
-      if (preset) {
-        mergedMetadata.style_prompt_zh = preset.zh;
-        mergedMetadata.style_prompt_en = preset.en;
-      }
-    }
+  if (req.style !== undefined) throw styleError('PROJECT_STYLE_OVERRIDE_FORBIDDEN', '不再接受旧 style 字段，请使用 style_id');
+  delete mergedMetadata.style_prompt_zh;
+  delete mergedMetadata.style_prompt_en;
+  let styleId = drama.style_id;
+  if (req.style_id !== undefined) {
+    styleId = String(req.style_id || '').trim();
+    if (!styleId) throw styleError('PROJECT_STYLE_REQUIRED', '项目风格不能为空');
+    createStyleRegistryService({ db }).requireStyle(styleId);
   }
 
   const metadataStr = JSON.stringify(mergedMetadata);
   
   db.prepare(
-    `UPDATE dramas SET title = ?, description = ?, genre = ?, tags = ?, style = ?, metadata = ?, updated_at = ? WHERE id = ?`
+    `UPDATE dramas SET title = ?, description = ?, genre = ?, tags = ?, style_id = ?, metadata = ?, updated_at = ? WHERE id = ?`
   ).run(
     req.title || drama.title, 
     req.summary ?? drama.description, 
     req.genre !== undefined ? req.genre : drama.genre, 
     tagsStr, 
-    req.style !== undefined ? req.style : drama.style, 
+    styleId,
     metadataStr, 
     now, 
     dramaId
   );
-  log.info('Outline saved', { drama_id: dramaId, style: req.style, genre: req.genre, metadata: mergedMetadata });
+  log.info('Outline saved', { drama_id: dramaId, style_id: styleId, genre: req.genre, metadata: mergedMetadata });
   return true;
 }
 

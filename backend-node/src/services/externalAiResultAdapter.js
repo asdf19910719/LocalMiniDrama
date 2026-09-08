@@ -332,13 +332,17 @@ function adaptExternalAiResult(db, result, task) {
     description: character.description,
     personality: character.personality,
     appearance: character.appearance,
-    image_prompt: character.image_prompt,
+    image_prompt: character.base_image_prompt,
     negative_prompt: character.negative_prompt,
     voice_profile: character.voice_profile,
     variants: character.variants.map((variant) => ({
-      ...variant,
       source_key: resolve(variant.local_ref),
-      local_ref: undefined,
+      name: variant.name,
+      description: variant.description,
+      appearance: variant.appearance,
+      image_prompt: variant.base_image_prompt,
+      negative_prompt: variant.negative_prompt,
+      is_default: variant.is_default,
     })),
   }));
   for (const characterRef of usedExistingCharacters) {
@@ -355,7 +359,7 @@ function adaptExternalAiResult(db, result, task) {
         name: variant.name,
         description: variant.description,
         appearance: variant.appearance,
-        image_prompt: variant.image_prompt,
+        image_prompt: variant.base_image_prompt,
         negative_prompt: variant.negative_prompt,
         is_default: variant.is_default,
       });
@@ -369,7 +373,7 @@ function adaptExternalAiResult(db, result, task) {
     state: scene.state,
     description: scene.description,
     atmosphere: scene.atmosphere,
-    image_prompt: scene.image_prompt,
+    image_prompt: scene.base_image_prompt,
     negative_prompt: scene.negative_prompt,
   }));
   for (const ref of usedExistingScenes) scenes.push(existingSceneToPackage(currentRows.scenes.get(ref)));
@@ -379,7 +383,7 @@ function adaptExternalAiResult(db, result, task) {
     name: prop.name,
     type: prop.type,
     description: prop.description,
-    image_prompt: prop.image_prompt,
+    image_prompt: prop.base_image_prompt,
     negative_prompt: prop.negative_prompt,
   }));
   for (const ref of usedExistingProps) props.push(existingPropToPackage(currentRows.props.get(ref)));
@@ -413,6 +417,10 @@ function adaptExternalAiResult(db, result, task) {
       variant_ref: resolve(ref.variant_ref),
     })),
     prop_refs: storyboard.prop_refs.map(resolve),
+    image_prompt: storyboard.base_image_prompt,
+    video_prompt: storyboard.base_video_prompt,
+    base_image_prompt: undefined,
+    base_video_prompt: undefined,
   }));
 
   const current = getCurrentAssetState(db, task.drama_id, { ensureKeys: false });

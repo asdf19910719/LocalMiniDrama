@@ -506,9 +506,9 @@ async function processFramePromptGeneration(db, log, taskId, storyboardId, frame
       'SELECT drama_id FROM episodes WHERE id = (SELECT episode_id FROM storyboards WHERE id = ? AND deleted_at IS NULL) AND deleted_at IS NULL'
     ).get(Number(storyboardId));
     if (epRow && epRow.drama_id) {
-      const dramaRow = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(epRow.drama_id);
+      const dramaRow = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(epRow.drama_id);
       if (dramaRow) {
-        const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+        const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
         let next = { ...cfg, style: { ...(cfg?.style || {}) } };
         if (dramaRow.metadata) {
           const meta = typeof dramaRow.metadata === 'string' ? JSON.parse(dramaRow.metadata) : dramaRow.metadata;
@@ -517,7 +517,7 @@ async function processFramePromptGeneration(db, log, taskId, storyboardId, frame
             next.style.default_video_ratio = meta.aspect_ratio;
           }
         }
-        cfg = mergeCfgStyleWithDrama(next, dramaRow);
+        cfg = applyProjectStyleToConfig(next, dramaRow, db);
       }
     }
   } catch (_) {}

@@ -103,6 +103,7 @@ function ensureAllColumns(database) {
     { name: 'description',    type: 'TEXT' },
     { name: 'genre',          type: 'TEXT' },
     { name: 'style',          type: 'TEXT DEFAULT \'realistic\'' },
+    { name: 'style_id',       type: 'TEXT' },
     { name: 'tags',           type: 'TEXT' },
     { name: 'thumbnail',      type: 'TEXT' },
     { name: 'total_episodes', type: 'INTEGER DEFAULT 1' },
@@ -113,6 +114,45 @@ function ensureAllColumns(database) {
     { name: 'updated_at',     type: 'TEXT' },
     { name: 'deleted_at',     type: 'TEXT' },
   ]);
+
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS custom_styles (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      spec_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    )`);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_custom_styles_active ON custom_styles(deleted_at, created_at)');
+  } catch (error) {
+    console.warn('ensure custom styles table failed:', error.message);
+  }
+
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS generation_style_snapshots (
+      id TEXT PRIMARY KEY,
+      drama_id INTEGER,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      media_type TEXT NOT NULL,
+      style_id TEXT NOT NULL,
+      style_version INTEGER NOT NULL,
+      language TEXT NOT NULL,
+      final_prompt TEXT NOT NULL,
+      negative_prompt TEXT,
+      references_json TEXT,
+      sections_json TEXT,
+      capability_validation_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'compiled',
+      created_at TEXT NOT NULL,
+      submitted_at TEXT
+    )`);
+    database.exec('CREATE INDEX IF NOT EXISTS idx_generation_style_snapshots_target ON generation_style_snapshots(target_type, target_id, created_at DESC)');
+  } catch (error) {
+    console.warn('ensure generation style snapshots table failed:', error.message);
+  }
 
   // --- episodes ---
   ensureColumns(database, 'episodes', [

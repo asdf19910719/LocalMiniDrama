@@ -315,6 +315,8 @@ function createUnifiedVideoSignatureService(db, harness, overrides = {}) {
     providerRegistry: harness.registry,
     schedule: (job) => harness.jobs.push(job),
     pollIntervalMs: 0,
+    // 本文件只验证 H3 草稿门禁；风格编译由 promptCompilers.test.js 独立覆盖。
+    videoStyleCompiler: (_db, input) => ({ prompt: String(input.prompt || ''), compilation: null }),
     ...overrides,
   });
 }

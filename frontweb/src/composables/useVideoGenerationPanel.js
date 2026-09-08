@@ -250,7 +250,6 @@ export function normalizeVideoGenerationContext(context = {}) {
     firstFrameUrl: trimmed(context.firstFrameUrl ?? context.first_frame_url),
     lastFrameUrl: trimmed(context.lastFrameUrl ?? context.last_frame_url),
     referenceImageUrls,
-    style: trimmed(context.style),
     aspectRatio: trimmed(context.aspectRatio ?? context.aspect_ratio),
     resolution: trimmed(context.resolution),
     duration: context.duration == null ? null : finiteNumber(context.duration, null),
@@ -305,7 +304,6 @@ export function buildVideoCandidateRequest(form = {}, overrides = {}) {
     imageUrl: trimmed(form.imageUrl),
     firstFrameUrl: trimmed(form.firstFrameUrl),
     lastFrameUrl: trimmed(form.lastFrameUrl),
-    style: trimmed(form.style),
     aspectRatio: trimmed(form.aspectRatio),
     resolution: trimmed(form.resolution),
   }
@@ -385,7 +383,6 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
     firstFrameUrl: '',
     lastFrameUrl: '',
     referenceImageUrls: [],
-    style: '',
     aspectRatio: '',
     resolution: '',
   })
@@ -801,7 +798,6 @@ export function useVideoGenerationPanel(props, emit, videosAPI) {
       : Array.isArray(storyboard?.reference_image_urls)
         ? storyboard.reference_image_urls.map(trimmed).filter(Boolean)
         : []
-    form.style = context.style
     form.aspectRatio = context.aspectRatio
     form.resolution = context.resolution
   }

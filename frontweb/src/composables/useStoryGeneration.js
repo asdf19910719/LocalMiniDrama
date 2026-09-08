@@ -1,7 +1,6 @@
 import { ElMessage } from 'element-plus'
 import { dramaAPI } from '@/api/drama'
 import { generationAPI } from '@/api/generation'
-import { stylePromptMetadataForSave } from '@/constants/styleOptions'
 import { GEN_RESOURCE } from '@/stores/generationTaskStore'
 
 /**
@@ -47,9 +46,8 @@ export async function runGenerateStoryFromPremise({
         title: scriptTitle || '新故事',
         description: text,
         genre: storyType || undefined,
-        style: generationStyle || undefined,
+        style_id: generationStyle || 'rh-101-cinematic',
         metadata: {
-          ...stylePromptMetadataForSave(generationStyle, customStylePrompt),
           story_style: storyStyle || undefined,
           aspect_ratio: projectAspectRatio || '16:9',
         },
@@ -83,9 +81,7 @@ export async function runGenerateStoryFromPremise({
         title: scriptTitle || undefined,
         summary: text,
         genre: storyType || undefined,
-        drama_style: generationStyle || undefined,
         metadata: {
-          ...stylePromptMetadataForSave(generationStyle, customStylePrompt),
           story_style: storyStyle || undefined,
           aspect_ratio: projectAspectRatio || '16:9',
         },

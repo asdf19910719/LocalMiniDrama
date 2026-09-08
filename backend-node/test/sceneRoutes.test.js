@@ -24,6 +24,15 @@ async function invoke(handler, { body = {}, params = {} } = {}) {
   return res;
 }
 
+function createSceneDb(assetMode = 'NORMAL') {
+  return {
+    prepare(sql) {
+      assert.match(sql, /SELECT id, asset_mode FROM scenes/);
+      return { get: () => ({ id: 17, asset_mode: assetMode }) };
+    },
+  };
+}
+
 function installGenerationStubs() {
   const originals = {
     generateSceneFourViewImage: sceneService.generateSceneFourViewImage,
@@ -56,7 +65,7 @@ describe('scene generation route mode selection', { concurrency: false }, () => 
   test('uses the single-image generator when use_quad_grid is false', async () => {
     const restore = installGenerationStubs();
     try {
-      const routes = createSceneRoutes({}, console, {});
+      const routes = createSceneRoutes(createSceneDb(), console, {});
       const res = await invoke(routes.generateImage, {
         body: { scene_id: 17, use_quad_grid: false },
       });
@@ -72,7 +81,7 @@ describe('scene generation route mode selection', { concurrency: false }, () => 
   test('defaults the general scene image endpoint to a single image', async () => {
     const restore = installGenerationStubs();
     try {
-      const routes = createSceneRoutes({}, console, {});
+      const routes = createSceneRoutes(createSceneDb(), console, {});
       const res = await invoke(routes.generateImage, { body: { scene_id: 17 } });
 
       assert.equal(res.statusCode, 200);
@@ -86,7 +95,7 @@ describe('scene generation route mode selection', { concurrency: false }, () => 
   test('uses the four-view generator only when use_quad_grid is explicitly true', async () => {
     const restore = installGenerationStubs();
     try {
-      const routes = createSceneRoutes({}, console, {});
+      const routes = createSceneRoutes(createSceneDb(), console, {});
       const res = await invoke(routes.generateImage, {
         body: { scene_id: 17, use_quad_grid: true },
       });

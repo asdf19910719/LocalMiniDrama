@@ -6,6 +6,13 @@ const characterVariantsService = require('../services/characterVariantsService')
 const storageLayout = require('../services/storageLayout');
 const seedance2AssetGuards = require('../utils/seedance2AssetGuards');
 const { normalizeAssetMode } = require('../services/assetGenerationModes');
+const { hasProjectStyleOverride } = require('../services/projectStyleService');
+
+function rejectStyleOverride(res, body) {
+  if (!hasProjectStyleOverride(body)) return false;
+  response.error(res, 400, 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', '生成风格由项目 style_id 统一决定，当前请求不得覆盖');
+  return true;
+}
 
 function routes(db, cfg, log, uploadService) {
   return {
@@ -69,8 +76,9 @@ function routes(db, cfg, log, uploadService) {
     batchGenerateImages: (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const characterIds = body.character_ids;
-        log.info('batch-generate-images request', { character_ids: characterIds, model: body.model, style: body.style });
+        log.info('batch-generate-images request', { character_ids: characterIds, model: body.model });
         if (!Array.isArray(characterIds) || characterIds.length === 0) {
           return response.badRequest(res, 'character_ids 不能为空');
         }
@@ -82,8 +90,7 @@ function routes(db, cfg, log, uploadService) {
           log,
           cfg,
           characterIds,
-          body.model,
-          body.style
+          body.model
         );
         if (!out.ok) {
           return response.badRequest(res, out.error);
@@ -100,6 +107,7 @@ function routes(db, cfg, log, uploadService) {
     generateImage: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const character = db.prepare(
           'SELECT id, asset_mode FROM characters WHERE id = ? AND deleted_at IS NULL'
         ).get(Number(req.params.id));
@@ -118,8 +126,7 @@ function routes(db, cfg, log, uploadService) {
           log,
           cfg,
           req.params.id,
-          body.model,
-          body.style
+          body.model
         );
         if (!out.ok) {
           if (out.error === 'character not found') return response.notFound(res, '角色不存在');
@@ -269,9 +276,9 @@ function routes(db, cfg, log, uploadService) {
     generateFourViewImage: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const modelName = body.model_name || body.model || undefined;
-        const style = body.style || undefined;
-        const out = await characterLibraryService.generateCharacterFourViewImage(db, log, cfg, req.params.id, modelName, style);
+        const out = await characterLibraryService.generateCharacterFourViewImage(db, log, cfg, req.params.id, modelName);
         if (!out.ok) {
           if (out.error === 'character not found') return response.notFound(res, '角色不存在');
           if (out.error === 'unauthorized') return response.notFound(res, '剧集不存在或无权限');
@@ -286,9 +293,9 @@ function routes(db, cfg, log, uploadService) {
     generatePrompt: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const modelName = body.model_name || body.model || undefined;
-        const style = body.style || undefined;
-        const out = await characterLibraryService.generateCharacterPromptOnly(db, log, cfg, req.params.id, modelName, style);
+        const out = await characterLibraryService.generateCharacterPromptOnly(db, log, cfg, req.params.id, modelName);
         if (!out.ok) {
           if (out.error === 'character not found') return response.notFound(res, '角色不存在');
           return response.badRequest(res, out.error);
@@ -469,9 +476,9 @@ function routes(db, cfg, log, uploadService) {
     generateVariantImage: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const row = await characterVariantsService.generateVariantImage(db, cfg, log, req.params.variantId, {
           model: body.model != null ? String(body.model).trim() : undefined,
-          style: body.style != null ? String(body.style).trim() : undefined,
           assetMode: body.asset_mode,
           useIdentityReference: body.use_identity_reference,
         });

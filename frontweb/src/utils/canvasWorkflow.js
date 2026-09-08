@@ -64,7 +64,7 @@ export function getDramaGenerationOptions(drama) {
   const meta = parseDramaMetadata(drama?.metadata)
   return {
     aspectRatio: meta.aspect_ratio || '16:9',
-    style: meta.style_prompt_en || meta.style_prompt_zh || drama?.style || '',
+    styleId: drama?.style_id || '',
     videoResolution: meta.video_resolution || '480p',
   }
 }

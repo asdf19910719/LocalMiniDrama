@@ -61,6 +61,12 @@ const uploadService = require('./uploadService');
 const storageLayout = require('./storageLayout');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
+const { createStyleRegistryService } = require('./styleRegistryService');
+const { compileImagePrompt } = require('./imagePromptCompiler');
+const { resolvePromptLanguage } = require('./promptLanguageResolver');
+const { createReferenceRegistry } = require('./referenceRegistry');
+const { validateGenerationCapabilities } = require('./modelCapabilityValidator');
+const { freezeGenerationSnapshot } = require('./generationSnapshotService');
 
 const LAST_FRAME_TYPES = new Set(['last', 'storyboard_last', 'tail', 'last_frame']);
 
@@ -518,18 +524,7 @@ async function normalizeSavedImageToTargetPixels(absPath, sizeStr, log, ctx) {
   }
 }
 
-function mergePromptWithStyle(prompt, style) {
-  const base = (prompt || '').toString().trim();
-  const styleText = (style || '').toString().trim();
-  if (!styleText) return base;
-  if (!base) return styleText;
-  const lowerBase = base.toLowerCase();
-  const lowerStyle = styleText.toLowerCase();
-  if (lowerBase.includes(lowerStyle)) return base;
-  return base + ', ' + styleText;
-}
-
-function create(db, log, req) {
+function create(db, log, req, internalOptions = {}) {
   const now = new Date().toISOString();
   const task = taskService.createTask(db, log, 'image_generation', String(req.drama_id || ''));
   const taskId = task.id;
@@ -546,7 +541,62 @@ function create(db, log, req) {
       reference_images: req.reference_images,
     });
   }
-  const mergedPrompt = mergePromptWithStyle(req.prompt || '', req.style);
+  const dramaId = Number(req.drama_id) || 0;
+  let project = null;
+  if (dramaId) {
+    try {
+      project = db.prepare('SELECT id, style_id FROM dramas WHERE id = ? AND deleted_at IS NULL').get(dramaId);
+    } catch (_) {}
+  }
+  const styleId = project?.style_id || (!dramaId ? String(req.style_id || '').trim() : '');
+  let mergedPrompt = '';
+  let canonicalCompilation = null;
+  let references = null;
+  let styleSpec = null;
+  if (styleId) {
+    if (req.style !== undefined || (dramaId && req.style_id !== undefined)) {
+      const error = new Error('生成请求不能覆盖项目风格');
+      error.code = 'PROJECT_STYLE_OVERRIDE_FORBIDDEN';
+      throw error;
+    }
+    styleSpec = createStyleRegistryService({ db }).requireStyle(styleId);
+    const language = resolvePromptLanguage({ style: styleSpec });
+    references = createReferenceRegistry((Array.isArray(req.reference_images) ? req.reference_images : []).map((item, index) => (
+      typeof item === 'string' ? { path: item, sortOrder: index } : item
+    )), language);
+    const targetType = req.target_type || (req.character_id ? 'character' : req.scene_id ? 'scene' : 'storyboard');
+    const mode = req.asset_mode || (targetType === 'storyboard' ? 'FRAME' : 'SINGLE');
+    canonicalCompilation = internalOptions.promptAlreadyCompiled === true
+      ? {
+          finalPrompt: String(req.prompt || '').trim(),
+          negativePrompt: String(req.negative_prompt || '').trim(),
+          language,
+          sections: internalOptions.sections || { source: 'immutable_image_generation_task' },
+        }
+      : compileImagePrompt({
+          targetType,
+          mode,
+          basePrompt: req.prompt || '',
+          negativePrompt: req.negative_prompt,
+          style: styleSpec,
+          language,
+          references,
+        });
+    if (!canonicalCompilation.finalPrompt) {
+      const error = new Error('最终图片提示词不能为空');
+      error.code = 'SNAPSHOT_PROMPT_REQUIRED';
+      throw error;
+    }
+    mergedPrompt = canonicalCompilation.finalPrompt;
+  } else if (!dramaId) {
+    const error = new Error('自由图片生成必须选择 style_id');
+    error.code = 'PROJECT_STYLE_REQUIRED';
+    throw error;
+  } else {
+    const error = new Error('项目尚未选择风格');
+    error.code = 'PROJECT_STYLE_REQUIRED';
+    throw error;
+  }
   // 优先使用请求中直接传入的 size；其次将 aspect_ratio 转成 size；未提供则存 NULL 留给 processImageGeneration 从 drama 元数据读取
   let reqSize = req.size || null;
   if (!reqSize && req.aspect_ratio) {
@@ -558,11 +608,11 @@ function create(db, log, req) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
   ).run(
     req.storyboard_id ?? null,
-    Number(req.drama_id) || 0,
+    dramaId,
     sceneId,
     req.provider || 'openai',
     mergedPrompt,
-    req.negative_prompt ?? null,
+    canonicalCompilation?.negativePrompt ?? req.negative_prompt ?? null,
     req.model ?? null,
     frameType,
     refImagesJson,
@@ -574,6 +624,31 @@ function create(db, log, req) {
   );
   const imageGenId = info.lastInsertRowid;
   if (!imageGenId) throw new Error('insert failed');
+  if (canonicalCompilation) {
+    const capabilityValidation = validateGenerationCapabilities({
+      mediaType: 'image',
+      style: styleSpec,
+      references,
+      capabilities: { supportsImage: true, maxReferences: 10 },
+    });
+    try {
+      freezeGenerationSnapshot(db, {
+        dramaId: dramaId || null,
+        targetType: req.target_type || 'free_image',
+        targetId: imageGenId,
+        mediaType: 'image',
+        style: { id: styleSpec.id, version: styleSpec.version },
+        language: canonicalCompilation.language,
+        finalPrompt: canonicalCompilation.finalPrompt,
+        negativePrompt: canonicalCompilation.negativePrompt,
+        references: references.entries,
+        sections: canonicalCompilation.sections,
+        capabilityValidation,
+      });
+    } catch (error) {
+      if (!(error.code === 'SQLITE_ERROR' && /generation_style_snapshots/i.test(error.message))) throw error;
+    }
+  }
   setImmediate(() => {
     processImageGeneration(db, log, imageGenId);
   });
@@ -1126,12 +1201,12 @@ async function processImageGeneration(db, log, imageGenId) {
 
     // ── Step 3: 计算尺寸 ────────────────────────────────────────────
     const loadConfig = require('../config').loadConfig;
-    const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+    const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
     let cfg = loadConfig();
     if (row.drama_id) {
       try {
-        const dr = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(row.drama_id);
-        cfg = mergeCfgStyleWithDrama(cfg, dr || {});
+        const dr = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(row.drama_id);
+        cfg = applyProjectStyleToConfig(cfg, dr || {}, db);
       } catch (_) {}
     }
     const filesBaseUrl = (cfg.storage && cfg.storage.base_url) ? String(cfg.storage.base_url).replace(/\/$/, '') : '';

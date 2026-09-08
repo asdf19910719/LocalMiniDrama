@@ -24,7 +24,7 @@ function isEnglish(cfg) {
   return getLanguage(cfg) === 'en';
 }
 
-/** 画风由前端写入 dramas.metadata.style_prompt_zh / style_prompt_en，mergeCfgStyleWithDrama 注入 cfg.style */
+/** 画风由后端根据 dramas.style_id 解析 StyleSpec，并注入 cfg.style 的双语槽位。 */
 
 function styleTextForCfgLang(cfg) {
   const z = (cfg?.style?.default_style_zh || '').trim();

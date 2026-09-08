@@ -46,6 +46,11 @@ async function submitTask(db, log = console, taskId, options = {}) {
       frame_type: input.frameType || prepared.frame_type || undefined,
       provider: prepared.provider || undefined,
       model: prepared.model || undefined,
+      target_type: prepared.target_type.startsWith('storyboard_') ? 'storyboard' : prepared.target_type,
+      asset_mode: input.assetMode || undefined,
+    }, {
+      promptAlreadyCompiled: true,
+      sections: { source: 'immutable_image_generation_task', task_id: prepared.id },
     }));
     const imageId = image?.id ?? image?.image_generation_id;
     if (!imageId) throw new Error('Image service did not return an image generation id');

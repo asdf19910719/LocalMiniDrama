@@ -14,7 +14,7 @@ function createDb() {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE dramas (
-      id INTEGER PRIMARY KEY, title TEXT, description TEXT, genre TEXT, style TEXT,
+      id INTEGER PRIMARY KEY, title TEXT, description TEXT, genre TEXT, style TEXT, style_id TEXT,
       metadata TEXT, deleted_at TEXT
     );
     CREATE TABLE episodes (
@@ -58,11 +58,12 @@ function createDb() {
       imported_at TEXT
     );
   `);
-  db.prepare(`INSERT INTO dramas VALUES (1, ?, ?, ?, ?, ?, NULL)`).run(
+  db.prepare(`INSERT INTO dramas VALUES (1, ?, ?, ?, ?, ?, ?, NULL)`).run(
     '雨夜追凶',
     '记者林晚追查旧案。',
     '悬疑',
     'cinematic',
+    'rh-101-cinematic',
     JSON.stringify({
       external_ai_continuity_notes: '林晚还不知道顾川的真实身份。',
       aspect_ratio: '16:9',
@@ -107,6 +108,12 @@ describe('externalAiTaskBundleService', () => {
     assert.equal(first.asset_manifest.characters[0].variants[0].source_key, 'variant_31');
     assert.equal(first.asset_manifest.scenes[0].source_key, 'scene_41');
     assert.equal(first.asset_manifest.props[0].source_key, 'prop_51');
+    assert.equal(first.asset_manifest.version, '2');
+    assert.equal(first.asset_manifest.project.style.style_id, 'rh-101-cinematic');
+    assert.equal(first.asset_manifest.project.style.readonly, true);
+    assert.equal('style_prompt_zh' in first.asset_manifest.project, false);
+    assert.equal(first.response_schema.properties.prompt_contract.const, 'base_prompt');
+    assert.match(first.instructions_markdown, /禁止返回 style\/style_id/);
     assert.equal('id' in first.asset_manifest.characters[0], false);
     assert.equal('character_id' in first.asset_manifest.characters[0].variants[0], false);
     assert.equal(first.asset_snapshot.characters.char_21.id, 21);

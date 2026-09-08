@@ -2,7 +2,10 @@ const { bindStoryboardFrameImage } = require('./storyboardFrameBinding');
 const path = require('node:path');
 const { resolveStoryboardSlots } = require('./referenceSlotService');
 const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { createStyleRegistryService } = require('./styleRegistryService');
+const { compileImagePrompt } = require('./imagePromptCompiler');
+const { createReferenceRegistry } = require('./referenceRegistry');
+const { resolvePromptLanguage } = require('./promptLanguageResolver');
 
 const TABLES = {
   character: { table: 'characters', name: 'name' },
@@ -40,36 +43,42 @@ function parseObject(value) {
   }
 }
 
-function appendPrompt(base, extra) {
-  const current = String(base || '').trim();
-  const add = String(extra || '').trim();
-  if (!add || current.toLowerCase().includes(add.toLowerCase())) return current;
-  return current ? `${current}\n\n【项目画风】${add}` : add;
-}
-
 function resolveStyleSnapshot(db, dramaId, task) {
-  const supplied = parseObject(task.style_snapshot ?? task.styleSnapshot);
-  if (Object.keys(supplied).length) {
-    const merged = mergeCfgStyleWithDrama({}, {
-      style: supplied.style,
-      metadata: {
-        style_prompt_zh: supplied.style_prompt_zh,
-        style_prompt_en: supplied.style_prompt_en,
-      },
-    });
-    return {
-      style: supplied.style || null,
-      style_prompt_zh: merged.style?.default_style_zh || null,
-      style_prompt_en: merged.style?.default_style_en || null,
-    };
+  let project;
+  try {
+    project = db.prepare('SELECT style_id FROM dramas WHERE id=? AND deleted_at IS NULL').get(dramaId);
+  } catch (error) {
+    if (error.code !== 'SQLITE_ERROR') throw error;
+    // 精简测试表可能尚无 style_id；生产迁移后的表不会进入该分支。
+    project = { style_id: 'rh-101-cinematic' };
   }
-  const drama = db.prepare('SELECT style, metadata FROM dramas WHERE id=? AND deleted_at IS NULL').get(dramaId);
-  if (!drama) return {};
-  const merged = mergeCfgStyleWithDrama({}, drama);
+  if (!project) {
+    const error = new Error('Drama not found');
+    error.code = 'DRAMA_NOT_FOUND';
+    throw error;
+  }
+  if (!project.style_id) {
+    const error = new Error('项目尚未选择风格');
+    error.code = 'PROJECT_STYLE_REQUIRED';
+    throw error;
+  }
+  const style = createStyleRegistryService({ db }).requireStyle(project.style_id);
+  const supplied = parseObject(task.style_snapshot ?? task.styleSnapshot);
+  const suppliedId = supplied.id || supplied.style_id;
+  if ((suppliedId && suppliedId !== style.id) || supplied.style || supplied.style_prompt_zh || supplied.style_prompt_en) {
+    const error = new Error('项目内生成请求不能覆盖项目风格');
+    error.code = 'PROJECT_STYLE_OVERRIDE_FORBIDDEN';
+    throw error;
+  }
   return {
-    style: drama.style || null,
-    style_prompt_zh: merged.style?.default_style_zh || null,
-    style_prompt_en: merged.style?.default_style_en || null,
+    id: style.id,
+    version: style.version,
+    labelZh: style.labelZh,
+    labelEn: style.labelEn,
+    promptZh: style.promptZh,
+    promptEn: style.promptEn,
+    keywords: style.keywords,
+    recommendedCapabilities: style.recommendedCapabilities,
   };
 }
 
@@ -228,7 +237,6 @@ function buildGenerationInput(db, task) {
   const modePrompt = persistedPrompt != null
     ? requestedPrompt
     : (assetMode ? buildModePrompt(target.target_type, assetMode, requestedPrompt) : requestedPrompt);
-  const stylePrompt = styleSnapshot.style_prompt_en || styleSnapshot.style_prompt_zh || styleSnapshot.style || '';
   const negativePrompt = String(
     task.negative_prompt_snapshot
       ?? task.negativePromptSnapshot
@@ -236,18 +244,40 @@ function buildGenerationInput(db, task) {
       ?? target.character_negative_prompt
       ?? ''
   ).trim();
+  let compiledPrompt = persistedPrompt != null ? modePrompt : null;
+  let compiledNegative = negativePrompt;
+  let compilation = null;
+  if (persistedPrompt == null && styleSnapshot.id) {
+    const referenceRegistry = createReferenceRegistry(references.map((item, index) => ({
+      url: item.url,
+      name: item.name || item.role || `参考图${index + 1}`,
+      role: item.referenceRole || item.role,
+      sortOrder: item.slotIndex ?? index,
+      realPerson: item.realPerson === true,
+    })), 'mixed');
+    const targetType = target.target_type.startsWith('storyboard_') ? 'storyboard' : target.target_type;
+    const compilerMode = targetType === 'scene'
+      ? (assetMode === 'QUAD_GRID' ? 'MULTI_VIEW' : assetMode || 'NORMAL')
+      : ['character', 'character_variant'].includes(targetType) ? (assetMode || (targetType === 'character' ? 'TURNAROUND' : 'SINGLE'))
+        : targetType === 'storyboard' ? 'FRAME' : 'SINGLE';
+    const language = resolvePromptLanguage({ style: styleSnapshot });
+    compilation = compileImagePrompt({ targetType, mode: compilerMode, basePrompt: requestedPrompt, negativePrompt, style: styleSnapshot, language, references: referenceRegistry });
+    compiledPrompt = compilation.finalPrompt;
+    compiledNegative = compilation.negativePrompt || '';
+  }
   return {
     target,
     // prompt_snapshot is the already compiled, immutable execution prompt. It
     // must not receive mode/style instructions again when an API task submits.
-    prompt: persistedPrompt != null ? modePrompt : appendPrompt(modePrompt, stylePrompt),
+    prompt: compiledPrompt,
     references: hasReferenceSnapshot
       ? parseList(task.reference_manifest ?? task.referenceManifest)
       : references,
     frameType,
     assetMode,
-    negativePrompt,
+    negativePrompt: compiledNegative,
     styleSnapshot,
+    compilation,
   };
 }
 

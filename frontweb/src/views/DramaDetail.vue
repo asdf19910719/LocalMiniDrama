@@ -38,12 +38,13 @@
                 <el-input v-model="infoForm.title" placeholder="剧集标题" @blur="saveInfo" />
               </el-form-item>
             </el-col>
+            <el-col :span="24">
+              <ProjectStyleSummary :style-id="infoForm.style_id" />
+            </el-col>
             <el-col :span="12">
               <el-form-item label="图片/视频风格">
                 <StylePickerButton
-                  v-model="infoForm.style"
-                  v-model:custom-prompt="infoForm.customStylePrompt"
-                  :options="generationStyleOptions"
+                  v-model="infoForm.style_id"
                   placeholder="选择全剧统一风格"
                   @change="saveInfo"
                 />
@@ -614,6 +615,7 @@ import EpisodePackageImportDialog from '@/components/EpisodePackageImportDialog.
 import EpisodeImportSourceDialog from '@/components/EpisodeImportSourceDialog.vue'
 import ExternalAiCollaborationDialog from '@/components/ExternalAiCollaborationDialog.vue'
 import StylePickerButton from '@/components/StylePickerButton.vue'
+import ProjectStyleSummary from '@/components/ProjectStyleSummary.vue'
 import { useTheme } from '@/composables/useTheme'
 import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/characterLibrary'
@@ -629,14 +631,6 @@ import { useImageGeneration } from '@/composables/useImageGeneration'
 import { normalizeAssetGenerationMode } from '@/constants/assetGenerationModes'
 import { assetImageUrl as resolveAssetImageUrl } from '@/utils/mediaUrl'
 import { hasImportSource } from '@/utils/episodeImportSource'
-import {
-  generationStyleOptions,
-  stylePromptMetadataForSave,
-  getStylePromptEn,
-  getStylePromptZh,
-  backfillDramaStylePromptMetadataIfNeeded,
-  CUSTOM_STYLE_VALUE,
-} from '@/constants/styleOptions'
 
 const route = useRoute()
 const { isDark, toggle: toggleTheme } = useTheme()
@@ -660,9 +654,6 @@ async function onSelectImageChannel(channel) {
 
 async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
   try {
-    const customStyle = infoForm.style === CUSTOM_STYLE_VALUE ? infoForm.customStylePrompt.trim() : ''
-    const stylePromptEn = customStyle || getStylePromptEn(infoForm.style)
-    const stylePromptZh = customStyle || getStylePromptZh(infoForm.style)
     const task = await imageGeneration.open({
       dramaId,
       targetType,
@@ -671,11 +662,6 @@ async function generateUnifiedDramaImage(channel, targetType, form, legacy) {
       assetMode: ['character', 'scene'].includes(targetType)
         ? normalizeAssetGenerationMode(targetType, form?.asset_mode)
         : undefined,
-      styleSnapshot: stylePromptEn || stylePromptZh ? {
-        style: infoForm.style || null,
-        style_prompt_zh: stylePromptZh || null,
-        style_prompt_en: stylePromptEn || null,
-      } : undefined,
     })
     return task
   } catch (error) {
@@ -1091,7 +1077,7 @@ const nextEpisodeNumber = computed(() => (
     : 1
 ))
 
-const infoForm = reactive({ title: '', description: '', genre: '', style: '', customStylePrompt: '', aspect_ratio: '16:9' })
+const infoForm = reactive({ title: '', description: '', genre: '', style_id: '', aspect_ratio: '16:9' })
 
 function assetImageUrl(item) {
   return resolveAssetImageUrl(item)
@@ -1105,19 +1091,13 @@ function formatDate(val) {
 async function loadDrama() {
   loading.value = true
   try {
-    let d = await dramaAPI.get(dramaId)
-    d = await backfillDramaStylePromptMetadataIfNeeded(dramaAPI, dramaId, d)
+    const d = await dramaAPI.get(dramaId)
     drama.value = d
     episodes.value = d.episodes || []
     infoForm.title = d.title || ''
     infoForm.description = d.description || ''
     infoForm.genre = d.genre || ''
-    infoForm.style = d.style || ''
-    if (infoForm.style === CUSTOM_STYLE_VALUE) {
-      infoForm.customStylePrompt = (d.metadata?.style_prompt_zh || d.metadata?.style_prompt_en || '').toString()
-    } else {
-      infoForm.customStylePrompt = ''
-    }
+    infoForm.style_id = d.style_id || ''
     infoForm.aspect_ratio = d.metadata?.aspect_ratio || '16:9'
   } catch (e) {
     ElMessage.error(e.message || '加载失败')
@@ -1128,19 +1108,14 @@ async function loadDrama() {
 
 let infoSaveTimer = null
 function saveInfo() {
-  if (infoForm.style === CUSTOM_STYLE_VALUE && !(infoForm.customStylePrompt || '').trim()) {
-    ElMessage.warning('请填写画风描述')
-    return
-  }
   if (infoSaveTimer) clearTimeout(infoSaveTimer)
   infoSaveTimer = setTimeout(async () => {
     try {
       await dramaAPI.update(dramaId, { title: infoForm.title, description: infoForm.description })
       await dramaAPI.saveOutline(dramaId, {
         genre: infoForm.genre || undefined,
-        style: infoForm.style || undefined,
+        style_id: infoForm.style_id || undefined,
         metadata: {
-          ...stylePromptMetadataForSave(infoForm.style, infoForm.customStylePrompt),
           aspect_ratio: infoForm.aspect_ratio || '16:9',
         },
       })

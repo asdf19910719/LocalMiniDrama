@@ -3,7 +3,8 @@
 function validExternalAiResult() {
   return {
     schema: 'local-mini-drama.external-ai-result',
-    version: '1',
+    version: '2',
+    prompt_contract: 'base_prompt',
     package_id: 'extai_task-1',
     generator: { name: '外部 AI', model: 'demo', generated_at: '2026-09-07T10:00:00+08:00' },
     episode: {
@@ -54,7 +55,8 @@ function validExternalAiResult() {
         visual_description: null,
         audio_bridge: { mode: 'carry', duration_ms: 200, description: '冷柜声延续' },
       },
-      image_prompt: '便利店柜台后，林晚翻看旧账本，电影近景。',
+      base_image_prompt: '便利店柜台后，林晚翻看旧账本，电影近景。',
+      base_video_prompt: '林晚翻开账本，镜头缓慢推近缺失的末页。',
       universal_segment_text: '@图片1 是便利店，@图片2 是林晚，@图片3 是账本。',
       is_primary: true,
     }],

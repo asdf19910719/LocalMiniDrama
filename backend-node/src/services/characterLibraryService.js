@@ -5,7 +5,7 @@ const imageClient = require('./imageClient');
 const { aspectRatioToSize } = require('./imageService');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
 const jimengMaterialHubService = require('./jimengMaterialHubService');
 const modelArkAssetConfigService = require('./modelArkAssetConfigService');
 const uploadService = require('./uploadService');
@@ -49,7 +49,7 @@ function generateCharacterImage(db, log, cfg, characterId, modelName, style) {
     'SELECT id, drama_id, name, appearance, description, negative_prompt FROM characters WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(characterId));
   if (!charRow) return { ok: false, error: 'character not found' };
-  const drama = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
+  const drama = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
   if (!drama) return { ok: false, error: 'unauthorized' };
 
   let effectiveCfg = { ...cfg, style: { ...(cfg?.style || {}) } };
@@ -59,7 +59,7 @@ function generateCharacterImage(db, log, cfg, characterId, modelName, style) {
       effectiveCfg.style.default_image_ratio = meta.aspect_ratio;
     }
   } catch (_) {}
-  effectiveCfg = mergeCfgStyleWithDrama(effectiveCfg, drama);
+  effectiveCfg = applyProjectStyleToConfig(effectiveCfg, drama, db);
   effectiveCfg = applyStyleOverrideToCfg(effectiveCfg, style);
 
   let prompt = '';
@@ -541,8 +541,8 @@ async function generateCharacterPromptOnly(db, log, cfg, characterId, modelName,
   ).get(Number(characterId));
   if (!charRow) return { ok: false, error: 'character not found' };
 
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull || {});
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull || {}, db);
   mergedCfg = applyStyleOverrideToCfg(mergedCfg, style);
 
   let appearanceText = '';
@@ -589,10 +589,10 @@ async function generateCharacterFourViewImage(db, log, cfg, characterId, modelNa
     'SELECT id, drama_id, name, appearance, description, polished_prompt, negative_prompt FROM characters WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(characterId));
   if (!charRow) return { ok: false, error: 'character not found' };
-  const dramaFull = db.prepare('SELECT id, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
+  const dramaFull = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(charRow.drama_id);
   if (!dramaFull) return { ok: false, error: 'unauthorized' };
 
-  let mergedCfg = mergeCfgStyleWithDrama(cfg, dramaFull);
+  let mergedCfg = applyProjectStyleToConfig(cfg, dramaFull, db);
   mergedCfg = applyStyleOverrideToCfg(mergedCfg, style);
   let imagePrompt;
 

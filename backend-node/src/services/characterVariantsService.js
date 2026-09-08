@@ -2,7 +2,7 @@
 const path = require('path');
 const storageLayout = require('./storageLayout');
 const { aspectRatioToSize } = require('./imageService');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
 const { buildModePrompt, normalizeAssetMode } = require('./assetGenerationModes');
 
 /** 解析行内 extra_images JSON 字符串为数组（解析失败时保留原值） */
@@ -276,9 +276,9 @@ async function generateVariantImage(db, cfg, log, variantId, options = {}, deps 
   let drama = null;
   if (char.drama_id) {
     try {
-      drama = db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(char.drama_id) || null;
+      drama = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(char.drama_id) || null;
     } catch (_) { drama = null; }
-    if (drama) effectiveCfg = mergeCfgStyleWithDrama(effectiveCfg, drama);
+    if (drama) effectiveCfg = applyProjectStyleToConfig(effectiveCfg, drama, db);
   }
   const styleOverride = options.style ? String(options.style).trim() : '';
   const baseStyle = styleOverride || (effectiveCfg?.style?.default_style_en || effectiveCfg?.style?.default_style || '');

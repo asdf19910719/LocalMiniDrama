@@ -1,389 +1,221 @@
 <template>
   <div class="style-picker-wrap">
-    <!-- 触发按钮，外观与 el-select 一致 -->
-    <div
-      class="style-picker-trigger"
-      :class="{ 'has-value': !!modelValue }"
-      @click="visible = true"
-    >
-      <template v-if="displayLabel">
-        <span class="spt-swatch" :style="triggerSwatchStyle" />
-        <span class="spt-label">{{ displayLabel }}</span>
-      </template>
-      <span v-else class="spt-placeholder">{{ placeholder }}</span>
-      <el-icon class="spt-arrow"><ArrowDown /></el-icon>
-      <span v-if="modelValue" class="spt-clear" @click.stop="clearSelection">
-        <el-icon><CircleClose /></el-icon>
+    <button type="button" class="style-picker-trigger" :class="{ 'has-value': !!modelValue }" @click="openPicker">
+      <img v-if="selectedStyle?.preview?.localPath" :src="selectedStyle.preview.localPath" :alt="selectedStyle.labelZh" />
+      <span v-else class="trigger-swatch" :style="fallbackStyle(selectedStyle)" />
+      <span class="trigger-copy">
+        <strong>{{ selectedStyle?.labelZh || placeholder }}</strong>
+        <small v-if="selectedStyle">{{ selectedStyle.labelEn }}</small>
       </span>
-    </div>
+      <el-icon><ArrowDown /></el-icon>
+    </button>
 
-    <!-- 选择弹窗 -->
-    <el-dialog
-      v-model="visible"
-      title="选择生成风格"
-      width="90vw"
-      style="max-width: 1100px"
-      class="style-picker-dialog"
-      :append-to-body="true"
-      destroy-on-close
-      @closed="showCustomEditor = false"
-    >
-      <div class="spd-search">
-        <el-input
-          v-model="search"
-          placeholder="搜索风格名称..."
-          clearable
-          style="width: 240px"
-        >
+    <el-dialog v-model="visible" title="选择项目画风" width="min(1120px, 94vw)" class="style-library-dialog" append-to-body>
+      <div class="library-toolbar">
+        <el-input v-model="search" clearable placeholder="搜索中文名、英文名或风格说明" class="style-search">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <span v-if="modelValue" class="spd-selected-hint">
-          已选：{{ getStyleLabel(modelValue) || displayLabel }}
-        </span>
+        <el-button @click="customVisible = true"><el-icon><Plus /></el-icon>创建我的画风</el-button>
       </div>
 
-      <div class="spd-body">
-        <template v-for="group in filteredGroups" :key="group.label">
-          <div class="spd-group-title">{{ group.label }}</div>
-          <div class="spd-grid">
-            <div
-              v-for="opt in group.options"
-              :key="opt.value"
-              class="spd-item"
-              :class="{ 'is-active': modelValue === opt.value }"
-              @click="select(opt)"
-            >
-              <div class="spd-thumb" :style="thumbStyle(opt)">
-                <img
-                  v-if="opt.thumb"
-                  :src="opt.thumb"
-                  :alt="opt.label"
-                  loading="lazy"
-                  @error="(e) => e.target.style.display = 'none'"
-                />
-                <span v-if="!opt.thumb" class="spd-thumb-text">{{ opt.label.slice(0, 2) }}</span>
-              </div>
-              <div class="spd-name">{{ opt.label }}</div>
-              <div v-if="modelValue === opt.value" class="spd-check">✓</div>
-            </div>
-          </div>
-        </template>
+      <div class="category-tabs" role="tablist" aria-label="风格分类">
+        <button v-for="tab in tabs" :key="tab.value" type="button" :class="{ active: activeTab === tab.value }" @click="activeTab = tab.value">
+          {{ tab.label }} <span>{{ tabCount(tab.value) }}</span>
+        </button>
+      </div>
 
-        <template v-if="showCustomSection">
-          <div class="spd-group-title">其他</div>
-          <div class="spd-grid">
-            <div
-              class="spd-item"
-              :class="{ 'is-active': modelValue === CUSTOM_STYLE_VALUE }"
-              @click="openCustomEditor"
-            >
-              <div class="spd-thumb" :style="{ background: CUSTOM_SWATCH }">
-                <span class="spd-thumb-text">自定</span>
-              </div>
-              <div class="spd-name">自定义</div>
-              <div v-if="modelValue === CUSTOM_STYLE_VALUE" class="spd-check">✓</div>
-            </div>
+      <div v-loading="loading" class="style-grid">
+        <article
+          v-for="style in filteredStyles"
+          :key="style.id"
+          class="style-card"
+          :class="{ selected: style.id === modelValue }"
+          @click="selectStyle(style)"
+        >
+          <div class="preview-frame">
+            <img v-if="style.preview?.localPath" :src="style.preview.localPath" :alt="`${style.labelZh}预览`" loading="lazy" />
+            <div v-else class="preview-fallback" :style="fallbackStyle(style)">{{ style.labelZh.slice(0, 2) }}</div>
+            <span v-if="style.id === modelValue" class="selected-badge">已选</span>
+            <button type="button" class="detail-button" @click.stop="showDetail(style)">详情</button>
           </div>
-        </template>
-
-        <div v-if="showCustomEditor" class="spd-custom-editor">
-          <el-input
-            v-model="customDraft"
-            type="textarea"
-            :rows="4"
-            maxlength="500"
-            show-word-limit
-            placeholder="描述画面风格，例如：赛博朋克水墨，霓虹灯映在宣纸上…"
-          />
-          <div class="spd-custom-actions">
-            <el-button @click="showCustomEditor = false">取消</el-button>
-            <el-button type="primary" @click="confirmCustom">确认</el-button>
+          <div class="style-card-copy">
+            <strong>{{ style.labelZh }}</strong>
+            <small>{{ style.labelEn }}</small>
+            <p>{{ style.descriptionZh }}</p>
           </div>
-        </div>
-
-        <div v-if="filteredGroups.length === 0 && !showCustomSection" class="spd-empty">没有匹配的风格</div>
+        </article>
+        <el-empty v-if="!loading && filteredStyles.length === 0" description="没有匹配的画风" />
       </div>
 
       <template #footer>
-        <el-button @click="clearAndClose">清除选择</el-button>
-        <el-button type="primary" @click="visible = false">完成</el-button>
+        <div class="dialog-footer">
+          <span>项目风格会统一参与人物、场景、道具、分镜图片和视频提示词编译</span>
+          <el-button @click="visible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="detailVisible" title="画风详情" size="430px" append-to-body>
+      <template v-if="detailStyle">
+        <img class="drawer-preview" :src="detailStyle.preview?.localPath" :alt="detailStyle.labelZh" />
+        <h3>{{ detailStyle.labelZh }}</h3>
+        <div class="drawer-en">{{ detailStyle.labelEn }}</div>
+        <p>{{ detailStyle.descriptionZh }}</p>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="分类">{{ categoryLabel(detailStyle.category) }}</el-descriptions-item>
+          <el-descriptions-item label="适用对象">{{ (detailStyle.suitableAssetTypes || []).join('、') }}</el-descriptions-item>
+          <el-descriptions-item label="提示词语言">{{ detailStyle.recommendedCapabilities?.preferredPromptLanguage || 'auto' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-collapse class="prompt-disclosure">
+          <el-collapse-item title="查看实际中文风格提示词" name="zh"><p>{{ detailStyle.promptZh }}</p></el-collapse-item>
+          <el-collapse-item title="查看实际英文风格提示词" name="en"><p>{{ detailStyle.promptEn }}</p></el-collapse-item>
+        </el-collapse>
+        <el-button type="primary" class="drawer-select" @click="selectStyle(detailStyle)">使用此画风</el-button>
+      </template>
+    </el-drawer>
+
+    <el-dialog v-model="customVisible" title="创建我的画风" width="620px" append-to-body>
+      <el-form label-position="top">
+        <div class="custom-name-row">
+          <el-form-item label="中文名称"><el-input v-model="customForm.labelZh" /></el-form-item>
+          <el-form-item label="英文名称"><el-input v-model="customForm.labelEn" /></el-form-item>
+        </div>
+        <el-form-item label="中文说明"><el-input v-model="customForm.descriptionZh" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="中文风格提示词"><el-input v-model="customForm.promptZh" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="英文风格提示词"><el-input v-model="customForm.promptEn" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="customVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingCustom" @click="createCustomStyle">保存并使用</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { ArrowDown, CircleClose, Search } from '@element-plus/icons-vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ArrowDown, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { CUSTOM_STYLE_VALUE, getStyleLabel } from '@/constants/styleOptions'
-
-const CUSTOM_SWATCH = 'linear-gradient(135deg,#5b8def,#2dd4bf)'
+import { stylesAPI } from '@/api/styles'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
   customPrompt: { type: String, default: '' },
   options: { type: Array, default: () => [] },
-  placeholder: { type: String, default: '图片/视频风格' },
+  placeholder: { type: String, default: '选择图片/视频风格' },
 })
-
 const emit = defineEmits(['update:modelValue', 'update:customPrompt', 'change'])
 
+const styles = ref([])
+const loading = ref(false)
 const visible = ref(false)
 const search = ref('')
-const showCustomEditor = ref(false)
-const customDraft = ref('')
+const activeTab = ref('all')
+const detailVisible = ref(false)
+const detailStyle = ref(null)
+const customVisible = ref(false)
+const savingCustom = ref(false)
+const customForm = ref({ labelZh: '', labelEn: '', descriptionZh: '', promptZh: '', promptEn: '' })
+const tabs = [
+  { label: '全部', value: 'all' },
+  { label: '真人', value: 'realistic' },
+  { label: '3D', value: '3d-special' },
+  { label: '2D', value: '2d' },
+  { label: '我的', value: 'mine' },
+]
 
-const allOptions = computed(() => props.options.flatMap((g) => g.options))
-const selectedOption = computed(() => allOptions.value.find((o) => o.value === props.modelValue) || null)
-
-const isCustom = computed(() => props.modelValue === CUSTOM_STYLE_VALUE)
-
-const displayLabel = computed(() => {
-  if (isCustom.value) return '自定义'
-  return selectedOption.value?.label || ''
+const selectedStyle = computed(() => styles.value.find((style) => style.id === props.modelValue) || null)
+const filteredStyles = computed(() => {
+  const q = search.value.trim().toLocaleLowerCase()
+  return styles.value.filter((style) => {
+    if (activeTab.value === 'mine' && style.type !== 'custom') return false
+    if (!['all', 'mine'].includes(activeTab.value) && style.category !== activeTab.value) return false
+    return !q || [style.labelZh, style.labelEn, style.descriptionZh, style.key]
+      .some((value) => String(value || '').toLocaleLowerCase().includes(q))
+  })
 })
 
-const triggerSwatchStyle = computed(() => {
-  if (isCustom.value) return { background: CUSTOM_SWATCH }
-  return swatchStyle(selectedOption.value)
-})
-
-const showCustomSection = computed(() => {
-  const kw = search.value.trim().toLowerCase()
-  if (!kw) return true
-  return '自定义'.includes(kw) || 'custom'.includes(kw) || kw.includes('自定义') || kw.includes('custom')
-})
-
-const filteredGroups = computed(() => {
-  const kw = search.value.trim().toLowerCase()
-  if (!kw) return props.options
-  return props.options
-    .map((g) => ({ ...g, options: g.options.filter((o) => o.label.toLowerCase().includes(kw) || o.value.toLowerCase().includes(kw)) }))
-    .filter((g) => g.options.length > 0)
-})
-
-function thumbStyle(opt) {
-  if (opt.thumb) return {}
-  return { background: opt.color || 'linear-gradient(135deg,#667eea,#764ba2)' }
+function tabCount(value) {
+  if (value === 'all') return styles.value.length
+  if (value === 'mine') return styles.value.filter((style) => style.type === 'custom').length
+  return styles.value.filter((style) => style.category === value).length
 }
-
-function swatchStyle(opt) {
-  return { background: opt?.color || 'linear-gradient(135deg,#667eea,#764ba2)' }
+function categoryLabel(value) {
+  return ({ realistic: '真人', '3d-special': '3D', '2d': '2D', custom: '我的画风' })[value] || value || '其他'
 }
-
-function openCustomEditor() {
-  customDraft.value = props.customPrompt || ''
-  showCustomEditor.value = true
+function fallbackStyle(style) {
+  return { background: style?.preview?.fallbackColor || 'linear-gradient(135deg,#42526e,#101828)' }
 }
-
-function confirmCustom() {
-  const text = customDraft.value.trim()
-  if (!text) {
-    ElMessage.warning('请填写画风描述')
+function legacyFallback() {
+  return props.options.flatMap((group) => group.options || []).map((item, index) => ({
+    id: item.value, key: item.value, type: 'system', category: '2d', sortOrder: index,
+    labelZh: item.label, labelEn: item.label, descriptionZh: item.prompt || '', promptZh: item.prompt || '',
+    promptEn: item.promptEn || item.prompt || '', suitableAssetTypes: [], recommendedCapabilities: {},
+    preview: { localPath: item.thumb || '', fallbackColor: item.color },
+  }))
+}
+async function loadStyles() {
+  loading.value = true
+  try {
+    const result = await stylesAPI.list()
+    styles.value = result?.items || []
+  } catch (error) {
+    styles.value = legacyFallback()
+    ElMessage.error(error?.message || '画风库加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+function openPicker() {
+  visible.value = true
+  if (!styles.value.length) loadStyles()
+}
+function selectStyle(style) {
+  emit('update:modelValue', style.id)
+  emit('update:customPrompt', '')
+  emit('change', style.id, style)
+  detailVisible.value = false
+  visible.value = false
+}
+function showDetail(style) {
+  detailStyle.value = style
+  detailVisible.value = true
+}
+async function createCustomStyle() {
+  const value = customForm.value
+  if (![value.labelZh, value.labelEn, value.descriptionZh, value.promptZh, value.promptEn].every((item) => item.trim())) {
+    ElMessage.warning('请完整填写名称、说明和中英文提示词')
     return
   }
-  emit('update:customPrompt', text)
-  emit('update:modelValue', CUSTOM_STYLE_VALUE)
-  emit('change', CUSTOM_STYLE_VALUE)
-  showCustomEditor.value = false
-  visible.value = false
+  savingCustom.value = true
+  try {
+    const style = await stylesAPI.create(value)
+    styles.value.push(style)
+    customVisible.value = false
+    selectStyle(style)
+    ElMessage.success('自定义画风已保存')
+  } finally {
+    savingCustom.value = false
+  }
 }
 
-function select(opt) {
-  emit('update:modelValue', opt.value)
-  emit('change', opt.value)
-  showCustomEditor.value = false
-  visible.value = false
-}
-
-function clearSelection() {
-  emit('update:modelValue', '')
-  emit('update:customPrompt', '')
-  emit('change', '')
-}
-
-function clearAndClose() {
-  clearSelection()
-  showCustomEditor.value = false
-  visible.value = false
-}
+watch(() => props.modelValue, async (id) => {
+  if (id && styles.value.length && !selectedStyle.value) await loadStyles()
+})
+onMounted(loadStyles)
 </script>
 
 <style scoped>
-.style-picker-wrap {
-  display: inline-block;
-}
-.style-picker-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
-  background: var(--el-fill-color-blank);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--el-text-color-placeholder);
-  user-select: none;
-  min-width: 150px;
-  transition: border-color 0.2s;
-  position: relative;
-}
-.style-picker-trigger:hover {
-  border-color: var(--el-color-primary);
-}
-.style-picker-trigger.has-value {
-  color: var(--el-text-color-primary);
-}
-.spt-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.spt-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.spt-placeholder {
-  flex: 1;
-}
-.spt-arrow {
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
-  flex-shrink: 0;
-}
-.spt-clear {
-  flex-shrink: 0;
-  font-size: 14px;
-  color: var(--el-text-color-placeholder);
-  display: flex;
-  align-items: center;
-}
-.spt-clear:hover {
-  color: var(--el-color-primary);
-}
-
-/* 弹窗内部 */
-.spd-search {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.spd-selected-hint {
-  font-size: 13px;
-  color: var(--el-color-primary);
-}
-.spd-body {
-  max-height: 65vh;
-  overflow-y: auto;
-  padding-right: 6px;
-}
-.spd-group-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  padding: 6px 0 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  margin-bottom: 10px;
-}
-.spd-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.spd-item {
-  cursor: pointer;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.1s;
-  position: relative;
-  background: var(--el-fill-color-light);
-}
-.spd-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  transform: translateY(-1px);
-}
-.spd-item.is-active {
-  border-color: var(--el-color-primary);
-}
-.spd-thumb {
-  width: 100%;
-  aspect-ratio: 3/4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  position: relative;
-}
-.spd-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.spd-thumb-text {
-  font-size: 20px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-  letter-spacing: 1px;
-}
-.spd-name {
-  font-size: 12px;
-  text-align: center;
-  padding: 4px 4px 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--el-text-color-primary);
-}
-.spd-check {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--el-color-primary);
-  color: #fff;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-}
-.spd-empty {
-  text-align: center;
-  padding: 40px;
-  color: var(--el-text-color-placeholder);
-  font-size: 13px;
-}
-.spd-custom-editor {
-  margin-top: 4px;
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--el-fill-color-light);
-  border: 1px solid var(--el-border-color-lighter);
-}
-.spd-custom-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-</style>
-
-<style>
-.style-picker-dialog .el-dialog__body {
-  padding: 16px 24px 8px;
-}
+.style-picker-wrap { display: inline-block; width: 100%; }
+.style-picker-trigger { width: 100%; min-width: 190px; height: 48px; padding: 5px 10px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--el-border-color); border-radius: 8px; background: var(--el-fill-color-blank); color: var(--el-text-color-placeholder); cursor: pointer; text-align: left; }
+.style-picker-trigger:hover,.style-picker-trigger.has-value { border-color: var(--el-color-primary); }
+.style-picker-trigger img,.trigger-swatch { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex: none; }
+.trigger-copy { display: grid; min-width: 0; flex: 1; }.trigger-copy strong,.trigger-copy small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.trigger-copy strong { color: var(--el-text-color-primary); font-size: 13px; }.trigger-copy small { font-size: 11px; }
+.library-toolbar,.dialog-footer,.custom-name-row { display: flex; align-items: center; gap: 12px; }.style-search { max-width: 430px; }.library-toolbar { justify-content: space-between; }
+.category-tabs { display: flex; gap: 8px; margin: 16px 0; border-bottom: 1px solid var(--el-border-color-lighter); }.category-tabs button { padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--el-text-color-secondary); cursor: pointer; }.category-tabs button.active { color: var(--el-color-primary); border-color: var(--el-color-primary); }.category-tabs span { opacity: .65; }
+.style-grid { min-height: 240px; max-height: 62vh; overflow: auto; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; padding: 2px; }.style-card { min-width: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: var(--el-fill-color-light); cursor: pointer; transition: .18s ease; }.style-card:hover { transform: translateY(-2px); box-shadow: var(--el-box-shadow-light); }.style-card.selected { border-color: var(--el-color-primary); }
+.preview-frame { position: relative; aspect-ratio: 16/10; overflow: hidden; }.preview-frame img,.preview-fallback { width: 100%; height: 100%; object-fit: cover; display: grid; place-items: center; color: white; font-weight: 700; }.selected-badge,.detail-button { position: absolute; top: 8px; border: 0; border-radius: 999px; color: white; }.selected-badge { left: 8px; padding: 3px 8px; background: var(--el-color-primary); font-size: 11px; }.detail-button { right: 8px; padding: 4px 9px; background: rgba(0,0,0,.55); cursor: pointer; }
+.style-card-copy { padding: 10px; }.style-card-copy strong,.style-card-copy small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.style-card-copy small { color: var(--el-text-color-secondary); margin-top: 2px; }.style-card-copy p { margin: 7px 0 0; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; height: 3em; overflow: hidden; }
+.dialog-footer { justify-content: space-between; color: var(--el-text-color-secondary); font-size: 12px; }.drawer-preview { width: 100%; aspect-ratio: 16/10; object-fit: cover; border-radius: 10px; }.drawer-en { color: var(--el-text-color-secondary); }.prompt-disclosure { margin-top: 18px; }.prompt-disclosure p { white-space: pre-wrap; line-height: 1.6; }.drawer-select { width: 100%; margin-top: 18px; }.custom-name-row > * { flex: 1; }
+@media (max-width: 860px) { .style-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 </style>

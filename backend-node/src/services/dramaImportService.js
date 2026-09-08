@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const storageLayout = require('./storageLayout');
 const { syncStoryboardVariantLinks } = require('./storyboardVariantService');
 const { normalizeAssetMode } = require('./assetGenerationModes');
+const { createStyleRegistryService } = require('./styleRegistryService');
 
 function toJsonText(value) {
   if (value == null || value === '') return null;
@@ -135,6 +136,13 @@ function importDrama(db, cfg, log, zipBuffer) {
   const { data, files } = parseZip(zipBuffer);
 
   const d = data.drama;
+  const styleId = String(d.style_id || '').trim();
+  if (!styleId) {
+    const error = new Error('project.json 格式不正确：缺少 drama.style_id 字段');
+    error.code = 'PROJECT_STYLE_REQUIRED';
+    throw error;
+  }
+  createStyleRegistryService({ db }).requireStyle(styleId);
   const title = resolveTitle(db, d.title || '导入项目');
   const now = new Date().toISOString();
 
@@ -152,23 +160,23 @@ function importDrama(db, cfg, log, zipBuffer) {
   // 用事务包裹全部写入：任何步骤失败时整体回滚，避免部分导入
   let result;
   const runImport = db.transaction(() => {
-    result = _doImport(db, storagePath, files, data, d, title, metaStr, now, log);
+    result = _doImport(db, storagePath, files, data, d, styleId, title, metaStr, now, log);
   });
   runImport();
   return result;
 }
 
-function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
+function _doImport(db, storagePath, files, data, d, styleId, title, metaStr, now, log) {
 
   // ---- 创建 drama ----
   const dramaInfo = db.prepare(
-    `INSERT INTO dramas (title, description, genre, style, status, tags, metadata, created_at, updated_at)
+    `INSERT INTO dramas (title, description, genre, style_id, status, tags, metadata, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     title,
     d.description || null,
     d.genre || null,
-    d.style || null,
+    styleId,
     d.status || 'draft',
     d.tags || null,
     metaStr,

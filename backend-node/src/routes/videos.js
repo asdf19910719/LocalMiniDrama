@@ -17,6 +17,23 @@ function sendLifecycleError(res, error) {
 function routes(db, log, { providerRegistry, lifecycleService, preparedService = null } = {}) {
   const lifecycle = lifecycleService || createUnifiedVideoGenerationService({ db, log, providerRegistry });
 
+  function assertStyleContract(input = {}) {
+    const dramaId = Number(input.drama_id ?? input.dramaId) || 0;
+    const hasRequestStyle = input.style !== undefined || input.style_id !== undefined || input.styleId !== undefined;
+    if (dramaId && hasRequestStyle) {
+      const error = new Error('项目内视频生成不能覆盖项目风格');
+      error.code = 'PROJECT_STYLE_OVERRIDE_FORBIDDEN';
+      error.status = 400;
+      throw error;
+    }
+    if (!dramaId && !String(input.style_id ?? input.styleId ?? '').trim()) {
+      const error = new Error('自由视频生成必须选择 style_id');
+      error.code = 'PROJECT_STYLE_REQUIRED';
+      error.status = 400;
+      throw error;
+    }
+  }
+
   return {
     list: (req, res) => {
       try {
@@ -31,6 +48,7 @@ function routes(db, log, { providerRegistry, lifecycleService, preparedService =
 
     create: async (req, res) => {
       try {
+        assertStyleContract(req.body || {});
         const item = await lifecycle.createVideoGeneration(req.body || {});
         response.created(res, item);
       } catch (error) {
@@ -41,6 +59,7 @@ function routes(db, log, { providerRegistry, lifecycleService, preparedService =
 
     preparedCreate: async (req, res) => {
       try {
+        assertStyleContract(req.body || {});
         if (!preparedService) throw new Error('VIDEO_PREPARATION_UNAVAILABLE');
         const result = await preparedService.prepareAndCreateVideoGeneration(req.body || {});
         response.created(res, result);
@@ -55,6 +74,7 @@ function routes(db, log, { providerRegistry, lifecycleService, preparedService =
         if (!preparedService) throw new Error('VIDEO_PREPARATION_UNAVAILABLE');
         const inputs = Array.isArray(req.body) ? req.body : req.body?.inputs;
         if (!Array.isArray(inputs)) return response.badRequest(res, 'inputs 必须为数组');
+        inputs.forEach(assertStyleContract);
         response.success(res, await preparedService.prepareAndCreateMany(inputs));
       } catch (error) {
         log.error('videos prepared batch', { code: error.code, error: error.message });
@@ -94,6 +114,7 @@ function routes(db, log, { providerRegistry, lifecycleService, preparedService =
 
     h3Preview: async (req, res) => {
       try {
+        assertStyleContract(req.body || {});
         if (!lifecycle.previewH3Prompt) throw new Error('H3 prompt preview is not configured');
         response.success(res, await lifecycle.previewH3Prompt(req.body || {}));
       } catch (error) {

@@ -1,6 +1,13 @@
 const propService = require('../services/propService');
 const propLibraryService = require('../services/propLibraryService');
 const response = require('../response');
+const { hasProjectStyleOverride } = require('../services/projectStyleService');
+
+function rejectStyleOverride(res, body) {
+  if (!hasProjectStyleOverride(body)) return false;
+  response.error(res, 400, 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', '生成风格由项目 style_id 统一决定，当前请求不得覆盖');
+  return true;
+}
 
 function listProps(db) {
   return (req, res) => {
@@ -48,10 +55,10 @@ function generateImage(db, log) {
   return (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return response.badRequest(res, '无效的ID');
+    if (rejectStyleOverride(res, req.body || {})) return;
     const model = req.body?.model != null ? String(req.body.model).trim() || null : null;
-    const style = req.body?.style != null ? String(req.body.style).trim() || null : null;
     try {
-      const taskId = propImageGenerationService.generatePropImage(db, log, id, { model, style });
+      const taskId = propImageGenerationService.generatePropImage(db, log, id, { model });
       response.success(res, { task_id: taskId });
     } catch (err) {
       if (err.message === '道具不存在') return response.notFound(res, err.message);
@@ -132,7 +139,8 @@ function generatePropPrompt(db, log, cfg) {
     if (isNaN(id)) return response.badRequest(res, '无效的ID');
     try {
       const body = req.body || {};
-      const out = await propService.generatePropPromptOnly(db, log, cfg, id, body.model || undefined, body.style || undefined);
+      if (rejectStyleOverride(res, body)) return;
+      const out = await propService.generatePropPromptOnly(db, log, cfg, id, body.model || undefined);
       if (!out.ok) {
         if (out.error === 'prop not found') return response.notFound(res, '道具不存在');
         return response.badRequest(res, out.error);

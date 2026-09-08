@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-label="自定义画风">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6d5dfc"/><stop offset="1" stop-color="#12233f"/></linearGradient>
+  </defs>
+  <rect width="640" height="400" rx="24" fill="url(#g)"/>
+  <circle cx="320" cy="180" r="76" fill="none" stroke="#fff" stroke-width="10" opacity=".9"/>
+  <path d="M320 136v88M276 180h88" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <text x="320" y="310" fill="#fff" font-family="sans-serif" font-size="34" text-anchor="middle">我的画风</text>
+</svg>

@@ -4,7 +4,7 @@ const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
 const { safeParseAIJSON, extractFirstArray } = require('../utils/safeJson');
 const characterLibraryService = require('./characterLibraryService');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
 
 /**
  * 从角色外貌描述中提炼 6层视觉锚点，写入 characters.identity_anchors
@@ -38,7 +38,7 @@ async function processCharacterGeneration(db, cfg, log, taskID, req) {
 
   // 读取剧的 style 和 metadata.aspect_ratio，覆盖全局 cfg
   let effectiveCfg = cfg;
-  const dramaRow = db.prepare('SELECT id, title, description, genre, style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(Number(req.drama_id));
+  const dramaRow = db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(Number(req.drama_id));
   if (!dramaRow) {
     taskService.updateTaskStatus(db, taskID, 'failed', 0, '剧本信息不存在');
     return;
@@ -51,7 +51,7 @@ async function processCharacterGeneration(db, cfg, log, taskID, req) {
         next.style.default_image_ratio = meta.aspect_ratio;
       }
     }
-    effectiveCfg = mergeCfgStyleWithDrama(next, dramaRow);
+    effectiveCfg = applyProjectStyleToConfig(next, dramaRow, db);
   } catch (_) {}
 
   if (!outlineText) {

@@ -3,6 +3,13 @@ const sceneService = require('../services/sceneService');
 const sceneLibraryService = require('../services/sceneLibraryService');
 const imageService = require('../services/imageService');
 const { normalizeAssetMode } = require('../services/assetGenerationModes');
+const { hasProjectStyleOverride } = require('../services/projectStyleService');
+
+function rejectStyleOverride(res, body) {
+  if (!hasProjectStyleOverride(body)) return false;
+  response.error(res, 400, 'PROJECT_STYLE_OVERRIDE_FORBIDDEN', '生成风格由项目 style_id 统一决定，当前请求不得覆盖');
+  return true;
+}
 
 function routes(db, log, cfg) {
   return {
@@ -19,12 +26,13 @@ function routes(db, log, cfg) {
     generatePrompt: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const singleImageMode = body.mode === 'single';
         const generatePrompt = singleImageMode
           ? sceneService.generateSceneSinglePromptOnly
           : sceneService.generateScenePromptOnly;
         const out = await generatePrompt(
-          db, log, cfg, req.params.scene_id, body.model || undefined, body.style || undefined
+          db, log, cfg, req.params.scene_id, body.model || undefined
         );
         if (!out.ok) {
           if (out.error === 'scene not found') return response.notFound(res, '场景不存在');
@@ -86,6 +94,7 @@ function routes(db, log, cfg) {
     create: (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const dramaId = body.drama_id;
         if (dramaId == null) return response.badRequest(res, '缺少 drama_id');
         const scene = sceneService.createScene(db, log, dramaId, body);
@@ -99,6 +108,7 @@ function routes(db, log, cfg) {
     generateImage: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const sceneId = body.scene_id != null ? Number(body.scene_id) : null;
         if (sceneId == null) return response.badRequest(res, '缺少 scene_id');
         const scene = db.prepare(
@@ -119,7 +129,7 @@ function routes(db, log, cfg) {
           ? sceneService.generateSceneFourViewImage
           : sceneService.generateSceneSingleImage;
         const out = await generateImage(
-          db, log, cfg, sceneId, body.model || undefined, body.style || undefined
+          db, log, cfg, sceneId, body.model || undefined
         );
         if (!out.ok) {
           if (out.error === 'scene not found') return response.notFound(res, '场景不存在');
@@ -166,9 +176,9 @@ function routes(db, log, cfg) {
     generateFourViewImage: async (req, res) => {
       try {
         const body = req.body || {};
+        if (rejectStyleOverride(res, body)) return;
         const modelName = body.model_name || body.model || undefined;
-        const style = body.style || undefined;
-        const out = await sceneService.generateSceneFourViewImage(db, log, cfg, req.params.scene_id, modelName, style);
+        const out = await sceneService.generateSceneFourViewImage(db, log, cfg, req.params.scene_id, modelName);
         if (!out.ok) {
           if (out.error === 'scene not found') return response.notFound(res, '场景不存在');
           if (out.error === 'unauthorized') return response.notFound(res, '剧集不存在或无权限');

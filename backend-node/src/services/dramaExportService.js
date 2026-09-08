@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
 
-const EXPORT_VERSION = '1.6';  // 1.6: 保留剧集音频策略、制作画像、场景氛围与分镜生产元数据；1.5: 人物状态与 source_key 往返
+const EXPORT_VERSION = '1.7';  // 1.7: 项目风格只导出 style_id；1.6: 保留剧集音频策略、制作画像、场景氛围与分镜生产元数据
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -228,7 +228,7 @@ function exportDrama(db, cfg, log, dramaId) {
       title: drama.title,
       description: drama.description,
       genre: drama.genre,
-      style: drama.style,
+      style_id: drama.style_id,
       status: drama.status,
       tags: drama.tags,
       metadata,

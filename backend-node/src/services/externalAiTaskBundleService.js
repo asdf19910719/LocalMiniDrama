@@ -2,9 +2,10 @@
 
 const crypto = require('node:crypto');
 const AdmZip = require('adm-zip');
+const { createStyleRegistryService } = require('./styleRegistryService');
 
 const TASK_SCHEMA = 'local-mini-drama.external-ai-task';
-const TASK_VERSION = '1';
+const TASK_VERSION = '2';
 
 function serviceError(code, message) {
   const error = new Error(message);
@@ -118,6 +119,7 @@ function ensureStableAssetKeys(db, dramaId) {
 function buildAssetData(db, drama) {
   const dramaId = Number(drama.id);
   const metadata = parseObject(drama.metadata);
+  const style = createStyleRegistryService({ db }).requireStyle(drama.style_id);
   const characterRows = db.prepare(
     'SELECT * FROM characters WHERE drama_id = ? AND deleted_at IS NULL ORDER BY sort_order ASC, id ASC'
   ).all(dramaId);
@@ -138,7 +140,7 @@ function buildAssetData(db, drama) {
         name: variant.name,
         description: variant.description || '',
         appearance: variant.appearance || '',
-        image_prompt: variant.image_prompt || '',
+        base_image_prompt: variant.image_prompt || '',
         negative_prompt: variant.negative_prompt || '',
         is_default: Number(variant.is_default) === 1,
       };
@@ -151,7 +153,7 @@ function buildAssetData(db, drama) {
       description: row.description || '',
       personality: row.personality || '',
       appearance: row.appearance || '',
-      image_prompt: row.polished_prompt || '',
+      base_image_prompt: row.polished_prompt || '',
       negative_prompt: row.negative_prompt || '',
       voice_profile: row.voice_style || '',
       variants,
@@ -168,7 +170,7 @@ function buildAssetData(db, drama) {
       state: row.state || row.time || '',
       description: row.description || '',
       atmosphere: row.atmosphere || '',
-      image_prompt: row.prompt || '',
+      base_image_prompt: row.prompt || '',
       negative_prompt: row.negative_prompt || '',
     };
   });
@@ -182,22 +184,26 @@ function buildAssetData(db, drama) {
       name: row.name,
       type: row.type || '',
       description: row.description || '',
-      image_prompt: row.prompt || '',
+      base_image_prompt: row.prompt || '',
       negative_prompt: row.negative_prompt || '',
     };
   });
 
   const manifest = {
     schema: 'local-mini-drama.project-assets',
-    version: '1',
+    version: '2',
     project: {
       title: drama.title || '',
       summary: drama.description || '',
       genre: drama.genre || '',
-      style: drama.style || '',
       aspect_ratio: metadata.aspect_ratio || '16:9',
-      style_prompt_zh: metadata.style_prompt_zh || '',
-      style_prompt_en: metadata.style_prompt_en || '',
+      style: {
+        style_id: style.id,
+        label_zh: style.labelZh,
+        label_en: style.labelEn,
+        description_zh: style.descriptionZh,
+        readonly: true,
+      },
     },
     production_contract: {
       video_mode: 'multi_reference_r2v',
@@ -244,7 +250,8 @@ function buildConversationContext(db, dramaId, options = {}) {
     '',
     `- 故事梗概：${drama.description || '未填写'}`,
     `- 类型：${drama.genre || '未填写'}`,
-    `- 视觉风格：${drama.style || '未填写'}`,
+    `- 视觉风格：${manifest.project.style.label_zh}（${manifest.project.style.style_id}）`,
+    `- 风格说明：${manifest.project.style.description_zh}`,
     `- 不可改变设定与连续性备注：${metadata.external_ai_continuity_notes || '未填写'}`,
     '',
     '## 已有分集',
@@ -289,11 +296,12 @@ function basicResponseSchema() {
     $schema: 'http://json-schema.org/draft-07/schema#',
     $id: 'local-mini-drama.external-ai-result',
     type: 'object',
-    required: ['schema', 'version', 'package_id', 'episode', 'new_assets', 'storyboards'],
+    required: ['schema', 'version', 'prompt_contract', 'package_id', 'episode', 'new_assets', 'storyboards'],
     additionalProperties: false,
     properties: {
       schema: { const: 'local-mini-drama.external-ai-result' },
-      version: { const: '1' },
+      version: { const: '2' },
+      prompt_contract: { const: 'base_prompt' },
       package_id: { type: 'string', minLength: 1 },
       generator: { type: 'object' },
       audio_plan: { type: 'object' },
@@ -317,10 +325,11 @@ function buildInstructions(drama, target, packageId) {
     '1. 只返回 JSON，不要 Markdown 围栏或解释文字。',
     '2. 已有资产以《当前项目资产.json》为准，只在分镜中引用其 source_key，不得重复定义或修改。',
     '3. 新人物、既有人物的新状态、新场景和新道具只能放在 new_assets。',
-    '4. 新人物必须完整提供性格、外貌、基础生图提示词、负向提示词、声音设定和至少一个状态。',
+    '4. 新人物必须完整提供性格、外貌、base_image_prompt、负向提示词、声音设定和至少一个状态。',
     '5. 分镜编号必须从 1 连续递增，所有引用必须指向已有 source_key 或本结果中的 local_ref。',
     '6. universal_segment_text 中如需引用参考图，必须使用规范槽位 @图片1、@图片2……：@图片1 对应场景，随后按 character_refs 的 sort_order 对应人物状态，最后对应 prop_refs；不要写 @场景/@人物/@道具或资产名称来代替槽位。',
-    '7. package_id 必须原样返回。',
+    '7. package_id 必须原样返回，version 必须为字符串 2，prompt_contract 必须为 base_prompt。',
+    '8. 项目风格为只读权威配置。禁止返回 style/style_id/style_prompt_*，也禁止返回 image_prompt/video_prompt/final_prompt/compiled_prompt；只能提交内容层 base_image_prompt/base_video_prompt，项目会在创建任务时编译并冻结最终提示词。',
   ].join('\n');
 }
 

@@ -1,6 +1,6 @@
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
-const { mergeCfgStyleWithDrama } = require('../utils/dramaStyleMerge');
+const { applyProjectStyleToConfig } = require('./projectStyleConfigService');
 
 function listByDramaId(db, dramaId) {
   const rows = db.prepare(
@@ -134,9 +134,9 @@ async function generatePropPromptOnly(db, log, cfg, propId, modelName, style) {
   if (!prop) return { ok: false, error: 'prop not found' };
 
   const dramaRow = prop.drama_id
-    ? db.prepare('SELECT style, metadata FROM dramas WHERE id = ? AND deleted_at IS NULL').get(prop.drama_id)
+    ? db.prepare('SELECT * FROM dramas WHERE id = ? AND deleted_at IS NULL').get(prop.drama_id)
     : null;
-  let polishCfg = mergeCfgStyleWithDrama(cfg, dramaRow || {});
+  let polishCfg = applyProjectStyleToConfig(cfg, dramaRow || {}, db);
   const so = (style && String(style).trim()) || '';
   if (so) {
     polishCfg = {

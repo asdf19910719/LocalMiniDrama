@@ -15,23 +15,27 @@
 输出要求：
 
 1. 最终只返回一个 UTF-8 JSON 对象，不要 Markdown 代码围栏、解释、注释或尾随逗号。
-2. `schema` 必须是 `local-mini-drama.external-ai-result`，`version` 必须是字符串 `1`。
+2. `schema` 必须是 `local-mini-drama.external-ai-result`，`version` 必须是字符串 `2`，`prompt_contract` 必须是 `base_prompt`。
 3. `package_id` 必须从 `任务说明.md` 原样复制，不能自行生成或修改。
 4. 只整理当前会话中已经确认的本集剧情，不擅自续写下一集或改写既有世界观。
 5. `当前项目资产.json` 中的资产是只读的：只通过其中的 `source_key` 引用，不要在 `new_assets` 重复声明，也不要修改其名称、性格、外貌、状态或提示词。
 6. 只有本集首次出现的新人物、新场景、新道具，以及已有人物在本集首次出现的新状态，才能写入 `new_assets`。
-7. 新人物必须完整填写身份与剧情功能、角色类型、性格、基础外貌、正负生图提示词、声音设定，并至少提供一个 `is_default=true` 的状态。
+7. 新人物必须完整填写身份与剧情功能、角色类型、性格、基础外貌、`base_image_prompt`、负向提示词、声音设定，并至少提供一个 `is_default=true` 的状态。
 8. 所有 `local_ref` 在整份 JSON 中唯一，并以英文字母开头；分镜可引用本次结果中先声明的 `local_ref`。
-9. `storyboard_number` 从 1 开始连续递增。每个分镜都提供完整动作起点/过程/终点、镜头、构图、对白表演、声音、转场、图片提示词和通用视频段落文本。
+9. `storyboard_number` 从 1 开始连续递增。每个分镜都提供完整动作起点/过程/终点、镜头、构图、对白表演、声音、转场、`base_image_prompt`、`base_video_prompt` 和通用视频段落文本。
 10. 对白只放入 `dialogue`，动作只放入 `action`；不要把人物对白混在动作描述里。
-11. 严格遵守 `返回格式.schema.json`，不要添加 Schema 未定义的字段。
+11. 项目风格由 LocalMiniDrama 的 `style_id` 唯一决定。禁止输出 `style`、`style_id`、`style_prompt_*` 等覆盖字段。
+12. 禁止输出 `image_prompt`、`video_prompt`、`final_prompt`、`compiled_prompt` 等最终提示词；只提交与剧情内容有关的 `base_image_prompt` / `base_video_prompt`，系统会在创建生成任务时编译风格并冻结最终提示词。
+13. 严格遵守 `返回格式.schema.json`，不要添加 Schema 未定义的字段。
 
 提交前自检：
 
 - `package_id` 与任务说明完全一致；
+- `version` 为 `2` 且 `prompt_contract` 为 `base_prompt`；
 - 本集集号与任务目标一致；
 - 已有资产全部引用 `source_key`，新资产全部使用唯一 `local_ref`；
 - 新人物的性格、外貌、提示词、声音和默认状态没有缺项；
 - 所有分镜引用都能在资产清单或 `new_assets` 中找到；
 - 分镜编号连续；
+- 不含任何风格覆盖字段或最终提示词字段；
 - 最终回复只有 JSON。

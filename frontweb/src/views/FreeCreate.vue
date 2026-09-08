@@ -50,7 +50,7 @@
         <div class="form-section form-row">
           <div class="form-item">
             <div class="form-label">风格</div>
-            <el-input v-model="style" placeholder="例如: cinematic, anime..." />
+            <StylePickerButton v-model="styleId" placeholder="选择本次生成风格" />
           </div>
           <div v-if="mode === 'image'" class="form-item">
             <div class="form-label">比例</div>
@@ -76,7 +76,7 @@
           type="primary"
           size="large"
           :loading="generating"
-          :disabled="!prompt.trim()"
+          :disabled="!prompt.trim() || !styleId"
           class="generate-btn"
           @click="generate"
         >
@@ -152,10 +152,11 @@ import { imagesAPI } from '@/api/images'
 import { videosAPI } from '@/api/videos'
 import { uploadAPI } from '@/api/upload'
 import { generationSettingsAPI } from '@/api/prompts'
+import StylePickerButton from '@/components/StylePickerButton.vue'
 
 const mode = ref('image')
 const prompt = ref('')
-const style = ref('')
+const styleId = ref('rh-101-cinematic')
 const aspectRatio = ref('16:9')
 const duration = ref(5)
 const generating = ref(false)
@@ -226,7 +227,7 @@ async function generate() {
   const newItem = {
     type: mode.value,
     prompt: prompt.value,
-    style: style.value,
+    style_id: styleId.value,
     status: 'processing',
     url: null,
     error: null,
@@ -236,7 +237,7 @@ async function generate() {
     if (mode.value === 'image') {
       const res = await imagesAPI.create({
         prompt: prompt.value,
-        style: style.value || undefined,
+        style_id: styleId.value,
         aspect_ratio: aspectRatio.value,
       })
       if (res?.task_id) {
@@ -254,7 +255,7 @@ async function generate() {
       }
       const body = {
         prompt: prompt.value,
-        style: style.value || undefined,
+        style_id: styleId.value,
         aspect_ratio: aspectRatio.value,
         duration: duration.value,
       }

@@ -20,7 +20,7 @@ describe('image generation target adapters and binding', () => {
       CREATE TABLE storyboard_character_variants (id INTEGER PRIMARY KEY, storyboard_id INTEGER, character_id INTEGER, variant_id INTEGER, reference_role TEXT, sort_order INTEGER, framing_note TEXT);
       CREATE TABLE storyboard_props (storyboard_id INTEGER, prop_id INTEGER);
       CREATE TABLE external_generation_results (id TEXT PRIMARY KEY, image_generation_id INTEGER);
-      CREATE TABLE dramas (id INTEGER PRIMARY KEY, style TEXT, metadata TEXT, deleted_at TEXT);
+      CREATE TABLE dramas (id INTEGER PRIMARY KEY, style TEXT, style_id TEXT, metadata TEXT, deleted_at TEXT);
     `);
     db.prepare("INSERT INTO characters VALUES (1,7,'林默','黑发少年','角色背景叙事，不应直接作为生图提示词','角色润色','/char-ref.png','/old-char.png','old-char.png',NULL,NULL,NULL,NULL)").run();
     db.prepare("INSERT INTO scenes VALUES (2,7,'雨夜街道','夜晚','湿润街道','四宫格','场景单图','/scene-ref.png','/old-scene.png','old-scene.png',NULL,'generated',NULL,NULL,NULL)").run();
@@ -42,17 +42,17 @@ describe('image generation target adapters and binding', () => {
       ALTER TABLE scenes ADD COLUMN negative_prompt TEXT;
       ALTER TABLE props ADD COLUMN negative_prompt TEXT;
     `);
-    db.prepare('INSERT INTO dramas (id, style, metadata) VALUES (?, ?, ?)').run(7, 'cinematic', '{}');
+    db.prepare('INSERT INTO dramas (id, style, style_id, metadata) VALUES (?, ?, ?, ?)').run(7, 'cinematic', 'rh-101-cinematic', '{}');
   });
 
   afterEach(() => db.close());
 
   it('builds authoritative prompts for every resource kind', () => {
     assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, /角色润色/);
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, /正面、正侧面、背面/);
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'scene', target_id: 2 }).prompt, /^场景单图/);
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'prop', target_id: 3 }).prompt, /^道具润色/);
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }).prompt, /^分镜润色/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character', target_id: 1 }).prompt, /正面、侧面、背面与三分之四视角/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'scene', target_id: 2 }).prompt, /场景单图/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'prop', target_id: 3 }).prompt, /道具润色/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_main', target_id: 4 }).prompt, /分镜润色/);
   });
 
   it('resolves mode-specific prompts plus negative and project style snapshots', () => {
@@ -70,13 +70,11 @@ describe('image generation target adapters and binding', () => {
     });
     assert.equal(character.assetMode, 'SINGLE');
     assert.doesNotMatch(character.prompt, /正面、正侧面、背面/);
-    assert.match(character.prompt, /cinematic realistic lighting/);
+    assert.match(character.prompt, /Cinematic Hyper-realistic/);
     assert.equal(character.negativePrompt, 'duplicate person');
-    assert.deepEqual(character.styleSnapshot, {
-      style: 'cinematic',
-      style_prompt_zh: '写实电影光影，冷青色调',
-      style_prompt_en: 'cinematic realistic lighting, cyan shadows',
-    });
+    assert.equal(character.styleSnapshot.id, 'rh-101-cinematic');
+    assert.equal(character.styleSnapshot.version, 1);
+    assert.equal(character.styleSnapshot.labelZh, '电影超写实');
 
     const scene = targets.buildGenerationInput(db, {
       drama_id: 7,
@@ -88,18 +86,16 @@ describe('image generation target adapters and binding', () => {
     assert.equal(scene.negativePrompt, 'text watermark');
   });
 
-  it('expands a legacy project style key into the complete prompt snapshot', () => {
-    db.prepare("UPDATE dramas SET style='cinematic', metadata='{}' WHERE id=7").run();
+  it('resolves the canonical project StyleSpec into the complete prompt snapshot', () => {
     const generation = targets.buildGenerationInput(db, {
       drama_id: 7,
       target_type: 'character',
       target_id: 1,
     });
-    assert.equal(generation.styleSnapshot.style, 'cinematic');
-    assert.match(generation.styleSnapshot.style_prompt_en, /anamorphic lens/);
-    assert.match(generation.styleSnapshot.style_prompt_zh, /电影级大片画面/);
-    assert.notEqual(generation.styleSnapshot.style_prompt_en, 'cinematic');
-    assert.match(generation.prompt, /anamorphic lens/);
+    assert.equal(generation.styleSnapshot.id, 'rh-101-cinematic');
+    assert.match(generation.styleSnapshot.promptEn, /Cinematic Hyper-realistic/);
+    assert.match(generation.styleSnapshot.promptZh, /真人电影写实摄影/);
+    assert.match(generation.prompt, /Cinematic Hyper-realistic/);
   });
 
   it('never falls back to a character background description when building an image prompt', () => {
@@ -155,8 +151,8 @@ describe('image generation target adapters and binding', () => {
   it('uses the matching frame prompt for first and last targets', () => {
     db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'first', '专业首帧提示', '2026-01-01')").run();
     db.prepare("INSERT INTO frame_prompts (storyboard_id, frame_type, prompt, updated_at) VALUES (4, 'last', '专业尾帧提示', '2026-01-02')").run();
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, /^专业首帧提示/);
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, /^专业尾帧提示/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_first', target_id: 4 }).prompt, /专业首帧提示/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'storyboard_last', target_id: 4 }).prompt, /专业尾帧提示/);
   });
 
   it('uses canonical scene, selected character variant, and prop references in slot order', () => {
@@ -214,13 +210,13 @@ describe('image generation target adapters and binding', () => {
       VALUES (1, 1, 'char_lin_default', '默认状态', '日常造型', '黑发束起', '状态生图提示词', '/old-variant.png', 'old-variant.png', NULL, 1, NULL, NULL)`).run();
 
     const generation = targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 });
-    assert.match(generation.prompt, /^状态生图提示词/);
+    assert.match(generation.prompt, /状态生图提示词/);
     assert.deepEqual(generation.references, [
       { role: 'character_identity', sourceId: 1, url: '/static/old-char.png' },
     ]);
 
     db.prepare('UPDATE character_variants SET image_prompt=NULL WHERE id=1').run();
-    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, /^黑发束起/);
+    assert.match(targets.buildGenerationInput(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }).prompt, /黑发束起/);
 
     targets.bindResult(db, { drama_id: 7, target_type: 'character_variant', target_id: 1 }, 50);
     const variant = db.prepare('SELECT * FROM character_variants WHERE id=1').get();
@@ -244,7 +240,7 @@ describe('image generation target adapters and binding', () => {
     });
 
     assert.equal(generation.assetMode, 'TURNAROUND');
-    assert.match(generation.prompt, /正面、正侧面、背面/);
+    assert.match(generation.prompt, /正面、侧面、背面与三分之四视角/);
     assert.deepEqual(generation.references, []);
   });
 

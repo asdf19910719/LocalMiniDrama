@@ -21,10 +21,10 @@ const variantSchema = strictObject({
   name: str(true),
   description: str(true),
   appearance: str(true),
-  image_prompt: str(true),
+  base_image_prompt: str(true),
   negative_prompt: str(true),
   is_default: bool,
-}, ['local_ref', 'name', 'description', 'appearance', 'image_prompt', 'negative_prompt', 'is_default']);
+}, ['local_ref', 'name', 'description', 'appearance', 'base_image_prompt', 'negative_prompt', 'is_default']);
 
 const characterSchema = strictObject({
   local_ref: localRef,
@@ -33,13 +33,13 @@ const characterSchema = strictObject({
   description: str(true),
   personality: str(true),
   appearance: str(true),
-  image_prompt: str(true),
+  base_image_prompt: str(true),
   negative_prompt: str(true),
   voice_profile: str(true),
   variants: arrayOf(variantSchema, { minItems: 1 }),
 }, [
   'local_ref', 'name', 'role', 'description', 'personality', 'appearance',
-  'image_prompt', 'negative_prompt', 'voice_profile', 'variants',
+  'base_image_prompt', 'negative_prompt', 'voice_profile', 'variants',
 ]);
 
 const existingCharacterVariantSchema = strictObject({
@@ -48,12 +48,12 @@ const existingCharacterVariantSchema = strictObject({
   name: str(true),
   description: str(true),
   appearance: str(true),
-  image_prompt: str(true),
+  base_image_prompt: str(true),
   negative_prompt: str(true),
   is_default: bool,
 }, [
   'local_ref', 'character_ref', 'name', 'description', 'appearance',
-  'image_prompt', 'negative_prompt', 'is_default',
+  'base_image_prompt', 'negative_prompt', 'is_default',
 ]);
 
 const sceneSchema = strictObject({
@@ -62,18 +62,18 @@ const sceneSchema = strictObject({
   state: str(true),
   description: str(true),
   atmosphere: str(true),
-  image_prompt: str(true),
+  base_image_prompt: str(true),
   negative_prompt: str(true),
-}, ['local_ref', 'name', 'state', 'description', 'atmosphere', 'image_prompt', 'negative_prompt']);
+}, ['local_ref', 'name', 'state', 'description', 'atmosphere', 'base_image_prompt', 'negative_prompt']);
 
 const propSchema = strictObject({
   local_ref: localRef,
   name: str(true),
   type: str(true),
   description: str(true),
-  image_prompt: str(true),
+  base_image_prompt: str(true),
   negative_prompt: str(true),
-}, ['local_ref', 'name', 'type', 'description', 'image_prompt', 'negative_prompt']);
+}, ['local_ref', 'name', 'type', 'description', 'base_image_prompt', 'negative_prompt']);
 
 const characterRefSchema = strictObject({
   character_ref: assetRef,
@@ -142,7 +142,8 @@ const storyboardSchema = strictObject({
   narration: str(false),
   audio_description: audioDescriptionSchema,
   transition: transitionSchema,
-  image_prompt: str(true),
+  base_image_prompt: str(true),
+  base_video_prompt: str(true),
   universal_segment_text: {
     ...str(true),
     description: '万能提示词草稿。参考图必须使用规范槽位 @图片1、@图片2……：@图片1 为场景，随后按 character_refs.sort_order 为人物状态，最后为 prop_refs；禁止用 @场景/@人物/@道具或资产名称代替槽位。',
@@ -153,7 +154,7 @@ const storyboardSchema = strictObject({
   'local_ref', 'storyboard_number', 'title', 'description', 'duration_seconds',
   'scene_ref', 'character_refs', 'prop_refs', 'shot_type', 'camera_angle',
   'camera_movement', 'composition', 'action', 'dialogue', 'narration',
-  'audio_description', 'transition', 'image_prompt', 'universal_segment_text', 'is_primary',
+  'audio_description', 'transition', 'base_image_prompt', 'base_video_prompt', 'universal_segment_text', 'is_primary',
 ]);
 
 const bgmSchema = strictObject({
@@ -189,11 +190,12 @@ const EXTERNAL_AI_RESULT_SCHEMA = {
   title: 'LocalMiniDrama 外部 AI 单集增量结果',
   description: '由项目任务包约束的严格增量结果。已有资产只引用，新资产只在 new_assets 中声明。',
   type: 'object',
-  required: ['schema', 'version', 'package_id', 'episode', 'new_assets', 'storyboards'],
+  required: ['schema', 'version', 'prompt_contract', 'package_id', 'episode', 'new_assets', 'storyboards'],
   additionalProperties: false,
   properties: {
     schema: { const: 'local-mini-drama.external-ai-result' },
-    version: { const: '1' },
+    version: { const: '2' },
+    prompt_contract: { const: 'base_prompt' },
     package_id: str(true),
     generator: strictObject({
       name: str(true),
@@ -316,6 +318,22 @@ function collectLocalRefs(result, errors) {
 
 function validateExternalAiResult(value) {
   const errors = [];
+  if (value?.version && value.version !== '2') {
+    errors.push({ code: 'LEGACY_SCHEMA_UNSUPPORTED', path: 'version', message: '外部 AI 结果只支持 version 2' });
+  }
+  const forbiddenStyleFields = new Set(['style', 'style_id', 'style_prompt', 'style_prompt_zh', 'style_prompt_en', 'style_override']);
+  const forbiddenFinalFields = new Set(['final_prompt', 'compiled_prompt', 'polished_prompt', 'image_prompt', 'video_prompt']);
+  const scanForbidden = (current, currentPath = '') => {
+    if (!current || typeof current !== 'object') return;
+    if (Array.isArray(current)) return current.forEach((item, index) => scanForbidden(item, joinPath(currentPath, index)));
+    for (const [key, child] of Object.entries(current)) {
+      const fieldPath = joinPath(currentPath, key);
+      if (forbiddenStyleFields.has(key)) errors.push({ code: 'STYLE_OVERRIDE_FORBIDDEN', path: fieldPath, message: `${fieldPath} 禁止覆盖项目风格` });
+      if (forbiddenFinalFields.has(key)) errors.push({ code: 'FINAL_PROMPT_FORBIDDEN', path: fieldPath, message: `${fieldPath} 禁止导入最终提示词，只能使用 base_image_prompt/base_video_prompt` });
+      scanForbidden(child, fieldPath);
+    }
+  };
+  scanForbidden(value);
   validateSchemaValue(value, EXTERNAL_AI_RESULT_SCHEMA, '', errors);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     collectLocalRefs(value, errors);

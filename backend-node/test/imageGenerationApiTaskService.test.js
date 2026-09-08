@@ -8,7 +8,7 @@ const orchestrator = require('../src/services/imageGenerationOrchestrator');
 function createDb() {
   const db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE dramas (id INTEGER PRIMARY KEY, style TEXT, metadata TEXT, deleted_at TEXT, updated_at TEXT);
+    CREATE TABLE dramas (id INTEGER PRIMARY KEY, style_id TEXT, metadata TEXT, deleted_at TEXT, updated_at TEXT);
     CREATE TABLE characters (
       id INTEGER PRIMARY KEY, drama_id INTEGER, name TEXT, appearance TEXT, description TEXT,
       polished_prompt TEXT, negative_prompt TEXT, asset_mode TEXT DEFAULT 'TURNAROUND',
@@ -30,7 +30,7 @@ function createDb() {
       total_count INTEGER, completed_count INTEGER DEFAULT 0, review_count INTEGER DEFAULT 0,
       failed_count INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT
     );
-    INSERT INTO dramas (id, style, metadata) VALUES (7, 'cinematic', '{}');
+    INSERT INTO dramas (id, style_id, metadata) VALUES (7, 'rh-101-cinematic', '{}');
     INSERT INTO characters (id, drama_id, name, appearance, image_url, local_path)
       VALUES (1, 7, '林默', '黑发少年', '/old.png', 'old.png');
   `);
@@ -46,7 +46,7 @@ function linkedGeneratingTask(db, imageGenerationId) {
     promptSnapshot: 'immutable character prompt',
     assetMode: 'TURNAROUND',
     negativePromptSnapshot: 'duplicate face',
-    styleSnapshot: { style: 'cinematic', style_prompt_en: 'cinematic movie still' },
+    styleSnapshot: { id: 'rh-101-cinematic' },
   });
   task = taskService.transitionTask(db, task.id, 'preparing');
   return taskService.transitionTask(db, task.id, 'generating', { imageGenerationId });
@@ -63,7 +63,7 @@ describe('API unified image task reconciliation', () => {
       promptSnapshot: 'already compiled immutable prompt',
       assetMode: 'TURNAROUND',
       negativePromptSnapshot: 'duplicate face',
-      styleSnapshot: { style: 'cinematic', style_prompt_en: 'cinematic movie still' },
+      styleSnapshot: { id: 'rh-101-cinematic' },
     });
     let submittedInput;
 
