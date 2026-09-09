@@ -1,0 +1,272 @@
+{
+  "videos": {
+    "shot1_official_sage_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_sage_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 2.199114168224299,
+      "normalized_laplacian_mean": 34.00376551455169,
+      "normalized_laplacian_median": 27.580058781215843,
+      "normalized_highpass_mean": 0.9898893733819326,
+      "normalized_contrast_mean": 25.389196034131075,
+      "normalized_temporal_diff_mean": 9.876094732903814
+    },
+    "shot1_official_sage_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_sage_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 8.335125532710281,
+      "normalized_laplacian_mean": 35.67753367960012,
+      "normalized_laplacian_median": 29.00999210258592,
+      "normalized_highpass_mean": 1.0752197818623648,
+      "normalized_contrast_mean": 25.448998918921482,
+      "normalized_temporal_diff_mean": 10.038555416751217
+    },
+    "shot1_official_nosage_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_nosage_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 2.1722754392523367,
+      "normalized_laplacian_mean": 33.1907489230637,
+      "normalized_laplacian_median": 26.923824662178877,
+      "normalized_highpass_mean": 0.9979641735553741,
+      "normalized_contrast_mean": 25.133182502085873,
+      "normalized_temporal_diff_mean": 9.782673308137175
+    },
+    "shot1_official_nosage_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_nosage_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 8.226166429906542,
+      "normalized_laplacian_mean": 35.35543482261266,
+      "normalized_laplacian_median": 26.932761982594393,
+      "normalized_highpass_mean": 1.0820024261871974,
+      "normalized_contrast_mean": 25.19254994072104,
+      "normalized_temporal_diff_mean": 9.945919554078733
+    },
+    "shot1_turbo09_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_turbo09_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 7.294252261682243,
+      "normalized_laplacian_mean": 64.00997535438415,
+      "normalized_laplacian_median": 57.8699035320862,
+      "normalized_highpass_mean": 1.416147145960066,
+      "normalized_contrast_mean": 29.83600757717105,
+      "normalized_temporal_diff_mean": 11.237547972047484
+    },
+    "shot1_turbo09_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_turbo09_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 107,
+      "duration": 4.458333333333333,
+      "bitrate_mbps_est": 26.12866093457944,
+      "normalized_laplacian_mean": 64.06187574040104,
+      "normalized_laplacian_median": 57.47089422844843,
+      "normalized_highpass_mean": 1.4873853259616427,
+      "normalized_contrast_mean": 29.820175540051366,
+      "normalized_temporal_diff_mean": 11.334508484679382
+    },
+    "shot2_official_sage_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_sage_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 0.7894265806451612,
+      "normalized_laplacian_mean": 23.268581763198927,
+      "normalized_laplacian_median": 23.598061191394063,
+      "normalized_highpass_mean": 1.0034825128893698,
+      "normalized_contrast_mean": 27.37243367614945,
+      "normalized_temporal_diff_mean": 1.6137639825994323
+    },
+    "shot2_official_sage_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_sage_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 2.5308464516129034,
+      "normalized_laplacian_mean": 22.46300688813513,
+      "normalized_laplacian_median": 22.738176307555072,
+      "normalized_highpass_mean": 1.0078420350628514,
+      "normalized_contrast_mean": 27.416433289922935,
+      "normalized_temporal_diff_mean": 1.719514862985322
+    },
+    "shot2_official_nosage_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_nosage_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 1.0299514838709676,
+      "normalized_laplacian_mean": 20.512872641525277,
+      "normalized_laplacian_median": 20.357330877086348,
+      "normalized_highpass_mean": 0.8973992601517709,
+      "normalized_contrast_mean": 27.362885170362105,
+      "normalized_temporal_diff_mean": 4.976500392104641
+    },
+    "shot2_official_nosage_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_nosage_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 3.664140387096774,
+      "normalized_laplacian_mean": 19.727758918570633,
+      "normalized_laplacian_median": 19.701725630177695,
+      "normalized_highpass_mean": 0.9065123969508756,
+      "normalized_contrast_mean": 27.414736635889664,
+      "normalized_temporal_diff_mean": 5.10110976710464
+    },
+    "shot2_turbo09_raw": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_turbo09_raw.mp4",
+      "width": 1280,
+      "height": 704,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 3.537576774193548,
+      "normalized_laplacian_mean": 28.20913156243626,
+      "normalized_laplacian_median": 29.10365317618551,
+      "normalized_highpass_mean": 1.0367390148101314,
+      "normalized_contrast_mean": 28.063714256904376,
+      "normalized_temporal_diff_mean": 8.157164343631628
+    },
+    "shot2_turbo09_rtx2x": {
+      "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_turbo09_rtx2x.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 124,
+      "duration": 5.166666666666667,
+      "bitrate_mbps_est": 14.815367225806451,
+      "normalized_laplacian_mean": 27.325241642433966,
+      "normalized_laplacian_median": 27.280362096600047,
+      "normalized_highpass_mean": 1.033593281622856,
+      "normalized_contrast_mean": 28.05513703278944,
+      "normalized_temporal_diff_mean": 8.30610499526515
+    }
+  },
+  "rtx_pairs": {
+    "shot1_official_sage": {
+      "downsampled_psnr_mean": 39.725597079462915,
+      "downsampled_abs_diff_mean": 1.8049318666811343
+    },
+    "shot1_official_nosage": {
+      "downsampled_psnr_mean": 39.7456078493331,
+      "downsampled_abs_diff_mean": 1.8058096323751844
+    },
+    "shot1_turbo09": {
+      "downsampled_psnr_mean": 41.381097678861885,
+      "downsampled_abs_diff_mean": 1.5197394579749315
+    },
+    "shot2_official_sage": {
+      "downsampled_psnr_mean": 41.66336678629572,
+      "downsampled_abs_diff_mean": 1.4710716150606369
+    },
+    "shot2_official_nosage": {
+      "downsampled_psnr_mean": 41.48772173493988,
+      "downsampled_abs_diff_mean": 1.4960812207890393
+    },
+    "shot2_turbo09": {
+      "downsampled_psnr_mean": 42.38847139545579,
+      "downsampled_abs_diff_mean": 1.3848724216077102
+    }
+  },
+  "contact_sheets": {
+    "shot1": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_contact_sheet.jpg",
+    "shot2": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_contact_sheet.jpg"
+  },
+  "sage_vs_nosage": {
+    "shot1_raw": {
+      "downsampled_psnr_mean": 28.08800783862197,
+      "downsampled_abs_diff_mean": 5.489023063479849
+    },
+    "shot1_rtx2x": {
+      "downsampled_psnr_mean": 27.95136082433444,
+      "downsampled_abs_diff_mean": 5.5747172757029935
+    },
+    "shot2_raw": {
+      "downsampled_psnr_mean": 20.424089299372458,
+      "downsampled_abs_diff_mean": 15.954684791303913
+    },
+    "shot2_rtx2x": {
+      "downsampled_psnr_mean": 20.372775248533003,
+      "downsampled_abs_diff_mean": 16.10030969822978
+    }
+  },
+  "detail_crops": {
+    "shot1": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_detail_crop.jpg",
+    "shot2": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_detail_crop.jpg"
+  },
+  "original_selected": {
+    "shot1": {
+      "path": "E:\\project\\LocalMiniDrama\\backend-node\\data\\storage\\projects\\0004_20260903_我是幕后大佬\\videos\\vg_69_60b88fe8.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 96,
+      "duration": 4.0,
+      "bitrate_mbps_est": 8.344924,
+      "normalized_laplacian_mean": 36.34940322949505,
+      "normalized_laplacian_median": 27.22150260924185,
+      "normalized_highpass_mean": 1.0862844251096249,
+      "normalized_contrast_mean": 25.74446985504624,
+      "normalized_temporal_diff_mean": 10.30700658535328
+    },
+    "shot2": {
+      "path": "E:\\project\\LocalMiniDrama\\backend-node\\data\\storage\\projects\\0004_20260903_我是幕后大佬\\videos\\vg_70_2c7dc299.mp4",
+      "width": 2560,
+      "height": 1408,
+      "fps": 24.0,
+      "frames": 120,
+      "duration": 5.0,
+      "bitrate_mbps_est": 2.5146896,
+      "normalized_laplacian_mean": 22.549885431215284,
+      "normalized_laplacian_median": 23.1233069882585,
+      "normalized_highpass_mean": 1.0093864719072978,
+      "normalized_contrast_mean": 27.459742912853873,
+      "normalized_temporal_diff_mean": 1.7016260990154781
+    }
+  },
+  "original_comparisons": {
+    "shot1": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_original_comparison.jpg",
+    "shot2": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_original_comparison.jpg"
+  },
+  "original_vs_controlled_official": {
+    "shot1": {
+      "downsampled_psnr_mean": 292.3655652687571,
+      "downsampled_abs_diff_mean": 0.15089993332371565
+    },
+    "shot2": {
+      "downsampled_psnr_mean": 268.1358714797198,
+      "downsampled_abs_diff_mean": 0.14353037208017677
+    }
+  },
+  "comparison_videos": {
+    "shot1": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_three_way_comparison.mp4",
+    "shot2": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_three_way_comparison.mp4"
+  }
+}

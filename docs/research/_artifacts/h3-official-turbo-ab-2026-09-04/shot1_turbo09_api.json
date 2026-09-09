@@ -1,0 +1,389 @@
+{
+  "119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "121": {
+    "inputs": {
+      "samples": [
+        "1306",
+        0
+      ],
+      "vae": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）"
+    }
+  },
+  "128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "131": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "132",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式"
+    }
+  },
+  "132": {
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Video Duration"
+    }
+  },
+  "136": {
+    "inputs": {
+      "prompt": "subject_definitions:\n<Picture 1> is the reference image defining the environment, lighting, and art direction of the ruined grand hall — a vast ancient Chinese palace interior with a cracked ceiling opening, weathered broken pillars, dust-covered stone altars, faint blue ghost flames flickering in corners, and suspended dust particles in dim volumetric light.\n\nsummary:\n[reference generation] The target video is a 4-second single continuous shot descending from a high overhead angle through the ruined hall defined by <Picture 1>, gliding past broken pillars and dusty altars, passing through the empty hall center, and ending on the decaying main hall with depth extending toward the dark doorway beyond. The scene is silent except for a voice-over narration.\n\nretention_analysis:\n<Picture 1> (environment, lighting, and spatial layout reference for the entire shot): partially_preserved - the ruined hall's cracked ceiling, broken pillars, dust-covered stone surfaces, blue ghost flames, and dim volumetric lighting are retained, but the camera moves through the space in a continuous descending path rather than reproducing any static composition or grid layout from the source image.\n\ndetailed_description:\nThe target video is in a photorealistic live-action cinematic style with high-definition quality, rendered with xianxia fantasy three-dimensional aesthetics, ethereal immortal-realm atmosphere, spiritual-energy light streams, and spell particles, matching the visual language of Chinese xianxia dramas and game CG, with soft volumetric light and shallow depth of field.\n\n[Shot 1] The single continuous shot begins from a high overhead angle looking down through the cracked opening in the grand hall's dome, as defined by <Picture 1>. The camera slowly tilts downward, descending through the broken ceiling gap, passing weathered fractured pillars and dust-covered stone altars below. Faint blue ghost flames flicker and dim in the shadowed corners of the hall, while fine dust particles float suspended in the weak shafts of light piercing through the cracks above. The camera continues its slow push forward, gliding across the vast empty hall center, the floor scattered with rubble and debris, until it settles on the decaying, withered main hall at the center — broken ceremonial vessels, a collapsed throne dais, and faded murals barely visible on the walls. The depth of field extends far into the dark, gloomy doorway beyond the hall, where only faint outlines of further corridors are suggested in shadow. The entire shot is one unbroken continuous take with no cuts or split screens. A male voice-over narrates in Chinese, with no other sound in the scene: <d>[Chinese] 陆无没想到，自己继承的遗产，是一座濒临崩溃的阴间。</d>\n\noverall_soundscape:\nComplete silence within the hall except for faint, barely audible ambient air movement and the subtle crackle of ghost flames; no footsteps, no wind, no environmental noise.\n\nnon_diegetic_music:\nN/A",
+      "width": 1280,
+      "height": 704,
+      "length": [
+        "131",
+        1
+      ],
+      "ref_image_size": "max",
+      "clip": [
+        "128",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ],
+      "audio_vae": [
+        "120",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "137",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "MiniMax H3 Reference to Video"
+    }
+  },
+  "137": {
+    "inputs": {
+      "image": "ab_20260904_shot1_ref1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    },
+    "is_changed": [
+      "cd1bd8c5e867e2182d2e3a95b183693baa42b28c120f2b113981531312955a13"
+    ]
+  },
+  "620": {
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "668": {
+    "inputs": {
+      "resize_type": "scale by multiplier",
+      "resize_type.scale": 2,
+      "quality": "ULTRA",
+      "images": [
+        "1307",
+        0
+      ]
+    },
+    "class_type": "RTXVideoSuperResolution",
+    "_meta": {
+      "title": "RTX Video Super Resolution"
+    }
+  },
+  "710": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 0.75,
+      "model": [
+        "748",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "725": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "727": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "728": {
+    "inputs": {
+      "scheduler": "beta",
+      "steps": 8,
+      "denoise": 1,
+      "model": [
+        "1309",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器"
+    }
+  },
+  "729": {
+    "inputs": {
+      "model": [
+        "1309",
+        0
+      ],
+      "conditioning": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "730": {
+    "inputs": {
+      "noise": [
+        "727",
+        0
+      ],
+      "guider": [
+        "729",
+        0
+      ],
+      "sampler": [
+        "725",
+        0
+      ],
+      "sigmas": [
+        "1311",
+        0
+      ],
+      "latent_image": [
+        "136",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "732": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "ab_20260904/shot1_turbo09_rtx2x",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1310",
+        0
+      ],
+      "audio": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "733": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "ab_20260904/shot1_turbo09_raw",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1307",
+        0
+      ],
+      "audio": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "748": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "620",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "ModelAttentionBackend"
+    }
+  },
+  "1306": {
+    "inputs": {
+      "offload_model": true,
+      "offload_cache": true,
+      "anything": [
+        "730",
+        0
+      ]
+    },
+    "class_type": "VRAMCleanup",
+    "_meta": {
+      "title": "🎈VRAM-Cleanup"
+    },
+    "is_changed": [
+      1788440459.8573432
+    ]
+  },
+  "1307": {
+    "inputs": {
+      "samples": [
+        "1306",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "1308": {
+    "inputs": {
+      "model": [
+        "710",
+        0
+      ],
+      "head_chunks": 4
+    },
+    "class_type": "MiniMaxLowVRAMAttention",
+    "_meta": {
+      "title": "MiniMax H3 Low VRAM Attention"
+    }
+  },
+  "1309": {
+    "inputs": {
+      "model": [
+        "1308",
+        0
+      ],
+      "chunks": 2,
+      "seq_threshold": 4096
+    },
+    "class_type": "MiniMaxChunkFeedForward",
+    "_meta": {
+      "title": "MiniMax H3 Chunk FeedForward"
+    }
+  },
+  "1310": {
+    "inputs": {
+      "clean_file_cache": true,
+      "clean_processes": true,
+      "clean_dlls": true,
+      "retry_times": 3,
+      "anything": [
+        "668",
+        0
+      ]
+    },
+    "class_type": "RAMCleanup",
+    "_meta": {
+      "title": "🎈RAM-Cleanup"
+    },
+    "is_changed": [
+      1788440459.9248147
+    ]
+  },
+  "1311": {
+    "inputs": {
+      "sigmas": [
+        "728",
+        0
+      ],
+      "extra_steps": 2,
+      "start_at_sigma": 0.65,
+      "end_at_sigma": 0,
+      "spacing": "cosine"
+    },
+    "class_type": "H3SigmaRefiner",
+    "_meta": {
+      "title": "H3 Sigma Refiner"
+    }
+  }
+}

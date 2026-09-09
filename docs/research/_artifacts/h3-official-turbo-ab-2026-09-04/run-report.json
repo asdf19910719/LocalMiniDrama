@@ -1,0 +1,417 @@
+{
+  "generatedAt": "2026-09-04T08:53:22.453Z",
+  "controls": {
+    "width": 1280,
+    "height": 704,
+    "fps": 24,
+    "seed": 42,
+    "samePromptAndReferences": true
+  },
+  "results": [
+    {
+      "label": "shot1_official_sage",
+      "workflow": "official_sage",
+      "shot": 1,
+      "storyboardId": 20,
+      "promptSourceVideoId": 69,
+      "durationRequested": 4,
+      "frames": 107,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        }
+      ],
+      "promptId": "8c0c1c31-a36d-4fbb-b0b7-937982390f5d",
+      "wallSeconds": 265,
+      "outputs": [
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_sage_raw.mp4",
+          "bytes": 1225548,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_sage_rtx2x.mp4",
+          "bytes": 4645096,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "shot2_official_sage",
+      "workflow": "official_sage",
+      "shot": 2,
+      "storyboardId": 21,
+      "promptSourceVideoId": 70,
+      "durationRequested": 5,
+      "frames": 124,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        },
+        {
+          "type": "character_variant",
+          "name": "玄袍府君",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1342fed9-4e2f-4403-9560-0176e44f2021\\original.png"
+        }
+      ],
+      "promptId": "9b794a02-6c11-4bba-983a-f1985ff3a486",
+      "wallSeconds": 267.804,
+      "outputs": [
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_sage_raw.mp4",
+          "bytes": 509838,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_sage_rtx2x.mp4",
+          "bytes": 1634505,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "shot1_official_nosage",
+      "workflow": "official_nosage",
+      "shot": 1,
+      "storyboardId": 20,
+      "promptSourceVideoId": 69,
+      "durationRequested": 4,
+      "frames": 107,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        }
+      ],
+      "promptId": "f16062fd-c1fa-4f54-927e-8cdeeefc8e23",
+      "wallSeconds": 355.184,
+      "outputs": [
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_nosage_rtx2x.mp4",
+          "bytes": 4584374,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_official_nosage_raw.mp4",
+          "bytes": 1210591,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "shot2_official_nosage",
+      "workflow": "official_nosage",
+      "shot": 2,
+      "storyboardId": 21,
+      "promptSourceVideoId": 70,
+      "durationRequested": 5,
+      "frames": 124,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        },
+        {
+          "type": "character_variant",
+          "name": "玄袍府君",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1342fed9-4e2f-4403-9560-0176e44f2021\\original.png"
+        }
+      ],
+      "promptId": "a234c3e6-6cbe-47f2-ac30-5412f38f4ef5",
+      "wallSeconds": 478.366,
+      "outputs": [
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_nosage_rtx2x.mp4",
+          "bytes": 2366424,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_official_nosage_raw.mp4",
+          "bytes": 665177,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "shot1_turbo09",
+      "workflow": "turbo09",
+      "shot": 1,
+      "storyboardId": 20,
+      "promptSourceVideoId": 69,
+      "durationRequested": 4,
+      "frames": 107,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        }
+      ],
+      "promptId": "bdfa71b5-2c32-410c-9aeb-f5a868c5a368",
+      "wallSeconds": 171.546,
+      "outputs": [
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_turbo09_raw.mp4",
+          "bytes": 4065026,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot1_turbo09_rtx2x.mp4",
+          "bytes": 14561285,
+          "format": {
+            "duration": "4.46"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "shot2_turbo09",
+      "workflow": "turbo09",
+      "shot": 2,
+      "storyboardId": 21,
+      "promptSourceVideoId": 70,
+      "durationRequested": 5,
+      "frames": 124,
+      "width": 1280,
+      "height": 704,
+      "seed": 42,
+      "references": [
+        {
+          "type": "scene",
+          "name": "阴府大殿·破败待修复",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1088fdd9-e22b-47a9-b93c-ad9292265508\\original.png"
+        },
+        {
+          "type": "character_variant",
+          "name": "玄袍府君",
+          "filePath": "E:\\project\\LocalMiniDrama\\backend-node\\data\\external-web\\4\\unassigned\\1342fed9-4e2f-4403-9560-0176e44f2021\\original.png"
+        }
+      ],
+      "promptId": "3bbbc398-11c9-4c6d-a8c6-d2790b4f86c4",
+      "wallSeconds": 225.98,
+      "outputs": [
+        {
+          "tag": "raw",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_turbo09_raw.mp4",
+          "bytes": 2284685,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 1280,
+              "height": 704,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        },
+        {
+          "tag": "rtx2x",
+          "path": "E:\\project\\LocalMiniDrama\\docs\\research\\_artifacts\\h3-official-turbo-ab-2026-09-04\\shot2_turbo09_rtx2x.mp4",
+          "bytes": 9568258,
+          "format": {
+            "duration": "5.17"
+          },
+          "streams": [
+            {
+              "codec_type": "video",
+              "codec_name": "h264",
+              "width": 2560,
+              "height": 1408,
+              "r_frame_rate": "24/1"
+            },
+            {
+              "codec_type": "audio",
+              "codec_name": "aac"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

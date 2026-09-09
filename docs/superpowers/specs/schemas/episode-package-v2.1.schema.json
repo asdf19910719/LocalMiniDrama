@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://localminidrama.local/schemas/episode-package-v2.1.schema.json",
+  "title": "LocalMiniDrama Episode Package V2.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "episode", "assets", "story_scenes", "shot_packages"],
+  "properties": {
+    "schema": { "const": "local-mini-drama.episode-package" },
+    "version": { "type": "string", "const": "2.1" },
+    "episode": { "$ref": "#/$defs/episode" },
+    "assets": { "$ref": "#/$defs/assets" },
+    "story_scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/storyScene" }
+    },
+    "shot_packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/portableShot" }
+    },
+    "audio_plan": { "$ref": "#/$defs/audioPlan" },
+    "extensions": { "$ref": "#/$defs/extensions" }
+  },
+  "$defs": {
+    "sourceKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$" },
+    "extensions": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$" } },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["episode_number", "title", "summary", "script", "duration_target_seconds"],
+      "properties": {
+        "episode_number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "script": { "type": "string", "minLength": 1 },
+        "duration_target_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "notes": { "type": "string" }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["characters", "scene_assets", "props"],
+      "properties": {
+        "characters": { "type": "array", "items": { "$ref": "#/$defs/character" } },
+        "scene_assets": { "type": "array", "items": { "$ref": "#/$defs/sceneAsset" } },
+        "props": { "type": "array", "items": { "$ref": "#/$defs/prop" } }
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_key", "name", "role", "description", "personality", "appearance", "states"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "name": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["main", "supporting", "minor"] },
+        "description": { "type": "string", "minLength": 1 },
+        "personality": { "type": "string", "minLength": 1 },
+        "appearance": { "type": "string", "minLength": 1 },
+        "base_image_prompt": { "type": "string" },
+        "negative_prompt": { "type": "string" },
+        "voice_profile": { "type": ["string", "null"] },
+        "states": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/characterState" } }
+      }
+    },
+    "characterState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_key", "name", "description", "appearance", "is_default"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "appearance": { "type": "string", "minLength": 1 },
+        "base_image_prompt": { "type": "string" },
+        "negative_prompt": { "type": "string" },
+        "is_default": { "type": "boolean" }
+      }
+    },
+    "sceneAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_key", "name", "state", "description", "atmosphere"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "name": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "atmosphere": { "type": "string", "minLength": 1 },
+        "base_image_prompt": { "type": "string" },
+        "negative_prompt": { "type": "string" }
+      }
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_key", "name", "type", "description"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "base_image_prompt": { "type": "string" },
+        "negative_prompt": { "type": "string" }
+      }
+    },
+    "storyScene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_key", "scene_number", "heading", "location_scene_ref", "summary"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "scene_number": { "type": "integer", "minimum": 1 },
+        "heading": { "type": "string", "minLength": 1 },
+        "location_scene_ref": { "$ref": "#/$defs/sourceKey" },
+        "summary": { "type": "string", "minLength": 1 },
+        "look_override": {
+          "allOf": [{ "$ref": "#/$defs/stringMap" }],
+          "description": "Only a StoryScene override; never a Project Look replacement."
+        }
+      }
+    },
+    "portableShot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "shot_number",
+        "story_scene_refs",
+        "planned_duration_seconds",
+        "story_intent",
+        "visual",
+        "timed_segments",
+        "continuity",
+        "audio"
+      ],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/sourceKey" },
+        "shot_number": { "type": "integer", "minimum": 1 },
+        "story_scene_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/sourceKey" } },
+        "planned_duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "story_intent": { "type": "string", "minLength": 1 },
+        "base_video_prompt": { "type": "string" },
+        "visual": { "$ref": "#/$defs/visual" },
+        "timed_segments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/portableSegment" } },
+        "continuity": { "$ref": "#/$defs/continuity" },
+        "audio": { "$ref": "#/$defs/shotAudio" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "portableSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds", "action", "scene_asset_refs", "character_state_refs", "prop_refs"],
+      "properties": {
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "action": { "type": "string", "minLength": 1 },
+        "camera": { "type": "string" },
+        "dialogue": { "type": "array", "items": { "$ref": "#/$defs/portableSpeech" } },
+        "scene_asset_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/sourceKey" } },
+        "character_state_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/sourceKey" } },
+        "prop_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/sourceKey" } }
+      }
+    },
+    "portableSpeech": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds", "text"],
+      "properties": {
+        "speaker_ref": { "$ref": "#/$defs/sourceKey" },
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "text": { "type": "string", "minLength": 1 },
+        "performance": { "type": "string" }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shot_size", "camera_angle", "camera_movement", "composition", "lighting"],
+      "properties": {
+        "shot_size": { "type": "string", "minLength": 1 },
+        "camera_angle": { "type": "string", "minLength": 1 },
+        "camera_movement": { "type": "string", "minLength": 1 },
+        "composition": { "type": "string", "minLength": 1 },
+        "lighting": { "type": "string", "minLength": 1 }
+      }
+    },
+    "continuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "exit", "axis"],
+      "properties": {
+        "entry": { "$ref": "#/$defs/stringMap" },
+        "exit": { "$ref": "#/$defs/stringMap" },
+        "axis": { "type": ["string", "null"] }
+      }
+    },
+    "shotAudio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dialogue", "narration", "ambience", "sound_effects", "music_intent"],
+      "properties": {
+        "dialogue": { "type": "array", "items": { "$ref": "#/$defs/portableSpeech" } },
+        "narration": { "type": "array", "items": { "$ref": "#/$defs/portableSpeech" } },
+        "ambience": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "sound_effects": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "music_intent": { "type": ["string", "null"] }
+      }
+    },
+    "audioPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bgm_mode", "dialogue_owner_default", "narration_owner_default"],
+      "properties": {
+        "bgm_mode": { "enum": ["none", "episode_track", "per_segment"] },
+        "dialogue_owner_default": { "enum": ["h3_native", "post_tts", "source_media", "none"] },
+        "narration_owner_default": { "enum": ["h3_native", "post_tts", "source_media", "none"] }
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    }
+  }
+}

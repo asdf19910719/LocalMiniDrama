@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-05T07:50:00.000Z",
+  "runtime": {
+    "comfyUIVersion": "0.33.1",
+    "pythonVersion": "3.13.14",
+    "pytorchVersion": "2.13.0+cu130",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "vramMiB": 16303
+  },
+  "implementation": {
+    "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+    "version": "3.3",
+    "commit": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+    "binarySha256": "84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c",
+    "registrationShimSha256": "305a0afb643f6907fe2742069cca2cea0cc5dae78478c8ec82d761c98f0684aa",
+    "cachePolicy": "te_node_always_changed"
+  },
+  "controlledSettings": {
+    "steps": 20,
+    "scheduler": "simple",
+    "sampler": "res_multistep",
+    "shiftVideo": 12,
+    "shiftAudio": 3,
+    "sageAttention": "auto",
+    "sageCompile": false,
+    "teMode": "standard",
+    "teDevice": "auto"
+  },
+  "comparisons": [
+    { "sample": "smoke", "width": 864, "height": 480, "durationSeconds": 3, "officialSeconds": 67.111, "teSeconds": 42.413, "reductionPercent": 36.8 },
+    { "sample": "static_dialogue", "width": 1280, "height": 736, "durationSeconds": 5, "officialSeconds": 309.626, "teSeconds": 188.15, "reductionPercent": 39.23 },
+    { "sample": "fast_action", "width": 1280, "height": 736, "durationSeconds": 5, "officialSeconds": 309.23, "teSeconds": 189.57, "reductionPercent": 38.7 },
+    { "sample": "multi_reference", "width": 1280, "height": 736, "durationSeconds": 5, "officialSeconds": 333.54, "teSeconds": 208.33, "reductionPercent": 37.54 },
+    { "sample": "cache_none_control", "width": 864, "height": 480, "durationSeconds": 3, "officialSeconds": 75.11, "teSeconds": 52.6, "reductionPercent": 29.97 }
+  ],
+  "stability": {
+    "runs": 5,
+    "completed": 5,
+    "seeds": [20260950, 20260951, 20260952, 20260953, 20260954],
+    "elapsedSeconds": [50.68, 42.36, 42.43, 44.23, 44.42],
+    "peakTemperatureC": 74,
+    "passed": true
+  },
+  "longRun": {
+    "width": 1280,
+    "height": 736,
+    "durationSeconds": 10,
+    "frames": 240,
+    "frameRate": 24,
+    "audioPresent": true,
+    "elapsedSeconds": 509.455,
+    "peakTemperatureC": 82,
+    "peakMemoryMiB": 15773,
+    "passed": true
+  },
+  "productionSmoke": {
+    "baseUrl": "http://127.0.0.1:8188/",
+    "runs": 2,
+    "completed": 2,
+    "errors": 0,
+    "seeds": [20260960, 20260961],
+    "passed": true
+  },
+  "qualityReview": {
+    "contactSheetsReviewed": 4,
+    "identityRegression": false,
+    "motionRegression": false,
+    "backgroundRegression": false,
+    "referenceMixup": false,
+    "audioMissing": false,
+    "approximateOutput": true,
+    "passed": true
+  },
+  "gates": {
+    "minimumReductionPercent": 25,
+    "performancePassed": true,
+    "fiveRunStabilityPassed": true,
+    "tenSecondRunPassed": true,
+    "mediaValidationPassed": true,
+    "productionRuntimePassed": true,
+    "visualReviewPassed": true,
+    "promotionDecision": "verified"
+  }
+}

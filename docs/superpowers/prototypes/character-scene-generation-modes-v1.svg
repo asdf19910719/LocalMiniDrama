@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5f7fb"/><stop offset="1" stop-color="#eef2f8"/>
+    </linearGradient>
+    <linearGradient id="thumb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#24364b"/><stop offset="1" stop-color="#6a8398"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1f2937" flood-opacity=".12"/>
+    </filter>
+    <style>
+      .font{font-family:Microsoft YaHei,Segoe UI,sans-serif;fill:#1f2937}
+      .muted{fill:#718096}.small{font-size:14px}.body{font-size:16px}.title{font-size:26px;font-weight:700}.section{font-size:18px;font-weight:700}
+      .card{fill:#fff;stroke:#e3e8f0;stroke-width:1}.line{stroke:#e6ebf2;stroke-width:1}.accent{fill:#4f46e5}.accentText{fill:#4f46e5}.pill{fill:#eef2ff;stroke:#c7d2fe}.green{fill:#ecfdf5;stroke:#a7f3d0}.orange{fill:#fff7ed;stroke:#fed7aa}.disabled{fill:#f5f6f8;stroke:#e2e5ea}.dark{fill:#111827}.white{fill:#fff}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <!-- header -->
+  <rect x="0" y="0" width="1600" height="76" fill="#ffffff"/>
+  <text x="36" y="47" class="font title">本地短剧助手</text>
+  <text x="300" y="47" class="font body muted">房客　›　第一集　›　设定</text>
+  <rect x="1240" y="20" width="150" height="36" rx="18" class="pill"/>
+  <text x="1262" y="44" class="font small accentText">当前风格　现代都市悬疑</text>
+  <rect x="1410" y="20" width="146" height="36" rx="18" fill="#4f46e5"/>
+  <text x="1434" y="44" class="font small white">查看生成历史</text>
+
+  <!-- left asset rail -->
+  <rect x="24" y="100" width="302" height="866" rx="16" class="card" filter="url(#shadow)"/>
+  <text x="50" y="143" class="font section">角色资产</text>
+  <text x="50" y="170" class="font small muted">角色实体与视觉资产并列管理</text>
+  <rect x="48" y="194" width="254" height="62" rx="10" fill="#f4f6fb"/>
+  <circle cx="78" cy="225" r="20" fill="#c7d2fe"/>
+  <text x="112" y="220" class="font body">苏妍</text>
+  <text x="112" y="242" class="font small muted">女 · 年轻 · 神秘女子</text>
+  <text x="50" y="292" class="font small muted">资产列表</text>
+  <!-- base asset -->
+  <rect x="48" y="310" width="254" height="152" rx="12" fill="#fff" stroke="#d9def0"/>
+  <rect x="62" y="326" width="78" height="112" rx="8" fill="url(#thumb)"/>
+  <circle cx="101" cy="360" r="15" fill="#edc4ae"/>
+  <path d="M83 388 Q101 372 119 388 L128 424 L74 424 Z" fill="#eef2f7"/>
+  <text x="156" y="350" class="font body">基础图</text>
+  <rect x="156" y="364" width="64" height="23" rx="11" class="green"/>
+  <text x="170" y="381" class="font small" fill="#047857">已生成</text>
+  <text x="156" y="413" class="font small muted">单图 · 16:9</text>
+  <text x="156" y="435" class="font small muted">身份基准图</text>
+  <!-- variant asset selected -->
+  <rect x="48" y="476" width="254" height="170" rx="12" fill="#eef2ff" stroke="#818cf8" stroke-width="2"/>
+  <rect x="62" y="492" width="78" height="128" rx="8" fill="url(#thumb)"/>
+  <circle cx="101" cy="526" r="15" fill="#edc4ae"/>
+  <path d="M81 552 Q101 539 121 552 L128 608 L74 608 Z" fill="#f8fafc"/>
+  <text x="156" y="516" class="font body">状态图 · 白色衬衫</text>
+  <rect x="156" y="532" width="86" height="23" rx="11" class="pill"/>
+  <text x="169" y="549" class="font small accentText">当前编辑</text>
+  <text x="156" y="580" class="font small muted">模式：单图</text>
+  <text x="156" y="603" class="font small muted">身份参考：已开启</text>
+  <text x="50" y="694" class="font small muted">+ 新增状态资产</text>
+  <line x1="48" y1="720" x2="302" y2="720" class="line"/>
+  <text x="50" y="758" class="font section">生成原则</text>
+  <text x="50" y="790" class="font small muted">基础图和状态图是并列资产</text>
+  <text x="50" y="816" class="font small muted">每个资产独立选择生图模式</text>
+  <text x="50" y="842" class="font small muted">身份参考图按需开启</text>
+  <rect x="48" y="874" width="254" height="64" rx="10" class="orange"/>
+  <text x="64" y="900" class="font small" fill="#9a3412">提示</text>
+  <text x="64" y="924" class="font small" fill="#9a3412">不同模式会生成不同版式结果</text>
+
+  <!-- main -->
+  <rect x="350" y="100" width="842" height="866" rx="16" class="card" filter="url(#shadow)"/>
+  <text x="384" y="143" class="font title">状态资产：白色衬衫</text>
+  <text x="384" y="171" class="font body muted">苏妍 · 状态资产 · 可独立重新生成</text>
+  <rect x="932" y="124" width="224" height="34" rx="17" class="pill"/>
+  <text x="950" y="146" class="font small accentText">继承剧集风格 · 现代都市悬疑</text>
+  <line x1="384" y1="198" x2="1158" y2="198" class="line"/>
+
+  <text x="384" y="238" class="font section">1　选择生图模式</text>
+  <text x="384" y="264" class="font small muted">模式控制输出版式；风格、模型和身份参考独立配置</text>
+  <!-- mode segmented -->
+  <rect x="384" y="286" width="774" height="64" rx="12" fill="#f6f7fb"/>
+  <rect x="396" y="298" width="226" height="40" rx="9" fill="#4f46e5"/>
+  <text x="475" y="324" class="font body white">单图</text>
+  <text x="508" y="324" class="font small" fill="#c7d2fe">SINGLE</text>
+  <rect x="632" y="298" width="250" height="40" rx="9" fill="#fff" stroke="#d7dce7"/>
+  <text x="694" y="324" class="font body">三/四视图</text>
+  <text x="786" y="324" class="font small muted">TURNAROUND</text>
+  <rect x="892" y="298" width="250" height="40" rx="9" class="disabled"/>
+  <text x="955" y="324" class="font body muted">设计表</text>
+  <text x="1018" y="324" class="font small muted">暂未支持</text>
+
+  <text x="384" y="401" class="font section">2　状态描述</text>
+  <rect x="384" y="422" width="774" height="98" rx="10" fill="#fafbfe" stroke="#e0e5ef"/>
+  <text x="404" y="451" class="font body">白色衬衫，湿发，赤脚，整体造型狼狈而神秘。</text>
+  <text x="404" y="482" class="font small muted">机敏狡黠，身手利落 · 仅描述本状态，不覆盖基础身份</text>
+  <text x="404" y="507" class="font small accentText">编辑状态描述　›</text>
+
+  <text x="384" y="570" class="font section">3　身份一致性（可选）</text>
+  <rect x="384" y="592" width="774" height="92" rx="10" fill="#f7fbff" stroke="#cbdcf3"/>
+  <rect x="408" y="617" width="48" height="26" rx="13" fill="#4f46e5"/>
+  <circle cx="443" cy="630" r="10" fill="#fff"/>
+  <text x="476" y="633" class="font body">保持与基础图人物一致</text>
+  <text x="476" y="660" class="font small muted">只继承脸部、年龄感、体型；不照搬服装、姿势和版式</text>
+  <rect x="930" y="609" width="196" height="58" rx="8" fill="#fff" stroke="#d8e0eb"/>
+  <rect x="942" y="619" width="42" height="38" rx="5" fill="url(#thumb)"/>
+  <text x="996" y="635" class="font small">基础图</text>
+  <text x="996" y="655" class="font small" fill="#047857">已附带</text>
+
+  <text x="384" y="739" class="font section">4　生成参数</text>
+  <rect x="384" y="760" width="236" height="56" rx="9" fill="#fafbfe" stroke="#e0e5ef"/>
+  <text x="404" y="784" class="font small muted">画幅</text><text x="404" y="805" class="font body">16:9</text>
+  <rect x="636" y="760" width="236" height="56" rx="9" fill="#fafbfe" stroke="#e0e5ef"/>
+  <text x="656" y="784" class="font small muted">模型</text><text x="656" y="805" class="font body">ChatGPT 网页生图</text>
+  <rect x="888" y="760" width="270" height="56" rx="9" fill="#fafbfe" stroke="#e0e5ef"/>
+  <text x="908" y="784" class="font small muted">负向提示词</text><text x="908" y="805" class="font body">已继承 10 条约束</text>
+  <rect x="384" y="850" width="774" height="66" rx="12" fill="#4f46e5"/>
+  <text x="692" y="891" class="font" fill="#fff" font-size="19" font-weight="700">生成状态资产</text>
+  <text x="867" y="891" class="font small" fill="#ddd6fe">将保存模式、风格、参考图和最终提示词</text>
+
+  <!-- right audit/preview -->
+  <rect x="1216" y="100" width="360" height="866" rx="16" class="dark" filter="url(#shadow)"/>
+  <text x="1246" y="144" class="font section white">生成前预览</text>
+  <text x="1246" y="173" class="font small" fill="#9ca3af">这次任务会实际提交什么</text>
+  <rect x="1246" y="202" width="300" height="48" rx="9" fill="#1f2937"/>
+  <text x="1264" y="223" class="font small" fill="#9ca3af">资产模式</text>
+  <text x="1264" y="241" class="font body white">单图 · SINGLE</text>
+  <rect x="1246" y="262" width="300" height="78" rx="9" fill="#1f2937"/>
+  <text x="1264" y="284" class="font small" fill="#9ca3af">风格快照</text>
+  <text x="1264" y="306" class="font small white">现代都市悬疑 · v1</text>
+  <text x="1264" y="326" class="font small" fill="#9ca3af">冷灰 / 深蓝 / 低照度 / 35mm</text>
+  <rect x="1246" y="352" width="300" height="78" rx="9" fill="#1f2937"/>
+  <text x="1264" y="374" class="font small" fill="#9ca3af">参考图</text>
+  <text x="1264" y="397" class="font small white">@基础图 · 身份参考</text>
+  <text x="1264" y="417" class="font small" fill="#86efac">已通过能力检查</text>
+  <text x="1246" y="477" class="font section white">提示词摘要</text>
+  <rect x="1246" y="496" width="300" height="182" rx="9" fill="#1f2937"/>
+  <text x="1264" y="523" class="font small" fill="#d1d5db">角色事实 + 状态服装</text>
+  <text x="1264" y="548" class="font small" fill="#d1d5db">+ 项目风格完整块</text>
+  <text x="1264" y="573" class="font small" fill="#d1d5db">+ 单图构图约束</text>
+  <text x="1264" y="598" class="font small" fill="#d1d5db">+ 身份一致性约束</text>
+  <text x="1264" y="623" class="font small" fill="#d1d5db">+ 负向提示词</text>
+  <text x="1264" y="652" class="font small" fill="#a5b4fc">查看最终完整提示词 ›</text>
+  <line x1="1246" y1="714" x2="1546" y2="714" stroke="#374151"/>
+  <text x="1246" y="751" class="font section white">场景模式入口</text>
+  <text x="1246" y="777" class="font small" fill="#9ca3af">与角色相同：模式和风格独立</text>
+  <rect x="1246" y="799" width="300" height="42" rx="8" fill="#4f46e5"/>
+  <text x="1351" y="826" class="font body white">单图场景　NORMAL</text>
+  <rect x="1246" y="850" width="300" height="42" rx="8" fill="#374151"/>
+  <text x="1341" y="877" class="font body" fill="#e5e7eb">四宫格场景　QUAD_GRID</text>
+  <text x="1246" y="928" class="font small" fill="#fbbf24">全景 / 俯视：待能力支持后启用</text>
+</svg>

@@ -1,0 +1,405 @@
+{
+  "119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "121": {
+    "inputs": {
+      "samples": [
+        "1306",
+        0
+      ],
+      "vae": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）"
+    }
+  },
+  "128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "131": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "132",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式"
+    }
+  },
+  "132": {
+    "inputs": {
+      "value": 5
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Video Duration"
+    }
+  },
+  "136": {
+    "inputs": {
+      "prompt": "subject_definitions:\n<Picture 1> is the environment and lighting reference for the entire scene, defining the dim, desolate grand hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire illumination.\n<Picture 2> is the appearance reference for the male protagonist, who wears a dark black wide-sleeved official robe of the underworld palace lord style.\n<Subject 1> is the male protagonist whose appearance comes from <Picture 2>, standing in the center of the grand hall defined by <Picture 1>.\n\nsummary:\n[reference generation] The target video is a 5-second single continuous shot showing <Subject 1> standing in the center of the desolate underworld hall defined by <Picture 1>, slowly raising his gaze along the cracked ceiling, then turning his body from left to right to survey the broken pillars and dust-covered stone tables, with a faint voice-over narration delivered in Chinese.\n\nretention_analysis:\n<Picture 1> (environment and lighting for [Shot 1]): fully_preserved - the dim, desolate hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire lighting is retained as the unified scene backdrop.\n<Picture 2> (appearance of <Subject 1> in [Shot 1]): fully_preserved - the dark black wide-sleeved underworld palace lord robe is retained.\n<Subject 1> (appears in [Shot 1]): fully_preserved - the protagonist's identity, dark robe, and calm yet slightly troubled expression are retained.\n\ndetailed_description:\nThe target video is in a photorealistic, cinematic style with high-definition quality, rendered with xianxia fantasy three-dimensional aesthetics, featuring an ethereal and desolate underworld atmosphere with a light comedic pacing.\n[Shot 1] The camera remains in a fixed position throughout the entire 5-second shot, maintaining a single continuous frame with no split-screen or multi-panel composition. <Subject 1>, wearing the dark black wide-sleeved underworld palace lord robe from <Picture 2>, stands at the exact center of the grand hall defined by <Picture 1>. He first slightly lifts his chin, his gaze slowly traveling upward along the cracked ceiling above. He then gradually rotates his body from left to right, his eyes sweeping across the broken pillars on both sides and the dust-covered stone tables, his brows briefly furrowing before quickly relaxing, his expression calm yet carrying a hint of helplessness and vexation. In the foreground, dust particles drift slowly in the air, illuminated by the flickering blue ghost-fire glow. The cold blue light pulses subtly along the stone pillars and across the shadows on the floor, creating an overall dim and desolate atmosphere. The lighting texture and environmental details strictly follow <Picture 1> as the unified scene reference, maintaining a single continuous shot without imitating any collage layout. The shot contains no dialogue; only a faint breeze echoes through the air. Voice-over narration (no visible speaker): <d>[Chinese] 没权没兵没灵气，偌大的阴府，只剩个空架子。</d>\n\noverall_soundscape:\nA faint, hollow breeze echoes through the empty hall throughout the entire shot, with subtle dust-like air movement and the low ambient hum of the desolate underworld space.\n\nnon_diegetic_music:\nN/A",
+      "width": 1280,
+      "height": 704,
+      "length": [
+        "131",
+        1
+      ],
+      "ref_image_size": "max",
+      "clip": [
+        "128",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ],
+      "audio_vae": [
+        "120",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "137",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "139",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "MiniMax H3 Reference to Video"
+    }
+  },
+  "137": {
+    "inputs": {
+      "image": "ab_20260904_shot2_ref1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    },
+    "is_changed": [
+      "cd1bd8c5e867e2182d2e3a95b183693baa42b28c120f2b113981531312955a13"
+    ]
+  },
+  "139": {
+    "inputs": {
+      "image": "ab_20260904_shot2_ref2.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    },
+    "is_changed": [
+      "90cdcace59035168aa847614b19dce758c1359b4e00e5a63f106303ad79238be"
+    ]
+  },
+  "620": {
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "668": {
+    "inputs": {
+      "resize_type": "scale by multiplier",
+      "resize_type.scale": 2,
+      "quality": "ULTRA",
+      "images": [
+        "1307",
+        0
+      ]
+    },
+    "class_type": "RTXVideoSuperResolution",
+    "_meta": {
+      "title": "RTX Video Super Resolution"
+    }
+  },
+  "710": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 0.75,
+      "model": [
+        "748",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "725": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "727": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "728": {
+    "inputs": {
+      "scheduler": "beta",
+      "steps": 8,
+      "denoise": 1,
+      "model": [
+        "1309",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器"
+    }
+  },
+  "729": {
+    "inputs": {
+      "model": [
+        "1309",
+        0
+      ],
+      "conditioning": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "730": {
+    "inputs": {
+      "noise": [
+        "727",
+        0
+      ],
+      "guider": [
+        "729",
+        0
+      ],
+      "sampler": [
+        "725",
+        0
+      ],
+      "sigmas": [
+        "1311",
+        0
+      ],
+      "latent_image": [
+        "136",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "732": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "ab_20260904/shot2_turbo09_rtx2x",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1310",
+        0
+      ],
+      "audio": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "733": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "ab_20260904/shot2_turbo09_raw",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1307",
+        0
+      ],
+      "audio": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "748": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "620",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "ModelAttentionBackend"
+    }
+  },
+  "1306": {
+    "inputs": {
+      "offload_model": true,
+      "offload_cache": true,
+      "anything": [
+        "730",
+        0
+      ]
+    },
+    "class_type": "VRAMCleanup",
+    "_meta": {
+      "title": "🎈VRAM-Cleanup"
+    },
+    "is_changed": [
+      1788440459.8573432
+    ]
+  },
+  "1307": {
+    "inputs": {
+      "samples": [
+        "1306",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "1308": {
+    "inputs": {
+      "model": [
+        "710",
+        0
+      ],
+      "head_chunks": 4
+    },
+    "class_type": "MiniMaxLowVRAMAttention",
+    "_meta": {
+      "title": "MiniMax H3 Low VRAM Attention"
+    }
+  },
+  "1309": {
+    "inputs": {
+      "model": [
+        "1308",
+        0
+      ],
+      "chunks": 2,
+      "seq_threshold": 4096
+    },
+    "class_type": "MiniMaxChunkFeedForward",
+    "_meta": {
+      "title": "MiniMax H3 Chunk FeedForward"
+    }
+  },
+  "1310": {
+    "inputs": {
+      "clean_file_cache": true,
+      "clean_processes": true,
+      "clean_dlls": true,
+      "retry_times": 3,
+      "anything": [
+        "668",
+        0
+      ]
+    },
+    "class_type": "RAMCleanup",
+    "_meta": {
+      "title": "🎈RAM-Cleanup"
+    },
+    "is_changed": [
+      1788440459.9248147
+    ]
+  },
+  "1311": {
+    "inputs": {
+      "sigmas": [
+        "728",
+        0
+      ],
+      "extra_steps": 2,
+      "start_at_sigma": 0.65,
+      "end_at_sigma": 0,
+      "spacing": "cosine"
+    },
+    "class_type": "H3SigmaRefiner",
+    "_meta": {
+      "title": "H3 Sigma Refiner"
+    }
+  }
+}

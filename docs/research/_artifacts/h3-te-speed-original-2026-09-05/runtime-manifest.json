@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-05T06:38:09.065Z",
+  "compatible": true,
+  "baseUrl": "http://127.0.0.1:8191/",
+  "plugin": {
+    "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+    "commit": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+    "files": {
+      "nodesPyd": {
+        "sha256": "84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c"
+      },
+      "initPy": {
+        "sha256": "e648e07930387284106fe2c5ccda288dd38c231c4fd39040b48c4ceca84b74a6"
+      }
+    }
+  },
+  "runtime": {
+    "comfyuiVersion": "0.33.1",
+    "pythonVersion": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+    "pytorchVersion": "2.13.0+cu130",
+    "device": {
+      "name": "cuda:0 NVIDIA GeForce RTX 5070 Ti : cudaMallocAsync",
+      "type": "cuda",
+      "vramTotal": 17094475776
+    }
+  },
+  "node": {
+    "classType": "TESpeedMiniMaxH3",
+    "displayName": "TE-Speed-MiniMaxH3",
+    "requiredInputs": {
+      "model": [
+        "MODEL"
+      ],
+      "processing_control_value": [
+        "FLOAT",
+        {
+          "default": 0.08,
+          "min": 0,
+          "max": 1,
+          "step": 0.005
+        }
+      ],
+      "processing_percent_1": [
+        "FLOAT",
+        {
+          "default": 0.1,
+          "min": 0,
+          "max": 1,
+          "step": 0.01
+        }
+      ],
+      "processing_percent_2": [
+        "FLOAT",
+        {
+          "default": 0.9,
+          "min": 0,
+          "max": 1,
+          "step": 0.01
+        }
+      ],
+      "mcs": [
+        "INT",
+        {
+          "default": 2,
+          "min": 1,
+          "max": 10,
+          "step": 1
+        }
+      ],
+      "device": [
+        [
+          "auto",
+          "gpu",
+          "cpu"
+        ],
+        {
+          "default": "auto"
+        }
+      ],
+      "mode": [
+        [
+          "standard",
+          "4-step LoRA",
+          "8-step LoRA"
+        ],
+        {
+          "default": "standard"
+        }
+      ]
+    },
+    "optionalInputs": {},
+    "outputs": [
+      "MODEL"
+    ],
+    "outputNames": [
+      "MODEL"
+    ]
+  }
+}

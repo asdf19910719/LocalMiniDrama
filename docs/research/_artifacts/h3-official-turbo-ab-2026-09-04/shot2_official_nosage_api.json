@@ -1,0 +1,142 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "MiniMaxH3Director",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "video_vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "4",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "task_type": "r2v",
+      "global_prompt": "subject_definitions:\n<Picture 1> is the environment and lighting reference for the entire scene, defining the dim, desolate grand hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire illumination.\n<Picture 2> is the appearance reference for the male protagonist, who wears a dark black wide-sleeved official robe of the underworld palace lord style.\n<Subject 1> is the male protagonist whose appearance comes from <Picture 2>, standing in the center of the grand hall defined by <Picture 1>.\n\nsummary:\n[reference generation] The target video is a 5-second single continuous shot showing <Subject 1> standing in the center of the desolate underworld hall defined by <Picture 1>, slowly raising his gaze along the cracked ceiling, then turning his body from left to right to survey the broken pillars and dust-covered stone tables, with a faint voice-over narration delivered in Chinese.\n\nretention_analysis:\n<Picture 1> (environment and lighting for [Shot 1]): fully_preserved - the dim, desolate hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire lighting is retained as the unified scene backdrop.\n<Picture 2> (appearance of <Subject 1> in [Shot 1]): fully_preserved - the dark black wide-sleeved underworld palace lord robe is retained.\n<Subject 1> (appears in [Shot 1]): fully_preserved - the protagonist's identity, dark robe, and calm yet slightly troubled expression are retained.\n\ndetailed_description:\nThe target video is in a photorealistic, cinematic style with high-definition quality, rendered with xianxia fantasy three-dimensional aesthetics, featuring an ethereal and desolate underworld atmosphere with a light comedic pacing.\n[Shot 1] The camera remains in a fixed position throughout the entire 5-second shot, maintaining a single continuous frame with no split-screen or multi-panel composition. <Subject 1>, wearing the dark black wide-sleeved underworld palace lord robe from <Picture 2>, stands at the exact center of the grand hall defined by <Picture 1>. He first slightly lifts his chin, his gaze slowly traveling upward along the cracked ceiling above. He then gradually rotates his body from left to right, his eyes sweeping across the broken pillars on both sides and the dust-covered stone tables, his brows briefly furrowing before quickly relaxing, his expression calm yet carrying a hint of helplessness and vexation. In the foreground, dust particles drift slowly in the air, illuminated by the flickering blue ghost-fire glow. The cold blue light pulses subtly along the stone pillars and across the shadows on the floor, creating an overall dim and desolate atmosphere. The lighting texture and environmental details strictly follow <Picture 1> as the unified scene reference, maintaining a single continuous shot without imitating any collage layout. The shot contains no dialogue; only a faint breeze echoes through the air. Voice-over narration (no visible speaker): <d>[Chinese] 没权没兵没灵气，偌大的阴府，只剩个空架子。</d>\n\noverall_soundscape:\nA faint, hollow breeze echoes through the empty hall throughout the entire shot, with subtle dust-like air movement and the low ambient hum of the desolate underworld space.\n\nnon_diegetic_music:\nN/A",
+      "bd_grp_sample": "采样设置",
+      "cfg": 1,
+      "seed": 42,
+      "frame_rate": 24,
+      "width": 1280,
+      "height": 704,
+      "ref_max_size": 1280,
+      "total_frames": 124,
+      "timeline_data": "{\"version\":4,\"editMode\":\"segment\",\"timelineMode\":\"gen_blank\",\"totalFrames\":124,\"frameRate\":24,\"width\":1280,\"height\":704,\"refMaxSize\":1280,\"output\":{\"mode\":\"fixed\",\"longEdge\":864,\"width\":1280,\"height\":704,\"maxExportFrames\":0,\"exportMode\":\"all\",\"audioMode\":\"generate\",\"continuityEnabled\":false,\"continuityOverlapFrames\":0},\"videoClips\":[],\"video\":{\"fileName\":\"\",\"videoFile\":\"\",\"subfolder\":\"\",\"type\":\"input\",\"frames\":[],\"frameMap\":[]},\"global\":{\"taskType\":\"r2v\",\"prompt\":\"subject_definitions:\\n<Picture 1> is the environment and lighting reference for the entire scene, defining the dim, desolate grand hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire illumination.\\n<Picture 2> is the appearance reference for the male protagonist, who wears a dark black wide-sleeved official robe of the underworld palace lord style.\\n<Subject 1> is the male protagonist whose appearance comes from <Picture 2>, standing in the center of the grand hall defined by <Picture 1>.\\n\\nsummary:\\n[reference generation] The target video is a 5-second single continuous shot showing <Subject 1> standing in the center of the desolate underworld hall defined by <Picture 1>, slowly raising his gaze along the cracked ceiling, then turning his body from left to right to survey the broken pillars and dust-covered stone tables, with a faint voice-over narration delivered in Chinese.\\n\\nretention_analysis:\\n<Picture 1> (environment and lighting for [Shot 1]): fully_preserved - the dim, desolate hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire lighting is retained as the unified scene backdrop.\\n<Picture 2> (appearance of <Subject 1> in [Shot 1]): fully_preserved - the dark black wide-sleeved underworld palace lord robe is retained.\\n<Subject 1> (appears in [Shot 1]): fully_preserved - the protagonist's identity, dark robe, and calm yet slightly troubled expression are retained.\\n\\ndetailed_description:\\nThe target video is in a photorealistic, cinematic style with high-definition quality, rendered with xianxia fantasy three-dimensional aesthetics, featuring an ethereal and desolate underworld atmosphere with a light comedic pacing.\\n[Shot 1] The camera remains in a fixed position throughout the entire 5-second shot, maintaining a single continuous frame with no split-screen or multi-panel composition. <Subject 1>, wearing the dark black wide-sleeved underworld palace lord robe from <Picture 2>, stands at the exact center of the grand hall defined by <Picture 1>. He first slightly lifts his chin, his gaze slowly traveling upward along the cracked ceiling above. He then gradually rotates his body from left to right, his eyes sweeping across the broken pillars on both sides and the dust-covered stone tables, his brows briefly furrowing before quickly relaxing, his expression calm yet carrying a hint of helplessness and vexation. In the foreground, dust particles drift slowly in the air, illuminated by the flickering blue ghost-fire glow. The cold blue light pulses subtly along the stone pillars and across the shadows on the floor, creating an overall dim and desolate atmosphere. The lighting texture and environmental details strictly follow <Picture 1> as the unified scene reference, maintaining a single continuous shot without imitating any collage layout. The shot contains no dialogue; only a faint breeze echoes through the air. Voice-over narration (no visible speaker): <d>[Chinese] 没权没兵没灵气，偌大的阴府，只剩个空架子。</d>\\n\\noverall_soundscape:\\nA faint, hollow breeze echoes through the empty hall throughout the entire shot, with subtle dust-like air movement and the low ambient hum of the desolate underworld space.\\n\\nnon_diegetic_music:\\nN/A\",\"refs\":[{\"index\":0,\"imageFile\":\"ab_20260904_shot2_ref1.png\",\"role\":\"environment\"},{\"index\":1,\"imageFile\":\"ab_20260904_shot2_ref2.png\",\"role\":\"subject\"}],\"refAudios\":[],\"refVideos\":[],\"referenceVideo\":{},\"continuousReference\":false,\"commonEnabled\":false},\"segments\":[{\"id\":\"s0\",\"start\":0,\"length\":124,\"frameCount\":124,\"durationSec\":5,\"prompt\":\"subject_definitions:\\n<Picture 1> is the environment and lighting reference for the entire scene, defining the dim, desolate grand hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire illumination.\\n<Picture 2> is the appearance reference for the male protagonist, who wears a dark black wide-sleeved official robe of the underworld palace lord style.\\n<Subject 1> is the male protagonist whose appearance comes from <Picture 2>, standing in the center of the grand hall defined by <Picture 1>.\\n\\nsummary:\\n[reference generation] The target video is a 5-second single continuous shot showing <Subject 1> standing in the center of the desolate underworld hall defined by <Picture 1>, slowly raising his gaze along the cracked ceiling, then turning his body from left to right to survey the broken pillars and dust-covered stone tables, with a faint voice-over narration delivered in Chinese.\\n\\nretention_analysis:\\n<Picture 1> (environment and lighting for [Shot 1]): fully_preserved - the dim, desolate hall interior with cracked ceiling, broken pillars, dust-covered stone tables, and flickering blue ghost-fire lighting is retained as the unified scene backdrop.\\n<Picture 2> (appearance of <Subject 1> in [Shot 1]): fully_preserved - the dark black wide-sleeved underworld palace lord robe is retained.\\n<Subject 1> (appears in [Shot 1]): fully_preserved - the protagonist's identity, dark robe, and calm yet slightly troubled expression are retained.\\n\\ndetailed_description:\\nThe target video is in a photorealistic, cinematic style with high-definition quality, rendered with xianxia fantasy three-dimensional aesthetics, featuring an ethereal and desolate underworld atmosphere with a light comedic pacing.\\n[Shot 1] The camera remains in a fixed position throughout the entire 5-second shot, maintaining a single continuous frame with no split-screen or multi-panel composition. <Subject 1>, wearing the dark black wide-sleeved underworld palace lord robe from <Picture 2>, stands at the exact center of the grand hall defined by <Picture 1>. He first slightly lifts his chin, his gaze slowly traveling upward along the cracked ceiling above. He then gradually rotates his body from left to right, his eyes sweeping across the broken pillars on both sides and the dust-covered stone tables, his brows briefly furrowing before quickly relaxing, his expression calm yet carrying a hint of helplessness and vexation. In the foreground, dust particles drift slowly in the air, illuminated by the flickering blue ghost-fire glow. The cold blue light pulses subtly along the stone pillars and across the shadows on the floor, creating an overall dim and desolate atmosphere. The lighting texture and environmental details strictly follow <Picture 1> as the unified scene reference, maintaining a single continuous shot without imitating any collage layout. The shot contains no dialogue; only a faint breeze echoes through the air. Voice-over narration (no visible speaker): <d>[Chinese] 没权没兵没灵气，偌大的阴府，只剩个空架子。</d>\\n\\noverall_soundscape:\\nA faint, hollow breeze echoes through the empty hall throughout the entire shot, with subtle dust-like air movement and the low ambient hum of the desolate underworld space.\\n\\nnon_diegetic_music:\\nN/A\",\"taskType\":\"r2v\",\"refs\":[{\"index\":0,\"imageFile\":\"ab_20260904_shot2_ref1.png\",\"role\":\"environment\"},{\"index\":1,\"imageFile\":\"ab_20260904_shot2_ref2.png\",\"role\":\"subject\"}],\"refAudios\":[],\"referenceVideo\":{},\"genImage\":{\"imageFile\":\"\"},\"negativePrompt\":\"\",\"continuityFromPrev\":false}],\"gen\":{\"defaultFrameCount\":124},\"runSelectEnabled\":false,\"runSelection\":[]}",
+      "bd_grp_advanced": "高级采样 Advanced",
+      "steps": 15,
+      "sampler": "res_multistep",
+      "scheduler": "simple",
+      "shift_video": 12,
+      "shift_audio": 3,
+      "bd_grp_perf": "性能 Performance",
+      "clear_vram_between_segments": true,
+      "export_source_images": false
+    }
+  },
+  "6": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "9",
+        0
+      ],
+      "fps": [
+        "5",
+        2
+      ],
+      "audio": [
+        "5",
+        1
+      ],
+      "bit_depth": 8
+    }
+  },
+  "7": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "6",
+        0
+      ],
+      "filename_prefix": "ab_20260904/shot2_official_nosage_rtx2x",
+      "format": "auto",
+      "codec": "auto"
+    }
+  },
+  "9": {
+    "class_type": "RTXVideoSuperResolution",
+    "inputs": {
+      "images": [
+        "5",
+        0
+      ],
+      "resize_type": "scale by multiplier",
+      "resize_type.scale": 2,
+      "quality": "ULTRA"
+    }
+  },
+  "10": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "5",
+        0
+      ],
+      "fps": [
+        "5",
+        2
+      ],
+      "audio": [
+        "5",
+        1
+      ],
+      "bit_depth": 8
+    }
+  },
+  "11": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "10",
+        0
+      ],
+      "filename_prefix": "ab_20260904/shot2_official_nosage_raw",
+      "format": "auto",
+      "codec": "auto"
+    }
+  }
+}

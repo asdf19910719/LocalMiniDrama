@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LocalMiniDrama Production Studio V2.1 原型</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d12;
+      --surface: #11161e;
+      --surface-2: #171e28;
+      --surface-3: #202936;
+      --text: #eef3f8;
+      --muted: #8e9bab;
+      --line: #283341;
+      --accent: #71e1bc;
+      --accent-2: #37b993;
+      --accent-soft: rgba(113,225,188,.12);
+      --blue: #70a9ff;
+      --warning: #f1be62;
+      --danger: #ff7b86;
+      --success: #71e1bc;
+      --shadow: 0 18px 50px rgba(0,0,0,.35);
+    }
+    body.light {
+      color-scheme: light;
+      --bg: #edf1f5;
+      --surface: #ffffff;
+      --surface-2: #f6f8fa;
+      --surface-3: #e8edf2;
+      --text: #17202b;
+      --muted: #647181;
+      --line: #d7dfe7;
+      --accent: #087f61;
+      --accent-2: #056c52;
+      --accent-soft: rgba(8,127,97,.1);
+      --blue: #2d6fd2;
+      --warning: #a56800;
+      --danger: #c93e4d;
+      --success: #087f61;
+      --shadow: 0 18px 50px rgba(26,39,55,.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body { font: 14px/1.45 Inter, "Microsoft YaHei", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .app { height: 100vh; display: grid; grid-template-columns: 64px 1fr; grid-template-rows: 56px 48px 1fr; }
+    .rail { grid-row: 1 / 4; background: #080b10; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 8px; }
+    body.light .rail { background: #15212a; }
+    .brand { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #07110e; font-weight: 900; background: linear-gradient(135deg,#9af4d4,#46bd99); margin-bottom: 12px; }
+    .rail-btn { position: relative; width: 42px; height: 42px; border: 0; border-radius: 10px; background: transparent; color: #8ea0b0; font-size: 17px; }
+    .rail-btn:hover, .rail-btn.active { background: rgba(113,225,188,.12); color: #9af4d4; }
+    .rail-btn.active::before { content: ""; position: absolute; left: -11px; top: 9px; width: 3px; height: 24px; border-radius: 3px; background: #71e1bc; }
+    .rail-spacer { flex: 1; }
+    .topbar { grid-column: 2; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 12px; min-width: 0; }
+    .crumb { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .crumb span { color: var(--muted); font-weight: 400; margin: 0 7px; }
+    .episode { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 7px 10px; }
+    .save { margin-left: auto; color: var(--muted); font-size: 12px; }
+    .icon-btn, .ghost, .secondary, .primary { border-radius: 8px; min-height: 34px; border: 1px solid var(--line); background: var(--surface-2); padding: 0 11px; }
+    .icon-btn { min-width: 36px; padding: 0; position: relative; }
+    .icon-btn:hover, .ghost:hover, .secondary:hover { border-color: var(--accent); }
+    .primary { background: var(--accent); color: #07110e; border-color: transparent; font-weight: 750; padding: 0 15px; }
+    .primary:hover { background: var(--accent-2); color: white; }
+    .secondary { background: var(--accent-soft); border-color: rgba(113,225,188,.32); color: var(--accent); font-weight: 650; }
+    .badge-dot { position: absolute; right: -3px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; display: grid; place-items: center; border-radius: 9px; background: var(--danger); color: white; font-size: 10px; border: 2px solid var(--surface); }
+    .stages { grid-column: 2; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 5px; }
+    .stage { height: 47px; border: 0; background: transparent; color: var(--muted); padding: 0 17px; position: relative; display: flex; align-items: center; gap: 8px; }
+    .stage.active { color: var(--text); font-weight: 700; }
+    .stage.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: 0; height: 3px; border-radius: 4px 4px 0 0; background: var(--accent); }
+    .status-mini { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: var(--surface-3); color: var(--muted); font-weight: 500; }
+    .stage.done .status-mini { color: var(--success); background: var(--accent-soft); }
+    .stage.warn .status-mini { color: var(--warning); background: rgba(241,190,98,.12); }
+    .stage-summary { margin-left: auto; color: var(--muted); font-size: 12px; }
+    .workspace { grid-column: 2; min-width: 0; min-height: 0; background: var(--bg); position: relative; }
+    .screen { display: none; height: 100%; min-height: 0; }
+    .screen.active { display: grid; }
+    .screen.simple { grid-template-rows: 58px 1fr; }
+    .stage-head { background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 18px; gap: 10px; }
+    .stage-title h1 { font-size: 17px; line-height: 1.1; margin: 0 0 4px; }
+    .stage-title p { color: var(--muted); font-size: 11px; margin: 0; }
+    .head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--surface-2); }
+    .segmented button { height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 0 10px; }
+    .segmented button.active { background: var(--surface-3); color: var(--text); }
+    .body-grid { min-height: 0; display: grid; }
+    .script-grid { grid-template-columns: 230px 1fr 310px; }
+    .assets-grid { grid-template-columns: 1fr; overflow: auto; padding: 18px; }
+    .story-grid { grid-template-columns: 370px minmax(430px,1fr) 360px; grid-template-rows: 1fr 112px; }
+    .cut-grid { grid-template-columns: 250px minmax(420px,1fr) 310px; grid-template-rows: 1fr 220px; }
+    .panel { min-width: 0; min-height: 0; background: var(--surface); border-right: 1px solid var(--line); overflow: auto; }
+    .panel:last-child { border-right: 0; }
+    .panel-title { height: 44px; position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); padding: 0 14px; display: flex; align-items: center; font-weight: 700; }
+    .panel-title small { color: var(--muted); margin-left: auto; font-weight: 400; }
+    .scene-item, .shot-item { margin: 7px 9px; padding: 10px; border: 1px solid transparent; border-radius: 8px; color: var(--muted); }
+    .scene-item.active, .shot-item.active { background: var(--accent-soft); border-color: rgba(113,225,188,.35); color: var(--text); }
+    .scene-item strong, .shot-item strong { display: block; color: var(--text); margin-bottom: 3px; }
+    .editor { padding: 28px clamp(24px,7vw,90px); overflow: auto; background: var(--surface-2); }
+    .paper { max-width: 820px; min-height: 100%; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 34px 46px; box-shadow: var(--shadow); }
+    .paper h2 { margin: 0 0 24px; font-size: 20px; }
+    .paper h3 { margin: 24px 0 10px; font-size: 14px; letter-spacing: .04em; color: var(--blue); }
+    .dialogue { max-width: 60%; margin: 13px auto; }
+    .dialogue b { display: block; text-align: center; font-size: 12px; margin-bottom: 4px; }
+    .check { margin: 10px; padding: 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); }
+    .check.warn { border-color: rgba(241,190,98,.4); }
+    .check b { display: block; margin-bottom: 4px; }
+    .check p { margin: 0; color: var(--muted); font-size: 12px; }
+    .metric-row { display: grid; grid-template-columns: repeat(5,minmax(130px,1fr)); gap: 10px; margin-bottom: 18px; }
+    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px; }
+    .metric span { color: var(--muted); font-size: 11px; }
+    .metric strong { display: block; font-size: 22px; margin-top: 5px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .tab { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); padding: 7px 12px; }
+    .tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .asset-cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 12px; }
+    .asset-card { text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 0; background: var(--surface); overflow: hidden; color: var(--text); }
+    .asset-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .visual { height: 128px; background: linear-gradient(140deg,#313b52,#192b34 58%,#244f46); display: grid; place-items: center; font-size: 42px; }
+    .asset-info { padding: 12px; }
+    .asset-info h3 { margin: 0 0 4px; font-size: 14px; }
+    .asset-info p { margin: 0 0 9px; color: var(--muted); font-size: 11px; }
+    .tag { display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; padding: 3px 7px; font-size: 10px; color: var(--muted); background: var(--surface-3); }
+    .tag.ok { color: var(--success); background: var(--accent-soft); }
+    .tag.warn { color: var(--warning); background: rgba(241,190,98,.12); }
+    .fields { padding: 12px; }
+    .field { margin-bottom: 13px; }
+    .field label { display: flex; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    .field label span { margin-left: auto; color: var(--blue); }
+    .field input, .field textarea, .field select { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); padding: 8px 9px; }
+    .field textarea { min-height: 64px; resize: vertical; }
+    .hierarchy { margin: 10px 12px 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+    .hierarchy small { color: var(--muted); display: block; margin-bottom: 4px; }
+    .hierarchy b { display: block; }
+    .hierarchy .path { color: var(--blue); font-size: 11px; margin-top: 5px; }
+    .duration-map { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin: 10px 12px; padding: 10px; border: 1px solid rgba(113,225,188,.32); border-radius: 9px; background: var(--accent-soft); }
+    .duration-map div { min-width: 0; }
+    .duration-map small { display: block; color: var(--muted); font-size: 10px; }
+    .duration-map strong { display: block; margin-top: 2px; font-size: 16px; }
+    .duration-map i { color: var(--accent); font-style: normal; }
+    .segment-toolbar { display: flex; align-items: center; gap: 7px; padding: 4px 12px 8px; }
+    .segment-toolbar b { flex: 1; }
+    .segment-list { padding: 0 9px 14px; }
+    .segment-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); margin-bottom: 9px; overflow: hidden; }
+    .segment-card.active { border-color: rgba(113,225,188,.6); box-shadow: inset 3px 0 var(--accent); }
+    .segment-head { display: flex; align-items: center; gap: 7px; padding: 8px 9px; border-bottom: 1px solid var(--line); }
+    .segment-head b { flex: 1; }
+    .segment-time { color: var(--accent); font-size: 11px; font-weight: 700; }
+    .mini-btn { min-width: 27px; height: 26px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 0 6px; }
+    .mini-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .segment-body { padding: 9px; }
+    .segment-body p { margin: 0 0 7px; font-size: 12px; }
+    .segment-body .camera { color: var(--muted); font-size: 11px; }
+    .asset-bindings { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .binding { border: 1px solid var(--line); border-radius: 12px; padding: 3px 7px; background: var(--surface); color: var(--muted); font-size: 10px; }
+    .binding:hover { color: var(--accent); border-color: var(--accent); }
+    .binding.add { border-style: dashed; color: var(--blue); }
+    .segment-foot { display: flex; gap: 6px; padding: 0 9px 9px; }
+    .segment-foot button { flex: 1; height: 27px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 10px; }
+    .segment-empty-note { margin: 0 12px 12px; color: var(--muted); font-size: 10px; }
+    .preview-meta { width: min(90%,760px); display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .preview-meta .check { flex: 1; margin: 0; }
+    .segment-ruler { width: min(90%,760px); margin-top: 12px; border: 1px solid #334050; background: #111821; border-radius: 8px; padding: 8px; }
+    .segment-ruler-head { display: flex; color: #93a0af; font-size: 10px; margin-bottom: 6px; }
+    .segment-ruler-head span:last-child { margin-left: auto; }
+    .segment-bars { height: 34px; display: flex; gap: 3px; }
+    .segment-bar { min-width: 48px; border: 1px solid rgba(113,225,188,.35); background: rgba(113,225,188,.13); color: #b9f3df; border-radius: 5px; display: grid; place-items: center; font-size: 10px; }
+    .capability-card, .gate-card, .envelope-card { margin: 0 0 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); padding: 10px; }
+    .capability-card b, .gate-card b, .envelope-card b { display: block; margin-bottom: 5px; }
+    .capability-card p, .gate-card p, .envelope-card p { margin: 0; color: var(--muted); font-size: 11px; }
+    .capability-card.warn { border-color: rgba(241,190,98,.55); background: rgba(241,190,98,.08); }
+    .gate-card { cursor: pointer; text-align: left; width: 100%; color: inherit; }
+    .gate-card:hover { border-color: var(--accent); }
+    .gate-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
+    .gate-checks span { color: var(--success); font-size: 10px; }
+    .schema-label { display: inline-flex; color: var(--blue); font-size: 10px; border: 1px solid rgba(112,169,255,.35); background: rgba(112,169,255,.08); border-radius: 10px; padding: 2px 6px; }
+    .modal.wide { width: min(760px,calc(100% - 40px)); }
+    .modal-content pre { max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #080b10; color: #cfe2ef; font: 11px/1.55 Consolas, monospace; }
+    .decision { display: grid; gap: 8px; }
+    .decision-row { display: grid; grid-template-columns: 32px 1fr; gap: 9px; align-items: start; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+    .decision-row i { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--success); font-style: normal; }
+    .decision-row p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+    .preview { min-width: 0; min-height: 0; background: #080b10; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18px; position: relative; }
+    .frame { width: min(90%,760px); aspect-ratio: 16/9; border-radius: 10px; border: 1px solid #334050; overflow: hidden; position: relative; background: radial-gradient(circle at 62% 24%,#9a907d 0 4%,transparent 5%),linear-gradient(122deg,#161d29 0 35%,#473e39 36% 55%,#17252a 56%); box-shadow: 0 22px 60px rgba(0,0,0,.38); }
+    .frame::before { content: "凌晨两点 · 酒店走廊"; position: absolute; left: 14px; top: 12px; color: rgba(255,255,255,.78); font-size: 11px; }
+    .frame::after { content: "分镜 03  ·  当前候选"; position: absolute; left: 14px; bottom: 12px; padding: 5px 8px; border-radius: 5px; background: rgba(0,0,0,.55); color: white; font-size: 11px; }
+    .candidate-row { display: flex; gap: 8px; margin-top: 13px; width: min(90%,760px); }
+    .candidate { flex: 1; height: 54px; border: 1px solid #334050; background: #151c26; border-radius: 7px; color: #9aa7b7; }
+    .candidate.active { border-color: #71e1bc; color: #71e1bc; background: rgba(113,225,188,.1); }
+    .shot-rail { grid-column: 1 / 4; display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; background: var(--surface); border-top: 1px solid var(--line); }
+    .shot-thumb { flex: 0 0 105px; height: 88px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); padding: 7px; color: var(--muted); text-align: left; }
+    .shot-thumb.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    .thumb-img { height: 48px; border-radius: 5px; background: linear-gradient(135deg,#2d394a,#244c44); margin-bottom: 5px; display: grid; place-items: center; }
+    .timeline { grid-column: 1 / 4; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 15px; overflow: auto; }
+    .ruler { height: 22px; margin-left: 80px; color: var(--muted); font-size: 10px; display: flex; justify-content: space-between; }
+    .track { display: grid; grid-template-columns: 75px 1fr; align-items: center; margin-bottom: 6px; }
+    .track-name { color: var(--muted); font-size: 11px; }
+    .clips { height: 34px; display: flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 6px; }
+    .clip { display: grid; place-items: center; min-width: 70px; border-radius: 4px; background: #27463f; color: #c9f7e7; font-size: 10px; }
+    .clip.audio { background: #263d5d; color: #d2e2ff; }
+    .clip.subtitle { background: #5a4524; color: #ffe3ae; }
+    .drawer { position: absolute; z-index: 20; right: 0; top: 0; bottom: 0; width: 430px; background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow); transform: translateX(101%); transition: transform .2s ease; display: grid; grid-template-rows: 56px 1fr 58px; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head, .drawer-foot { display: flex; align-items: center; gap: 8px; padding: 0 15px; border-bottom: 1px solid var(--line); }
+    .drawer-head strong { flex: 1; }
+    .drawer-body { overflow: auto; padding: 14px; }
+    .drawer-foot { border-top: 1px solid var(--line); border-bottom: 0; justify-content: flex-end; }
+    .task { border: 1px solid var(--line); background: var(--surface-2); border-radius: 9px; padding: 11px; margin-bottom: 9px; }
+    .task-top { display: flex; gap: 7px; align-items: center; }
+    .task-top strong { flex: 1; }
+    .task p { margin: 7px 0; color: var(--muted); font-size: 11px; }
+    .progress { height: 5px; background: var(--surface-3); border-radius: 4px; overflow: hidden; }
+    .progress i { display: block; height: 100%; background: var(--accent); width: 64%; }
+    .overlay { position: absolute; z-index: 30; inset: 0; background: rgba(0,0,0,.55); display: none; place-items: center; }
+    .overlay.open { display: grid; }
+    .modal { width: min(520px,calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 18px; }
+    .modal h2 { margin: 0 0 5px; font-size: 17px; }
+    .modal > p { color: var(--muted); margin: 0 0 15px; }
+    .summary-box { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); padding: 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .summary-box span { color: var(--muted); font-size: 11px; }
+    .summary-box b { display: block; margin-top: 2px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .toast { position: absolute; z-index: 50; left: 50%; bottom: 20px; transform: translate(-50%,20px); opacity: 0; transition: .2s; padding: 9px 13px; border-radius: 8px; background: var(--text); color: var(--bg); font-weight: 650; box-shadow: var(--shadow); pointer-events: none; }
+    .toast.show { opacity: 1; transform: translate(-50%,0); }
+    @media (max-width: 1180px) {
+      .script-grid { grid-template-columns: 210px 1fr; }
+      .script-grid > .panel:last-child { display: none; }
+      .story-grid { grid-template-columns: 330px minmax(400px,1fr); }
+      .story-grid > .panel:nth-child(3) { display: none; }
+      .shot-rail { grid-column: 1 / 3; }
+      .cut-grid { grid-template-columns: 220px 1fr; }
+      .cut-grid > .panel:nth-child(3) { display: none; }
+      .timeline { grid-column: 1 / 3; }
+      .metric-row { grid-template-columns: repeat(3,1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" aria-label="全局导航">
+      <div class="brand">LM</div>
+      <button class="rail-btn active" title="项目" aria-label="项目">▦</button>
+      <button class="rail-btn" title="资产库" aria-label="资产库">◇</button>
+      <button class="rail-btn" title="快速创作" aria-label="快速创作">✦</button>
+      <button class="rail-btn" title="高级画布" aria-label="高级画布">⌘</button>
+      <div class="rail-spacer"></div>
+      <button class="rail-btn" title="设置" aria-label="设置">⚙</button>
+    </nav>
+
+    <header class="topbar">
+      <div class="crumb">本地短剧 <span>/</span> 凌晨两点的客房服务</div>
+      <button class="episode">第 1 集⌄</button>
+      <div class="save">● 已保存 · 刚刚</div>
+      <button class="icon-btn" id="taskButton" title="任务" aria-label="打开任务抽屉">↻<i class="badge-dot" id="taskCount">2</i></button>
+      <button class="icon-btn" id="themeButton" title="切换主题" aria-label="切换主题">◐</button>
+      <button class="icon-btn" title="更多" aria-label="更多">•••</button>
+    </header>
+
+    <nav class="stages" aria-label="生产阶段">
+      <button class="stage done" data-stage="script"><b>1</b> 剧本 <span class="status-mini">已确认</span></button>
+      <button class="stage done" data-stage="assets"><b>2</b> 设定 <span class="status-mini">8/9</span></button>
+      <button class="stage active warn" data-stage="storyboard"><b>3</b> 分镜 <span class="status-mini">7/10</span></button>
+      <button class="stage" data-stage="cut"><b>4</b> 短片 <span class="status-mini">1/10</span></button>
+      <div class="stage-summary" id="stageSummary">场次 02 · 分镜 03 · 视频待生成</div>
+    </nav>
+
+    <main class="workspace">
+      <section class="screen simple" data-screen="script">
+        <div class="stage-head">
+          <div class="stage-title"><h1>剧本</h1><p>已确认修订 v3 · 新草稿有 2 处变更</p></div>
+          <div class="head-actions"><button class="ghost">查看差异</button><button class="primary approve">检查并提交</button></div>
+        </div>
+        <div class="body-grid script-grid">
+          <aside class="panel">
+            <div class="panel-title">场次 <small>4 场</small></div>
+            <div class="scene-item active"><strong>01 · 酒店外景</strong>凌晨 1:58 · 建立环境</div>
+            <div class="scene-item"><strong>02 · 酒店走廊</strong>凌晨 2:00 · 异常来电</div>
+            <div class="scene-item"><strong>03 · 208 客房</strong>门外 · 冲突升级</div>
+            <div class="scene-item"><strong>04 · 前台</strong>凌晨 2:17 · 真相揭示</div>
+          </aside>
+          <div class="editor">
+            <article class="paper">
+              <h2>第 1 集 · 凌晨两点的客房服务</h2>
+              <h3>01. 酒店外景 · 夜 · 外</h3>
+              <p>雨水沿着霓虹招牌滴落。酒店大门内只亮着一盏暖黄的灯，街上没有行人。</p>
+              <h3>02. 酒店走廊 · 夜 · 内</h3>
+              <p>林夏推着客房服务车穿过空荡的走廊。208 房的电话铃声从远处传来。</p>
+              <div class="dialogue"><b>林夏</b>“前台说这一层今晚没有住客。”</div>
+              <p>电梯数字从 7 跳到 2，但门没有打开。她的手机收到一条没有号码的短信。</p>
+            </article>
+          </div>
+          <aside class="panel">
+            <div class="panel-title">结构检查 <small>1 建议</small></div>
+            <div class="check"><b>✓ 必需结构完整</b><p>4 场、3 个角色、3 个场景资产、10 个分镜建议</p></div>
+            <div class="check warn"><b>对白可能过长</b><p>场次 03 · 林夏的一段对白约 13 秒</p></div>
+            <div class="check"><b>下游影响</b><p>当前变更可能影响 2 个分镜 Shot Package</p></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen simple" data-screen="assets">
+        <div class="stage-head">
+          <div class="stage-title"><h1>设定</h1><p>Look 已确认 · 8/9 个必需资产已确认</p></div>
+          <div class="head-actions"><div class="segmented"><button class="active mode-btn">标准</button><button class="mode-btn">高级画布</button></div><button class="secondary">批量预检</button><button class="primary approve">确认设定</button></div>
+        </div>
+        <div class="assets-grid">
+          <div class="metric-row">
+            <div class="metric"><span>画风</span><strong>1/1</strong><i class="tag ok">已确认</i></div>
+            <div class="metric"><span>角色</span><strong>3/3</strong><i class="tag ok">已确认</i></div>
+            <div class="metric"><span>场景</span><strong>2/3</strong><i class="tag warn">1 待确认</i></div>
+            <div class="metric"><span>道具</span><strong>3/3</strong><i class="tag ok">已确认</i></div>
+            <div class="metric"><span>音色</span><strong>2/3</strong><i class="tag">可选</i></div>
+          </div>
+          <div class="tabs"><button class="tab active">总览</button><button class="tab">画风</button><button class="tab">角色 3</button><button class="tab">场景 3</button><button class="tab">道具 3</button><button class="tab">音色 2</button></div>
+          <div class="asset-cards">
+            <button class="asset-card open-detail"><div class="visual">◫</div><div class="asset-info"><h3>都市悬疑 · 冷暖对撞</h3><p>Look v4 · 10 个分镜使用</p><span class="tag ok">✓ 项目当前 Look</span></div></button>
+            <button class="asset-card open-detail"><div class="visual">👩🏻</div><div class="asset-info"><h3>林夏 · 夜班前台</h3><p>角色 v3 · 8 个分镜使用</p><span class="tag ok">✓ 已确认</span></div></button>
+            <button class="asset-card open-detail"><div class="visual">🧥</div><div class="asset-info"><h3>陌生住客</h3><p>角色 v2 · 3 个分镜使用</p><span class="tag ok">✓ 已确认</span></div></button>
+            <button class="asset-card open-detail"><div class="visual">🚪</div><div class="asset-info"><h3>208 客房走廊</h3><p>场景资产候选 2 · 4 个分镜使用</p><span class="tag warn">◷ 待确认</span></div></button>
+            <button class="asset-card open-detail"><div class="visual">🛎</div><div class="asset-info"><h3>酒店前台</h3><p>场景资产 v2 · 3 个分镜使用</p><span class="tag ok">✓ 已确认</span></div></button>
+            <button class="asset-card open-detail"><div class="visual">☎</div><div class="asset-info"><h3>老式客房电话</h3><p>道具 v1 · 2 个分镜使用</p><span class="tag ok">✓ 已确认</span></div></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen simple active" data-screen="storyboard">
+        <div class="stage-head">
+          <div class="stage-title"><h1>分镜</h1><p>场次 02 / 分镜 03 · 在此完成结构、画面与目标视频请求编译</p></div>
+          <div class="head-actions"><span class="schema-label">Schema 2.1</span><button class="ghost" id="sourceJsonButton">查看外部来源</button><button class="ghost" id="autoPlanButton">自动规划时段</button><button class="primary approve">确认分镜</button></div>
+        </div>
+        <div class="body-grid story-grid">
+          <aside class="panel">
+            <div class="panel-title">分镜与时段 <small id="autosaveLabel">自动保存</small></div>
+            <div class="hierarchy">
+              <small>叙事层级（场次 ≠ 场景资产）</small>
+              <b>02 · 酒店走廊 · 夜 · 内</b>
+              <div class="path">剧集 01 → 场次 02 → 分镜 03 → 时段</div>
+            </div>
+            <div class="duration-map">
+              <div><small>计划总时长</small><strong id="plannedDuration">7.0s</strong></div>
+              <i>→</i>
+              <div><small>目标视频请求档位</small><strong id="requestDuration">8s</strong></div>
+            </div>
+            <div class="segment-toolbar"><b id="segmentCount">时段 1</b><button class="secondary" id="addSegmentButton">＋ 新增时段</button></div>
+            <div class="segment-list" id="segmentList" aria-live="polite"></div>
+            <p class="segment-empty-note">规则：允许仅 1 个时段；多个时段按叙事语义组织，总时长受所选 Provider 能力约束，不强制填满 15 秒。</p>
+          </aside>
+          <div class="preview">
+            <div class="frame"></div>
+            <div class="segment-ruler">
+              <div class="segment-ruler-head"><span>分镜 03 时段预览</span><span id="rulerDuration">0—7.0s</span></div>
+              <div class="segment-bars" id="segmentBars"></div>
+            </div>
+            <div class="candidate-row"><button class="candidate active">关键帧 A · 已采用</button><button class="candidate">关键帧 B · 构图偏右</button><button class="candidate">＋ 生成关键帧</button></div>
+            <div class="preview-meta"><div class="check"><b>目标生成单元</b><p>分镜 03 是一个正式视频生成单元；在此完成结构、画面、请求编译、候选生成与使用。</p></div><button class="ghost" id="editSelectedSegment">编辑当前时段</button></div>
+          </div>
+          <aside class="panel">
+            <div class="panel-title">生成编译 <small id="capabilityState">能力已校验</small></div>
+            <div class="fields">
+              <div class="field"><label>Recipe <span>项目固定</span></label><select><option>H3 Story Video · 都市悬疑</option></select></div>
+              <div class="field"><label>Provider / 模型</label><select id="providerSelect"><option value="multi">H3 Story Video · 支持多时段</option><option value="single">Legacy Video · 仅单时段</option></select></div>
+              <div class="capability-card" id="capabilityCard"><b>✓ Provider 能力匹配</b><p>最长 15s · 请求档位 5/8/10/15s · 支持一个分镜内多个时段与多场景资产。</p></div>
+              <button class="gate-card" id="styleGateButton"><b>✓ PromptStyleGate 已通过</b><p>只校验最终提示词与请求快照，不分析生成结果。</p><div class="gate-checks"><span>✓ 风格身份固定</span><span>✓ 正向块恰好一次</span><span>✓ 负向条款齐全</span><span>✓ 请求字节一致</span></div></button>
+              <div class="envelope-card"><b>Generation Envelope</b><p id="envelopeSummary">计划 7.0s → 请求 8s · 1 个时段 · 4 个资产引用</p></div>
+              <div class="check"><b>任务与预计费用</b><p>1 个任务 · 并发 1 · 约 ¥0.48；提交前再次确认，不自动采用结果。</p></div>
+              <div class="field"><label>H3 编译摘要 <span id="promptDetailButton">查看提示词</span></label><div class="check"><b>一次编译 · 无二次包装</b><p>风格块位于 H3 结构内部；逐时段动作、镜头、场景资产、角色状态与道具进入同一请求。</p></div></div>
+              <button class="primary" style="width:100%" id="generateButton">预检并生成视频候选</button>
+            </div>
+          </aside>
+          <div class="shot-rail" id="shotRail"></div>
+        </div>
+      </section>
+
+      <section class="screen simple" data-screen="cut">
+        <div class="stage-head">
+          <div class="stage-title"><h1>短片</h1><p>整集镜头审核 · 1/10 个分镜视频完成 · 时间线 v2 未锁定</p></div>
+          <div class="head-actions"><div class="segmented"><button class="active">镜头审核</button><button>时间线</button><button>交付</button></div><button class="secondary">检查时间线</button><button class="primary approve">锁定画面</button></div>
+        </div>
+        <div class="body-grid cut-grid">
+          <aside class="panel"><div class="panel-title">分镜素材 <small>10</small></div><div class="shot-item active"><strong>分镜 03</strong>视频候选 1 · 5.2s</div><div class="shot-item"><strong>分镜 04</strong>缺少视频 · 预计 4s</div><div class="shot-item"><strong>分镜 05</strong>生成失败 · 可重试</div></aside>
+          <div class="preview"><div class="frame"></div><div class="candidate-row"><button class="candidate active">▶ 播放当前时间线</button><button class="candidate">选择稳定帧</button></div></div>
+          <aside class="panel"><div class="panel-title">来源与修复 <small>读取分镜快照</small></div><div class="fields"><div class="field"><label>Recipe <span>继承分镜编译</span></label><select><option>H3 Story Video · 都市悬疑</option></select></div><div class="field"><label>Provider / 模型</label><select><option>H3 Story Video · 支持多时段</option></select></div><div class="check"><b>Generation Envelope 已就绪</b><p>分镜 03 · 计划 7.0s → 请求 8s · PromptStyleGate 已通过</p></div><button class="secondary" style="width:100%" id="cutGenerateButton">重新生成或补充候选</button><div class="check warn"><b>Picture Lock 被阻塞</b><p>8 个分镜缺少视频，1 个任务失败</p></div></div></aside>
+          <div class="timeline">
+            <div class="ruler"><span>00:00</span><span>00:10</span><span>00:20</span><span>00:30</span><span>00:40</span></div>
+            <div class="track"><span class="track-name">视频</span><div class="clips"><i class="clip" style="flex:1">01</i><i class="clip" style="flex:1.2">02</i><i class="clip" style="flex:1.1">03</i><i class="clip" style="flex:.9">04</i><i class="clip" style="flex:1.3">05</i></div></div>
+            <div class="track"><span class="track-name">对白/旁白</span><div class="clips"><i class="clip audio" style="width:27%">林夏 · 旁白</i><i class="clip audio" style="width:18%;margin-left:12%">陌生住客</i></div></div>
+            <div class="track"><span class="track-name">字幕</span><div class="clips"><i class="clip subtitle" style="width:23%">这一层没有住客</i><i class="clip subtitle" style="width:18%;margin-left:16%">请进</i></div></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="drawer" id="drawer" aria-label="详情抽屉">
+        <div class="drawer-head"><strong id="drawerTitle">全局任务</strong><button class="icon-btn close-drawer" aria-label="关闭">×</button></div>
+        <div class="drawer-body" id="drawerBody"></div>
+        <div class="drawer-foot"><button class="ghost close-drawer">关闭</button><button class="primary" id="drawerPrimary">查看全部</button></div>
+      </aside>
+
+      <div class="overlay" id="overlay">
+        <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <h2 id="modalTitle">创建远端生成任务</h2>
+          <p id="modalDescription">任务成功后进入待确认，不会自动替换当前分镜。</p>
+          <div class="modal-content" id="modalContent"></div>
+          <div class="modal-actions"><button class="ghost" id="cancelModal">取消</button><button class="primary" id="confirmModal">创建远端任务</button></div>
+        </div>
+      </div>
+      <div class="toast" id="toast">已完成</div>
+    </main>
+  </div>
+  <script src="production-studio-v2.1-prototype-model.js"></script>
+  <script>
+    const {
+      createStoryboardModel,
+      addTimedSegment,
+      splitTimedSegment,
+      mergeTimedSegment,
+      moveTimedSegment,
+      compileGenerationEnvelope,
+    } = window.ProductionStudioV21Model;
+    const screens = [...document.querySelectorAll('[data-screen]')];
+    const stages = [...document.querySelectorAll('[data-stage]')];
+    const summary = {
+      script: '剧本 v3 已确认 · 新草稿有 2 处变更',
+      assets: '8/9 个必需资产已确认 · 1 个场景资产待确认',
+      storyboard: '场次 02 · 分镜 03 · 目标视频请求待确认',
+      cut: '1/10 个分镜视频完成 · 时间线未锁定'
+    };
+    let storyboardModel = createStoryboardModel();
+    let selectedSegmentId = storyboardModel.timedSegments[0].id;
+    let modalAction = null;
+
+    const PROVIDERS = {
+      multi: {
+        id: 'provider-h3-story-video', name: 'H3 Story Video', allowedDurations: [5,8,10,15],
+        maxDurationSeconds: 15, supportsMultipleTimedSegments: true,
+      },
+      single: {
+        id: 'provider-legacy-single', name: 'Legacy Video', allowedDurations: [5,8,10,15],
+        maxDurationSeconds: 15, supportsMultipleTimedSegments: false,
+      },
+    };
+    const assetLabels = {
+      'SCENE-hotel-corridor': '场景·酒店走廊',
+      'SCENE-room-208-threshold': '场景·208门口',
+      'CHAR-linxia-night-shift': '角色·林夏/值班',
+      'CHAR-linxia-alert': '角色·林夏/警觉',
+      'PROP-service-cart': '道具·服务车',
+      'PROP-room-phone': '道具·客房电话',
+    };
+
+    function setStage(name) {
+      stages.forEach(el => el.classList.toggle('active', el.dataset.stage === name));
+      screens.forEach(el => el.classList.toggle('active', el.dataset.screen === name));
+      document.getElementById('stageSummary').textContent = summary[name];
+      history.replaceState(null, '', `${location.pathname}${location.search}#${name}`);
+    }
+    stages.forEach(el => el.addEventListener('click', () => setStage(el.dataset.stage)));
+    const initial = location.hash.slice(1);
+    if (summary[initial]) setStage(initial);
+
+    const drawer = document.getElementById('drawer');
+    const drawerBody = document.getElementById('drawerBody');
+    const overlay = document.getElementById('overlay');
+    const modal = document.getElementById('modal');
+    const taskHtml = `
+      <div class="tabs"><button class="tab active">运行 1</button><button class="tab">失败 1</button><button class="tab">已完成</button></div>
+      <div class="task"><div class="task-top"><strong>分镜 08 · 视频生成</strong><span class="tag">运行中</span></div><p>远端视频模型 B · 03:14 · 费用未知</p><div class="progress"><i></i></div></div>
+      <div class="task"><div class="task-top"><strong>分镜 05 · 视频生成</strong><span class="tag warn">失败</span></div><p>认证已过期 · Generation Envelope 已保存</p><button class="ghost">查看原因</button> <button class="secondary">登录后重试</button></div>
+      <div class="task"><div class="task-top"><strong>分镜 03 · 动态预演</strong><span class="tag ok">已完成</span></div><p>非主链预演产物 · 不进入正式视频候选与时间线</p></div>`;
+
+    function openDrawer(title, html, primary='完成') {
+      document.getElementById('drawerTitle').textContent = title;
+      document.getElementById('drawerPrimary').textContent = primary;
+      drawerBody.innerHTML = html;
+      drawer.classList.add('open');
+    }
+
+    function closeModal() {
+      overlay.classList.remove('open');
+      modalAction = null;
+    }
+
+    function openModal({ title, description, content, confirmLabel='确认', cancelLabel='取消', wide=false, onConfirm=null }) {
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalDescription').textContent = description;
+      document.getElementById('modalContent').innerHTML = content;
+      document.getElementById('confirmModal').textContent = confirmLabel;
+      document.getElementById('cancelModal').textContent = cancelLabel;
+      modal.classList.toggle('wide', wide);
+      modalAction = onConfirm;
+      overlay.classList.add('open');
+    }
+
+    function currentProvider() {
+      return PROVIDERS[document.getElementById('providerSelect').value];
+    }
+
+    function formatSeconds(value) {
+      return Number.isInteger(value) ? `${value}.0s` : `${value.toFixed(1)}s`;
+    }
+
+    function bindingButton(id) {
+      return `<button class="binding" data-binding="${id}">${assetLabels[id] || id}</button>`;
+    }
+
+    function renderSegments() {
+      const envelope = compileGenerationEnvelope(storyboardModel, currentProvider());
+      const segmentList = document.getElementById('segmentList');
+      segmentList.innerHTML = storyboardModel.timedSegments.map((segment, index) => `
+        <article class="segment-card ${segment.id === selectedSegmentId ? 'active' : ''}" data-segment-id="${segment.id}">
+          <div class="segment-head">
+            <b>时段 ${String(index + 1).padStart(2,'0')}</b>
+            <span class="segment-time">${formatSeconds(segment.startSeconds)}—${formatSeconds(segment.endSeconds)}</span>
+            <button class="mini-btn" data-action="up" title="上移">↑</button>
+            <button class="mini-btn" data-action="down" title="下移">↓</button>
+          </div>
+          <div class="segment-body">
+            <p>${segment.action}</p>
+            <p class="camera">摄影机：${segment.camera}</p>
+            <div class="asset-bindings">
+              ${[...segment.sceneAssetIds, ...segment.characterStateIds, ...segment.propIds].map(bindingButton).join('')}
+              <button class="binding add" data-action="bind">＋ 绑定资产</button>
+            </div>
+          </div>
+          <div class="segment-foot"><button data-action="split">在叙事点拆分</button><button data-action="merge">与相邻时段合并</button><button data-action="edit">编辑动作/对白</button></div>
+        </article>`).join('');
+
+      document.getElementById('segmentCount').textContent = `时段 ${storyboardModel.timedSegments.length}`;
+      document.getElementById('plannedDuration').textContent = formatSeconds(envelope.plannedDurationSeconds);
+      document.getElementById('requestDuration').textContent = `${envelope.requestDurationSeconds}s`;
+      document.getElementById('rulerDuration').textContent = `0—${formatSeconds(envelope.plannedDurationSeconds)}`;
+      document.getElementById('segmentBars').innerHTML = envelope.timedSegments.map((segment, index) =>
+        `<div class="segment-bar" style="flex:${segment.endSeconds - segment.startSeconds}">时段 ${index + 1} · ${formatSeconds(segment.endSeconds - segment.startSeconds)}</div>`).join('');
+      const referenceCount = envelope.timedSegments.reduce((total, segment) => total + segment.sceneAssetIds.length + segment.characterStateIds.length + segment.propIds.length, 0);
+      document.getElementById('envelopeSummary').textContent = `计划 ${formatSeconds(envelope.plannedDurationSeconds)} → 请求 ${envelope.requestDurationSeconds}s · ${envelope.timedSegments.length} 个时段 · ${referenceCount} 个资产引用`;
+      renderCompatibility(envelope);
+    }
+
+    function renderCompatibility(envelope) {
+      const card = document.getElementById('capabilityCard');
+      const state = document.getElementById('capabilityState');
+      if (envelope.compatibility.passed) {
+        card.className = 'capability-card';
+        card.innerHTML = '<b>✓ Provider 能力匹配</b><p>最长 15s · 请求档位 5/8/10/15s · 支持当前分镜的时段结构与资产引用。</p>';
+        state.textContent = '能力已校验';
+      } else {
+        const reason = envelope.compatibility.code === 'MULTI_SEGMENT_UNSUPPORTED' ? '该模型只接受单时段' : '计划时长超过 15s';
+        card.className = 'capability-card warn';
+        card.innerHTML = `<b>⚠ Provider 能力不匹配</b><p>${reason}。点击查看拆分分镜或更换模型的建议。</p>`;
+        state.textContent = '需要处理';
+      }
+    }
+
+    function openSegmentEditor(segmentId) {
+      const segment = storyboardModel.timedSegments.find(item => item.id === segmentId);
+      if (!segment) return;
+      selectedSegmentId = segment.id;
+      renderSegments();
+      openDrawer('编辑时段', `
+        <div class="check"><b>${formatSeconds(segment.startSeconds)}—${formatSeconds(segment.endSeconds)}</b><p>时段属于分镜 03；调整时保持分镜总时长闭合。</p></div>
+        <div class="field"><label>动作与表演</label><textarea>${segment.action}</textarea></div>
+        <div class="field"><label>摄影机</label><textarea>${segment.camera}</textarea></div>
+        <div class="field"><label>对白/声音</label><textarea>${segment.dialogue || '无对白；保留走廊环境声。'}</textarea></div>`, '保存时段');
+    }
+
+    function openBindingDrawer(segmentId) {
+      const segment = storyboardModel.timedSegments.find(item => item.id === segmentId);
+      if (!segment) return;
+      openDrawer('逐时段资产绑定', `
+        <div class="check"><b>绑定范围：${segmentId}</b><p>每个时段可独立绑定多个场景资产、角色状态和道具；场次仍是叙事容器。</p></div>
+        <div class="field"><label>场景资产 · 多选</label><div class="asset-bindings"><button class="binding">✓ 酒店走廊</button><button class="binding">✓ 208 房门口</button><button class="binding add">＋ 选择场景资产</button></div></div>
+        <div class="field"><label>角色状态 · 多选</label><div class="asset-bindings"><button class="binding">✓ 林夏 / 夜班警觉</button><button class="binding add">＋ 选择角色状态</button></div></div>
+        <div class="field"><label>道具 · 多选</label><div class="asset-bindings"><button class="binding">✓ 服务车</button><button class="binding">✓ 客房电话</button><button class="binding add">＋ 选择道具</button></div></div>`, '应用绑定');
+    }
+
+    function openStyleGateDrawer() {
+      const envelope = compileGenerationEnvelope(storyboardModel, currentProvider());
+      openDrawer('PromptStyleGate · 提交前门禁', `
+        <div class="check"><b style="color:var(--success)">✓ 校验通过</b><p>门禁只检查提示词编译与请求快照，不读取图片、不抽取视频帧、不评价生成结果。</p></div>
+        <div class="decision">
+          <div class="decision-row"><i>1</i><div><b>风格身份与版本固定</b><p>${envelope.promptStyleGate.styleId} @ v${envelope.promptStyleGate.styleVersion}</p></div></div>
+          <div class="decision-row"><i>2</i><div><b>正向风格块恰好出现一次</b><p>逐项保留色彩、材质、光照与角色渲染方式，禁止模型概括删除。</p></div></div>
+          <div class="decision-row"><i>3</i><div><b>负向风格条款齐全</b><p>负向约束已进入 H3 结构，不由通用包装器二次拼接。</p></div></div>
+          <div class="decision-row"><i>4</i><div><b>编译快照与请求字节一致</b><p>发送给 Provider 的 prompt 与已审计 requestSnapshot 完全一致。</p></div></div>
+        </div>`, '查看审计快照');
+    }
+
+    function openCompatibilityModal(envelope) {
+      const isMulti = envelope.compatibility.code === 'MULTI_SEGMENT_UNSUPPORTED';
+      openModal({
+        title: '当前 Provider 无法执行此分镜',
+        description: '这是生成前的能力预检，不会静默丢弃时段或强制压缩到 15 秒。',
+        content: `<div class="decision">
+          <div class="decision-row"><i>!</i><div><b>${isMulti ? '模型仅支持单时段' : '计划时长超过模型上限'}</b><p>当前：${envelope.timedSegments.length} 个时段，计划 ${formatSeconds(envelope.plannedDurationSeconds)}；模型上限 15s。</p></div></div>
+          <div class="decision-row"><i>A</i><div><b>按叙事边界拆分分镜</b><p>生成分镜 03A / 03B，并保留各自的场次归属、资产绑定和时长。</p></div></div>
+          <div class="decision-row"><i>B</i><div><b>更换支持当前结构的模型</b><p>切回 H3 Story Video，保留一个分镜内的多个时段。</p></div></div>
+        </div>`,
+        confirmLabel: '按建议拆分分镜',
+        cancelLabel: '返回更换模型',
+        onConfirm: () => showToast('原型：已生成分镜 03A / 03B 拆分草案'),
+      });
+    }
+
+    function openSourcePreview() {
+      const source = {
+        schema: 'local-mini-drama.episode-package',
+        version: '2.1',
+        episode: { episode_number: 1, title: '凌晨两点的客房服务', summary: '夜班前台接到不存在客房的来电。', script: '内景·酒店走廊·深夜……', duration_target_seconds: 90 },
+        assets: {
+          characters: [],
+          scene_assets: [{ source_key: 'scene_hotel_corridor', name: '酒店走廊', state: '深夜', description: '老旧酒店二层走廊', atmosphere: '冷清、压迫' }],
+          props: [],
+        },
+        story_scenes: [{
+          source_key: 'story_scene_02', scene_number: 2, heading: '酒店走廊 · 夜 · 内', location_scene_ref: 'scene_hotel_corridor', summary: '林夏循声走向 208 房。',
+        }],
+        shot_packages: [{
+          source_key: 'shot_03', shot_number: 3, story_scene_refs: ['story_scene_02'], planned_duration_seconds: 10,
+          story_intent: '电话铃把林夏引向 208 房。',
+          visual: { shot_size: 'medium', camera_angle: 'eye_level', camera_movement: 'slow_push_in', composition: '林夏右侧、房门左侧', lighting: '冷色走廊灯' },
+          timed_segments: [
+            { start_seconds: 0, end_seconds: 7, action: '林夏推服务车靠近房门', scene_asset_refs: ['scene_hotel_corridor'], character_state_refs: [], prop_refs: [] },
+            { start_seconds: 7, end_seconds: 10, action: '电话铃骤然停止', scene_asset_refs: ['scene_hotel_corridor'], character_state_refs: [], prop_refs: [] },
+          ],
+          continuity: { entry: {}, exit: {}, axis: null },
+          audio: { dialogue: [], narration: [], ambience: ['空调低鸣'], sound_effects: ['电话铃'], music_intent: null },
+        }],
+      };
+      openModal({
+        title: '外部 JSON 来源 · Schema 2.1',
+        description: '只读查看当前剧集的原始来源、规范化结构和导入报告；导入入口位于项目详情的剧集列表。',
+        content: `<div class="summary-box"><span>源文件<b>episode-01.json</b></span><span>SHA-256<b>d8c50d…a91e</b></span><span>合同<b>episode-package@2.1</b></span></div><div class="tabs"><button class="tab active">原始 JSON</button><button class="tab">规范化数据</button><button class="tab">导入报告</button></div><pre>${JSON.stringify(source, null, 2)}</pre>`,
+        confirmLabel: '复制哈希',
+        cancelLabel: '关闭',
+        wide: true,
+        onConfirm: () => showToast('原型：已复制来源 SHA-256'),
+      });
+    }
+
+    document.getElementById('segmentList').addEventListener('click', event => {
+      const card = event.target.closest('[data-segment-id]');
+      if (!card) return;
+      selectedSegmentId = card.dataset.segmentId;
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      if (!action) { renderSegments(); return; }
+      if (action === 'split') storyboardModel = splitTimedSegment(storyboardModel, selectedSegmentId);
+      if (action === 'merge') storyboardModel = mergeTimedSegment(storyboardModel, selectedSegmentId);
+      if (action === 'up') storyboardModel = moveTimedSegment(storyboardModel, selectedSegmentId, -1);
+      if (action === 'down') storyboardModel = moveTimedSegment(storyboardModel, selectedSegmentId, 1);
+      if (action === 'edit') return openSegmentEditor(selectedSegmentId);
+      if (action === 'bind') return openBindingDrawer(selectedSegmentId);
+      renderSegments();
+      showToast(action === 'split' ? '已按叙事点拆分时段' : action === 'merge' ? '已合并相邻时段' : '已调整时段顺序并重排时间');
+    });
+    document.getElementById('segmentList').addEventListener('click', event => {
+      if (event.target.closest('[data-binding]')) openBindingDrawer(event.target.closest('[data-segment-id]').dataset.segmentId);
+    });
+    document.getElementById('addSegmentButton').addEventListener('click', () => {
+      storyboardModel = addTimedSegment(storyboardModel);
+      selectedSegmentId = storyboardModel.timedSegments.at(-1).id;
+      renderSegments();
+      showToast('已新增时段；分镜仍是一个视频生成单元');
+    });
+    document.getElementById('autoPlanButton').addEventListener('click', () => {
+      if (storyboardModel.timedSegments.length === 1) storyboardModel = addTimedSegment(storyboardModel);
+      selectedSegmentId = storyboardModel.timedSegments[0].id;
+      renderSegments();
+      showToast('已按动作转折规划 2 个时段，不强制凑满 15 秒');
+    });
+    document.getElementById('editSelectedSegment').addEventListener('click', () => openSegmentEditor(selectedSegmentId));
+    document.getElementById('providerSelect').addEventListener('change', () => {
+      const envelope = compileGenerationEnvelope(storyboardModel, currentProvider());
+      renderSegments();
+      if (!envelope.compatibility.passed) openCompatibilityModal(envelope);
+    });
+    document.getElementById('capabilityCard').addEventListener('click', () => {
+      const envelope = compileGenerationEnvelope(storyboardModel, currentProvider());
+      if (!envelope.compatibility.passed) openCompatibilityModal(envelope);
+      else showToast('Provider 能力与当前分镜结构匹配');
+    });
+    document.getElementById('styleGateButton').addEventListener('click', openStyleGateDrawer);
+    document.getElementById('promptDetailButton').addEventListener('click', openStyleGateDrawer);
+    document.getElementById('sourceJsonButton').addEventListener('click', openSourcePreview);
+    document.getElementById('taskButton').addEventListener('click', () => openDrawer('全局任务', taskHtml));
+    document.querySelectorAll('.close-drawer').forEach(button => button.addEventListener('click', () => drawer.classList.remove('open')));
+    document.querySelectorAll('.open-detail').forEach((button, index) => button.addEventListener('click', () => openDrawer(index === 0 ? 'Look · 都市悬疑' : '资产详情', `
+      <div class="visual" style="border-radius:10px">${index === 0 ? '◫' : '👩🏻'}</div>
+      <div class="check"><b>${index === 0 ? '当前批准版本 v4' : '当前批准版本 v3'}</b><p>已用于 8 个分镜 · 输入来源可追溯</p></div>
+      <div class="field"><label>业务描述 <span>草稿</span></label><textarea>${index === 0 ? '冷色环境与暖色人物光对撞，压迫、克制、电影感。' : '夜班前台，警觉但克制，服装与身份锚点保持一致。'}</textarea></div>
+      <div class="check warn"><b>变更影响</b><p>保存草稿不会影响下游；确认新版本前将展示受影响分镜。</p></div>`, '提交确认')));
+
+    function openOfficialVideoTask(source) {
+      const envelope = compileGenerationEnvelope(storyboardModel, currentProvider());
+      if (!envelope.compatibility.passed) return openCompatibilityModal(envelope);
+      openModal({
+        title: source === 'cut' ? '补充正式视频候选' : '创建正式视频生成任务',
+        description: '任务成功后追加到同一候选组，不会自动采用、覆盖原片或替换时间线。',
+        content: `<div class="summary-box"><span>范围<b>分镜 03 · ${envelope.timedSegments.length} 个时段</b></span><span>Provider<b>${envelope.provider.name}</b></span><span>时长映射<b>${formatSeconds(envelope.plannedDurationSeconds)} → ${envelope.requestDurationSeconds}s</b></span><span>预计费用<b>约 ¥0.48</b></span><span>提示词门禁<b style="color:var(--success)">PromptStyleGate 通过</b></span></div>`,
+        confirmLabel: '创建视频任务',
+        onConfirm: () => {
+          document.getElementById('taskCount').textContent = '3';
+          showToast('已创建正式视频任务 · 完成后仅追加候选');
+        },
+      });
+    }
+    document.getElementById('generateButton').addEventListener('click', () => openOfficialVideoTask('storyboard'));
+    document.getElementById('cutGenerateButton').addEventListener('click', () => {
+      openOfficialVideoTask('cut');
+    });
+    document.getElementById('cancelModal').addEventListener('click', closeModal);
+    document.getElementById('confirmModal').addEventListener('click', () => {
+      const action = modalAction;
+      closeModal();
+      if (action) action();
+    });
+    overlay.addEventListener('click', event => { if (event.target === overlay) closeModal(); });
+
+    document.getElementById('themeButton').addEventListener('click', () => document.body.classList.toggle('light'));
+    document.querySelectorAll('.mode-btn').forEach(button => button.addEventListener('click', () => {
+      const group = button.parentElement;
+      group.querySelectorAll('button').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      showToast(button.textContent.includes('高级') ? '已切换高级视图（原型示意）' : '已切换标准视图');
+    }));
+    document.querySelectorAll('.approve').forEach(button => button.addEventListener('click', () => showToast('原型：已打开阶段检查与影响确认')));
+    document.querySelectorAll('.rail-btn:not(.active)').forEach(button => button.addEventListener('click', () => showToast('原型：全局入口保留当前位置')));
+
+    const rail = document.getElementById('shotRail');
+    for (let i=1;i<=10;i++) {
+      const button = document.createElement('button');
+      button.className = 'shot-thumb' + (i===3 ? ' active' : '');
+      button.innerHTML = `<span class="thumb-img">${i < 8 ? '▧' : '＋'}</span>分镜 ${String(i).padStart(2,'0')} · ${i < 8 ? '已生成' : '缺失'}`;
+      button.addEventListener('click', () => { rail.querySelectorAll('button').forEach(item => item.classList.remove('active')); button.classList.add('active'); showToast(`已切换到分镜 ${String(i).padStart(2,'0')}`); });
+      rail.appendChild(button);
+    }
+
+    let toastTimer;
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      toast.textContent = text;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    renderSegments();
+    const demo = new URLSearchParams(location.search).get('demo');
+    if (demo === 'multi') {
+      storyboardModel = addTimedSegment(storyboardModel);
+      selectedSegmentId = storyboardModel.timedSegments[1].id;
+      renderSegments();
+    }
+    if (demo === 'conflict') {
+      storyboardModel = addTimedSegment(storyboardModel);
+      document.getElementById('providerSelect').value = 'single';
+      renderSegments();
+      openCompatibilityModal(compileGenerationEnvelope(storyboardModel, currentProvider()));
+    }
+    if (demo === 'gate') openStyleGateDrawer();
+    if (demo === 'source') openSourcePreview();
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { drawer.classList.remove('open'); closeModal(); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); showToast('草稿已保存'); }
+    });
+  </script>
+</body>
+</html>

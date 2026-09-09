@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://localminidrama.local/schemas/external-ai-result-v2.1.schema.json",
+  "title": "LocalMiniDrama External AI Result V2.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "package_id",
+    "assets_digest",
+    "episode",
+    "new_assets",
+    "story_scenes",
+    "shot_packages"
+  ],
+  "properties": {
+    "schema": { "const": "local-mini-drama.external-ai-result" },
+    "version": { "type": "string", "const": "2.1" },
+    "package_id": { "type": "string", "minLength": 1 },
+    "assets_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "model": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "episode": { "$ref": "episode-package-v2.1.schema.json#/$defs/episode" },
+    "new_assets": { "$ref": "#/$defs/newAssets" },
+    "story_scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "episode-package-v2.1.schema.json#/$defs/storyScene" }
+    },
+    "shot_packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "episode-package-v2.1.schema.json#/$defs/portableShot" }
+    },
+    "audio_plan": { "$ref": "episode-package-v2.1.schema.json#/$defs/audioPlan" },
+    "extensions": { "$ref": "episode-package-v2.1.schema.json#/$defs/extensions" }
+  },
+  "$defs": {
+    "newAssets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["characters", "character_states", "scene_assets", "props"],
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "episode-package-v2.1.schema.json#/$defs/character" },
+              {
+                "required": ["base_image_prompt", "negative_prompt", "voice_profile"],
+                "properties": {
+                  "states": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "allOf": [
+                        { "$ref": "episode-package-v2.1.schema.json#/$defs/characterState" },
+                        { "required": ["base_image_prompt", "negative_prompt"] }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "character_states": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/existingCharacterState" }
+        },
+        "scene_assets": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "episode-package-v2.1.schema.json#/$defs/sceneAsset" },
+              { "required": ["base_image_prompt", "negative_prompt"] }
+            ]
+          }
+        },
+        "props": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "episode-package-v2.1.schema.json#/$defs/prop" },
+              { "required": ["base_image_prompt", "negative_prompt"] }
+            ]
+          }
+        }
+      }
+    },
+    "existingCharacterState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "character_ref",
+        "name",
+        "description",
+        "appearance",
+        "base_image_prompt",
+        "negative_prompt",
+        "is_default"
+      ],
+      "properties": {
+        "source_key": { "$ref": "episode-package-v2.1.schema.json#/$defs/sourceKey" },
+        "character_ref": { "$ref": "episode-package-v2.1.schema.json#/$defs/sourceKey" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "appearance": { "type": "string", "minLength": 1 },
+        "base_image_prompt": { "type": "string", "minLength": 1 },
+        "negative_prompt": { "type": "string" },
+        "is_default": { "const": false }
+      }
+    }
+  }
+}

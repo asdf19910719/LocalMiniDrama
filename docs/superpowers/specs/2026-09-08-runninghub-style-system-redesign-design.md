@@ -1,14 +1,17 @@
 # RunningHub 风格体系重构设计
 
+> 状态：Production Studio V2.1 的风格体系专项规格，不是平行总体架构。
+> 上位设计：`2026-09-05-production-studio-v2-design.md`；如有范围冲突，以上位设计为准。
+
 **日期：** 2026-09-08
 
-**状态：** 已完成业务设计确认，待实施计划
+**实施状态：** 统一风格目录、图片/视频编译、Reference Registry、生成快照和主要 UI 已完成首版实现；阶段批准和 Look stale 投影由 V2.1 继续建设
 
 **范围：** 项目风格库、图片/视频提示词编译、模型能力预检、外部 AI JSON v2、自由创作、生成快照和风格 UI
 
 ## 1. 背景
 
-LocalMiniDrama 当前维护 39 个静态风格，前端 `styleOptions.js` 与后端 `generationStylePresets.js` 各有一份风格定义。项目同时保存短风格值和 `metadata.style_prompt_zh/en`，图片链路已有高优先级风格注入，普通视频链路主要使用 `. Style: ...` 追加，H3 则使用独立的不可变草稿编译流程。
+本专项启动前，LocalMiniDrama 维护 39 个静态风格，前端 `styleOptions.js` 与后端 `generationStylePresets.js` 各有一份风格定义。项目同时保存短风格值和 `metadata.style_prompt_zh/en`，图片链路已有高优先级风格注入，普通视频链路主要使用 `. Style: ...` 追加，H3 则使用独立的不可变草稿编译流程。
 
 登录态 RunningHub 调研导出了 169 个真实系统风格，并通过真实图片和视频任务确认了以下模式：
 
@@ -19,12 +22,12 @@ LocalMiniDrama 当前维护 39 个静态风格，前端 `styleOptions.js` 与后
 - 模型能力门禁与提示词编译相互独立；
 - 画风库采用大缩略图、粗分类、搜索和工作台常驻风格摘要。
 
-本设计不兼容旧项目、旧风格和外部 AI JSON v1，以减少双轨、迁移和回填复杂度，直接建立单一的新风格体系。
+本专项不保留旧风格 key 映射，也不允许外部 AI JSON v1 继续写入风格字段，以减少长期双轨。Production Studio V2.1 仍须保证旧项目可打开且内容不丢失：遇到无法解析的旧风格时显示迁移阻断并要求用户选择正式 `style_id`，不得静默映射或令整个项目不可访问。
 
 ## 2. 已确认的产品决策
 
 1. 使用 RunningHub 调研所得的 169 个风格替换当前 39 个风格。
-2. 不兼容旧项目和旧风格，不提供旧 key 映射、metadata 回填或项目升级入口。
+2. 不提供旧风格 key 的静默映射或 metadata 回填；旧项目缺少有效 `style_id` 时进入显式选择/修复流程，其他项目内容保持可读。
 3. 每个系统风格必须具有中文说明和真实英文生成提示词；不得把中文复制到 `promptEn`。
 4. 项目 `style_id` 是项目内唯一权威风格来源。
 5. 所有剧集、角色、人物状态、场景、道具、分镜图片和视频继承项目风格，不允许局部风格覆盖。
@@ -37,6 +40,7 @@ LocalMiniDrama 当前维护 39 个静态风格，前端 `styleOptions.js` 与后
 12. 独立自由创作任务可选择正式 `style_id`；绑定项目时必须继承项目风格。
 13. RunningHub 风格预览图本地化保存，运行时不热链 RunningHub。
 14. 导入外部 JSON 不触发图片或视频生成，不产生生成费用。
+15. V2.1 只建设 Provider 提交前的 `PromptStyleGate`；不建设图片视觉理解、视频抽帧或结果级 `StyleConformanceGate`。
 
 ## 3. 目标与非目标
 
@@ -49,6 +53,7 @@ LocalMiniDrama 当前维护 39 个静态风格，前端 `styleOptions.js` 与后
 - 建立稳定的 `@图片N` / `@ImageN` 参考图注册表。
 - 在调用模型前完成语言与能力预检。
 - 对成功和失败任务保存不可变的逐字最终提示词快照。
+- 在提交前逐字验证风格正向块、负向条款、H3 结构内注入和请求快照一致性。
 - 让用户在中文 UI 中理解风格，并能按需查看真实中英文生成提示词。
 
 ### 3.2 非目标
@@ -58,8 +63,9 @@ LocalMiniDrama 当前维护 39 个静态风格，前端 `styleOptions.js` 与后
 - 不自动切换具体模型、厂商或计费渠道。
 - 不建设在线风格市场、审核发布和灰度分发系统。
 - 不依赖 RunningHub 在线服务运行。
-- 不兼容旧项目、旧风格或外部 JSON v1。
-- 不在导入 JSON 后自动启动付费生成。
+- 不为旧风格 key 或外部 JSON v1 风格字段提供静默兼容；旧项目本身仍须可读，并通过显式选择完成修复。
+- 不在导入 JSON 后自动启动高资源或外部计费生成。
+- 不对生成图片或视频做风格视觉评分、视频抽帧、VLM 检查或自动拒绝结果。
 
 ## 4. 总体架构
 
@@ -255,6 +261,20 @@ metadata.style_prompt_en
 
 当前普通视频的 `. Style: ...` 追加方式在新系统中被统一编译器取代。
 
+H3 必须在一次编译中把权威风格块写入 H3 正式结构；禁止先完成 H3 再使用普通视频编译器包裹整段 H3 文本。模型可以组织业务内容，但不能决定是否保留项目风格。
+
+### 9.1 PromptStyleGate
+
+所有图片和视频任务在快照与 Provider 调用前执行同一轻量门禁：
+
+1. 项目风格 ID、版本和目标语言有效；
+2. 当前语言的完整权威风格块在最终正向提示词中出现且只出现一次；
+3. `keywords.negative` 的必选条款全部进入最终负向提示词；
+4. H3 使用同一 StyleSpec，并在 H3 正式结构内完成确定性注入；
+5. 编译结果、快照和即将提交的 Provider 请求逐字一致。
+
+门禁输出 `{ ok, styleId, styleVersion, language, checks[], errors[] }`，错误必须定位到缺失、重复或不一致的具体条款。`ok=true` 只证明提示词合同正确，不对生成画面的实际风格质量作保证。
+
 ## 10. ReferenceRegistry
 
 注册表项结构：
@@ -335,29 +355,41 @@ BLOCKED    禁止提交并给出解决方式
   },
   "parameters": {},
   "finalPrompt": "...",
-  "negativePrompt": "..."
+  "negativePrompt": "...",
+  "promptStyleValidation": {
+    "ok": true,
+    "checks": ["style_block_once", "negative_complete", "request_snapshot_exact"]
+  }
 }
 ```
 
 快照保存失败时不得调用 Provider。失败任务也保留完整快照。重试默认复制原快照；输入、风格或模型发生变化时创建新任务。
 
-## 13. 外部 AI JSON v2
+## 13. 外部 AI JSON V2.1
 
 ### 13.1 顶层协议
+
+本节只约束外部协作中的风格边界；完整机器合同以 [`external-ai-result-v2.1.schema.json`](./schemas/external-ai-result-v2.1.schema.json) 为准，规范化目标以 [`episode-package-v2.1.schema.json`](./schemas/episode-package-v2.1.schema.json) 为准。
 
 ```json
 {
   "schema": "local-mini-drama.external-ai-result",
-  "version": "2",
-  "package_id": "...",
-  "prompt_contract": "base_prompt",
+  "version": "2.1",
+  "package_id": "PKG-20260908-001",
+  "assets_digest": "0000000000000000000000000000000000000000000000000000000000000000",
   "episode": {},
-  "new_assets": {},
-  "storyboards": []
+  "new_assets": {
+    "characters": [],
+    "character_states": [],
+    "scene_assets": [],
+    "props": []
+  },
+  "story_scenes": [],
+  "shot_packages": []
 }
 ```
 
-`prompt_contract` 固定为 `base_prompt`。
+协议不再设置 `prompt_contract` 字段。`base_image_prompt/base_video_prompt` 的语义由 Schema 固定为不含项目 Look 的对象/镜头基础描述；最终文本只由本地编译器生成。
 
 ### 13.2 资产字段
 
@@ -371,7 +403,7 @@ BLOCKED    禁止提交并给出解决方式
 }
 ```
 
-分镜可以提供 `base_video_prompt`，但最终视频提示词仍由结构化分镜重新编译。
+`shot_packages[]` 可以提供 `base_video_prompt`，但最终视频提示词仍由结构化时段、引用和项目 Look 在本地重新编译。
 
 禁止字段包括：
 
@@ -406,12 +438,12 @@ compiled_prompt
 ### 13.4 导入流程
 
 ```text
-Schema v2 校验
-→ package_id/项目/集数绑定
-→ 资产快照和引用校验
+Schema 2.1 校验
+→ package_id/assets_digest/项目/目标集绑定
+→ 任务资产快照和引用校验
 → 禁止字段与风格污染检测
 → 只读预览
-→ 单事务创建资产、分镜、base prompt 和来源记录
+→ 单事务创建资产、场次、Shot Package、base prompt 和来源记录
 → 生成本地编译预览
 ```
 
@@ -482,7 +514,7 @@ Schema v2 校验
 
 ### 15.5 外部 JSON 导入预览
 
-显示协议、项目/集数绑定、只读项目风格、基础提示词、预计编译模式、资产引用和错误报告。用户不能在导入弹窗中修改风格。
+显示协议、项目/集数绑定、只读项目风格、基础提示词、预计编译模式、资产引用和错误报告。用户不能在导入弹窗中修改风格。导入目标只允许新建剧集或填充空白剧集；非空目标必须显示 `TARGET_NOT_BLANK` 并提供“选择空白剧集/创建新剧集/取消”，不提供合并或覆盖。
 
 ## 16. RunningHub 预览图本地化
 
@@ -531,6 +563,10 @@ FINAL_PROMPT_FORBIDDEN
 BASE_PROMPT_REQUIRED
 BASE_PROMPT_CONTAINS_STYLE_BLOCK
 PROMPT_COMPILATION_FAILED
+STYLE_PROMPT_MISSING
+STYLE_PROMPT_DUPLICATED
+STYLE_NEGATIVE_INCOMPLETE
+STYLE_SNAPSHOT_MISMATCH
 PROMPT_LANGUAGE_UNSUPPORTED
 REFERENCE_MISSING
 REFERENCE_ORDER_MISMATCH
@@ -548,7 +584,7 @@ SNAPSHOT_PERSIST_FAILED
 - 项目创建必须引用有效风格。
 - 自定义风格删除执行引用保护。
 - 外部 JSON 先只读预览，确认后单事务写入；失败完整回滚。
-- 生成顺序固定为“解析 → 编译 → 预检 → 快照 → 任务 → Provider”。
+- 生成顺序固定为“解析 → 编译 → PromptStyleGate → 能力预检 → 快照 → 请求逐字复核 → 任务 → Provider”。
 - Provider 已调用但没有快照的状态在新系统中不得发生。
 
 ## 19. 测试策略
@@ -573,11 +609,11 @@ SNAPSHOT_PERSIST_FAILED
 
 ### 19.3 图片 Golden Tests
 
-覆盖角色三视图、人设图、单图、人物状态、场景普通/多视图/全景/俯视、道具和分镜图。逐字验证风格块、语言、base prompt、负向词、版式和无重复注入。
+覆盖角色三视图、人设图、单图、人物状态、场景普通/多视图/全景/俯视、道具和分镜图。逐字验证风格块、语言、base prompt、负向词、版式和无重复注入；缺失、重复、负向遗漏和快照不一致必须在 Provider 调用前失败。
 
 ### 19.4 视频 Golden Tests
 
-覆盖普通视频、多参考图、首尾帧、Seedance/Omni、H3、三种语言模式、时间轴、对白/旁白/环境声、真人模式和能力失败。普通视频与 H3 必须使用相同 StyleSpec 和 ReferenceRegistry。
+覆盖普通视频、多参考图、首尾帧、Seedance/Omni、H3、三种语言模式、时间轴、对白/旁白/环境声、真人模式和能力失败。普通视频与 H3 必须使用相同 StyleSpec 和 ReferenceRegistry；H3 风格必须在正式结构内一次完成，不再测试或允许外层普通提示词包裹。
 
 ### 19.5 外部 JSON v2
 
@@ -588,6 +624,8 @@ SNAPSHOT_PERSIST_FAILED
 - 失败事务回滚；
 - 来源 JSON 和导入报告可回读；
 - 导入后生成使用项目风格。
+- 创建新剧集和填充空白剧集成功；非空剧集在预览与正式事务中均被 `TARGET_NOT_BLANK` 阻止；
+- 导入只写结构化草稿，不自动生成图片、视频或音频。
 
 ### 19.6 前端
 
@@ -629,7 +667,9 @@ SNAPSHOT_PERSIST_FAILED
 - 模型不支持真人、参考图、语言、时长或分辨率时，在调用前阻止并说明原因。
 - 外部 JSON v1 被拒绝，v2 不能携带任何风格覆盖或最终提示词。
 - 外部 JSON 导入不触发生成、不产生费用。
+- 外部 JSON 不能合并、覆盖或追加到非空剧集；完整导入入口位于项目详情/剧集列表，Studio 只查看来源。
 - 每个图片和视频任务都能回读实际提交的逐字最终提示词、风格版本、引用和模型参数。
+- PromptStyleGate 对缺失、重复、负向遗漏和请求/快照不一致进行阻断；系统不执行结果级风格视觉分析。
 - 后端测试、前端测试和前端构建全部通过。
 
 ## 22. 设计证据
