@@ -819,7 +819,7 @@ test('AI 配置原型包含默认解析、诊断、一次性配置和真实导�
   const html = fs.readFileSync(htmlPath, 'utf8');
   for (const marker of [
     'data-ai-config-import', 'data-ai-config-export', 'data-ai-provider-edit', 'data-ai-one-shot',
-    'data-ai-recovery', 'data-ai-capability-probe', '任务创建后固定快照', '能力声明（任务按钮按此决定）',
+    'data-ai-recovery', 'data-ai-capability-probe', '任务创建后固定本次配置', '能力声明（任务按钮按此决定）',
   ]) assert.match(html, new RegExp(marker));
   assert.doesNotMatch(html, /data-one-shot-channel/);
 });

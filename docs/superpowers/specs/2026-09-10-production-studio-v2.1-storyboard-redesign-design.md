@@ -111,3 +111,15 @@ STORYBOARD-020 将旧分镜原型重排为“当前镜头优先”的三栏工�
 1. **管理镜头引用成为真实操作**：`管理镜头引用` 从纯文字说明抽屉升级为管理抽屉——按出场角色 / 分镜场景 / 场景道具三组列出（名称、固定版本状态、移除按钮），每组提供从项目素材目录添加的入口（已在本镜的素材不重复出现）。本镜场景是结构性的，不可移除。任何增删即时重排中栏引用 chips、将 H3 草稿标记为 `引用已变化`（需重新编译），并同步刷新自动拼装的分镜图提示词（手工覆盖的不动）。新增模型命令 `getStoryboardReferenceManager` / `removeStoryboardShotReference` / `addStoryboardShotReference`。
 2. **素材预览展示版本与使用位置**：预览抽屉在类型/状态/槽位之外，新增版本信息（本集固定版本、素材库最新版本、是否可换绑）与 `出现时段`（该素材被哪些时段的提示词直接提及），并提供 `换绑到最新版`（仅当有更新时可用，换绑后 H3 与自动分镜图提示词标脏）与 `在素材库中查看` 两个操作。`getStoryboardAssetPreview` 返回值相应扩展 `version` / `latestVersion` / `canUpdateToLatest` / `usedInSegments` / `actions`。
 3. **H3 生成视频可选择候选数量**：生成确认抽屉新增 `生成数量`（1 / 2 / 3，默认 1）选择，费用按数量乘算、耗时按并行提交口径展示。提交时一次创建 N 个并行任务（`activeTasks` 数组，`activeTask` 保持指向第一个任务以兼容既有消费方）；沿用"成功只追加候选、不自动采用"规则，取消逐任务执行。新增模型命令 `getStoryboardVideoBatchQuote`（数量钳制在 1–3，越界抛错），`submitStoryboardVideoGeneration` 增加 `{ count }` 参数。
+
+## 9. 复用与改造策略（对照当前产品）
+
+> 详细对照见 `docs/vnext/v2.1-vs-current-gap-and-reuse-analysis.md`。
+
+**优先复用（当前产品已实现，本页直接消费）**：
+- 后端：`reference-slots` 引用槽位（分镜图/H3/视频三处共用）、H3 全链路（草稿编译/技能包/结构语义校验/门禁/TE-Speed 工作流）、`frame_prompts` 首尾帧与尾帧衔接、director 候选三表（候选组/选用/锚点/质量检查）、`image_generations` 多通道生图、风格系统（项目 style_id 唯一 + 编译审计）、`ai_service_configs`/`ai_model_map` 配置解析。
+- 前端：VideoGenerationPanel 的 H3 草稿区与候选逻辑（改造进新右栏）、风格选择器、多通道环境检测。
+
+**需新开发**：场次实体与时段表（`storyboard_segments`：时码/画面/对白/资产引用 + 拆分/合并/重排 API）、五区前端工作台、素材预览/引用管理抽屉、上一镜/下一镜与镜头时间线组件、图片提示词"自动拼装/手工覆盖"两态。
+
+**需改造**：`FilmCreate.vue` 分镜区拆出为独立路由页面；全能模式（universal_segment_text）与时段模型合并为单一时段结构（迁移矩阵 B-02 决策）；episode Gate reason 全部改为顺序解锁语言。
