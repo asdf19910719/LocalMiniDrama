@@ -149,6 +149,92 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  // ---- 剧本阶段（Task 3.1） ----
+  const { createScriptService } = require('./script/scriptService.js');
+  const script = createScriptService(db, { log });
+  r.get('/episodes/:episodeId/script', wrap((req, res) => {
+    response.success(res, script.getStageModel(req.params.episodeId));
+  }));
+  r.put('/episodes/:episodeId/script/draft', wrap((req, res) => {
+    response.success(res, script.saveDraft(req.params.episodeId, req.body || {}));
+  }));
+  r.post('/episodes/:episodeId/script/parse-scenes', wrap((req, res) => {
+    response.success(res, { scenes: script.parseScenes(req.params.episodeId) });
+  }));
+  r.post('/episodes/:episodeId/script/ai-candidate', wrap((req, res) => {
+    response.created(res, script.generateAiCandidate(req.params.episodeId, req.body || {}));
+  }));
+  r.post('/episodes/:episodeId/script/ai-candidate/apply', wrap((req, res) => {
+    response.success(res, script.applyAiCandidate(req.params.episodeId, req.body?.candidate || null));
+  }));
+  r.post('/episodes/:episodeId/script/confirm', wrap((req, res) => {
+    response.success(res, script.confirmScript(req.params.episodeId, req.body || {}));
+  }));
+  r.get('/episodes/:episodeId/script/history', wrap((req, res) => {
+    response.success(res, { items: script.listHistory(req.params.episodeId) });
+  }));
+  r.post('/episodes/:episodeId/script/history/:revision/copy', wrap((req, res) => {
+    response.created(res, script.copyFromHistory(req.params.episodeId, req.params.revision));
+  }));
+
+  // ---- 项目素材（Task 3.2） ----
+  const { createMockProvider } = require('./mockProvider.js');
+  const { createAssetQueryService } = require('./assets/assetQueryService.js');
+  const nodePath = require('node:path');
+  const assetStorage = nodePath.resolve(cfg.storage?.local_path || nodePath.join(process.cwd(), 'data', 'storage'));
+  const assets = createAssetQueryService(db, {
+    log,
+    mockProvider: createMockProvider({ db, log, storageDir: assetStorage }),
+  });
+  r.get('/projects/:id/assets', wrap((req, res) => {
+    response.success(res, assets.listAssets(req.params.id, req.query || {}));
+  }));
+  r.post('/projects/:id/assets', wrap((req, res) => {
+    response.created(res, assets.createAsset(req.params.id, req.body || {}));
+  }));
+  r.get('/assets/:type/:assetId', wrap((req, res) => {
+    response.success(res, assets.getDetail(req.params.type, req.params.assetId));
+  }));
+  r.post('/projects/:id/assets/generate-candidate', wrap((req, res) => {
+    assets.generateCandidate(req.params.id, req.body || {}).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/assets/use-candidate', wrap((req, res) => {
+    response.success(res, assets.useCandidate(req.body || {}));
+  }));
+  r.delete('/assets/:type/:assetId', wrap((req, res) => {
+    response.success(res, assets.deleteAsset({ type: req.params.type, assetId: req.params.assetId }));
+  }));
+  r.post('/assets/:type/:assetId/restore', wrap((req, res) => {
+    response.success(res, assets.restoreAsset({ type: req.params.type, assetId: req.params.assetId }));
+  }));
+
+  // ---- 本集设定（Task 3.3） ----
+  const { createEpisodeAssetsService } = require('./assets/episodeAssetsService.js');
+  const episodeAssets = createEpisodeAssetsService(db, { log });
+  r.get('/episodes/:episodeId/assets', wrap((req, res) => {
+    response.success(res, {
+      referenced: episodeAssets.getReferencedAssets(req.params.episodeId),
+      readiness: episodeAssets.resolveMediaReadiness(req.params.episodeId),
+    });
+  }));
+  r.put('/episodes/:episodeId/assets/selection', wrap((req, res) => {
+    response.success(res, episodeAssets.updateSelection(req.params.episodeId, req.body || {}));
+  }));
+  r.post('/episodes/:episodeId/enter-storyboard', wrap((req, res) => {
+    response.success(res, episodeAssets.enterStoryboard(req.params.episodeId));
+  }));
+  r.get('/episodes/:episodeId/media-guard', wrap((req, res) => {
+    response.success(res, episodeAssets.getMediaGenerationGuard({
+      episodeId: req.params.episodeId,
+      shotId: req.query.shot || null,
+    }));
+  }));
+
   // ---- 外部 AI 向导（Task 2.4） ----
   const { createExternalAiWizardService } = require('./wizard/externalAiWizardService.js');
   const wizard = createExternalAiWizardService(db, { log });
