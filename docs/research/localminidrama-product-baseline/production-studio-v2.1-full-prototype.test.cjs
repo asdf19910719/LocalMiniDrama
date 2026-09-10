@@ -423,13 +423,12 @@ test('单集制作包五步导入先保护目标和资产匹配再以零媒体�
   assert.deepEqual(commit.createdMediaTasks, []);
 });
 
-test('剧集管理只提供可恢复归档并保留外部来源审计入口', () => {
+test('剧集管理提供回收站式删除并保留外部来源审计入口', () => {
   const page = model.getProjectEpisodesModel('7', 'default');
   assert.deepEqual(page.managementActions.map(item => item.id), [
-    'rename', 'duplicate-draft', 'set-duration', 'reorder', 'archive', 'view-source',
+    'rename', 'duplicate-draft', 'reorder', 'delete', 'view-source',
   ]);
-  assert.equal(page.managementActions.find(item => item.id === 'archive').recoverable, true);
-  assert.equal(page.managementActions.some(item => item.id === 'physical-delete'), false);
+  assert.equal(page.managementActions.find(item => item.id === 'delete').recoverable, true);
   const imported = page.rows.find(item => item.episodeId === '1');
   assert.equal(imported.importSource.schemaVersion, '2.1');
   assert.ok(imported.importSource.sha256);

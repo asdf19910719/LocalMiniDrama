@@ -997,9 +997,8 @@
       managementActions: [
         { id: 'rename', label: '重命名' },
         { id: 'duplicate-draft', label: '复制为草稿' },
-        { id: 'set-duration', label: '设置目标时长' },
         { id: 'reorder', label: '调整集序' },
-        { id: 'archive', label: '归档剧集', recoverable: true },
+        { id: 'delete', label: '删除剧集', recoverable: true },
         { id: 'view-source', label: '查看导入来源' },
       ],
       scenario: scenarios[scenarioId],
