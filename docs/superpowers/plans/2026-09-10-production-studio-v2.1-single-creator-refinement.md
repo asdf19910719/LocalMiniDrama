@@ -1,6 +1,6 @@
 # Production Studio V2.1 单人创作者收敛改造 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将统一可交互原型收敛为单人完成一集成片的工作流：移除项目设置投影、统一剧集创建、简化设定管理，并让分镜页始终可进入而只在媒体生成前校验。
 
@@ -44,7 +44,7 @@
 - Consumes: existing `getProjectSectionNavigation(projectId)`, `getEpisodeStageNavigation(projectId, episodeId)` and episode row `stages` projection.
 - Produces: project navigation `['概览','剧集','项目素材']`; stage navigation `['剧本','设定','分镜','成片']`; each stage exposes `navigationAccess` separately from `mediaGenerationAccess`.
 
-- [ ] **Step 1: Write a failing test for default navigation and independent generation access**
+- [x] **Step 1: Write a failing test for default navigation and independent generation access**
 
 ```js
 test('单人创作者导航不再暴露项目设置，分镜可进入但未准备时不可生成媒体', () => {
@@ -62,13 +62,13 @@ test('单人创作者导航不再暴露项目设置，分镜可进入但未准�
 });
 ```
 
-- [ ] **Step 2: Run the focused test to prove the old projection fails**
+- [x] **Step 2: Run the focused test to prove the old projection fails**
 
 Run: `node --test --test-name-pattern "单人创作者导航不再暴露项目设置" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because the current tabs include `项目设置`, the asset label is `本集素材`, and unopened storyboard rows use `access: 'locked'`.
 
-- [ ] **Step 3: Change the state-model projection without deleting legacy facts**
+- [x] **Step 3: Change the state-model projection without deleting legacy facts**
 
 ```js
 function toStageAccess({ canNavigate = true, canGenerateMedia = false, reason = '' } = {}) {
@@ -82,13 +82,13 @@ function toStageAccess({ canNavigate = true, canGenerateMedia = false, reason = 
 
 Remove `project-bible` from `getProjectSectionNavigation()`, change the visible stage label to `设定`, and apply `toStageAccess()` to each episode stage. Preserve `status`, `label`, `reason`, import provenance, and nonempty-target protection. Keep `project-bible` only as a legacy route alias that redirects to `project-overview` with the same `projectId`.
 
-- [ ] **Step 4: Run focused navigation and episode-center tests**
+- [x] **Step 4: Run focused navigation and episode-center tests**
 
 Run: `node --test --test-name-pattern "单人创作者导航不再暴露项目设置|剧集中心|剧集阶段导航" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS, with no default navigation test depending on `项目设置`.
 
-- [ ] **Step 5: Inspect changes and commit only this task’s files**
+- [x] **Step 5: Inspect changes and commit only this task’s files**
 
 Run: `git diff -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -111,7 +111,7 @@ Run: `git commit -m "refactor: simplify prototype navigation projection"`
 - Consumes: project overview `sections.projectLook` and existing style preset data.
 - Produces: `projectProfile` Drawer model on overview; `projectStyleSelector` Modal model with `presets`, `mine`, `custom`; `project-bible` redirects rather than renders a page.
 
-- [ ] **Step 1: Write failing model and HTML tests for overview ownership**
+- [x] **Step 1: Write failing model and HTML tests for overview ownership**
 
 ```js
 test('项目概览承载项目资料和风格选择，不再渲染项目设置工作台', () => {
@@ -125,13 +125,13 @@ test('项目概览承载项目资料和风格选择，不再渲染项目设置�
 });
 ```
 
-- [ ] **Step 2: Run the focused test to verify the legacy model fails**
+- [x] **Step 2: Run the focused test to verify the legacy model fails**
 
 Run: `node --test --test-name-pattern "项目概览承载项目资料和风格选择" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because default duration/output preference and `project-bible` content still exist.
 
-- [ ] **Step 3: Add compact profile editing and a visual style-selection Modal**
+- [x] **Step 3: Add compact profile editing and a visual style-selection Modal**
 
 Add `projectProfile` to the overview model with name, cover, aspect ratio, genre and description only. Remove `defaultEpisodeDuration`, `outputPreference`, production object summary, and permanent external-AI context from default projection.
 
@@ -151,19 +151,19 @@ projectStyleSelector: {
 
 Render “编辑项目” as a compact overview Drawer. Render style selection as a central large Modal with a pinned current card and a visual grid for the selected tab. A custom style’s fields live in the same Modal. Applying a style changes only the simulated current-style pointer and shows that existing media was preserved.
 
-- [ ] **Step 4: Run overview and style regression tests**
+- [x] **Step 4: Run overview and style regression tests**
 
 Run: `node --test --test-name-pattern "项目概览|项目画面风格|项目设置" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS with overview-owned interactions and no visible settings workbench.
 
-- [ ] **Step 5: Manually inspect the overview**
+- [x] **Step 5: Manually inspect the overview**
 
 Run: `Start-Process 'http://127.0.0.1:8765/production-studio-v2.1-full-prototype.html#/project-overview?projectId=7'`
 
 Expected: Hero has “编辑项目”; style action opens a central selector; no project-settings tab appears.
 
-- [ ] **Step 6: Commit the isolated task changes**
+- [x] **Step 6: Commit the isolated task changes**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.html docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -182,7 +182,7 @@ Run: `git commit -m "feat: move prototype project controls to overview"`
 - Consumes: `getEpisodeTargetSelectorModel()` and existing five-step package-import validation model.
 - Produces: `getEpisodeCreationEntryModel(projectId)` with `newEpisode` and `importOrCollaborate`; `getExternalAiWizardModel(projectId, state)` with eight explicit steps; the same `package_id` and `assets_digest` validation in the return JSON path.
 
-- [ ] **Step 1: Write a failing test for unified script creation and persisted external collaboration**
+- [x] **Step 1: Write a failing test for unified script creation and persisted external collaboration**
 
 ```js
 test('新建剧集直达空白剧本，外部 AI 通过独立可恢复向导回流草稿', () => {
@@ -201,13 +201,13 @@ test('新建剧集直达空白剧本，外部 AI 通过独立可恢复向导回�
 });
 ```
 
-- [ ] **Step 2: Run the focused test to prove the old six-card source picker fails**
+- [x] **Step 2: Run the focused test to prove the old six-card source picker fails**
 
 Run: `node --test --test-name-pattern "新建剧集直达空白剧本" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because the current first screen contains “我有剧本 / 让 AI 帮我写 / 我有制作包” cards and no standalone wizard model.
 
-- [ ] **Step 3: Implement the two-level entry and eight-step external AI flow**
+- [x] **Step 3: Implement the two-level entry and eight-step external AI flow**
 
 ```js
 creationEntry: {
@@ -228,19 +228,19 @@ Keep the target selector and reject nonempty episode targets. Create an external
 
 Persist the waiting task in both episode list and task center. No handler may create image/video/audio tasks during package creation or JSON import.
 
-- [ ] **Step 4: Run creation, package-import and external-AI regression tests**
+- [x] **Step 4: Run creation, package-import and external-AI regression tests**
 
 Run: `node --test --test-name-pattern "剧集.*创建|外部 AI|制作包" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS; target protection and `package_id/assets_digest` matching remain covered.
 
-- [ ] **Step 5: Manually exercise the core branch in the prototype**
+- [x] **Step 5: Manually exercise the core branch in the prototype**
 
 Run: `Start-Process 'http://127.0.0.1:8765/production-studio-v2.1-full-prototype.html#/project-episodes?projectId=7'`
 
 Expected: “新建剧集” enters a blank script; “导入 / 协作 → 外部 AI 制作” reaches the wizard, can create a waiting task, and then reaches JSON import preview.
 
-- [ ] **Step 6: Commit the isolated task changes**
+- [x] **Step 6: Commit the isolated task changes**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.html docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -259,7 +259,7 @@ Run: `git commit -m "feat: streamline episode creation prototype"`
 - Consumes: existing scene-level draft, save state, approval check, AI candidate and revision data.
 - Produces: blank-start options `paste-import`, `ai-draft`, `manual-write`; contextual `aiAssistant`; `revisionHistory.presentation === 'drawer'`; main action labels “确认剧本 / 确认修改”.
 
-- [ ] **Step 1: Write a failing test for blank-script starts and contextual revision tools**
+- [x] **Step 1: Write a failing test for blank-script starts and contextual revision tools**
 
 ```js
 test('剧本草稿在确认前可结构化，AI和历史均按上下文渐进出现', () => {
@@ -275,13 +275,13 @@ test('剧本草稿在确认前可结构化，AI和历史均按上下文渐进出
 });
 ```
 
-- [ ] **Step 2: Run the focused test to verify the current UI fails**
+- [x] **Step 2: Run the focused test to verify the current UI fails**
 
 Run: `node --test --test-name-pattern "剧本草稿在确认前可结构化" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because the current page uses `本集素材`, exposes all AI actions together, and renders revisions as persistent panel content.
 
-- [ ] **Step 3: Update script model and render behavior**
+- [x] **Step 3: Update script model and render behavior**
 
 ```js
 emptyStart: {
@@ -298,13 +298,13 @@ Only add `emptyStart` for truly blank drafts. Pasting/importing opens a compact 
 
 Render the four stage labels in centered `studio-steps`. Move historical revisions behind “历史版本” Drawer. Show comparison only if `approvedRevisionId` exists and the current draft differs; use a Modal. Use “确认剧本” for initial approval and “确认修改” thereafter. Keep `checkScriptDraftForApproval()` and `approveScriptDraft()` as the only route to media generation availability.
 
-- [ ] **Step 4: Run script state and HTML regression tests**
+- [x] **Step 4: Run script state and HTML regression tests**
 
 Run: `node --test --test-name-pattern "剧本|版本比较|AI 改写|确认检查" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS; empty scripts stay unconfirmable, AI still applies through candidate comparison, and history recovery still creates a new draft.
 
-- [ ] **Step 5: Commit the isolated task changes**
+- [x] **Step 5: Commit the isolated task changes**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.html docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -323,7 +323,7 @@ Run: `git commit -m "feat: focus script prototype on draft creation"`
 - Consumes: canonical project asset records, asset states, candidates and episode selection references.
 - Produces: compact project card projection; `getEpisodeAssetsStageModel(projectId, episodeId)` with role/scene/prop tabs and referenced-only cards; shared `getAssetDetailDrawerModel(assetId, { projectId, episodeId })` with a small default surface and a generation Modal.
 
-- [ ] **Step 1: Write a failing test for simplified cards and episode-scoped settings**
+- [x] **Step 1: Write a failing test for simplified cards and episode-scoped settings**
 
 ```js
 test('项目素材卡只显示创作必要信息，本集设定只列当前剧本引用对象', () => {
@@ -344,13 +344,13 @@ test('项目素材卡只显示创作必要信息，本集设定只列当前剧�
 });
 ```
 
-- [ ] **Step 2: Run the focused test to verify the existing cards fail**
+- [x] **Step 2: Run the focused test to verify the existing cards fail**
 
 Run: `node --test --test-name-pattern "项目素材卡只显示创作必要信息" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because current cards expose candidate count, usage count, side-view warning, and the episode page only renders differences/blockers.
 
-- [ ] **Step 3: Project canonical assets into simple cards and episode-specific setting references**
+- [x] **Step 3: Project canonical assets into simple cards and episode-specific setting references**
 
 For project cards retain only `id`, `type`, `name`, `subtitle`, `description`, `imageTone`, `statePreviews`, `mediaState`, and a genuine blocking `issue`. Move candidate count, usage position, source, history and technical properties into Drawer sections. Do not treat absent side view as an issue.
 
@@ -358,7 +358,7 @@ For episode settings, derive cards from the current script’s required role/sce
 
 Build a shared Drawer with `summary`, `states`, `current-and-candidates`, `description`, `generation`, `episode-use`. Put hash, revisions, full prompt, provider fields, task timeline and broader usage under collapsed technical details. “生成新图” opens a central Modal; candidate selection changes the episode tuple only when opened from 本集设定.
 
-- [ ] **Step 4: Replace archive UI with protected user-facing deletion**
+- [x] **Step 4: Replace archive UI with protected user-facing deletion**
 
 Add test assertions that default asset menus contain `删除` and not `归档`. When an item is referenced, deletion must list impact and provide “保留并取消 / 选择替代素材 / 移入回收站”, never a hard-delete action.
 
@@ -366,13 +366,13 @@ Run: `node --test --test-name-pattern "项目素材|本集设定|人物音色|�
 
 Expected: PASS; candidate generation, upload, state selection and voice actions remain reachable through the simplified Drawer.
 
-- [ ] **Step 5: Manually inspect both asset surfaces**
+- [x] **Step 5: Manually inspect both asset surfaces**
 
 Run: `Start-Process 'http://127.0.0.1:8765/production-studio-v2.1-full-prototype.html#/project-assets?projectId=7'`
 
 Expected: card grid is scan-friendly and does not show low-value counts; `#/studio-assets?projectId=7&episodeId=1` shows only episode references in three tabs.
 
-- [ ] **Step 6: Commit the isolated task changes**
+- [x] **Step 6: Commit the isolated task changes**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.html docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -391,7 +391,7 @@ Run: `git commit -m "feat: simplify prototype asset setting workflow"`
 - Consumes: script approval state, episode asset selection and snapshot lifecycle.
 - Produces: `storyboardEntry` with `allowed: true` for all valid episode pages; `mediaReadiness` with `checking|ready|needs-attention|snapshot-failed|script-unapproved`; generation controls derive `disabled` and `recoveryTarget` from `mediaReadiness`.
 
-- [ ] **Step 1: Write a failing test for immediate navigation and guarded generation**
+- [x] **Step 1: Write a failing test for immediate navigation and guarded generation**
 
 ```js
 test('本集设定不完整时仍能进入分镜，但受影响镜头不能提交媒体任务', () => {
@@ -405,13 +405,13 @@ test('本集设定不完整时仍能进入分镜，但受影响镜头不能提�
 });
 ```
 
-- [ ] **Step 2: Run the focused test to prove old Gate behavior fails**
+- [x] **Step 2: Run the focused test to prove old Gate behavior fails**
 
 Run: `node --test --test-name-pattern "本集设定不完整时仍能进入分镜" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: FAIL because the old blocked state withholds the entering action or keeps storyboard locked.
 
-- [ ] **Step 3: Split navigation from preparation and wire visible state strips**
+- [x] **Step 3: Split navigation from preparation and wire visible state strips**
 
 ```js
 function getStoryboardMediaGenerationGuard(projectId, episodeId, shotId, readiness) {
@@ -436,19 +436,19 @@ On 本集设定, “进入分镜” calls `navigate('studio-storyboard', params)
 
 Disable only image/video generation controls requiring invalid references. Preserve storyboard viewing, scene and shot editing, imported structure inspection, and normal route navigation.
 
-- [ ] **Step 4: Run episode-setting and storyboard-generation regression tests**
+- [x] **Step 4: Run episode-setting and storyboard-generation regression tests**
 
 Run: `node --test --test-name-pattern "本集设定|本集素材|分镜.*生成|视频.*预检|阶段导航" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS; navigation is always allowed while invalid input, stale reference, loading snapshot and paid generation remain safely blocked.
 
-- [ ] **Step 5: Manually execute the blocked-to-storyboard path**
+- [x] **Step 5: Manually execute the blocked-to-storyboard path**
 
 Run: `Start-Process 'http://127.0.0.1:8765/production-studio-v2.1-full-prototype.html#/studio-assets?projectId=7&episodeId=1&scenario=blocked'`
 
 Expected: clicking “进入分镜” navigates immediately. The destination allows storyboard inspection but marks the affected image/video action disabled and offers one “去处理” recovery action.
 
-- [ ] **Step 6: Commit the isolated task changes**
+- [x] **Step 6: Commit the isolated task changes**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype-model.js docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.html docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -468,7 +468,7 @@ Run: `git commit -m "feat: allow storyboard navigation before asset readiness"`
 - Consumes: implementation behavior from Tasks 1–6 and the approved design spec.
 - Produces: all user-facing specifications agree on `概览 / 剧集 / 项目素材`, `剧本 / 设定 / 分镜 / 成片`, two-level episode creation, external AI wizard, and nonblocking storyboard entry.
 
-- [ ] **Step 1: Add failing consistency assertions to the prototype test file**
+- [x] **Step 1: Add failing consistency assertions to the prototype test file**
 
 ```js
 test('统一原型默认投影不再保留被替换的单人工作流入口', () => {
@@ -480,13 +480,13 @@ test('统一原型默认投影不再保留被替换的单人工作流入口', ()
 });
 ```
 
-- [ ] **Step 2: Run the consistency test and remove remaining default-view legacy copy**
+- [x] **Step 2: Run the consistency test and remove remaining default-view legacy copy**
 
 Run: `node --test --test-name-pattern "统一原型默认投影不再保留" docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
 Expected: PASS. Technical details and historical documentation may mention legacy internal names only where they are explicitly marked as migration context; default UI must not.
 
-- [ ] **Step 3: Update interaction specification and decision log with final contracts**
+- [x] **Step 3: Update interaction specification and decision log with final contracts**
 
 Record these exact decisions:
 
@@ -499,7 +499,7 @@ Record these exact decisions:
 
 Update each UI state table for default, empty, loading, processing, success, error and disabled states. Add exact storyboard media-generation behavior to the spec.
 
-- [ ] **Step 4: Run full prototype tests and static format checks**
+- [x] **Step 4: Run full prototype tests and static format checks**
 
 Run: `node --test docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -509,7 +509,7 @@ Run: `git diff --check`
 
 Expected: no trailing whitespace or malformed patch output.
 
-- [ ] **Step 5: Perform final prototype smoke walkthrough**
+- [x] **Step 5: Perform final prototype smoke walkthrough**
 
 Run: `Start-Process 'http://127.0.0.1:8765/production-studio-v2.1-full-prototype.html#/projects'`
 
@@ -522,7 +522,7 @@ Expected walkthrough:
 5. With a remaining missing reference, enter storyboard; verify generation is guarded but editing works.
 6. Start external AI task from 导入 / 协作; verify JSON result returns only a draft.
 
-- [ ] **Step 6: Commit documentation and regression evidence**
+- [x] **Step 6: Commit documentation and regression evidence**
 
 Run: `git add -- docs/research/localminidrama-product-baseline/production-studio-v2.1-interaction-ui-spec.md docs/superpowers/specs/2026-09-08-production-studio-v2.1-page-review-decision-log.md docs/vnext/production-studio-v2.1-design-review.md docs/superpowers/plans/2026-09-10-production-studio-v2.1-single-creator-refinement.md docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs`
 
@@ -542,3 +542,23 @@ Run: `git commit -m "docs: record single creator prototype refinement"`
 | State, copy, decision and test synchronization | Task 7 |
 
 The plan contains no incomplete placeholders. Function names introduced in the tasks are exercised by the same or a later task: `toStageAccess`, `getEpisodeCreationEntryModel`, `getExternalAiWizardModel`, `getAssetDetailDrawerModel`, and `getStoryboardMediaGenerationGuard`. Every behavior is covered by a failing-first test, focused regression command, and final full-suite smoke walkthrough.
+
+## Execution Evidence（2026-09-10 实施记录）
+
+- Task 1（提交 778177d）：导航固定 `概览/剧集/项目素材` 与 `剧本/设定/分镜/成片`；新增 `toStageAccess`，剧集行投影 `navigationAccess` 与 `mediaGenerationAccess` 分离；移除阶段筛选、空白/已归档筛选与归档行；行内菜单移除 `复制为草稿`；行时长改为剧本估算（`estimatedDuration`）；仅成片保留前置条件。
+- Task 2（提交 90bf991）：概览新增 `projectProfile`（名称/封面/题材/画幅/简介）与 `projectStyleSelector`（中央弹窗，预设/我的/自定义，应用范围提示）；移除默认单集时长、输出偏好、生产对象概览与常驻外部 AI 上下文；`getProjectBibleModel` 降级为重定向别名；新建项目表单与常规设置默认值移除时长。
+- Task 3：剧集创建收敛为 `getEpisodeCreationEntryModel`（新建剧集 + 导入/协作四项）；新增 `getExternalAiWizardModel` 八步独立 Page 向导（唯一可编辑字段 `task-note`；包创建后输出下载/复制动作；回流校验 `package_id/assets_digest` 等，仅写草稿）；空白剧集 resume 直达剧本页。
+- Task 4：剧本页 `emptyStart` 三起点、`aiAssistant` 渐进（空白突出 / 菜单 / 选中文本改写·扩写·缩写）、`revisionHistory` 收进抽屉、比较仅在已有确认版本且草稿有修改时出现、确认按钮为“确认剧本 / 确认修改”、四阶段导航居中。
+- Task 5：项目素材卡极简（移除候选数/使用集数/资料版本/侧视图警告）；`getEpisodeAssetsStageModel` 更名“本集设定”并新增角色/场景/道具引用卡片；`getAssetDetailDrawerModel` 六段共享抽屉（角色含音色，技术详情折叠）；批量动作与筛选移除归档。
+- Task 6：`storyboardEntry` 恒可进入 + 后台快照；`mediaReadiness` 五状态；`getStoryboardMediaGenerationGuard` 输出生成禁用与唯一恢复入口；本集设定页重写为紧凑状态条 + 引用卡片网格；分镜页顶部同源状态条。
+- Task 7：一致性测试“统一原型默认投影不再保留被替换的单人工作流入口”通过；交互规格补 2026-09-10 呈现口径；决策记录补第 11 节六项决定；评审报告补单人收敛复审补充。
+
+回归命令与结果：
+
+```
+node --test docs/research/localminidrama-product-baseline/production-studio-v2.1-full-prototype.test.cjs   # 全部通过 / 0 fail（174 项，含并行会话新增的场景参考图池用例）
+node --test docs/research/localminidrama-product-baseline/production-studio-v2.1-project-hub-prototype.test.cjs         docs/research/localminidrama-product-baseline/production-studio-v2.1-prototype.test.cjs         docs/research/localminidrama-product-baseline/production-studio-v2.1-schema-contract.test.cjs      # 全部通过 / 0 fail
+git diff --check                                                                                            # 无输出
+```
+
+与计划的偏差说明：Task 1 的测试因导航标签在早期提交已部分落地而无法“先失败”，故扩展断言至门禁移除、筛选收敛与管理菜单，使新契约部分先失败；Task 5/6 在同一模型函数上分两次提交（卡片化与投影在先，mediaReadiness/guard 在后），与计划任务边界一致。
