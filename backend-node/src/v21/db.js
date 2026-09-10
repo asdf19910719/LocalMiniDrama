@@ -111,11 +111,24 @@ function ensureStoryboardV21Columns(db) {
   }
 }
 
+/**
+ * V2.1 成片版本表补充 updated_at（幂等）。
+ */
+function ensureCutVersionsV21Columns(db) {
+  const existing = new Set(
+    db.prepare('PRAGMA table_info(episode_cut_versions)').all().map((r) => r.name)
+  );
+  if (!existing.has('updated_at')) {
+    db.exec('ALTER TABLE episode_cut_versions ADD COLUMN updated_at TEXT');
+  }
+}
+
 module.exports = {
   ensureV21Domain,
   getAppSchemaVersion,
   ensureAsyncTaskV21Columns,
   ensureExternalAiTaskV21Columns,
   ensureStoryboardV21Columns,
+  ensureCutVersionsV21Columns,
   V21_SCHEMA_VERSION,
 };

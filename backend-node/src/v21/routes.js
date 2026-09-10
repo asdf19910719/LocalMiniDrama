@@ -382,6 +382,39 @@ function createV21Router({ db, cfg, log }) {
     response.created(res, wizard.confirmImport(req.params.taskId, req.body?.resultJson || ""));
   }));
 
+  // ---- 成片阶段（Task 5.x） ----
+  const { createCutService } = require('./cut/cutService.js');
+  const cut = createCutService(db, {
+    log,
+    exportDir: nodePath.join(assetStorage, 'v21-exports'),
+  });
+  r.get('/episodes/:episodeId/cut', wrap((req, res) => {
+    const review = cut.getReviewModel(req.params.episodeId);
+    response.success(res, { ...review, versions: cut.listVersions(req.params.episodeId) });
+  }));
+  r.post('/cut/waivers', wrap((req, res) => {
+    response.created(res, cut.createWaiver(req.body || {}));
+  }));
+  r.post('/episodes/:episodeId/cut/compose', wrap((req, res) => {
+    cut.composeEpisode(req.params.episodeId, req.body || {}).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/episodes/:episodeId/cut/cancel', wrap((req, res) => {
+    response.success(res, cut.cancelCompose(req.params.episodeId));
+  }));
+  r.post('/episodes/:episodeId/cut/export', wrap((req, res) => {
+    cut.exportCut(req.params.episodeId, req.body || {}).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+
   return r;
 }
 
