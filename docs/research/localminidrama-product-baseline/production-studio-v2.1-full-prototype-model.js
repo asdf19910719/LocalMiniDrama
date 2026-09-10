@@ -25,9 +25,7 @@
       'default', 'empty', 'loading', 'load-failed', 'storage-offline', 'source-picker', 'blank-manual', 'ai-script', 'ai-script-partial', 'novel-split',
       'external-ai-context', 'external-ai-waiting', 'episode-json-import', 'source-video',
       'json-target-not-blank', 'asset-match-conflict', 'import-failed', 'import-succeeded', 'gate-blocked',
-      'filter-script', 'filter-assets', 'filter-storyboard', 'filter-cut',
       'filter-status-needs-attention', 'filter-status-in-progress', 'filter-status-completed',
-      'filter-status-blank', 'filter-status-archived',
     ]),
     route('project-assets', /^#\/projects\/([^/]+)\/assets$/, ['projectId'], p => `/projects/${p.projectId}/assets`, [
       'default', 'empty', 'loading', 'load-failed', 'detail-load-failed', 'candidate-compare',
@@ -429,7 +427,15 @@
     return {
       routeId: 'project-episodes',
       params: { projectId: String(projectId) },
-      scenarioId: `filter-${stage}`,
+      scenarioId: 'default',
+    };
+  }
+
+  function toStageAccess({ canNavigate = true, canGenerateMedia = false, reason = '' } = {}) {
+    return {
+      navigationAccess: canNavigate ? 'available' : 'unavailable',
+      mediaGenerationAccess: canGenerateMedia ? 'available' : 'blocked',
+      reason,
     };
   }
 
@@ -438,7 +444,7 @@
     const assetsReady = ['ready', 'ready_for_review', 'snapshot-succeeded'].includes(stages.assets?.status);
     return Object.fromEntries(Object.entries(stages).map(([stageId, stage]) => [stageId, {
       ...stage,
-      navigationAccess: 'available',
+      navigationAccess: stage.access === 'locked' ? 'unavailable' : 'available',
       mediaGenerationAccess: stageId === 'storyboard' && scriptApproved && assetsReady ? 'available' : 'blocked',
     }]));
   }
@@ -447,7 +453,7 @@
     const projectKey = String(projectId);
     const rows = [
       {
-        episodeId: '1', number: 1, title: '无人楼层', durationTarget: '92s', isBlank: false,
+        episodeId: '1', number: 1, title: '无人楼层', estimatedDuration: '约 92 秒', isBlank: false,
         workStatus: 'needs-attention', updatedAt: '2026-09-09T10:42:00+08:00',
         recentStage: 'storyboard', recentPosition: '场次 02 · 分镜 03', nextAction: '继续分镜 03', blockers: 1, hardBlockers: 0,
         resumeLocator: { sceneId: 'scene-02', shotId: 'shot-03', candidateId: 'video-03-b' },
@@ -459,33 +465,33 @@
           script: { status: 'approved', label: '已确认', access: 'available' },
           assets: { status: 'ready_for_review', label: '待处理 1', access: 'available', severity: 'soft', reason: '有 1 个音色建议，不阻断继续分镜' },
           storyboard: { status: 'in_progress', label: '7/10 镜', access: 'available' },
-          cut: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'storyboard', reason: '请先完成并选用全部必需镜头视频' },
+          cut: { status: 'not_started', label: '待分镜完成', access: 'locked', requiredStage: 'storyboard', reason: '请先完成并选用全部必需镜头视频' },
         },
       },
       {
-        episodeId: '2', number: 2, title: '门后的铃声', durationTarget: '85s', isBlank: false,
+        episodeId: '2', number: 2, title: '门后的铃声', estimatedDuration: '约 85 秒', isBlank: false,
         workStatus: 'in-progress', updatedAt: '2026-09-09T11:18:00+08:00',
         recentStage: 'script', recentPosition: '剧本草稿', nextAction: '继续剧本', blockers: 0, hardBlockers: 0,
         resumeLocator: { sceneId: 'scene-01', inspectorSection: 'script-outline' },
         importSource: null,
         stages: {
           script: { status: 'draft', label: '草稿', access: 'available' },
-          assets: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'script', reason: '请先确认剧本' },
-          storyboard: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'assets', reason: '请先确认剧本并完成设定检查' },
-          cut: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'storyboard', reason: '请先完成分镜与必需镜头视频' },
+          assets: { status: 'not_started', label: '待剧本确认', access: 'available', reason: '剧本确认后即可准备设定' },
+          storyboard: { status: 'not_started', label: '未开始', access: 'available', reason: '可查看结构；生成媒体前需确认剧本和设定' },
+          cut: { status: 'not_started', label: '待分镜完成', access: 'locked', requiredStage: 'storyboard', reason: '请先完成分镜与必需镜头视频' },
         },
       },
       {
-        episodeId: '3', number: 3, title: '未命名', durationTarget: null, isBlank: true,
+        episodeId: '3', number: 3, title: '未命名', estimatedDuration: null, isBlank: true,
         workStatus: 'blank', updatedAt: '2026-09-07T16:05:00+08:00',
-        recentStage: null, recentPosition: null, nextAction: '开始创建', blockers: 0, hardBlockers: 0,
+        recentStage: null, recentPosition: null, nextAction: '开始创作', blockers: 0, hardBlockers: 0,
         resumeLocator: null,
         importSource: null,
         stages: {
-          script: { status: 'not_started', label: '开始创建', access: 'source-picker' },
-          assets: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'script', reason: '请先创建并确认剧本' },
-          storyboard: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'assets', reason: '请先确认剧本并完成设定检查' },
-          cut: { status: 'not_started', label: '未解锁', access: 'locked', requiredStage: 'storyboard', reason: '请先完成分镜与必需镜头视频' },
+          script: { status: 'not_started', label: '开始创作', access: 'available' },
+          assets: { status: 'not_started', label: '待剧本确认', access: 'available', reason: '剧本确认后即可准备设定' },
+          storyboard: { status: 'not_started', label: '未开始', access: 'available', reason: '可查看结构；生成媒体前需确认剧本和设定' },
+          cut: { status: 'not_started', label: '待分镜完成', access: 'locked', requiredStage: 'storyboard', reason: '请先完成分镜与必需镜头视频' },
         },
       },
     ].map(item => ({ ...item, projectId: projectKey }));
@@ -499,7 +505,7 @@
       };
       const importedRow = {
         ...baseRow,
-        title: '208 房没有住客', durationTarget: '92s', isBlank: false,
+        title: '208 房没有住客', estimatedDuration: '约 92 秒', isBlank: false,
         workStatus: 'in-progress', updatedAt: '2026-09-09T14:31:00+08:00',
         recentStage: 'script', recentPosition: '导入的剧本草稿', nextAction: '检查剧本', highlighted: true,
         resumeLocator: { sceneId: 'scene-01', inspectorSection: 'import-summary' },
@@ -878,11 +884,6 @@
     if (action === 'stage') {
       if (!['script', 'assets', 'storyboard', 'cut'].includes(stage)) throw new Error(`Unknown episode stage: ${stage}`);
       const stageState = row.stages[stage];
-      if (stageState.access === 'source-picker') return {
-        routeId: 'project-episodes',
-        params: { projectId: projectKey, focusId: episodeKey },
-        scenarioId: 'source-picker',
-      };
       if (stageState.access === 'locked') return {
         blocked: true,
         routeId: 'project-episodes',
@@ -893,7 +894,7 @@
       return {
         routeId: `studio-${stage}`,
         params: { projectId: projectKey, episodeId: episodeKey },
-        scenarioId: stageState.access === 'blocked' ? 'blocked' : 'default',
+        scenarioId: 'default',
       };
     }
     throw new Error(`Unknown episode navigation action: ${action}`);
@@ -903,19 +904,6 @@
     const projectKey = String(projectId);
     const overview = getProjectOverviewModel(projectKey, 'default');
     const rows = projectKey === 'new-project' ? [] : buildProjectEpisodeRows(projectKey, { importSucceeded: scenarioId === 'import-succeeded' ? resultEpisodeId : false });
-    const archivedRows = projectKey === 'new-project' ? [] : [{
-      projectId: projectKey, episodeId: '7', number: 7, title: '废弃支线', durationTarget: '76s', isBlank: false,
-      workStatus: 'archived', updatedAt: '2026-08-29T09:15:00+08:00', recentStage: 'script',
-      recentPosition: '已归档', nextAction: '恢复剧集', blockers: 0, hardBlockers: 0, archived: true,
-      importSource: null,
-      stages: {
-        script: { status: 'draft', label: '草稿', access: 'locked', reason: '恢复剧集后继续' },
-        assets: { status: 'not_started', label: '未开始', access: 'locked', reason: '恢复剧集后继续' },
-        storyboard: { status: 'not_started', label: '未开始', access: 'locked', reason: '恢复剧集后继续' },
-        cut: { status: 'not_started', label: '未开始', access: 'locked', reason: '恢复剧集后继续' },
-      },
-    }];
-    const activeStageFilter = /^filter-(script|assets|storyboard|cut)$/.test(scenarioId) ? scenarioId.slice('filter-'.length) : null;
     const activeStatusFilter = scenarioId.startsWith('filter-status-') ? scenarioId.slice('filter-status-'.length) : null;
     const routeScenarios = buildPrototypeRouteRegistry().find(item => item.id === 'project-episodes').scenarios;
     if (!routeScenarios.includes(scenarioId)) throw new Error(`Unknown project episodes scenario: ${scenarioId}`);
@@ -939,20 +927,12 @@
       'import-failed': { kind: 'recoverable-error', title: '导入事务已回滚', detail: '项目没有部份写入；文件、目标和匹配决策均已保留。', actions: [{ id: 'retry-import', label: '按原预览重试' }, { id: 'choose-file', label: '重新选择文件' }] },
       'import-succeeded': { kind: 'success', title: `第 ${resultEpisodeId} 集已导入为结构化草稿`, detail: '没有自动确认阶段，也没有创建图片、视频或音频任务。', resultEpisodeId: String(resultEpisodeId), actions: [{ id: 'view-report', label: '查看报告', episodeId: String(resultEpisodeId) }, { id: 'open-script', label: '检查剧本', episodeId: String(resultEpisodeId) }, { id: 'open-assets', label: '检查设定', episodeId: String(resultEpisodeId) }, { id: 'open-storyboard', label: '查看导入分镜', episodeId: String(resultEpisodeId) }] },
       'gate-blocked': { kind: 'blocking', title: '该阶段尚未解锁', detail: '请先完成当前剧集的前置步骤；不会跳转到其他剧集。', actions: [{ id: 'open-required-stage', label: '处理前置步骤' }] },
-      'filter-script': null,
-      'filter-assets': null,
-      'filter-storyboard': null,
-      'filter-cut': null,
       'filter-status-needs-attention': null,
       'filter-status-in-progress': null,
       'filter-status-completed': null,
-      'filter-status-blank': null,
-      'filter-status-archived': null,
     };
     let visibleRows = scenarioId === 'empty' ? [] : rows;
-    if (activeStatusFilter === 'archived') visibleRows = archivedRows;
-    else if (activeStatusFilter) visibleRows = rows.filter(item => item.workStatus === activeStatusFilter);
-    else if (activeStageFilter && !activeStageFilter.startsWith('status-')) visibleRows = rows.filter(item => item.stages[activeStageFilter]?.status !== 'not_started');
+    if (activeStatusFilter) visibleRows = rows.filter(item => item.workStatus === activeStatusFilter);
     const emptyState = scenarioId === 'empty'
       ? { kind: 'project-empty', title: '还没有剧集', detail: '选择一种开始方式创建第 1 集。', action: { id: 'open-sources', label: '新建 / 导入剧集' } }
       : visibleRows.length === 0
@@ -976,30 +956,18 @@
         { id: 'needs-attention', label: '需要处理' },
         { id: 'in-progress', label: '制作中' },
         { id: 'completed', label: '已完成' },
-        { id: 'blank', label: '空白' },
-        { id: 'archived', label: '已归档' },
       ],
-      stageFilters: [
-        { id: 'all', label: '全部阶段' },
-        { id: 'script', label: '剧本' },
-        { id: 'assets', label: '设定' },
-        { id: 'storyboard', label: '分镜' },
-        { id: 'cut', label: '成片' },
-      ],
-      activeStageFilter,
       activeStatusFilter,
       rows,
-      archivedRows,
       visibleRows,
       emptyState,
       externalCollaborationTasks: scenarioId === 'external-ai-waiting' ? [getExternalAiCollaborationTaskModel(projectKey, 'waiting')] : [],
       creationSources: buildEpisodeCreationSources(),
       managementActions: [
         { id: 'rename', label: '重命名' },
-        { id: 'duplicate-draft', label: '复制为草稿' },
         { id: 'reorder', label: '调整集序' },
-        { id: 'delete', label: '删除剧集', recoverable: true },
         { id: 'view-source', label: '查看导入来源' },
+        { id: 'delete', label: '删除剧集', recoverable: true },
       ],
       scenario: scenarios[scenarioId],
     };

@@ -188,11 +188,6 @@ test('项目剧集中心统一展示剧集状态、阶段筛选和六类来源',
   assert.deepEqual(page.creationSources.map(item => item.id), [
     'blank', 'ai', 'novel', 'external_ai', 'episode_json', 'source_video',
   ]);
-  assert.equal(page.activeStageFilter, null);
-
-  const filtered = model.getProjectEpisodesModel('7', 'filter-storyboard');
-  assert.equal(filtered.activeStageFilter, 'storyboard');
-  assert.deepEqual(filtered.visibleRows.map(item => item.episodeId), ['1']);
 });
 
 test('默认项目导航隐藏项目设置并将分镜访问与媒体生成分离', () => {
@@ -214,6 +209,36 @@ test('默认项目导航隐藏项目设置并将分镜访问与媒体生成分�
   });
 });
 
+test('单人创作者导航不暴露项目设置，阶段可进入而媒体生成单独受控', () => {
+  assert.deepEqual(
+    model.getProjectSectionNavigation('7').map(item => item.label),
+    ['概览', '剧集', '项目素材'],
+  );
+  assert.deepEqual(
+    model.getEpisodeStageNavigation('7', '2').map(item => item.label),
+    ['剧本', '设定', '分镜', '成片'],
+  );
+  const page = model.getProjectEpisodesModel('7');
+  const row = page.rows.find(item => item.episodeId === '2');
+  assert.equal(row.stages.storyboard.navigationAccess, 'available');
+  assert.equal(row.stages.storyboard.mediaGenerationAccess, 'blocked');
+  assert.equal(row.stages.storyboard.access, 'available');
+  assert.equal(row.stages.assets.access, 'available');
+  assert.equal(row.stages.cut.navigationAccess, 'unavailable');
+
+  assert.equal(page.stageFilters, undefined);
+  assert.equal(page.archivedRows, undefined);
+  assert.deepEqual(page.statusFilters.map(item => item.id), [
+    'all', 'needs-attention', 'in-progress', 'completed',
+  ]);
+  assert.deepEqual(page.managementActions.map(item => item.id), [
+    'rename', 'reorder', 'view-source', 'delete',
+  ]);
+  assert.equal(page.managementActions.find(item => item.id === 'delete').recoverable, true);
+  assert.equal('durationTarget' in row, false);
+  assert.equal(row.estimatedDuration, '约 85 秒');
+});
+
 test('剧集中心使用紧凑头、工作状态筛选和真实最近工作时间', () => {
   const page = model.getProjectEpisodesModel('7', 'default');
   assert.equal(page.header.mode, 'compact');
@@ -224,7 +249,7 @@ test('剧集中心使用紧凑头、工作状态筛选和真实最近工作时�
     completed: 2,
   });
   assert.deepEqual(page.statusFilters.map(item => item.id), [
-    'all', 'needs-attention', 'in-progress', 'completed', 'blank', 'archived',
+    'all', 'needs-attention', 'in-progress', 'completed',
   ]);
   assert.equal(page.search.debounceMs, 280);
   assert.equal(page.defaultSort, 'number-asc');
@@ -236,8 +261,6 @@ test('剧集中心使用紧凑头、工作状态筛选和真实最近工作时�
 
   const needsAttention = model.getProjectEpisodesModel('7', 'filter-status-needs-attention');
   assert.deepEqual(needsAttention.visibleRows.map(item => item.episodeId), ['1']);
-  const blank = model.getProjectEpisodesModel('7', 'filter-status-blank');
-  assert.deepEqual(blank.visibleRows.map(item => item.episodeId), ['3']);
 
   const empty = model.getProjectEpisodesModel('7', 'empty');
   assert.deepEqual(empty.stats, { total: 0, active: 0, needsAttention: 0, completed: 0 });
@@ -245,25 +268,29 @@ test('剧集中心使用紧凑头、工作状态筛选和真实最近工作时�
   const filterEmpty = model.getProjectEpisodesModel('7', 'filter-status-completed');
   assert.equal(filterEmpty.emptyState.kind, 'filter-empty');
   assert.equal(filterEmpty.emptyState.action.id, 'clear-filters');
-  const archived = model.getProjectEpisodesModel('7', 'filter-status-archived');
-  assert.equal(archived.visibleRows.length, 1);
-  assert.equal(Object.values(archived.visibleRows[0].stages).every(stage => stage.access === 'locked'), true);
 });
 
-test('剧集阶段导航执行 Gate 且继续工作恢复精确对象位置', () => {
+test('分镜阶段始终可进入，仅成片保留前置条件', () => {
   const page = model.getProjectEpisodesModel('7', 'default');
   const episode2 = page.rows.find(item => item.episodeId === '2');
-  assert.equal(episode2.stages.storyboard.access, 'locked');
-  assert.match(episode2.stages.storyboard.reason, /确认剧本/);
+  assert.equal(episode2.stages.storyboard.access, 'available');
 
   assert.deepEqual(model.getEpisodeNavigationTarget({
     projectId: '7', episodeId: '2', action: 'stage', stage: 'storyboard',
   }), {
+    routeId: 'studio-storyboard',
+    params: { projectId: '7', episodeId: '2' },
+    scenarioId: 'default',
+  });
+
+  assert.deepEqual(model.getEpisodeNavigationTarget({
+    projectId: '7', episodeId: '2', action: 'stage', stage: 'cut',
+  }), {
     blocked: true,
     routeId: 'project-episodes',
-    params: { projectId: '7', focusId: '2', workspaceTab: 'assets' },
+    params: { projectId: '7', focusId: '2', workspaceTab: 'storyboard' },
     scenarioId: 'gate-blocked',
-    reason: '请先确认剧本并完成设定检查',
+    reason: '请先完成分镜与必需镜头视频',
   });
 
   assert.deepEqual(model.getEpisodeNavigationTarget({
@@ -426,7 +453,7 @@ test('单集制作包五步导入先保护目标和资产匹配再以零媒体�
 test('剧集管理提供回收站式删除并保留外部来源审计入口', () => {
   const page = model.getProjectEpisodesModel('7', 'default');
   assert.deepEqual(page.managementActions.map(item => item.id), [
-    'rename', 'duplicate-draft', 'reorder', 'delete', 'view-source',
+    'rename', 'reorder', 'view-source', 'delete',
   ]);
   assert.equal(page.managementActions.find(item => item.id === 'delete').recoverable, true);
   const imported = page.rows.find(item => item.episodeId === '1');
@@ -1881,23 +1908,15 @@ test('项目概览首屏并列下一步与待处理且项目操作首层使用�
   ]);
 });
 
-test('项目阶段汇总进入带阶段筛选的剧集页且不绑定任意剧集', () => {
+test('项目阶段汇总进入剧集页且不绑定任意剧集', () => {
   assert.equal(typeof model.getProjectStageNavigationTarget, 'function');
-  const expected = {
-    script: 'filter-script',
-    assets: 'filter-assets',
-    storyboard: 'filter-storyboard',
-    cut: 'filter-cut',
-  };
-  for (const [stage, scenarioId] of Object.entries(expected)) {
-    const target = model.getProjectStageNavigationTarget({ projectId: 7, stage });
-    assert.deepEqual(target, {
-      routeId: 'project-episodes',
-      params: { projectId: '7' },
-      scenarioId,
-    });
-    assert.equal('episodeId' in target.params, false);
-  }
+  const target = model.getProjectStageNavigationTarget({ projectId: 7, stage: 'storyboard' });
+  assert.deepEqual(target, {
+    routeId: 'project-episodes',
+    params: { projectId: '7' },
+    scenarioId: 'default',
+  });
+  assert.equal('episodeId' in target.params, false);
   assert.throws(
     () => model.getProjectStageNavigationTarget({ projectId: 7, stage: 'unknown' }),
     /Unknown project stage/,
@@ -2758,6 +2777,7 @@ test('个人创作者语言回归：页面不再出现工程与门禁术语', ()
   assert.doesNotMatch(html, /当前 Recipe/);
   assert.doesNotMatch(html, /自由创作实验室/);
   assert.doesNotMatch(html, /给外部 AI 的项目说明已标记/);
-  assert.match(html, /各阶段按顺序解锁/);
+  assert.doesNotMatch(html, /各阶段按顺序解锁/);
+  assert.match(html, /四个阶段随时可以进入查看/);
   assert.match(html, /当前生成方式/);
 });
