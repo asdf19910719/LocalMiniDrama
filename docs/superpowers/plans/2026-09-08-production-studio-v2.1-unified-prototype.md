@@ -153,9 +153,9 @@ The exported wrapper must support both browser globals and `require()`:
 }(typeof globalThis !== 'undefined' ? globalThis : this, function createApi() {
   const routes = [
     { id: 'projects', pattern: /^#\/projects$/, params: [], path: () => '/projects', scenarios: ['default', 'empty', 'loading', 'offline', 'no-results', 'task-paused'] },
-    { id: 'project-new', pattern: /^#\/projects\/new$/, params: [], path: () => '/projects/new', scenarios: ['default', 'source-picker', 'shell-created'] },
+    { id: 'project-new', pattern: /^#\/projects\/new$/, params: [], path: () => '/projects/new', scenarios: ['default', 'source-selected', 'validation-error', 'creating', 'name-conflict', 'path-unavailable', 'insufficient-space', 'source-cancelled', 'create-failed', 'success'] },
     { id: 'project-import', pattern: /^#\/projects\/import$/, params: [], path: () => '/projects/import', scenarios: ['default', 'unsupported-archive', 'failed', 'succeeded'] },
-    { id: 'project-overview', pattern: /^#\/projects\/([^/]+)\/overview$/, params: ['projectId'], path: p => `/projects/${p.projectId}/overview`, scenarios: ['default', 'blocked', 'loading'] },
+    { id: 'project-overview', pattern: /^#\/projects\/([^/]+)\/overview$/, params: ['projectId'], path: p => `/projects/${p.projectId}/overview`, scenarios: ['default', 'needs-attention', 'all-complete', 'loading', 'load-failed', 'storage-offline', 'missing'] },
     { id: 'project-bible', pattern: /^#\/projects\/([^/]+)\/bible$/, params: ['projectId'], path: p => `/projects/${p.projectId}/bible`, scenarios: ['default', 'empty', 'conflict'] },
     { id: 'project-episodes', pattern: /^#\/projects\/([^/]+)\/episodes$/, params: ['projectId'], path: p => `/projects/${p.projectId}/episodes`, scenarios: ['default', 'empty', 'source-picker', 'blank-manual', 'ai-script', 'novel-split', 'external-ai-context', 'external-ai-waiting', 'episode-json-import', 'source-video', 'json-target-not-blank', 'asset-match-conflict', 'import-failed', 'import-succeeded'] },
     { id: 'project-assets', pattern: /^#\/projects\/([^/]+)\/assets$/, params: ['projectId'], path: p => `/projects/${p.projectId}/assets`, scenarios: ['default', 'empty', 'library-update', 'publish-blocked'] },
