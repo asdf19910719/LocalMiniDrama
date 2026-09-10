@@ -3802,6 +3802,56 @@
     return syncStoryboardDerived(next, { reselectShot: false });
   }
 
+  const storyboardSceneImagePools = {
+    '208 客房走廊 · 常规夜景 v2': [
+      { id: 'corridor-main', label: '主图', type: '主图' },
+      { id: 'corridor-top', label: '俯视图', type: '俯视图' },
+      { id: 'corridor-pano', label: '全景图', type: '全景图' },
+      { id: 'corridor-rain', label: '雨夜参考', type: '状态图', status: '雨夜' },
+    ],
+    '13 层门卡 · 刷卡中 v1': [
+      { id: 'keycard-main', label: '主图', type: '主图' },
+      { id: 'keycard-swipe', label: '刷卡中特写', type: '状态图' },
+    ],
+  };
+
+  function getStoryboardSceneReferencePool(page, referenceIndex) {
+    const chip = (page.segmentEditor.referenceChips || [])[Number(referenceIndex) - 1];
+    if (!chip) throw new Error(`Unknown storyboard reference: ${referenceIndex}`);
+    const pool = storyboardSceneImagePools[chip.label] || [];
+    const selected = (page.sceneImageSelections || {})[chip.label] || pool.map(item => item.id);
+    return {
+      sceneLabel: chip.label,
+      typeLabel: '分镜场景',
+      usage: `@图片${chip.index}`,
+      images: pool.map(item => ({ ...item, checked: selected.includes(item.id) })),
+    };
+  }
+
+  function toggleStoryboardSceneImage(page, referenceIndex, imageId) {
+    const next = cloneStoryboardPage(page);
+    next.sceneImageSelections = next.sceneImageSelections || {};
+    const chip = (next.segmentEditor.referenceChips || [])[Number(referenceIndex) - 1];
+    if (!chip) throw new Error(`Unknown storyboard reference: ${referenceIndex}`);
+    const pool = storyboardSceneImagePools[chip.label] || [];
+    if (!pool.some(item => item.id === imageId)) throw new Error(`Unknown scene image: ${imageId}`);
+    const current = next.sceneImageSelections[chip.label] || pool.map(item => item.id);
+    next.sceneImageSelections[chip.label] = current.includes(imageId)
+      ? current.filter(id => id !== imageId)
+      : [...current, imageId];
+    return syncStoryboardDerived(next);
+  }
+
+  function toggleStoryboardSegmentImageRef(page, segmentId) {
+    const next = cloneStoryboardPage(page);
+    const segment = (next.selectedShot.segments || []).find(item => item.id === segmentId);
+    if (!segment) throw new Error(`Unknown storyboard segment: ${segmentId}`);
+    segment.refsStoryboardImage = segment.refsStoryboardImage === false;
+    next.selectedShot.autoSave = 'dirty';
+    syncSelectedShotIntoDetails(next);
+    return syncStoryboardDerived(next);
+  }
+
   function getStoryboardAssetPreview(page, referenceIndex) {
     const chips = page.segmentEditor.referenceChips || [];
     const chip = chips[Number(referenceIndex) - 1];
@@ -4772,6 +4822,9 @@
     resetStoryboardImagePrompt,
     uploadStoryboardImage,
     getStoryboardAssetPreview,
+    getStoryboardSceneReferencePool,
+    toggleStoryboardSceneImage,
+    toggleStoryboardSegmentImageRef,
     getStoryboardReferenceManager,
     addStoryboardShotReference,
     removeStoryboardShotReference,

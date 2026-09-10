@@ -2816,6 +2816,18 @@ test('动态评审缺陷回归：素材卡片可点击、画布场景齐全、�
   }
 });
 
+test('统一原型默认投影不再保留被替换的单人工作流入口', () => {
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  assert.equal(model.getProjectSectionNavigation('7').some(item => item.label === '项目设置'), false);
+  assert.equal(model.getProjectEpisodesModel('7').managementActions.some(item => item.id === 'set-duration'), false);
+  assert.equal(model.getProjectEpisodesModel('7').managementActions.some(item => item.id === 'duplicate-draft'), false);
+  assert.equal(model.getProjectEpisodesModel('7').statusFilters.some(item => item.id === 'archived'), false);
+  assert.doesNotMatch(html, /进入分镜前检查/);
+  assert.doesNotMatch(html, /归档剧集/);
+  assert.match(html, /本集设定/);
+  assert.match(html, /导入 \/ 协作/);
+});
+
 test('个人创作者语言回归：页面不再出现工程与门禁术语', () => {
   const html = fs.readFileSync(htmlPath, 'utf8');
   assert.doesNotMatch(html, /遵循当前剧集 Gate/);
@@ -2825,4 +2837,27 @@ test('个人创作者语言回归：页面不再出现工程与门禁术语', ()
   assert.doesNotMatch(html, /各阶段按顺序解锁/);
   assert.match(html, /四个阶段随时可以进入查看/);
   assert.match(html, /当前生成方式/);
+});
+
+test('场景参考图池支持逐张勾选且时段可引用分镜图', () => {
+  const page = model.getStoryboardStageModel('7', '1', 'default');
+  const pool = model.getStoryboardSceneReferencePool(page, 3);
+  assert.equal(pool.typeLabel, '分镜场景');
+  assert.equal(pool.usage, '@图片3');
+  assert.ok(pool.images.length >= 3);
+  assert.ok(pool.images.every(item => 'checked' in item));
+
+  const firstId = pool.images[0].id;
+  const toggled = model.toggleStoryboardSceneImage(page, 3, firstId);
+  const pool2 = model.getStoryboardSceneReferencePool(toggled, 3);
+  assert.equal(pool2.images.find(item => item.id === firstId).checked, false);
+  const restored = model.toggleStoryboardSceneImage(toggled, 3, firstId);
+  assert.equal(model.getStoryboardSceneReferencePool(restored, 3).images.find(item => item.id === firstId).checked, true);
+  assert.throws(() => model.toggleStoryboardSceneImage(page, 3, 'unknown-image'), /Unknown scene image/);
+
+  const segToggled = model.toggleStoryboardSegmentImageRef(page, 'segment-a');
+  const segment = segToggled.selectedShot.segments.find(item => item.id === 'segment-a');
+  assert.equal(segment.refsStoryboardImage, false);
+  const segRestored = model.toggleStoryboardSegmentImageRef(segToggled, 'segment-a');
+  assert.equal(segRestored.selectedShot.segments.find(item => item.id === 'segment-a').refsStoryboardImage, true);
 });
