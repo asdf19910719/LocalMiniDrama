@@ -2699,24 +2699,50 @@
     };
   }
 
+  function resolveEpisodeMediaReadiness(page) {
+    const scriptApproved = !['2', '3'].includes(String(page.episodeId));
+    const blockers = page.gate.blockers;
+    if (!scriptApproved) return 'script-unapproved';
+    if (page.scenarioId === 'snapshot-failed') return 'snapshot-failed';
+    if (page.scenarioId === 'checking' || page.scenarioId === 'loading' || page.scenarioId === 'snapshot-saving') return 'checking';
+    if (blockers.length > 0) return 'needs-attention';
+    return 'ready';
+  }
+
   function syncEpisodeAssetsDerived(page) {
     const next = JSON.parse(JSON.stringify(page));
     const items = next.requiredGroups.flatMap(group => group.items);
     for (const group of next.requiredGroups) {
       group.ready = group.items.filter(item => !['阻塞','文件离线','不匹配'].includes(item.status)).length;
     }
-    const prepared = items.filter(item => !['阻塞','文件离线','不匹配'].includes(item.status)).length;
-    next.inheritedSummary = { ...next.inheritedSummary, ready:prepared, total:items.length };
-    next.readinessSummary = { prepared, required:items.length, mandatory:next.gate.blockers.length, optionalUpdates:next.gate.warnings.length };
-    next.gate.canEnterStoryboard = next.gate.blockers.length === 0;
-    next.batchPreflight = { ...next.batchPreflight, checked:items.length, ready:prepared, blocking:next.gate.blockers.length, warnings:next.gate.warnings.length };
-    next.preflightPanel = { ...next.preflightPanel, readyLabel:next.gate.canEnterStoryboard?'设定已准备好':'' };
-    next.primaryAction = next.gate.canEnterStoryboard
-      ? {id:'enter-storyboard',label:'进入分镜',enabled:true}
-      : {id:'resolve-blocker',label:`还需处理 ${next.gate.blockers.length} 项`,enabled:true,focusId:next.gate.blockers[0]?.id};
+    const status = resolveEpisodeMediaReadiness(next);
+    const pendingCount = next.gate.blockers.length + next.gate.warnings.length;
+    next.mediaReadiness = {
+      status,
+      checkedAt: '刚刚',
+      blockers: next.gate.blockers,
+      warnings: next.gate.warnings,
+      scriptApproved: status !== 'script-unapproved',
+      summary: status === 'script-unapproved'
+        ? '确认剧本后才能生成本集媒体'
+        : status === 'checking'
+          ? '正在准备素材…'
+          : status === 'snapshot-failed'
+            ? '素材准备未完成：重试'
+            : next.gate.blockers.length > 0
+              ? `有 ${pendingCount} 项可稍后处理`
+              : '本集设定已准备好',
+    };
+    next.storyboardEntry = {
+      allowed: true,
+      target: { routeId: 'studio-storyboard', params: { projectId: next.projectId, episodeId: next.episodeId }, scenarioId: 'default' },
+      savesSnapshotOnClick: true,
+      pendingCount,
+    };
+    next.primaryAction = { id:'enter-storyboard', label:'进入分镜', enabled:true, allowed:true, readiness:status, pendingCount };
     const storyboard = next.stageNavigation.find(item => item.id === 'storyboard');
-    storyboard.state = next.gate.canEnterStoryboard ? 'available' : 'blocked';
-    storyboard.reason = next.gate.canEnterStoryboard ? '' : next.gate.blockers[0]?.label;
+    storyboard.state = 'available';
+    storyboard.reason = '';
     return next;
   }
 
@@ -2740,7 +2766,6 @@
       item.status = '已就绪';
       item.selectionLabel = decision.type === 'use-model-default' ? '本集不再要求人物音色' : '已选择本集音色';
       next.audioPolicy = decision.type === 'use-model-default' ? '模型默认声音' : '人物参考音色';
-      next.preflightPanel.audioPolicy = decision.type === 'use-model-default' ? '模型默认声音' : '人物参考音色 · 已选择';
       next.reviewItems = next.reviewItems.filter(review => review.targetId !== item.id);
       next.gate.blockers = next.gate.blockers.filter(blocker => blocker.id !== item.id);
     } else {
@@ -2817,13 +2842,10 @@
       ],
       cards:[],
       requiredGroups,
-      inheritedSummary:{ready:0,total:7,collapsed:true},
       reviewItems,
-      fullInheritedListEntry:{label:'查看全部继承素材',secondary:true,inlineMax:12,count:7,presentation:'inline'},
       snapshot:{id:'asset-snapshot-draft-13',immutable:true,autoRefreshFromProject:false,entryAction:'enter-storyboard',hiddenFromDefaultCopy:true,captures:['asset/version id','media hash','voice revision','Look revision','selection reason'],transactional:true},
-      gate:{canEnterStoryboard:false,blockers,warnings:[{id:'linxia-version',label:'林夏有项目新图可选'}]},
-      batchPreflight:{checked:7,ready:0,blocking:blockers.length,warnings:1,automaticTriggers:['page-enter','selection-change','project-material-change','enter-storyboard'],manualRetryOnly:true},
-      preflightPanel:{title:'进入分镜前检查',audioPolicy:readySelection?'人物参考音色 · 已选择':'人物参考音色 · 缺少酒店经理音色',checkedAt:'刚刚',readyLabel:''},
+      gate:{blockers,warnings:[{id:'linxia-version',label:'林夏有项目新图可选'}]},
+      audioPolicy:readySelection?'人物参考音色 · 已选择':'人物参考音色 · 缺少酒店经理音色',
       missingMaterialsAction:{id:'prepare-missing',label:'准备缺失素材'},
       missingMaterialsPreflight:{items:[{id:'manager-voice',label:'酒店经理音色',channel:'MiniMax TTS',model:'speech-02-hd',reference:'无',count:1,execution:'远端'}],taskCount:1,estimatedCost:'¥0.08',estimatedTime:'约 20–40 秒'},
       externalPackage:scenarioId.startsWith('external-package')?{
@@ -2850,10 +2872,9 @@
     } else if (scenarioId === 'snapshot-succeeded') {
       synced.primaryAction={id:'open-storyboard',label:'打开分镜',enabled:true,target:{routeId:'studio-storyboard',params:{projectId:String(projectId),episodeId:String(episodeId)},scenarioId:'default'}};
     } else if (scenarioId === 'check-failed') {
+      synced.mediaReadiness.status='checking';
+      synced.mediaReadiness.summary='检查没有完成，可再次检查';
       synced.primaryAction={id:'retry-check',label:'再次检查',enabled:true};
-      synced.gate.canEnterStoryboard=false;
-    } else if (scenarioId === 'snapshot-failed') {
-      synced.primaryAction={id:'retry-snapshot',label:'重试准备分镜',enabled:true};
     } else if (scenarioId === 'media-offline') {
       synced.primaryAction={id:'relocate-media',label:'重新定位离线素材',enabled:true,focusId:'corridor-night'};
     } else if (scenarioId === 'external-package-mismatch') {
@@ -4124,6 +4145,17 @@
     };
   }
 
+  function getStoryboardMediaGenerationGuard(projectId, episodeId, shotId, readiness) {
+    const enabled = readiness === 'ready';
+    return {
+      enabled,
+      recoveryTarget: enabled ? null : {
+        routeId: 'studio-assets',
+        params: { projectId: String(projectId), episodeId: String(episodeId), shotId: String(shotId) },
+      },
+    };
+  }
+
   function getStoryboardStageModel(projectId, episodeId, scenarioId = 'default') {
     const scenarios = {
       default: null,
@@ -4305,6 +4337,12 @@
       finalCutActions: [],
     };
     page.pageState = scenarioId === 'loading' ? 'loading' : scenarioId === 'empty' ? 'empty' : 'ready';
+    const readiness = scenarioId === 'checking' ? 'checking' : ['2', '3'].includes(String(episodeId)) ? 'script-unapproved' : 'needs-attention';
+    page.mediaReadiness = {
+      status: readiness,
+      text: readiness === 'checking' ? '正在准备素材…' : readiness === 'script-unapproved' ? '确认剧本后才能生成本集媒体' : '有 2 项可稍后处理',
+      recovery: readiness === 'ready' ? null : { id: 'resolve-episode-assets', label: '去处理', target: { routeId: 'studio-assets', params: { projectId: String(projectId), episodeId: String(episodeId) } } },
+    };
     page.recoveryActions = scenarioId === 'save-failed' ? scenarios['save-failed'].actions : [];
     page.conflictResolution = scenarioId === 'conflict' ? { actions: ['compare', 'merge-as-new-revision', 'reload-latest'], neverOverwriteEitherSide: true } : null;
     page.emptyState = scenarioId === 'empty' ? { primaryAction: { id: 'create-from-script', label: '从已确认剧本创建分镜' }, secondaryAction: { id: 'import-storyboard', label: '导入分镜结构' } } : null;
@@ -4658,6 +4696,7 @@
     getEpisodeSourceAuditModel,
     getEpisodeNavigationTarget,
     getEpisodeCreationEntryModel,
+    getStoryboardMediaGenerationGuard,
     getExternalAiWizardModel,
     getEpisodeCreationFlow,
     getEpisodeCreationSourceGroups,

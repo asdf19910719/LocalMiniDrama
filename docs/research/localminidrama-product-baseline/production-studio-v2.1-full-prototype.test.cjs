@@ -735,9 +735,35 @@ test('设定只选择本集生产版本并在进入分镜时固化快照', () =>
   assert.equal(page.snapshot.entryAction, 'enter-storyboard');
   assert.equal(page.snapshot.confirmAction, undefined);
   assert.equal(page.snapshot.autoRefreshFromProject, false);
-  assert.equal(page.gate.canEnterStoryboard, false);
-  assert.deepEqual(page.gate.blockers.map(item => item.id), ['manager-voice']);
+  assert.equal(page.mediaReadiness.status, 'needs-attention');
+  assert.deepEqual(page.mediaReadiness.blockers.map(item => item.id), ['manager-voice']);
   assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'candidate-compare').scenario.actions.length > 0, true);
+});
+
+test('本集设定不完整时仍能进入分镜，但受影响镜头不能提交媒体任务', () => {
+  const page = model.getEpisodeAssetsStageModel('7', '1', 'blocked');
+  assert.equal(page.storyboardEntry.allowed, true);
+  assert.equal(page.storyboardEntry.target.routeId, 'studio-storyboard');
+  assert.equal(page.storyboardEntry.savesSnapshotOnClick, true);
+  assert.equal(page.mediaReadiness.status, 'needs-attention');
+
+  const guard = model.getStoryboardMediaGenerationGuard('7', '1', 'shot-03', 'needs-attention');
+  assert.equal(guard.enabled, false);
+  assert.deepEqual(guard.recoveryTarget, {
+    routeId: 'studio-assets',
+    params: { projectId: '7', episodeId: '1', shotId: 'shot-03' },
+  });
+  const readyGuard = model.getStoryboardMediaGenerationGuard('7', '1', 'shot-03', 'ready');
+  assert.equal(readyGuard.enabled, true);
+  assert.equal(readyGuard.recoveryTarget, null);
+
+  const storyboard = model.getStoryboardStageModel('7', '1', 'default');
+  assert.equal(storyboard.mediaReadiness.status, 'needs-attention');
+  assert.equal(storyboard.mediaReadiness.text, '有 2 项可稍后处理');
+  assert.equal(storyboard.mediaReadiness.recovery.target.routeId, 'studio-assets');
+  const unapproved = model.getEpisodeAssetsStageModel('7', '2', 'default');
+  assert.equal(unapproved.mediaReadiness.status, 'script-unapproved');
+  assert.equal(unapproved.storyboardEntry.allowed, true);
 });
 
 test('设定覆盖首次准备、就绪、检查、快照和媒体异常完整生命周期', () => {
@@ -754,13 +780,15 @@ test('设定覆盖首次准备、就绪、检查、快照和媒体异常完整�
     backLabel: '返回剧集',
     backTarget: { routeId: 'project-episodes', params: { projectId: '7' } },
   });
-  assert.deepEqual(blocked.readinessSummary, { prepared: 6, required: 7, mandatory: 1, optionalUpdates: 1 });
-  assert.deepEqual(blocked.primaryAction, { id: 'resolve-blocker', label: '还需处理 1 项', enabled: true, focusId: 'manager-voice' });
+  assert.equal(blocked.mediaReadiness.summary, '有 2 项可稍后处理');
+  assert.equal(blocked.primaryAction.label, '进入分镜');
+  assert.equal(blocked.primaryAction.allowed, true);
   const ready = model.getEpisodeAssetsStageModel('7', '1', 'ready');
-  assert.equal(ready.gate.canEnterStoryboard, true);
+  assert.equal(ready.mediaReadiness.status, 'ready');
+  assert.equal(ready.mediaReadiness.summary, '本集设定已准备好');
   assert.equal(ready.primaryAction.label, '进入分镜');
-  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'snapshot-saving').primaryAction.label, '正在准备分镜…');
-  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'snapshot-failed').primaryAction.label, '重试准备分镜');
+  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'checking').mediaReadiness.status, 'checking');
+  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'snapshot-failed').mediaReadiness.status, 'snapshot-failed');
   assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'snapshot-succeeded').primaryAction.target.routeId, 'studio-storyboard');
 });
 
@@ -777,7 +805,7 @@ test('设定以缩略图比较本集旧版和项目新版且只修改本集选�
   const character = updated.requiredGroups.flatMap(group => group.items).find(item => item.id === 'linxia-hotel');
   assert.equal(character.episodeSelection, 'v3');
   assert.equal(updated.reviewItems.some(item => item.targetId === 'linxia-hotel'), false);
-  assert.equal(updated.gate.warnings.length, 0);
+  assert.equal(updated.mediaReadiness.warnings.length, 0);
 });
 
 test('设定就地解决条件音色并在解除阻塞后允许进入分镜', () => {
@@ -789,10 +817,11 @@ test('设定就地解决条件音色并在解除阻塞后允许进入分镜', ()
   assert.equal(voice.actions.find(item => item.id === 'use-model-default').changesAudioPolicy, true);
   const page = model.getEpisodeAssetsStageModel('7', '1', 'default');
   const resolved = model.applyEpisodeAssetDecision(page, { type: 'use-voice', targetId: 'manager-voice', candidateId: 'voice-manager-02' });
-  assert.equal(resolved.gate.blockers.length, 0);
-  assert.equal(resolved.gate.canEnterStoryboard, true);
-  assert.equal(resolved.preflightPanel.audioPolicy, '人物参考音色 · 已选择');
+  assert.equal(resolved.mediaReadiness.blockers.length, 0);
+  assert.equal(resolved.mediaReadiness.status, 'ready');
+  assert.equal(resolved.audioPolicy, '人物参考音色');
   assert.equal(resolved.primaryAction.label, '进入分镜');
+  assert.equal(resolved.storyboardEntry.allowed, true);
 });
 
 test('设定追踪外部制作包映射并只准备真实缺失素材', () => {
@@ -806,7 +835,8 @@ test('设定追踪外部制作包映射并只准备真实缺失素材', () => {
   assert.equal(page.missingMaterialsPreflight.estimatedCost, '¥0.08');
   const mismatch = model.getEpisodeAssetsStageModel('7', '1', 'external-package-mismatch');
   assert.equal(mismatch.primaryAction.id, 'review-package-mismatch');
-  assert.equal(mismatch.gate.canEnterStoryboard, false);
+  assert.equal(mismatch.mediaReadiness.status, 'needs-attention');
+  assert.equal(mismatch.storyboardEntry.allowed, true);
 });
 
 test('设定主界面使用个人用户语言且完整继承项带视觉预览', () => {
@@ -818,8 +848,11 @@ test('设定主界面使用个人用户语言且完整继承项带视觉预览',
     '查看影响', '继续使用当前风格', '本集改用新风格',
   ]);
   assert.ok(page.requiredGroups.flatMap(group => group.items).every(item => item.thumbnail));
-  assert.equal(page.preflightPanel.title, '进入分镜前检查');
-  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'ready').preflightPanel.readyLabel, '设定已准备好');
+  assert.equal(page.audioPolicy, '人物参考音色 · 缺少酒店经理音色');
+  assert.equal(model.getEpisodeAssetsStageModel('7', '1', 'ready').mediaReadiness.summary, '本集设定已准备好');
+  assert.equal('preflightPanel' in page, false);
+  assert.equal('batchPreflight' in page, false);
+  assert.equal('readinessSummary' in page, false);
 });
 
 test('设定 HTML 提供页内版本音色外部包决策和进入分镜状态链', () => {
@@ -830,10 +863,13 @@ test('设定 HTML 提供页内版本音色外部包决策和进入分镜状态�
     'data-episode-model-default', 'data-episode-package-mapping', 'data-episode-missing-preflight',
     'data-episode-primary', 'beginEpisodeStoryboardEntry',
   ]) assert.match(html, new RegExp(marker));
-  for (const copy of ['只处理差异和阻塞', '进入分镜前检查', '外部制作包素材对应关系', '参考：']) {
+  for (const copy of ['外部制作包素材对应关系', '参考：']) {
     assert.match(html, new RegExp(copy));
   }
-  assert.doesNotMatch(html, /确认并进入分镜/);
+  for (const legacy of ['只处理差异和阻塞', '进入分镜前检查', '确认并进入分镜']) {
+    assert.doesNotMatch(html, new RegExp(legacy));
+  }
+  assert.match(html, /data-media-readiness=/);
 });
 
 test('AI 配置隐藏密钥且全局任务只展示可信进度与能力动作', () => {
@@ -2733,11 +2769,12 @@ test('任务中心覆盖离线、批任务部分成功和聚焦恢复状态', ()
   assert.ok(batch.tasks.some(item => item.id === 'batch-episode-01-video'));
 });
 
-test('设定默认只展示继承摘要例外缺失和阻塞项', () => {
+test('设定默认只展示本集引用卡片与必要待处理项', () => {
   const stage = model.getEpisodeAssetsStageModel('7', '1', 'default');
-  assert.deepEqual(stage.inheritedSummary, { ready: 6, total: 7, collapsed: true });
-  assert.equal(stage.fullInheritedListEntry.secondary, true);
-  assert.ok(stage.reviewItems.length < stage.inheritedSummary.total);
+  assert.equal('inheritedSummary' in stage, false);
+  assert.equal('fullInheritedListEntry' in stage, false);
+  assert.ok(stage.cards.length === 5);
+  assert.ok(stage.cards.every(card => card.referencedByEpisode === true));
   assert.ok(stage.reviewItems.every(item => [
     'new-object', 'version-difference', 'missing-media', 'missing-required-voice', 'invalid-reference', 'blocker',
   ].includes(item.kind)));
