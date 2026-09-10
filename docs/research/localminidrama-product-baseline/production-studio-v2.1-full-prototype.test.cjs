@@ -855,7 +855,8 @@ test('新建项目只通过一个上下文主动作提交，并隐藏项目壳�
   const selected = model.getProjectCreateModel('source-selected');
   assert.equal(initial.fields.find(item => item.id === 'name').value, '');
   assert.equal(initial.fields.find(item => item.id === 'aspect-ratio').control, 'select');
-  assert.equal(initial.fields.find(item => item.id === 'episode-duration').control, 'duration');
+  assert.equal(initial.fields.find(item => item.id === 'genre').control, 'text');
+  assert.equal(initial.fields.some(item => item.id === 'episode-duration'), false);
   assert.equal(initial.fields.find(item => item.id === 'output-location').control, 'directory');
   assert.equal(initial.primaryAction.enabled, false);
   assert.equal(initial.primaryAction.label, '选择开始方式');
@@ -909,7 +910,8 @@ test('新项目来源流程只允许创建第 1 集，不泄漏已有项目空�
 
 test('新建项目仍复用六类剧集来源能力', () => {
   const page = model.getProjectCreateModel('default');
-  assert.deepEqual(page.fields.map(item => item.id), ['name', 'aspect-ratio', 'episode-duration', 'output-location']);
+  assert.deepEqual(page.fields.map(item => item.id), ['name', 'aspect-ratio', 'genre', 'output-location']);
+  assert.equal(page.fields.some(item => item.label.includes('时长')), false);
   assert.deepEqual(page.sources.map(item => item.id), ['blank', 'ai', 'novel', 'external_ai', 'episode_json', 'source_video']);
   assert.equal(page.cancelAfterCreate.keepsEmptyProject, true);
 });
@@ -1005,7 +1007,8 @@ test('常规设置提供路径安全检查、备份策略和默认值作用域',
   assert.deepEqual(page.save.states, ['clean', 'dirty', 'saving', 'saved', 'failed', 'conflict']);
   assert.equal(page.paths.every(item => item.permission && item.availableSpace && item.lastCheckedAt && item.overlapCheck), true);
   assert.equal(page.backupPolicy.canDisable, false);
-  assert.deepEqual(page.defaults.scope, ['新建项目', '新建剧集', '新任务']);
+  assert.deepEqual(page.defaults.scope, ['新建项目', '新任务']);
+  assert.equal('episodeDuration' in page.defaults, false);
   assert.equal(page.workspaceChange.requiresMigrationPreview, true);
   assert.equal(page.workspaceChange.activeTaskPolicy, 'block-dangerous-change');
 });
@@ -1801,12 +1804,9 @@ test('项目概览只聚合下一步、阶段、Project Look 和可操作阻塞'
   assert.ok(overview.sections.stages.every(item => item.total === 8));
   assert.equal(overview.sections.stages.some(item => /\d+\/\d+ (项|镜)/.test(item.summary)), false);
   assert.equal(overview.sections.projectLook.version, 4);
-  assert.equal(overview.sections.projectLook.action.label, '查看风格');
-  assert.equal(overview.sections.projectLook.action.type, 'open-drawer');
-  assert.deepEqual(overview.sections.projectLook.action.manageTarget, {
-    routeId: 'project-bible',
-    scenarioId: 'look',
-  });
+  assert.equal(overview.sections.projectLook.action.label, '更换风格');
+  assert.equal(overview.sections.projectLook.action.type, 'open-modal');
+  assert.equal('manageTarget' in overview.sections.projectLook.action, false);
   assert.ok(overview.sections.projectLook.visualIntent.length > 0);
   assert.ok(overview.sections.projectLook.versionHistory.length > 0);
   assert.ok(overview.sections.blockers.length > 0);
@@ -1968,149 +1968,70 @@ test('任务待处理项打开任务中心并定位自己的任务', () => {
   );
 });
 
-test('项目设置把稳定项目资料与外部 AI 创作上下文分开', () => {
+test('项目设置路由只作为兼容别名重定向到项目概览', () => {
   assert.equal(typeof model.getProjectBibleModel, 'function');
   const bible = model.getProjectBibleModel('7', 'default');
-  assert.equal(bible.projectId, '7');
-  assert.equal(bible.viewId, 'bible-overview');
-  assert.equal(bible.pageSubtitle, '项目资料、画面风格与外部 AI');
-  assert.equal(bible.primaryAction, undefined);
-  assert.deepEqual(bible.sectionOrder, [
-    'project-profile', 'project-look', 'production-objects', 'external-ai',
-  ]);
-  assert.deepEqual(bible.projectProfile.editableFields.map(item => item.id), [
-    'name', 'cover', 'aspect-ratio', 'genre', 'default-episode-duration', 'output-preference',
-  ]);
-  assert.equal(bible.projectProfile.localPath.readOnly, true);
-  assert.deepEqual(bible.context.editableFields.map(item => item.id), [
-    'story-foundation', 'immutable-settings', 'continuity-notes',
-  ]);
-});
-
-test('生产对象摘要只显示数量与问题并精确进入项目素材分类', () => {
-  const bible = model.getProjectBibleModel('7', 'default');
-  assert.deepEqual(bible.productionObjects.map(item => item.id), ['characters', 'scenes', 'props']);
-  assert.deepEqual(bible.productionObjects.map(item => item.target.params.focusId), [
-    'characters', 'scenes', 'props',
-  ]);
-  assert.ok(bible.productionObjects.every(item => item.target.routeId === 'project-assets'));
-  assert.ok(bible.productionObjects.every(item => !('episodeId' in item.target.params)));
-  assert.deepEqual(bible.productionObjects.map(item => item.actionLabel), [
-    '查看人物', '查看场景', '查看道具',
-  ]);
-  assert.deepEqual(bible.productionObjects.map(item => item.issueCount), [1, 1, 2]);
-  assert.equal(bible.productionObjects[0].summary, '4 名人物 · 12 个状态');
-  assert.deepEqual(bible.excludedCapabilities, [
-    'image-candidates', 'voice-candidates', 'media-generation', 'cross-episode-media-usage',
-  ]);
-});
-
-test('项目圣经的 Look 场景保持项目作用域', () => {
-  const lookView = model.getProjectBibleModel('7', 'look');
-  assert.equal(lookView.viewId, 'project-look');
-  assert.equal(lookView.projectLook.version, 4);
-  assert.equal(lookView.managementScope, 'project');
-  assert.equal('episodeId' in lookView, false);
-});
-
-test('项目圣经不是通用生成提示词源且只有明确生产字段参与生成', () => {
-  const bible = model.getProjectBibleModel('7', 'default');
-  assert.deepEqual(bible.generationPolicy, {
-    isGeneralPromptSource: false,
-    isGenerationGate: false,
-    directInputs: [
-      'project-look',
-      'character-current-production-state',
-      'scene-current-production-state',
-      'prop-current-production-state',
-    ],
-    contextOnly: [
-      'project-summary',
-      'world-building',
-      'character-background-and-relationships',
-      'cross-episode-story-continuity',
-    ],
-    staleRule: 'only-effective-generation-input-changes',
+  assert.deepEqual(bible.redirectTo, {
+    routeId: 'project-overview',
+    params: { projectId: '7' },
+    scenarioId: 'default',
   });
+  assert.equal(bible.legacyRoute, true);
+  assert.equal('projectProfile' in bible, false);
+  assert.equal('productionObjects' in bible, false);
+  assert.equal('externalAiCollaboration' in bible, false);
 });
 
-test('项目设置的外部 AI 上下文复制与制作任务进入不同流程', () => {
-  const settings = model.getProjectBibleModel('7', 'default');
-  assert.equal(settings.featureName, '项目设置');
-  assert.deepEqual(settings.externalAiCollaboration.actions.map(item => item.id), [
-    'copy-collaboration-context', 'create-external-ai-production-task',
+test('项目概览承载项目资料和风格选择，不再渲染项目设置工作台', () => {
+  const overview = model.getProjectOverviewModel('7');
+  assert.deepEqual(overview.projectProfile.editableFields.map(field => field.id), [
+    'name', 'cover', 'aspect-ratio', 'genre', 'description',
   ]);
-  assert.equal(settings.externalAiCollaboration.actions[0].presentation, 'drawer');
-  assert.deepEqual(settings.externalAiCollaboration.actions[1], {
-    id: 'create-external-ai-production-task',
-    label: '创建外部 AI 制作任务',
-    presentation: 'episode-source-center',
-    routeId: 'project-episodes',
-    params: { projectId: '7', type: 'external_ai' },
-    scenarioId: 'source-picker',
-    sourceId: 'external_ai',
-  });
-  assert.deepEqual(settings.excludedKnowledgeSystems, [
-    'structured-world-fact-database',
-    'foreshadowing-tracker',
-    'event-timeline',
-  ]);
-  assert.equal(settings.context.title, '外部 AI 创作上下文');
-  assert.deepEqual(settings.context.includedSources, [
-    '项目简介与题材', '故事基础设定', '不可改变的设定', '跨集连续性备注',
-    '相邻剧集与最新剧本', '人物当前状态', '场景索引', '道具索引', 'Project Look 摘要',
-  ]);
-  assert.equal(settings.projectLook.version, 4);
-  assert.equal(settings.projectLook.action.scenarioId, 'look');
+  assert.equal('default-episode-duration' in overview.projectProfile, false);
+  assert.equal('outputPreference' in overview.projectProfile, false);
+  assert.equal(overview.projectStyleSelector.presentation, 'modal');
+  assert.deepEqual(overview.projectStyleSelector.tabs.map(tab => tab.id), ['presets', 'mine', 'custom']);
+  assert.equal(overview.projectStyleSelector.applyRule, '更换项目风格只影响之后的新生成和主动刷新，不自动重做已有图片或视频。');
+  assert.equal(overview.assetSummary.line, '项目素材：16 个对象，2 个缺少可用形象');
+  assert.equal(overview.assetSummary.target.routeId, 'project-assets');
+  assert.equal(overview.externalAiPendingTask, null);
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  assert.doesNotMatch(html, /项目资料、画面风格与外部 AI/);
+  assert.doesNotMatch(html, /默认单集时长/);
+  assert.doesNotMatch(html, /输出偏好/);
+  assert.doesNotMatch(html, /生产对象概览/);
+  assert.match(html, /更换项目风格只影响之后的新生成和主动刷新/);
 });
 
-test('项目画面风格先完成基础选择再创建可追溯新版本', () => {
+test('项目画面风格以中央弹窗完成选择并保留影响确认', () => {
   assert.equal(typeof model.getProjectLookEditorModel, 'function');
   const editor = model.getProjectLookEditorModel('7', { query: '悬疑', selectedPresetId: 'cinematic-suspense' });
+  assert.equal(editor.presentation, 'modal');
   assert.equal(editor.searchEnabled, true);
-  assert.deepEqual(editor.tabs.map(item => item.id), ['presets', 'custom']);
+  assert.deepEqual(editor.tabs.map(item => item.id), ['presets', 'mine', 'custom']);
   assert.deepEqual(editor.visiblePresets.map(item => item.id), ['cinematic-suspense']);
   assert.equal(editor.selectedPreset.name, '电影感悬疑');
+  assert.deepEqual(editor.customFields.map(item => item.id), [
+    'style-name', 'style-description', 'positive-visual-prompt', 'negative-constraints', 'reference-images',
+  ]);
   assert.deepEqual(editor.impactPreview, {
     referencedResults: 10,
     needsUpdate: 6,
     unaffectedHistory: 4,
     autoRegenerate: false,
   });
-  assert.equal(editor.confirmAction.label, '创建风格版本 v5');
+  assert.equal(editor.confirmAction.label, '确认应用');
 });
 
-test('项目设置覆盖编辑保存、离线和外部上下文失效恢复状态', () => {
-  const definition = model.buildPrototypeRouteRegistry().find(item => item.id === 'project-bible');
-  assert.deepEqual(definition.scenarios, [
-    'default', 'look', 'empty', 'loading', 'load-failed', 'dirty', 'saving',
-    'save-succeeded', 'save-failed', 'storage-offline', 'context-stale',
-    'copy-failed', 'package-failed',
-  ]);
-
-  const empty = model.getProjectBibleModel('7', 'empty');
-  assert.ok(empty.productionObjects.every(item => item.count === 0));
-  assert.equal(empty.context.missingFields.length, 2);
-  assert.equal(empty.projectLook.usage, '尚无引用');
-  const failed = model.getProjectBibleModel('7', 'load-failed');
-  assert.equal(failed.recoveryAction, 'retry');
-  const dirty = model.getProjectBibleModel('7', 'dirty');
-  assert.equal(dirty.editorState.closeRequiresConfirmation, true);
-  const saving = model.getProjectBibleModel('7', 'saving');
-  assert.equal(saving.editorState.controlsDisabled, true);
-  const saveFailed = model.getProjectBibleModel('7', 'save-failed');
-  assert.deepEqual(saveFailed.editorState.recoveryActions, ['continue-editing', 'retry-save']);
-  const offline = model.getProjectBibleModel('7', 'storage-offline');
-  assert.equal(offline.readOnly, true);
-  assert.equal(offline.editorState.canSave, false);
-  assert.deepEqual(offline.editorState.recoveryActions, ['open-data-tools']);
-  const stale = model.getProjectBibleModel('7', 'context-stale');
-  assert.equal(stale.externalAiCollaboration.status.id, 'needs-update');
-  assert.equal(stale.externalAiCollaboration.actions[0].label, '更新并复制创作上下文');
-  const copyFailed = model.getProjectBibleModel('7', 'copy-failed');
-  assert.deepEqual(copyFailed.externalAiCollaboration.recoveryActions, ['retry-copy', 'download-markdown']);
-  const packageFailed = model.getProjectBibleModel('7', 'package-failed');
-  assert.deepEqual(packageFailed.externalAiCollaboration.recoveryActions, ['retry-package', 'open-task-center']);
+test('外部 AI 上下文由系统自动汇总，不再提供常驻编辑入口', () => {
+  const context = model.getExternalAiContextModel('7');
+  assert.equal(context.autoCompiled, true);
+  assert.ok(context.includedSources.includes('当前画面风格'));
+  assert.ok(context.includedSources.includes('已确认的上一集剧本'));
+  assert.match(context.note, /自动汇总/);
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  assert.doesNotMatch(html, /编辑项目说明/);
+  assert.doesNotMatch(html, /复制创作上下文</);
 });
 
 test('项目设置编辑器恢复草稿时同步恢复未保存提示与保存能力', () => {
@@ -2504,14 +2425,15 @@ test('项目资产原型覆盖高风险异常和恢复场景', () => {
   assert.equal(blocked.blockedAction.recoveryTarget, 'usage-locations');
 });
 
-test('项目画面风格从概览打开项目级抽屉且管理入口不绑定任意剧集', () => {
+test('项目画面风格从概览直接打开中央选择弹窗', () => {
   const html = fs.readFileSync(htmlPath, 'utf8');
   assert.match(html, /data-project-look=/);
-  assert.match(html, /data-manage-project-look=/);
+  assert.match(html, /openLookStyleModal/);
+  assert.doesNotMatch(html, /data-manage-project-look=/);
   assert.doesNotMatch(html, /data-project-stage="assets"/);
   assert.doesNotMatch(html, />查看设定</);
   const projectBible = model.buildPrototypeRouteRegistry().find(item => item.id === 'project-bible');
-  assert.ok(projectBible.scenarios.includes('look'));
+  assert.deepEqual(projectBible.scenarios, ['default']);
 });
 
 test('每张项目卡的继续动作指向其真实最近剧集', () => {

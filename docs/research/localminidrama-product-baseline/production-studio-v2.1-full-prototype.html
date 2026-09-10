@@ -123,7 +123,7 @@
     let quickCreateUiState = { recipeId:'image', projectId:'', episodeId:'', form:null, resultStatus:null, resultDestinationId:null };
     let episodeUiState = { query:'', sortId:'number-asc', importStep:1, targetMode:'create_new', assetDecisions:{}, importProtocol:'episode-package' };
     let episodeSearchTimer = null;
-    let projectCreateUiState = { name:'', aspectRatio:'9:16', episodeDuration:90, outputLocation:'E:/LocalMiniDrama/新项目', locationCustomized:false, selectedSourceId:'', dirty:false, submitting:false };
+    let projectCreateUiState = { name:'', aspectRatio:'9:16', genre:'', outputLocation:'E:/LocalMiniDrama/新项目', locationCustomized:false, selectedSourceId:'', dirty:false, submitting:false };
     let projectImportUiState = { projectName:'凌晨两点的客房服务（副本）', workspacePath:'E:/LocalMiniDrama/projects', mediaStrategy:'copy' };
     let generalUiState = { dirty:false, fields:{}, status:'clean' };
     let dataToolsUiState = { relocationRoot:'F:\\DramaMedia', relocationSelections:new Map(), cleanupDryRun:false, cleanupConfirmed:false };
@@ -227,7 +227,7 @@
     function renderProjectOverview(projectId, scenarioId) {
       const project = fullModel.getProjectOverviewModel(projectId, scenarioId);
       const data = project.sections;
-      const hero = `<div class="overview-hero"><div class="overview-cover" aria-hidden="true"></div><div><h1 tabindex="-1">${project.title}</h1><p>${project.description}</p><div class="overview-meta">${project.metadata.map(item=>`<span class="tag">${item}</span>`).join('')}</div></div><div class="overview-actions"><button class="btn" data-route-id="projects">返回项目列表</button></div></div>`;
+      const hero = `<div class="overview-hero"><div class="overview-cover" aria-hidden="true"></div><div><h1 tabindex="-1">${project.title}</h1><p>${project.description}</p><div class="overview-meta">${project.metadata.map(item=>`<span class="tag">${item}</span>`).join('')}</div></div><div class="overview-actions"><button class="btn" data-route-id="projects">返回项目列表</button><button class="btn" data-project-profile-edit="${project.projectId}">编辑项目</button></div></div>`;
       const tabs = renderProjectTabs(project.projectId, 'project-overview');
       if (project.viewState.kind === 'loading') return `<section class="page" data-feature-id="P-01">${hero}${tabs}<div class="overview-grid"><article class="overview-panel overview-loading"><div class="skeleton" style="height:96px"></div></article><article class="overview-panel overview-loading"><div class="skeleton" style="height:96px"></div></article><article class="overview-panel wide"><div class="skeleton" style="height:112px"></div></article></div></section>`;
       const stateBanner = project.viewState.kind === 'normal' || project.viewState.kind === 'all-complete' ? '' : `<div class="overview-state"><span class="tag warn">${project.viewState.kind === 'storage-offline' ? '只读' : project.viewState.kind === 'needs-attention' ? '需要处理' : '加载异常'}</span><div class="grow"><b>${project.viewState.title || '当前工作存在阻塞'}</b><small>${project.viewState.detail || '处理当前硬阻塞后可恢复上次工作位置。'}</small></div>${(project.viewState.actions||[]).map(item=>`<button class="btn" data-overview-state-action="${item.id}">${item.label}</button>`).join('')}</div>`;
@@ -242,7 +242,8 @@
           <article class="overview-panel"><h2>下一步</h2><div class="next-card" data-blocking="${primary.kind==='resolve-blocker'}"><span class="tag">${primary.kind==='resume'?'已保存位置':primary.kind==='resolve-blocker'?'当前阻塞':'推荐操作'}</span><div class="grow"><b>${primary.label}</b><small>${primary.detail}</small></div>${primaryButton}</div></article>
           <article class="overview-panel"><h2>待处理 ${data.blockers.length}</h2>${blockers}</article>
           <article class="overview-panel wide"><h2>项目阶段概览</h2><div class="overview-stages">${stages}</div></article>
-          <article class="overview-panel wide"><h2>项目画面风格</h2><div class="look-card"><div class="look-swatch"></div><div><b>${data.projectLook.name}</b><p>版本 ${data.projectLook.version} · ${data.projectLook.status}</p><p>${data.projectLook.aspectRatio} · ${data.projectLook.usage}</p></div><button class="btn" data-project-look="${project.projectId}">${data.projectLook.action.label}</button></div></article>
+          <article class="overview-panel wide"><h2>当前画面风格</h2><div class="look-card"><div class="look-swatch"></div><div><b>${data.projectLook.name}</b><p>版本 ${data.projectLook.version} · ${data.projectLook.status}</p><p>${data.projectLook.aspectRatio} · ${data.projectLook.usage}</p><small>更换项目风格只影响之后的新生成和主动刷新，不自动重做已有图片或视频。</small></div><button class="btn" data-project-look="${project.projectId}">${data.projectLook.action.label}</button></div></article>
+          <article class="overview-panel wide"><h2>制作进度</h2><div class="look-card"><div><b>${project.assetSummary.line}</b><small>人物、场景和道具的资料与问题都在项目素材中处理。</small></div><button class="btn" data-route-id="project-assets" data-project-route="${project.projectId}">打开项目素材</button></div></article>
         </div>
       </section>`;
     }
@@ -328,7 +329,7 @@
       const back = `<button type="button" class="btn" data-source-back>${isNewProject?'取消首集创建':'返回来源'}</button>`;
       if(legacySourceId==='blank'){
         const targetField=`<label>写入目标<input value="${targetLabel}" readonly></label>`;
-        openDrawer('空白创建', `${steps}<form class="settings-form" data-blank-episode-form>${targetField}<label>集号<input value="${targetSelection.episodeNumber}" readonly></label><label>标题<input value="未命名"></label><label>目标时长<input value="${isNewProject?projectCreateUiState.episodeDuration:90} 秒" readonly></label><div class="tool-note">只创建空白剧本草稿，不调用 AI、不解析素材、不确认阶段。</div><div class="drawer-actions">${back}<button class="btn primary" type="submit">创建并进入剧本</button></div></form>`);
+        openDrawer('空白创建', `${steps}<form class="settings-form" data-blank-episode-form>${targetField}<label>集号<input value="${targetSelection.episodeNumber}" readonly></label><label>标题<input value="未命名"></label><div class="tool-note">只创建空白剧本草稿，不调用 AI、不解析素材、不确认阶段。</div><div class="drawer-actions">${back}<button class="btn primary" type="submit">创建并进入剧本</button></div></form>`);
         drawerBody.querySelector('[data-source-back]').addEventListener('click',backToSources);
         drawerBody.querySelector('[data-blank-episode-form]').addEventListener('submit',event=>{event.preventDefault();closeDrawer();navigate('studio-script',{projectId,episodeId:targetEpisodeId})});return;
       }
@@ -370,8 +371,8 @@
         drawerBody.querySelector('[data-external-back]').addEventListener('click',()=>openExternalAiWorkflow(projectId,'context',focusEpisodeId,creationContext,targetSelection));
         drawerBody.querySelector('[data-external-wait]').addEventListener('click',()=>{closeDrawer();navigate('project-episodes',{projectId,focusId:targetSelection.episodeId||String(targetSelection.episodeNumber)},'external-ai-waiting')});return;
       }
-      const bible=fullModel.getProjectBibleModel(projectId,'default');
-      openDrawer('外部 AI · 生成项目说明', `${steps}<div class="tool-note"><b>${externalTask.target.label} · 用于新的外部 AI 会话</b><br>只提供剧情背景说明，不直接进入生图或视频 Prompt；本地绝对路径和无关字段不会写入制作任务包。</div><div class="settings-form"><label>目标<input value="${externalTask.target.label}" readonly></label><label>上下文生成时间<input value="今天 14:26" readonly></label><label>当前版本<input value="${externalTask.contextRevision} · ${externalTask.assetSnapshotVersion}" readonly></label><label>上下文摘要<textarea readonly>${bible.context.summary}</textarea></label></div><h3>包含的信息（可取消非必要项）</h3><div>${bible.context.includedSources.map(item=>`<label class="asset-chip"><input type="checkbox" checked> ${item}</label>`).join('')}</div><div class="drawer-actions"><button class="btn" data-external-source-back>返回目标</button><button class="btn" data-external-context-copy>复制上下文</button><button class="btn primary" data-external-package-next>继续创建本集制作任务包</button></div>`);
+      const context=fullModel.getExternalAiContextModel(projectId);
+      openDrawer('外部 AI · 生成项目说明', `${steps}<div class="tool-note"><b>${externalTask.target.label} · 用于新的外部 AI 会话</b><br>只提供剧情背景说明，不直接进入生图或视频 Prompt；本地绝对路径和无关字段不会写入制作任务包。</div><div class="settings-form"><label>目标<input value="${externalTask.target.label}" readonly></label><label>上下文生成时间<input value="今天 14:26" readonly></label><label>当前版本<input value="${externalTask.contextRevision} · ${externalTask.assetSnapshotVersion}" readonly></label><label>上下文摘要<textarea readonly>${context.summary}</textarea></label></div><h3>包含的信息（可取消非必要项）</h3><div>${context.includedSources.map(item=>`<label class="asset-chip"><input type="checkbox" checked> ${item}</label>`).join('')}</div><div class="drawer-actions"><button class="btn" data-external-source-back>返回目标</button><button class="btn" data-external-context-copy>复制上下文</button><button class="btn primary" data-external-package-next>继续创建本集制作任务包</button></div>`);
       drawerBody.querySelector('[data-external-source-back]').addEventListener('click',()=>openEpisodeTargetSelector(projectId,'external_ai',focusEpisodeId,creationContext,targetSelection.id));
       drawerBody.querySelector('[data-external-context-copy]').addEventListener('click',()=>showToast('项目说明已复制'));
       drawerBody.querySelector('[data-external-package-next]').addEventListener('click',()=>openExternalAiWorkflow(projectId,'package',focusEpisodeId,creationContext,targetSelection));
@@ -458,40 +459,7 @@
 
     function renderProjectBible(projectId, scenarioId) {
       const bible = fullModel.getProjectBibleModel(projectId, scenarioId);
-      const projectTabs = renderProjectTabs(bible.projectId, 'project-bible');
-      const header = `<div class="bible-head"><div><h1 tabindex="-1">${bible.featureName}</h1><p>${bible.title} · ${bible.pageSubtitle}</p></div><div class="actions"><button class="btn" data-route-id="project-overview" data-project-route="${bible.projectId}">返回概览</button></div></div>${projectTabs}`;
-      if (bible.loading) return `<section class="page">${header}<div class="settings-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton" style="grid-column:1/-1"></div></div></section>`;
-      if (bible.viewId === 'load-failed') return `<section class="page">${header}<div class="empty"><div><div class="empty-mark">!</div><h2>项目设置加载失败</h2><p>其他项目数据没有受到影响。请重新读取本页。</p><button class="btn primary" data-settings-retry="${bible.projectId}">重新加载</button></div></div></section>`;
-      if (bible.viewId === 'project-look') {
-        const look = projectSettingsUiState.activeLook ? { ...bible.projectLook, ...projectSettingsUiState.activeLook } : bible.projectLook;
-        const rules = look.visualIntent.map((item,index) => `<div class="look-rule"><small>${['媒介与质感','色彩策略','光线策略','镜头语言'][index] || '视觉规则'}</small><b>${item}</b></div>`).join('');
-        const versions = look.versionHistory.map(item => `<div class="look-version"><span class="tag ${item.status === '当前' ? 'ok' : ''}">v${item.version}</span><div><b>${item.status}</b><small>${item.note}</small></div><div class="mini-actions"><button data-look-compare="${item.version}">比较</button>${item.status === '当前' ? '' : `<button data-look-history-use="${item.version}">设为当前</button>`}</div></div>`).join('');
-        return `<section class="page" data-feature-id="L-01">${header}<div class="look-workbench"><article class="panel"><div class="look-hero-image" aria-label="${look.name} 代表图"></div><div class="look-detail-section"><span class="tag ok">${look.status}</span><h2 style="margin:10px 0 4px">${look.name}</h2><p>风格版本 ${look.version} · ${look.source} · ${look.aspectRatio}</p></div><div class="look-rule-grid">${rules}</div><div class="actions" style="margin-top:14px"><button class="btn" data-look-edit-rules="${bible.projectId}">编辑视觉规则</button><button class="btn primary" data-look-change="${bible.projectId}">更换画面风格</button></div></article><aside class="panel"><h2>项目画面风格</h2><p class="recent">这里维护可被所有剧集继承的视觉规则和当前使用版本，不绑定任何剧集。</p><div class="look-detail-section"><h3>影响范围</h3><p>${look.impact}</p></div><div class="look-detail-section"><h3>版本记录</h3>${versions}</div><div class="tool-note">选择新风格会先展示影响，再创建新版本；历史图片不会静默改变，也不会自动重新生成。</div><button class="btn" style="width:100%;margin-top:12px" data-route-id="project-assets" data-project-route="${bible.projectId}">打开项目素材</button></aside></div></section>`;
-      }
-      const missing = bible.context.missingFields.length ? `<div class="settings-warning"><b>信息待补充</b><div>${bible.context.missingFields.join('、')}。仍可继续生成上下文。</div></div>` : '';
-      const sources = bible.context.includedSources.map(item => `<span class="tag">${item}</span>`).join('');
-      const profile = projectSettingsUiState.activeProfile ? { ...bible.projectProfile, ...projectSettingsUiState.activeProfile } : bible.projectProfile;
-      const look = projectSettingsUiState.activeLook ? { ...bible.projectLook, ...projectSettingsUiState.activeLook } : bible.projectLook;
-      const contextSummary = projectSettingsUiState.activeContextSummary || bible.context.summary;
-      const objects = bible.productionObjects.map(item => `<article class="object-card"><strong>${item.summary}</strong><small>${item.label}</small>${item.issueCount ? `<span class="tag warn">${item.issueCount} 项需处理</span><span class="warning">${item.warning}</span>` : '<span class="tag">状态正常</span>'}<button class="btn" data-settings-object="${item.id}" data-project-id="${bible.projectId}">${item.actionLabel}</button></article>`).join('');
-      const emptyActions = scenarioId === 'empty' ? `<div class="settings-warning"><b>当前项目还没有生产对象</b><div>可以先通过外部 AI 创建剧集，也可以创建空白剧集后手工补充。</div><div class="actions" style="margin-top:10px"><button class="btn" data-settings-blank="${bible.projectId}">创建空白剧集</button></div></div>` : '';
-      const collaboration=bible.externalAiCollaboration;
-      const collaborationActions=collaboration.actions.map((item,index)=>`<button class="btn ${index===1?'primary':''}" data-project-collaboration="${item.id}" data-project-id="${bible.projectId}" ${bible.readOnly&&index===1?'disabled':''}>${item.label}</button>`).join('');
-      const scenarioMessages = {
-        dirty: ['warn','有未保存修改','关闭编辑器前需要保存或明确放弃。'],
-        saving: ['','正在保存项目资料','编辑控件暂时不可用，请稍候。'],
-        'save-succeeded': ['ok','项目资料已保存','页面摘要已更新；外部 AI 项目说明已标记为需要更新。'],
-        'save-failed': ['danger','保存失败，草稿仍在','可以继续编辑或按当前输入重试，不会丢失滚动位置。'],
-        'storage-offline': ['danger','项目存储当前不可写','页面保持只读；重新连接存储后再保存或创建外部任务。'],
-        'context-stale': ['warn','外部 AI 项目说明需要更新','项目资料已变化；旧上下文仍可查看，但创建新任务前应更新。'],
-        'copy-failed': ['danger','复制上下文失败','可以重试复制，或下载 Markdown 文件。'],
-        'package-failed': ['danger','外部 AI 制作任务包创建失败','未产生外部调用；可以重试或到任务中心查看记录。'],
-      };
-      const stateMessage=scenarioMessages[scenarioId];
-      const scenarioActions=scenarioId==='save-failed'?`<button class="btn" data-settings-continue-editing="${bible.projectId}">继续编辑</button><button class="btn primary" data-settings-retry-save="${bible.projectId}">重试保存</button>`:bible.editorState.recoveryActions.includes('open-data-tools')?'<button class="btn primary" data-settings-open-data-tools>打开高级数据工具</button>':'';
-      const scenarioBanner=stateMessage?`<div class="settings-warning"><span class="tag ${stateMessage[0]}">${stateMessage[1]}</span><div>${stateMessage[2]}</div>${scenarioActions?`<div class="actions" style="margin-top:8px">${scenarioActions}</div>`:''}</div>`:'';
-      const recoveryActions=collaboration.recoveryActions.map(id=>`<button class="btn" data-context-recovery="${id}" data-project-id="${bible.projectId}">${({ 'retry-copy':'重试复制','download-markdown':'下载 Markdown','retry-package':'重试创建制作任务包','open-task-center':'打开任务中心' })[id]}</button>`).join('');
-      return `<section class="page">${header}${scenarioBanner}${emptyActions}<div class="settings-grid"><article class="settings-panel"><div class="settings-section-head"><div><h2>项目资料</h2><p>项目名称、封面、画幅和默认输出偏好。</p></div><button class="btn" data-project-profile-edit="${bible.projectId}" ${bible.readOnly?'disabled':''}>编辑项目资料</button></div><div class="profile-summary"><div class="look-swatch project-cover" aria-label="${profile.cover.label}"></div><div class="profile-facts"><b>${profile.name}</b><span>${profile.genre} · ${profile.aspectRatio}</span><span>默认 ${profile.defaultEpisodeDuration} 秒 · ${profile.outputPreference}</span><small title="${profile.localPath.value}">本地位置：${profile.localPath.value}</small></div></div></article><aside class="settings-panel"><div class="settings-section-head"><div><h2>项目画面风格</h2><p>当前全项目继承的基础视觉风格。</p></div><span class="tag ok">${look.status}</span></div><div class="look-summary"><div class="look-swatch" aria-label="${look.name} 代表图"></div><div><b>${look.name}</b><p>风格版本 ${look.version} · ${look.aspectRatio}</p><p>${look.usage}</p></div></div><div class="actions" style="margin-top:14px"><button class="btn" data-bible-look="${bible.projectId}">查看版本</button><button class="btn primary" data-look-change="${bible.projectId}" ${bible.readOnly?'disabled':''}>更换画面风格</button></div></aside><section class="settings-panel object-overview"><div class="settings-section-head"><div><h2>生产对象概览</h2><p>只展示项目级数量与问题；资料、媒体和版本仍在项目素材中处理。</p></div></div><div class="object-grid">${objects}</div></section><section class="settings-panel object-overview"><div class="settings-section-head"><div><h2>${collaboration.title}</h2><p>${collaboration.description}</p></div><span class="tag ${collaboration.status.id==='needs-update'?'warn':'ok'}">${collaboration.status.label}</span></div><div class="context-summary"><b>当前项目说明</b><span>${contextSummary}</span><small>${collaboration.status.detail}</small></div>${missing}<div class="actions" style="margin-top:12px"><button class="btn" data-context-edit="${bible.projectId}" ${bible.readOnly?'disabled':''}>编辑项目说明</button>${collaborationActions}</div>${recoveryActions?`<div class="actions" style="margin-top:8px">${recoveryActions}</div>`:''}<details style="margin-top:12px"><summary>上下文包含内容</summary><div class="source-list">${sources}</div></details><div class="settings-help">复制上下文不会调用外部 AI；制作任务先在剧集中心选择安全目标，返回结果仍需五步检查。</div></section></div></section>`;
+      return `<section class="page"><div class="tool-note">项目设置已合并到项目概览；项目资料与画面风格都在概览中编辑。</div></section>`;
     }
 
     function openUnsavedSettingsConfirm(reopen, discard) {
@@ -501,13 +469,11 @@
     }
 
     function openProjectProfileEditor(projectId) {
-      const settings = fullModel.getProjectBibleModel(projectId, 'default');
-      const source=projectSettingsUiState.profileDraft||Object.fromEntries(settings.projectProfile.editableFields.map(item=>[item.id,item.value]));
+      const project = fullModel.getProjectOverviewModel(projectId, 'default');
+      const source=projectSettingsUiState.profileDraft||Object.fromEntries(project.projectProfile.editableFields.map(item=>[item.id,item.value]));
       const initialEditor=fullModel.getProjectSettingsEditorUiState({hasDraft:Boolean(projectSettingsUiState.profileDraft)});
       const optionField=(id,options)=>`<select name="${id}">${options.map(value=>`<option ${String(source[id])===value?'selected':''}>${value}</option>`).join('')}</select>`;
-      openDrawer('编辑项目设定', `<form class="settings-form" id="projectProfileForm"><label>项目名称<input name="name" value="${escapePrototypeHtml(source.name)}"></label><label>项目封面<input name="cover" value="${escapePrototypeHtml(source.cover||'')}" readonly placeholder="尚未选择封面"><button type="button" class="btn" data-project-cover-select style="margin-top:8px">选择本地封面</button><small>只更新项目列表与概览封面，不创建媒体生成任务。</small></label><label>画幅${optionField('aspect-ratio',['16:9','9:16','1:1'])}</label><label>题材<input name="genre" value="${escapePrototypeHtml(source.genre)}"></label><label>默认单集时长<input name="default-episode-duration" type="number" min="10" value="${source['default-episode-duration']}"></label><label>输出偏好${optionField('output-preference',['MP4 · H.264 · 1080p','MP4 · H.265 · 4K','MOV · ProRes · 1080p'])}</label><label>本地项目位置<input value="${settings.projectProfile.localPath.value}" readonly><small>移动或修复项目位置请使用项目操作或高级数据工具。</small></label><div class="settings-save-state" data-settings-save-state>${initialEditor.label}</div><div class="drawer-actions"><button type="button" class="btn" data-settings-cancel>取消</button><button type="submit" class="btn primary" ${initialEditor.saveEnabled?'':'disabled'}>保存项目资料</button></div></form>`);
-      drawerBody.insertAdjacentHTML('afterbegin','<div class="asset-detail-tabs"><button class="active" data-settings-switch="profile">项目资料</button><button data-settings-switch="context">项目说明</button></div>');
-      drawerBody.querySelector('[data-settings-switch="context"]')?.addEventListener('click',()=>openProjectContextEditor(projectId));
+      openDrawer('编辑项目', `<form class="settings-form" id="projectProfileForm"><label>项目名称<input name="name" value="${escapePrototypeHtml(source.name)}"></label><label>项目封面<input name="cover" value="${escapePrototypeHtml(source.cover||'')}" readonly placeholder="尚未选择封面"><button type="button" class="btn" data-project-cover-select style="margin-top:8px">选择本地封面</button><small>只更新项目列表与概览封面，不创建媒体生成任务。</small></label><label>画幅${optionField('aspect-ratio',['16:9','9:16','1:1'])}</label><label>题材<input name="genre" value="${escapePrototypeHtml(source.genre)}"></label><label>项目简介<textarea name="description">${escapePrototypeHtml(source.description||'')}</textarea></label><div class="tool-note">${project.projectProfile.pathNote}</div><div class="settings-save-state" data-settings-save-state>${initialEditor.label}</div><div class="drawer-actions"><button type="button" class="btn" data-settings-cancel>取消</button><button type="submit" class="btn primary" ${initialEditor.saveEnabled?'':'disabled'}>保存项目资料</button></div></form>`);
       const form=drawerBody.querySelector('#projectProfileForm');const submit=form.querySelector('[type="submit"]');let dirty=initialEditor.dirty;
       const capture=()=>{projectSettingsUiState.profileDraft=Object.fromEntries(new FormData(form));dirty=true;submit.disabled=false;drawerBody.querySelector('[data-settings-save-state]').textContent='有未保存修改'};
       form.addEventListener('input',capture);form.addEventListener('change',capture);
@@ -515,40 +481,17 @@
       const reopen=()=>openProjectProfileEditor(projectId);const discard=()=>{projectSettingsUiState.profileDraft=null};
       drawerCloseGuard=()=>dirty?openUnsavedSettingsConfirm(reopen,discard):closeDrawer(true);
       drawerBody.querySelector('[data-settings-cancel]').addEventListener('click',()=>dirty?openUnsavedSettingsConfirm(reopen,discard):closeDrawer(true));
-      form.addEventListener('submit',event=>{event.preventDefault();capture();submit.disabled=true;submit.textContent='正在保存…';form.querySelectorAll('input,select,button').forEach(item=>item.disabled=true);setTimeout(()=>{if(currentLocation().scenarioId==='save-failed'){form.querySelectorAll('input,select,button').forEach(item=>item.disabled=false);submit.textContent='重试保存';drawerBody.querySelector('[data-settings-save-state]').innerHTML='<span class="tag danger">保存失败，输入已保留</span>';return;}const draft=projectSettingsUiState.profileDraft;projectSettingsUiState.activeProfile={name:draft.name,cover:{...settings.projectProfile.cover,label:draft.cover?'当前项目封面':'尚未设置封面'},genre:draft.genre,aspectRatio:draft['aspect-ratio'],defaultEpisodeDuration:Number(draft['default-episode-duration']),outputPreference:draft['output-preference']};projectSettingsUiState.profileDraft=null;drawerCloseGuard=null;closeDrawer(true);navigate('project-bible',{projectId},'context-stale');showToast('项目资料已保存；外部 AI 上下文需要更新')},360)});
-    }
-
-    function openProjectContextEditor(projectId) {
-      const settings=fullModel.getProjectBibleModel(projectId,'default');
-      const source=projectSettingsUiState.contextDraft||Object.fromEntries(settings.context.editableFields.map(item=>[item.id,item.value]));
-      const initialEditor=fullModel.getProjectSettingsEditorUiState({hasDraft:Boolean(projectSettingsUiState.contextDraft)});
-      const fields=settings.context.editableFields.map(item=>`<label>${item.label}<textarea name="${item.id}">${escapePrototypeHtml(source[item.id]||'')}</textarea>${item.id==='continuity-notes'?'<small>只用于外部 AI 创作和人工检查，不会让已有媒体整体过期。</small>':''}</label>`).join('');
-      openDrawer('编辑项目设定',`<form class="settings-form" id="settingsContextForm">${fields}<div class="settings-save-state" data-settings-save-state>${initialEditor.label}</div><div class="drawer-actions"><button type="button" class="btn" data-settings-cancel>取消</button><button type="submit" class="btn primary" ${initialEditor.saveEnabled?'':'disabled'}>保存项目说明</button></div></form>`);
-      drawerBody.insertAdjacentHTML('afterbegin','<div class="asset-detail-tabs"><button data-settings-switch="profile">项目资料</button><button class="active" data-settings-switch="context">项目说明</button></div>');
-      drawerBody.querySelector('[data-settings-switch="profile"]')?.addEventListener('click',()=>openProjectProfileEditor(projectId));
-      const form=drawerBody.querySelector('#settingsContextForm');const submit=form.querySelector('[type="submit"]');let dirty=initialEditor.dirty;
-      const capture=()=>{projectSettingsUiState.contextDraft=Object.fromEntries(new FormData(form));dirty=true;submit.disabled=false;drawerBody.querySelector('[data-settings-save-state]').textContent='有未保存修改'};
-      form.addEventListener('input',capture);const reopen=()=>openProjectContextEditor(projectId);const discard=()=>{projectSettingsUiState.contextDraft=null};drawerCloseGuard=()=>dirty?openUnsavedSettingsConfirm(reopen,discard):closeDrawer(true);
-      drawerBody.querySelector('[data-settings-cancel]').addEventListener('click',()=>dirty?openUnsavedSettingsConfirm(reopen,discard):closeDrawer(true));
-      form.addEventListener('submit',event=>{event.preventDefault();capture();submit.disabled=true;submit.textContent='正在保存…';setTimeout(()=>{if(currentLocation().scenarioId==='save-failed'){submit.disabled=false;submit.textContent='重试保存';drawerBody.querySelector('[data-settings-save-state]').innerHTML='<span class="tag danger">保存失败，输入与滚动位置已保留</span>';return;}projectSettingsUiState.activeContextSummary=projectSettingsUiState.contextDraft['story-foundation'];projectSettingsUiState.contextDraft=null;drawerCloseGuard=null;closeDrawer(true);navigate('project-bible',{projectId},'context-stale');showToast('项目说明已保存')},360)});
-    }
-
-    function openProjectContextPreview(projectId) {
-      const pageScenario=currentLocation().scenarioId;const previewScenario=['context-stale','copy-failed'].includes(pageScenario)?pageScenario:'default';const settings=fullModel.getProjectBibleModel(projectId,previewScenario);const collaboration=settings.externalAiCollaboration;
-      const copyLabel=previewScenario==='context-stale'?'更新并复制':'复制上下文';
-      openDrawer('外部 AI · 项目说明预览',`<div class="tool-note"><b>${collaboration.status.label}</b><br>${collaboration.status.detail}</div><div class="context-summary" style="margin-top:12px"><b>预览</b><span>${projectSettingsUiState.activeContextSummary||settings.context.summary}</span></div><h3>包含内容</h3><div class="source-list">${settings.context.includedSources.map(item=>`<span class="tag">${item}</span>`).join('')}</div>${currentLocation().scenarioId==='copy-failed'?'<div class="settings-warning"><b>复制失败</b><div>剪贴板当前不可用，内容仍在。</div></div>':''}<div class="drawer-actions"><button class="btn" data-context-edit-from-preview>编辑</button><button class="btn" data-context-download>下载 Markdown</button><button class="btn primary" data-context-copy>${copyLabel}</button></div>`);
-      drawerBody.querySelector('[data-context-edit-from-preview]').addEventListener('click',()=>openProjectContextEditor(projectId));
-      drawerBody.querySelector('[data-context-download]').addEventListener('click',()=>showToast('Markdown 已准备；原型未写入磁盘'));
-      drawerBody.querySelector('[data-context-copy]').addEventListener('click',()=>{if(currentLocation().scenarioId==='copy-failed'){showToast('复制仍失败，请下载 Markdown');return;}if(previewScenario==='context-stale'){closeDrawer(true);navigate('project-bible',{projectId});showToast('项目说明已更新并复制');return;}showToast('项目说明已复制')});
+      form.addEventListener('submit',event=>{event.preventDefault();capture();submit.disabled=true;submit.textContent='正在保存…';form.querySelectorAll('input,select,button').forEach(item=>item.disabled=true);setTimeout(()=>{if(currentLocation().scenarioId==='save-failed'){form.querySelectorAll('input,select,button').forEach(item=>item.disabled=false);submit.textContent='重试保存';drawerBody.querySelector('[data-settings-save-state]').innerHTML='<span class="tag danger">保存失败，输入已保留</span>';return;}projectSettingsUiState.profileDraft=null;drawerCloseGuard=null;closeDrawer(true);showToast('项目资料已保存')},360)});
     }
 
     function openProjectLookPicker(projectId) {
-      const editor=fullModel.getProjectLookEditorModel(projectId,{query:projectSettingsUiState.lookQuery,selectedPresetId:projectSettingsUiState.selectedLookId});const isCustom=projectSettingsUiState.lookTab==='custom';
-      const presets=editor.visiblePresets.map(item=>`<button class="batch-action ${item.id===projectSettingsUiState.selectedLookId?'selected':''}" data-look-preset="${item.id}"><b>${item.name}</b><small>${item.category} · ${item.description}</small></button>`).join('')||'<div class="asset-empty-inline">没有匹配的风格预设。</div>';
-      const body=isCustom?`<div class="settings-form">${editor.customFields.map(item=>`<label>${item.label}<textarea placeholder="描述${item.label}"></textarea></label>`).join('')}</div><div class="tool-note">自定义规则只创建项目风格版本；样例图和媒体候选仍归项目素材。</div>`:`<div class="toolbar"><input class="search" data-look-search-input value="${escapePrototypeHtml(editor.query)}" placeholder="搜索真人、3D、2D 或风格名称"><button class="btn" data-look-search>搜索</button></div><div class="asset-option-list">${presets}</div>`;
-      openLookStyleModal(projectId);return;}
+      openLookStyleModal(projectId);
+    }
     function openLookStyleModal(projectId){
-      const catalog=[
+      const overview=fullModel.getProjectOverviewModel(projectId,'default');
+      const selector=overview.projectStyleSelector;
+      const editor=fullModel.getProjectLookEditorModel(projectId,{query:'',selectedPresetId:projectSettingsUiState.selectedLookId});
+      const presets=[
         {id:'rh-101',name:'电影感悬疑',cat:'电影感',desc:'冷色低照度、局部暖光和缓慢运镜',tone:'linear-gradient(145deg,#1b2438,#465f96)'},
         {id:'rh-102',name:'真人写实',cat:'真人写实',desc:'自然肤质、真实镜头和克制调色',tone:'linear-gradient(145deg,#3a2e28,#9b6c4b)'},
         {id:'rh-103',name:'都市夜景',cat:'电影感',desc:'霓虹反光、大光比和浅景深',tone:'linear-gradient(145deg,#132c47,#335d86)'},
@@ -559,56 +502,42 @@
         {id:'rh-108',name:'悬疑冷雾',cat:'电影感',desc:'低饱和青灰与雾气层次',tone:'linear-gradient(145deg,#1f2b33,#5a7480)'},
         {id:'rh-109',name:'国风仙侠',cat:'风格化',desc:'飘逸布料、云雾山水与金饰高光',tone:'linear-gradient(145deg,#274060,#c9a86a)'},
       ];
-      const cats=['全部',...new Set(catalog.map(item=>item.cat))];
-      let activeCat='全部';let selectedId=window.__lookSelectedId||null;
+      const mine=[{id:'my-noir-night',name:'私藏 · 高对比夜戏',cat:'我的风格',desc:'基于电影感悬疑调整的自定义风格',tone:'linear-gradient(145deg,#101820,#3d5a80)'}];
+      const cats=['全部',...new Set(presets.map(item=>item.cat))];
+      let activeTab='presets';let activeCat='全部';let lookQuery='';let selectedId=window.__lookSelectedId||null;
+      const allStyles=()=>presets.concat(mine);
       const render=()=>{
-        const list=catalog.filter(item=>activeCat==='全部'||item.cat===activeCat);
-        document.getElementById('styleModalBody').innerHTML=`
-          <div class="toolbar"><input class="search" id="styleSearch" placeholder="搜索风格名称" style="width:260px"><div class="asset-tabs" style="margin:0">${cats.map(cat=>`<button class="asset-tab ${cat===activeCat?'active':''}" data-style-cat="${cat}">${cat}</button>`).join('')}</div></div>
-          <div class="style-grid">${list.map(item=>`<button class="style-card ${selectedId===item.id?'selected':''}" data-style-id="${item.id}"><div class="style-thumb" style="background:${item.tone}"></div><b>${item.name}</b><small>${item.cat} · ${item.desc}</small></button>`).join('')}</div>`;
-        document.querySelectorAll('#styleModalBody [data-style-cat]').forEach(btn=>btn.addEventListener('click',()=>{activeCat=btn.dataset.styleCat;render()}));
-        document.querySelectorAll('#styleModalBody [data-style-id]').forEach(btn=>btn.addEventListener('click',()=>{selectedId=btn.dataset.styleId;window.__lookSelectedId=selectedId;render();document.getElementById('styleApplyHint').textContent=`已选择「${catalog.find(item=>item.id===selectedId).name}」；应用前请确认影响范围。`}));
+        const body=document.getElementById('styleModalBody');
+        if(activeTab==='custom'){
+          body.innerHTML=`<div class="settings-form">${selector.customFields.map(item=>`<label>${item.label}${item.id==='reference-images'?'<input type="file" placeholder="选择参考图片">':item.id==='style-name'?'<input placeholder="例如：午夜霓虹">':'<textarea placeholder="描述'+item.label+'"></textarea>'}</label>`).join('')}</div><div class="tool-note">自定义风格保存到“我的风格”；样例图和媒体候选仍归项目素材。</div>`;
+          return;
+        }
+        const pool=activeTab==='mine'?mine:presets.filter(item=>activeCat==='全部'||item.cat===activeCat);
+        const list=pool.filter(item=>`${item.name} ${item.cat} ${item.desc}`.toLowerCase().includes(lookQuery.trim().toLowerCase()));
+        body.innerHTML=`<div class="toolbar"><input class="search" id="styleSearch" value="${escapePrototypeHtml(lookQuery)}" placeholder="${escapePrototypeHtml(selector.search.placeholder)}" style="width:260px">${activeTab==='presets'?`<div class="asset-tabs" style="margin:0">${cats.map(cat=>`<button class="asset-tab ${cat===activeCat?'active':''}" data-style-cat="${cat}">${cat}</button>`).join('')}</div>`:''}</div>
+          <div class="style-grid">${list.map(item=>`<button class="style-card ${selectedId===item.id?'selected':''}" data-style-id="${item.id}"><div class="style-thumb" style="background:${item.tone}"></div><b>${item.name}</b><small>${item.cat} · ${item.desc}</small></button>`).join('')||'<div class="asset-empty-inline">没有匹配的风格。</div>'}</div>`;
+        body.querySelectorAll('[data-style-cat]').forEach(btn=>btn.addEventListener('click',()=>{activeCat=btn.dataset.styleCat;render()}));
+        body.querySelectorAll('[data-style-id]').forEach(btn=>btn.addEventListener('click',()=>{selectedId=btn.dataset.styleId;window.__lookSelectedId=selectedId;render();document.getElementById('styleApplyHint').textContent=`已选择「${allStyles().find(item=>item.id===selectedId).name}」；应用前请确认影响范围。`}));
+        const search=body.querySelector('#styleSearch');
+        if(search)search.addEventListener('input',()=>{lookQuery=search.value;const caret=search.selectionStart;render();const next=document.getElementById('styleModalBody').querySelector('#styleSearch');if(next){next.focus();next.setSelectionRange(caret,caret)}});
       };
       const wrap=document.createElement('div');wrap.className='style-modal-backdrop';wrap.id='styleModal';
-      wrap.innerHTML=`<div class="style-modal"><div class="drawer-head"><h2>更换项目画面风格</h2><span class="tag ok">当前：都市悬疑 · 冷暖对撞 · 第 4 版</span><button class="icon-btn" id="styleModalClose" aria-label="关闭">×</button></div><div id="styleModalBody"></div><div class="drawer-actions"><span id="styleApplyHint" style="color:var(--muted)">点击风格卡片进行选择；应用前会确认影响范围。</span><span style="flex:1"></span><button class="btn" id="styleModalCancel">取消</button><button class="btn primary" id="styleModalApply" ${selectedId?'':'disabled'}>查看影响并应用</button></div></div>`;
+      wrap.innerHTML=`<div class="style-modal"><div class="drawer-head"><h2>更换项目画面风格</h2><span class="tag ok">当前：${selector.currentStyle.name}${selector.currentStyle.version?` · 第 ${selector.currentStyle.version} 版`:''}</span><button class="icon-btn" id="styleModalClose" aria-label="关闭">×</button></div><div class="asset-tabs" style="margin:0 0 10px">${selector.tabs.map(tab=>`<button class="asset-tab ${tab.id===activeTab?'active':''}" data-style-tab="${tab.id}">${tab.label}</button>`).join('')}</div><div class="tool-note" style="margin-bottom:10px">${selector.applyRule}</div><div id="styleModalBody"></div><div class="drawer-actions"><span id="styleApplyHint" style="color:var(--muted)">点击风格卡片进行选择；应用前会确认影响范围。</span><span style="flex:1"></span><button class="btn" id="styleModalCancel">取消</button><button class="btn primary" id="styleModalApply" ${selectedId?'':'disabled'}>${selector.confirmAction.label}</button></div></div>`;
       document.body.appendChild(wrap);
       const close=()=>{wrap.remove();window.__lookSelectedId=selectedId;};
       wrap.querySelector('#styleModalClose').addEventListener('click',close);
       wrap.querySelector('#styleModalCancel').addEventListener('click',close);
-      wrap.querySelector('#styleModalApply').addEventListener('click',()=>{const name=catalog.find(item=>item.id===selectedId).name;close();showToast(`已选择「${name}」；打开影响确认`);openProjectLookImpactPreview(projectId);});
+      wrap.querySelectorAll('[data-style-tab]').forEach(btn=>btn.addEventListener('click',()=>{activeTab=btn.dataset.styleTab;wrap.querySelectorAll('[data-style-tab]').forEach(item=>item.classList.toggle('active',item===btn));render()}));
+      wrap.querySelector('#styleModalApply').addEventListener('click',()=>{const style=allStyles().find(item=>item.id===selectedId);close();showToast(`已选择「${style.name}」；打开影响确认`);openProjectLookImpactPreview(projectId,style);});
       render();
     }
-    function __unusedLookPicker(projectId){openDrawer('更换项目画面风格',`<div class="segmented"><button class="${isCustom?'':'active'}" data-look-tab="presets">预设</button><button class="${isCustom?'active':''}" data-look-tab="custom">自定义</button></div>${body}<div class="drawer-actions"><button class="btn" data-stage-drawer-action="cancel">取消</button><button class="btn primary" data-look-preview-impact>预览影响</button></div>`);
-      drawerBody.querySelectorAll('[data-look-tab]').forEach(button=>button.addEventListener('click',()=>{projectSettingsUiState.lookTab=button.dataset.lookTab;openProjectLookPicker(projectId)}));
-      drawerBody.querySelectorAll('[data-look-preset]').forEach(button=>button.addEventListener('click',()=>{projectSettingsUiState.selectedLookId=button.dataset.lookPreset;openProjectLookPicker(projectId)}));
-      drawerBody.querySelector('[data-look-search]')?.addEventListener('click',()=>{projectSettingsUiState.lookQuery=drawerBody.querySelector('[data-look-search-input]').value;openProjectLookPicker(projectId)});
-      drawerBody.querySelector('[data-look-preview-impact]').addEventListener('click',()=>openProjectLookImpactPreview(projectId,isCustom?'custom':projectSettingsUiState.selectedLookId));
+    function openProjectLookImpactPreview(projectId, selectedStyle) {
+      const editor=fullModel.getProjectLookEditorModel(projectId,{selectedPresetId:selectedStyle&&selectedStyle.id||projectSettingsUiState.selectedLookId});const selected=selectedStyle;const impact=editor.impactPreview;
+      openDrawer('应用风格前确认影响',`<div class="tool-note"><b>将应用「${selected?selected.name:'自定义风格'}」为新风格版本</b><br>当前风格版本和历史媒体保持不变。</div><div class="batch-summary" style="margin-top:12px"><div class="asset-field"><small>引用当前风格的结果</small><b>${impact.referencedResults}</b></div><div class="asset-field"><small>将标记需要更新</small><b>${impact.needsUpdate}</b></div><div class="asset-field"><small>不受影响的历史</small><b>${impact.unaffectedHistory}</b></div><div class="asset-field"><small>自动重新生成</small><b>${impact.autoRegenerate?'是':'否'}</b></div></div><div class="drawer-actions"><button class="btn" data-look-back>返回选择</button><button class="btn primary" data-look-confirm-version>${editor.confirmAction.label}</button></div>`);
+      drawerBody.querySelector('[data-look-back]').addEventListener('click',()=>openLookStyleModal(projectId));
+      drawerBody.querySelector('[data-look-confirm-version]').addEventListener('click',()=>{projectSettingsUiState.activeLook={name:selected?selected.name:'自定义风格',version:5,status:'当前风格版本',source:selected&&selected.id&&selected.id.indexOf('my-')===0?'我的风格':'内置风格预设'};closeDrawer(true);showToast('已应用新风格；只影响之后的新生成，已有图片和视频保持不变')});
     }
 
-    function openProjectLookImpactPreview(projectId, selectedId) {
-      const editor=fullModel.getProjectLookEditorModel(projectId,{selectedPresetId:selectedId});const selected=selectedId==='custom'?{name:'自定义风格'}:editor.selectedPreset;const impact=editor.impactPreview;
-      openDrawer('应用风格前确认影响',`<div class="tool-note"><b>将创建“${selected.name}”风格版本 v5</b><br>当前 v4 和历史媒体保持不变。</div><div class="batch-summary" style="margin-top:12px"><div class="asset-field"><small>引用当前风格的结果</small><b>${impact.referencedResults}</b></div><div class="asset-field"><small>将标记需要更新</small><b>${impact.needsUpdate}</b></div><div class="asset-field"><small>不受影响的历史</small><b>${impact.unaffectedHistory}</b></div><div class="asset-field"><small>自动重新生成</small><b>${impact.autoRegenerate?'是':'否'}</b></div></div><div class="drawer-actions"><button class="btn" data-look-back>返回选择</button><button class="btn primary" data-look-confirm-version>${editor.confirmAction.label}</button></div>`);
-      drawerBody.querySelector('[data-look-back]').addEventListener('click',()=>openProjectLookPicker(projectId));
-      drawerBody.querySelector('[data-look-confirm-version]').addEventListener('click',()=>{projectSettingsUiState.activeLook={name:selected.name,version:5,status:'当前',source:selectedId==='custom'?'自定义视觉规则':'内置风格预设'};closeDrawer(true);navigate('project-bible',{projectId});showToast('已创建风格版本 v5；6 个真实引用标记为需要更新')});
-    }
-
-    function openProjectLookDrawer(projectId) {
-      const project = fullModel.getProjectOverviewModel(projectId, 'default');
-      const look = project.sections.projectLook;
-      const tags = look.visualIntent.map(item => `<span class="tag">${item}</span>`).join('');
-      const versions = look.versionHistory.map(item => `<div class="look-version"><span class="tag ${item.status === '当前' ? 'ok' : ''}">v${item.version}</span><div><b>${item.status}</b><small>${item.note}</small></div></div>`).join('');
-      openDrawer('项目画面风格', `<div class="look-detail-preview" aria-label="${look.name} 代表图"></div>
-        <div class="look-detail-section"><span class="tag ok">${look.status}</span><h3 style="margin-top:10px">${look.name}</h3><p>风格版本 ${look.version} · ${look.source}</p><p>${look.aspectRatio} · ${look.usage}</p></div>
-        <div class="look-detail-section"><h3>视觉规则</h3><div class="look-tags">${tags}</div></div>
-        <div class="look-detail-section"><h3>当前影响范围</h3><p>${look.impact}</p><p>修改并批准新版本后，受影响内容将按依赖指纹标记为已过期，不会自动重新生成。</p></div>
-        <div class="look-detail-section"><h3>版本记录</h3>${versions}</div>
-        <div class="drawer-actions"><button class="btn primary" data-manage-project-look="${project.projectId}">管理画面风格</button></div>`);
-      drawerBody.querySelector('[data-manage-project-look]').addEventListener('click', event => {
-        const targetProjectId = event.currentTarget.dataset.manageProjectLook;
-        closeDrawer();
-        navigate(look.action.manageTarget.routeId, { projectId: targetProjectId }, look.action.manageTarget.scenarioId);
-      });
-    }
 
     function renderProjectAssets(projectId, scenarioId, focusId = '') {
       if (scenarioId === 'loading') return `<section class="page"><div class="skeleton"></div><div class="project-assets-grid" style="margin-top:16px"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>`;
@@ -1704,7 +1633,7 @@
       const nameError=scenarioId==='validation-error'?'<span class="field-error">请输入项目名称</span>':'';
       const pathError=scenarioId==='path-unavailable'?'<span class="field-error">此位置当前不可写，请重新选择</span>':scenarioId==='insufficient-space'?'<span class="field-error">空间不足，制作包预计需要 4.8 GB</span>':'';
       const selectedLabel=model.selectedSourceId?[...groups.primary,...groups.more].find(item=>item.id===model.selectedSourceId)?.label:'';
-      return `<section class="page project-create" data-feature-id="P-01-NEW"><div class="page-head"><div><h1>${model.featureName}</h1><p>${model.subtitle}</p></div></div>${renderStageScenario(model.scenario)}<form data-project-create-form><section class="project-create-panel" aria-busy="${model.formLocked}"><div class="settings-section-head"><div><h2>项目信息</h2><p>画幅和时长已继承默认设置，之后仍可调整。</p></div></div><div class="settings-form project-create-fields"><label>项目名称<input name="name" data-project-create-field="name" value="${escapePrototypeHtml(model.fields[0].value)}" placeholder="${model.fields[0].placeholder}" required ${model.formLocked?'disabled':''}>${nameError}</label><label>画幅<select name="aspectRatio" data-project-create-field="aspectRatio" ${model.formLocked?'disabled':''}>${model.fields[1].options.map(item=>`<option value="${item}" ${model.fields[1].value===item?'selected':''}>${item}</option>`).join('')}</select></label><label>目标单集时长（用于预估每集分镜数量与合成时长，之后可改）<div class="duration-row"><input name="episodeDuration" type="number" min="10" max="1800" step="5" data-project-create-field="episodeDuration" value="${model.fields[2].value}" ${model.formLocked?'disabled':''}><span class="tag">秒</span></div><div class="duration-presets">${model.fields[2].presets.map(item=>`<button type="button" class="btn" data-duration-preset="${item}" ${model.formLocked?'disabled':''}>${item}</button>`).join('')}</div></label><label class="directory-field">保存到<div class="directory-row"><code>${escapePrototypeHtml(model.fields[3].value)}</code><button type="button" class="btn" data-project-location-change ${model.formLocked?'disabled':''}>更改</button></div><small>创建前检查可写权限、同名目录和可用空间。</small>${pathError}</label></div></section><section class="project-create-panel" aria-busy="${model.formLocked}"><div class="settings-section-head"><div><h2>你想从哪里开始？</h2><p>${selectedLabel?`已选择：${selectedLabel}`:'选择一种方式后，再创建项目。'}</p></div></div><div class="source-grid project-create-sources">${primary}</div><details style="margin-top:14px"><summary class="btn">更多开始方式</summary><div class="source-grid project-create-sources" style="margin-top:10px">${more}</div></details></section><div class="project-create-actions"><button type="button" class="btn" data-project-create-cancel>取消</button><button class="btn primary" type="submit" data-project-create-submit ${model.primaryAction.enabled?'':'disabled'}>${model.formLocked?(scenarioId==='creating'?'正在创建…':'项目已创建'):model.primaryAction.label}</button></div></form></section>`;
+      return `<section class="page project-create" data-feature-id="P-01-NEW"><div class="page-head"><div><h1>${model.featureName}</h1><p>${model.subtitle}</p></div></div>${renderStageScenario(model.scenario)}<form data-project-create-form><section class="project-create-panel" aria-busy="${model.formLocked}"><div class="settings-section-head"><div><h2>项目信息</h2><p>画幅已继承默认设置，之后仍可调整。</p></div></div><div class="settings-form project-create-fields"><label>项目名称<input name="name" data-project-create-field="name" value="${escapePrototypeHtml(model.fields[0].value)}" placeholder="${model.fields[0].placeholder}" required ${model.formLocked?'disabled':''}>${nameError}</label><label>画幅<select name="aspectRatio" data-project-create-field="aspectRatio" ${model.formLocked?'disabled':''}>${model.fields[1].options.map(item=>`<option value="${item}" ${model.fields[1].value===item?'selected':''}>${item}</option>`).join('')}</select></label><label>题材<input name="genre" data-project-create-field="genre" value="${escapePrototypeHtml(model.fields[2].value)}" placeholder="${model.fields[2].placeholder}" ${model.formLocked?'disabled':''}></label><label class="directory-field">保存到<div class="directory-row"><code>${escapePrototypeHtml(model.fields[3].value)}</code><button type="button" class="btn" data-project-location-change ${model.formLocked?'disabled':''}>更改</button></div><small>创建前检查可写权限、同名目录和可用空间。</small>${pathError}</label></div></section><section class="project-create-panel" aria-busy="${model.formLocked}"><div class="settings-section-head"><div><h2>你想从哪里开始？</h2><p>${selectedLabel?`已选择：${selectedLabel}`:'选择一种方式后，再创建项目。'}</p></div></div><div class="source-grid project-create-sources">${primary}</div><details style="margin-top:14px"><summary class="btn">更多开始方式</summary><div class="source-grid project-create-sources" style="margin-top:10px">${more}</div></details></section><div class="project-create-actions"><button type="button" class="btn" data-project-create-cancel>取消</button><button class="btn primary" type="submit" data-project-create-submit ${model.primaryAction.enabled?'':'disabled'}>${model.formLocked?(scenarioId==='creating'?'正在创建…':'项目已创建'):model.primaryAction.label}</button></div></form></section>`;
     }
 
     function renderProjectImport(scenarioId) {
@@ -1744,7 +1673,7 @@
       const save=generalUiState.dirty&&scenarioId==='default'?{...model.save,state:'dirty',buttonLabel:'保存修改'}:model.save;
       const statusLabel={clean:'没有未保存修改',dirty:'有未保存修改',saving:'正在保存',saved:`已保存 · ${save.lastSavedAt||'刚刚'}`,failed:'保存失败 · 当前输入已保留',conflict:'发现其他窗口的修改'}[save.state];
       const pathRows=model.paths.map(item=>`<article class="path-row ${item.permission==='可写'&&item.overlapCheck==='无重叠'?'':'path-warning'}"><div class="path-main"><b>${item.label}</b><code>${item.value}</code><small>当前状态：${item.permission==='可写'&&item.availableSpace!=='未知'?'可访问':'需要处理'} · 空间 ${item.availableSpace} · 权限 ${item.permission} · 最近检查 ${item.lastCheckedAt}${item.occupancy?` · 已占用 ${item.occupancy}`:''}${item.safeToClean?` · 可安全清理 ${item.safeToClean}`:''}</small></div><div class="mini-actions"><button class="btn" data-general-path-check="${item.id}">重新检测</button>${item.id==='workspace'?'<button class="btn" data-general-workspace-change>更改工作区</button>':'<button class="btn" data-general-path-select="'+item.id+'">选择目录</button>'}</div></article>`).join('');
-      const defaults=`<article class="review-panel"><h2>创作默认值</h2><p>只影响新建项目、新建剧集和新任务；不会修改已有项目或已确认剧集。</p><label>默认画幅<select data-general-field="aspectRatio"><option ${(!generalUiState.fields.aspectRatio||generalUiState.fields.aspectRatio==='16:9')?'selected':''}>16:9</option><option ${generalUiState.fields.aspectRatio==='9:16'?'selected':''}>9:16</option><option ${generalUiState.fields.aspectRatio==='1:1'?'selected':''}>1:1</option></select></label><label>默认单集时长<div class="duration-row"><input type="number" data-general-field="episodeDuration" value="${generalUiState.fields.episodeDuration||model.defaults.episodeDuration}"><span class="tag">秒</span></div><div class="duration-presets"><button class="btn" data-general-duration="60">60 秒</button><button class="btn" data-general-duration="90">90 秒</button><button class="btn" data-general-duration="180">180 秒</button></div></label><label>默认语言<select data-general-field="language"><option ${(!generalUiState.fields.language||generalUiState.fields.language==='简体中文')?'selected':''}>简体中文</option><option ${generalUiState.fields.language==='繁体中文'?'selected':''}>繁体中文</option><option ${generalUiState.fields.language==='English'?'selected':''}>English</option></select></label><div class="tool-note" style="margin-top:12px">项目级设置优先于这里的默认值；任务创建时冻结最终配置。</div></article>`;
+      const defaults=`<article class="review-panel"><h2>创作默认值</h2><p>只影响新建项目、新建剧集和新任务；不会修改已有项目或已确认剧集。</p><label>默认画幅<select data-general-field="aspectRatio"><option ${(!generalUiState.fields.aspectRatio||generalUiState.fields.aspectRatio==='16:9')?'selected':''}>16:9</option><option ${generalUiState.fields.aspectRatio==='9:16'?'selected':''}>9:16</option><option ${generalUiState.fields.aspectRatio==='1:1'?'selected':''}>1:1</option></select></label><label>默认语言<select data-general-field="language"><option ${(!generalUiState.fields.language||generalUiState.fields.language==='简体中文')?'selected':''}>简体中文</option><option ${generalUiState.fields.language==='繁体中文'?'selected':''}>繁体中文</option><option ${generalUiState.fields.language==='English'?'selected':''}>English</option></select></label><div class="tool-note" style="margin-top:12px">只影响新建项目和新任务的初始选择；任务创建时冻结最终配置。</div></article>`;
       const backup=`<article class="review-panel"><h2>自动备份</h2><label>保留天数<input type="number" min="${model.backupPolicy.minDays}" max="${model.backupPolicy.maxDays}" value="${model.backupPolicy.retentionDays}" data-general-field="backupRetentionDays"><small>范围 ${model.backupPolicy.minDays}–${model.backupPolicy.maxDays} 天，不允许设置为 0 关闭保护。</small></label><div class="feature-line"><span>备份目录</span><b>${model.backupPolicy.directory}</b></div><div class="feature-line"><span>预计占用</span><b>${model.backupPolicy.estimatedUsage}</b></div><button class="btn" data-general-backup-now>立即创建备份</button></article>`;
       const impact=model.storageImpact?`<div class="settings-warning"><b>媒体根目录不可访问</b><div>会影响：${model.storageImpact.affects.join('、')}</div><div>不会影响：${model.storageImpact.doesNotAffect.join('、')}</div></div>`:'';
       return `<section class="page" data-feature-id="D-01-SETTINGS"><div class="page-head"><div><h1>${model.featureName}</h1><p>日常路径和创作默认值；修复、迁移与物理清理进入高级工具。</p></div><div class="actions"><span class="tag ${save.state==='dirty'||save.state==='failed'||save.state==='conflict'?'warn':''}" data-general-save-status>${statusLabel}</span><button class="btn primary" data-general-save ${save.state==='clean'||save.state==='saving'||scenarioId==='read-only'?'disabled':''}>${save.buttonLabel}</button></div></div><nav class="settings-tabs"><button data-route-id="settings-ai">AI 配置</button><button class="active">常规</button><button data-route-id="settings-data">高级数据工具</button></nav>${renderStageScenario(model.scenario)}${impact}<div class="review-grid"><section class="review-panel full"><div class="settings-section-head"><div><h2>工作区与数据库</h2><p>工作区变更不是普通保存，会进入迁移向导并创建回滚点。</p></div><span class="tag">${model.workspaceChange.current}</span></div><div class="path-row"><div class="path-main"><b>当前工作区</b><code>${model.workspaceChange.current}</code><small>数据库、项目索引、任务记录、媒体引用和备份均位于此工作区。</small></div><button class="btn" data-general-workspace-change>更改工作区</button></div><details style="margin-top:12px"><summary class="btn">迁移安全说明</summary><p>迁移前检查数据库和项目结构、权限、空间与活动任务；确认时可选择复制数据库、复制媒体、保留原目录，并在完成后重新打开工作区。</p></details></section><section class="review-panel full"><div class="settings-section-head"><div><h2>媒体与交付输出</h2><p>三个目录生命周期不同；保存新路径前会检查存在性、权限、空间、重叠和活动任务；不会自动改写媒体引用。</p></div><span class="tag">${model.paths.filter(item=>item.permission==='可写').length}/${model.paths.length} 可写</span></div>${pathRows}</section>${backup}${defaults}<article class="review-panel full"><h2>遇到存储问题？</h2><p>完整性检查、媒体重定位、迁移 journal、备份恢复和物理清理由高级数据工具负责。</p><button class="btn" data-general-open-repair>打开高级数据工具</button></article></div></section>`;
@@ -1890,7 +1819,6 @@
       const localState = document.getElementById('localState');
       const hasSystemWarning = (state.routeId === 'projects' && ['offline','load-failed'].includes(state.scenarioId)) ||
         (state.routeId === 'project-overview' && ['needs-attention','load-failed','storage-offline','missing'].includes(state.scenarioId)) ||
-        (state.routeId === 'project-bible' && ['load-failed','save-failed','storage-offline','context-stale','copy-failed','package-failed'].includes(state.scenarioId)) ||
         (state.routeId === 'project-import' && ['unsupported-archive','failed','partial-success'].includes(state.scenarioId)) ||
         (state.routeId === 'studio-script' && ['save-failed','conflict','offline','ai-failed'].includes(state.scenarioId)) ||
         (state.routeId === 'studio-assets' && ['check-failed','snapshot-failed','media-offline','external-package-mismatch'].includes(state.scenarioId)) ||
@@ -1900,7 +1828,7 @@
       localState.className = `tag system-state${hasSystemWarning ? ' warn' : ''}`;
       if (state.routeId === 'projects') pageRoot.innerHTML = renderProjects(state.params,state.scenarioId);
       else if (state.routeId === 'project-overview') pageRoot.innerHTML = renderProjectOverview(state.params.projectId,state.scenarioId);
-      else if (state.routeId === 'project-bible') pageRoot.innerHTML = renderProjectBible(state.params.projectId,state.scenarioId);
+      else if (state.routeId === 'project-bible') { const redirect=fullModel.getProjectBibleModel(state.params.projectId,state.scenarioId); navigate(redirect.redirectTo.routeId,redirect.redirectTo.params,redirect.redirectTo.scenarioId); pageRoot.innerHTML = `<section class="page"><div class="tool-note">项目设置已合并到项目概览，正在打开…</div></section>`; }
       else if (state.routeId === 'project-episodes') pageRoot.innerHTML = renderProjectEpisodes(state.params.projectId,state.scenarioId);
       else if (state.routeId === 'project-assets') pageRoot.innerHTML = renderProjectAssets(state.params.projectId,state.scenarioId,state.params.focusId);
       else if (state.routeId === 'project-new') pageRoot.innerHTML = renderProjectCreate(state.scenarioId);
@@ -2164,7 +2092,6 @@
       if (scriptLocation.routeId === 'settings-general') {
         const markGeneralDirty=(field,value)=>{generalUiState.dirty=true;generalUiState.status='dirty';generalUiState.fields[field]=value;renderLocation()};
         pageRoot.querySelectorAll('[data-general-field]').forEach(control=>control.addEventListener('change',()=>markGeneralDirty(control.dataset.generalField,control.value)));
-        pageRoot.querySelectorAll('[data-general-duration]').forEach(button=>button.addEventListener('click',()=>markGeneralDirty('episodeDuration',Number(button.dataset.generalDuration))));
         pageRoot.querySelector('[data-general-save]')?.addEventListener('click',()=>{if(!generalUiState.dirty){return}generalUiState.status='saving';renderLocation();setTimeout(()=>{if(currentLocation().routeId!=='settings-general')return;generalUiState.dirty=false;generalUiState.status='saved';generalUiState.fields={};navigate('settings-general',{},'default')},420)});
         pageRoot.querySelector('[data-general-backup-now]')?.addEventListener('click',()=>{openDrawer('立即创建备份',`<div class="tool-note"><b>创建前检查</b><br>备份数据库、项目索引、任务记录和配置；不会复制临时目录。</div><div class="feature-line"><span>目标目录</span><b>E:/LocalMiniDrama/backups</b></div><div class="drawer-actions"><button class="btn" data-stage-drawer-action="cancel">取消</button><button class="btn primary" data-general-backup-confirm>开始备份</button></div>`);drawerBody.querySelector('[data-general-backup-confirm]').addEventListener('click',()=>{closeDrawer();navigate('settings-general',{},'saving')})});
         pageRoot.querySelectorAll('[data-general-path-check]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.generalPathCheck;openDrawer('目录检查',`<div class="feature-line"><span>目录</span><b>${id}</b></div><div class="delivery-check"><span>存在且可访问</span><span class="tag ok">通过</span></div><div class="delivery-check"><span>可写权限</span><span class="tag ok">通过</span></div><div class="delivery-check"><span>可用空间</span><span class="tag ok">86.4 GB</span></div><div class="delivery-check"><span>与其他目录重叠</span><span class="tag ok">无</span></div><div class="drawer-actions"><button class="btn primary" data-stage-drawer-action="review-complete">完成</button></div>`)}));
@@ -2224,14 +2151,10 @@
       }));
       pageRoot.querySelectorAll('[data-project-create-field]').forEach(field=>field.addEventListener('change',()=>{
         const key=field.dataset.projectCreateField;
-        const value=key==='episodeDuration'?Number(field.value):field.value;
+        const value=field.value;
         const next={...projectCreateUiState,[key]:value,dirty:true};
         if(key==='name'&&!projectCreateUiState.locationCustomized){const safe=String(value).replace(/[<>:"/\\|?*]/g,'').trim()||'新项目';next.outputLocation=`E:/LocalMiniDrama/${safe}`}
         projectCreateUiState=next;
-        renderLocation();
-      }));
-      pageRoot.querySelectorAll('[data-duration-preset]').forEach(button=>button.addEventListener('click',()=>{
-        projectCreateUiState={...projectCreateUiState,episodeDuration:Number(button.dataset.durationPreset),dirty:true};
         renderLocation();
       }));
       pageRoot.querySelector('[data-project-location-change]')?.addEventListener('click',()=>{
@@ -2243,7 +2166,7 @@
         if(state.scenarioId==='source-cancelled'){navigate('project-overview',{projectId:'new-project'});return;}
         if(!projectCreateUiState.dirty){navigate('projects');return;}
         openDrawer('放弃新建项目？', `<div class="tool-note">当前项目尚未创建。离开后，本页填写的信息和开始方式不会保存。</div><div class="drawer-actions"><button class="btn" data-stage-drawer-action="cancel">继续编辑</button><button class="btn danger" data-project-create-discard>放弃并返回</button></div>`);
-        drawerBody.querySelector('[data-project-create-discard]').addEventListener('click',()=>{projectCreateUiState={name:'',aspectRatio:'9:16',episodeDuration:90,outputLocation:'E:/LocalMiniDrama/新项目',locationCustomized:false,selectedSourceId:'',dirty:false,submitting:false};closeDrawer();navigate('projects')});
+        drawerBody.querySelector('[data-project-create-discard]').addEventListener('click',()=>{projectCreateUiState={name:'',aspectRatio:'9:16',genre:'',outputLocation:'E:/LocalMiniDrama/新项目',locationCustomized:false,selectedSourceId:'',dirty:false,submitting:false};closeDrawer();navigate('projects')});
       });
       pageRoot.querySelector('[data-project-create-form]')?.addEventListener('submit',event=>{
         event.preventDefault();
@@ -2483,22 +2406,11 @@
       pageRoot.querySelectorAll('[data-data-tool]').forEach(button => button.addEventListener('click', () => openAdvancedDataToolDrawer(button.dataset.dataTool)));
       pageRoot.querySelectorAll('[data-data-scenario-action]').forEach(button => button.addEventListener('click', () => handleDataScenarioAction(button.dataset.dataScenarioAction)));
       pageRoot.querySelectorAll('[data-project-view]').forEach(button => button.addEventListener('click', () => {saveProjectViewMode(button.dataset.projectView);renderLocation()}));
-      pageRoot.querySelectorAll('[data-bible-look]').forEach(button => button.addEventListener('click', () => navigate('project-bible',{projectId:button.dataset.bibleLook},'look')));
       pageRoot.querySelectorAll('[data-project-profile-edit]').forEach(button => button.addEventListener('click', () => openProjectProfileEditor(button.dataset.projectProfileEdit)));
-      pageRoot.querySelectorAll('[data-context-edit]').forEach(button => button.addEventListener('click', () => openProjectContextEditor(button.dataset.contextEdit)));
       pageRoot.querySelectorAll('[data-look-change]').forEach(button => button.addEventListener('click', () => openLookStyleModal(button.dataset.lookChange)));
       pageRoot.querySelectorAll('[data-look-edit-rules]').forEach(button => button.addEventListener('click', () => {openLookStyleModal(button.dataset.lookEditRules)}));
       pageRoot.querySelectorAll('[data-look-compare]').forEach(button => button.addEventListener('click', () => openDrawer(`比较风格版本 v${button.dataset.lookCompare}`, '<div class="tool-note"><b>只比较视觉规则和真实引用影响</b><br>历史媒体和候选不会被改写。</div><div class="feature-line"><span>色彩策略</span><b>冷青灰 → 冷青灰 + 局部暖光</b></div><div class="feature-line"><span>镜头语言</span><b>稳定构图 → 缓慢推进</b></div>')));
       pageRoot.querySelectorAll('[data-look-history-use]').forEach(button => button.addEventListener('click', () => openProjectLookImpactPreview(currentLocation().params.projectId,'cinematic-suspense')));
-      pageRoot.querySelectorAll('[data-settings-object]').forEach(button => button.addEventListener('click', () => {
-        const settings = fullModel.getProjectBibleModel(button.dataset.projectId, 'default');
-        const target = settings.productionObjects.find(item => item.id === button.dataset.settingsObject).target;
-        navigate(target.routeId,target.params);
-      }));
-      pageRoot.querySelectorAll('[data-settings-retry]').forEach(button => button.addEventListener('click', () => navigate('project-bible',{projectId:button.dataset.settingsRetry})));
-      pageRoot.querySelectorAll('[data-settings-blank]').forEach(button => button.addEventListener('click', () => navigate('project-episodes',{projectId:button.dataset.settingsBlank},'blank-manual')));
-      pageRoot.querySelectorAll('[data-project-collaboration]').forEach(button=>button.addEventListener('click',()=>{const settings=fullModel.getProjectBibleModel(button.dataset.projectId,'default');const action=settings.externalAiCollaboration.actions.find(item=>item.id===button.dataset.projectCollaboration);if(action.presentation==='drawer')openProjectContextPreview(button.dataset.projectId);else navigate(action.routeId,action.params,action.scenarioId)}));
-      pageRoot.querySelectorAll('[data-context-recovery]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.contextRecovery;if(action==='retry-copy')openProjectContextPreview(button.dataset.projectId);else if(action==='download-markdown')showToast('Markdown 已准备；原型未写入磁盘');else if(action==='retry-package')navigate('project-episodes',{projectId:button.dataset.projectId,type:'external_ai'},'source-picker');else navigate('tasks',{projectId:button.dataset.projectId},'project-filtered')}));
       pageRoot.querySelectorAll('[data-settings-continue-editing]').forEach(button=>button.addEventListener('click',()=>openProjectProfileEditor(button.dataset.settingsContinueEditing)));
       pageRoot.querySelectorAll('[data-settings-retry-save]').forEach(button=>button.addEventListener('click',()=>openProjectProfileEditor(button.dataset.settingsRetrySave)));
       pageRoot.querySelectorAll('[data-settings-open-data-tools]').forEach(button=>button.addEventListener('click',()=>navigate('settings-data',{},'storage-offline')));
@@ -2642,7 +2554,7 @@
         const target = fullModel.getProjectStageNavigationTarget({projectId:button.dataset.projectId,stage:button.dataset.projectStageSummary});
         navigate(target.routeId,target.params,target.scenarioId);
       }));
-      pageRoot.querySelectorAll('[data-project-look]').forEach(button => button.addEventListener('click', () => openProjectLookDrawer(button.dataset.projectLook)));
+      pageRoot.querySelectorAll('[data-project-look]').forEach(button => button.addEventListener('click', () => openLookStyleModal(button.dataset.projectLook)));
       pageRoot.querySelectorAll('[data-overview-primary]').forEach(button => button.addEventListener('click', () => {
         const current = currentLocation();
         const target = fullModel.getProjectOverviewPrimaryActionTarget({ projectId:button.dataset.overviewPrimary, scenarioId:current.scenarioId });

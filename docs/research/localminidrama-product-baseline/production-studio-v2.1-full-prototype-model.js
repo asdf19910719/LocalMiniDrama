@@ -17,9 +17,7 @@
       'default', 'needs-attention', 'all-complete', 'loading', 'load-failed', 'storage-offline', 'missing',
     ]),
     route('project-bible', /^#\/projects\/([^/]+)\/bible$/, ['projectId'], p => `/projects/${p.projectId}/bible`, [
-      'default', 'look', 'empty', 'loading', 'load-failed', 'dirty', 'saving',
-      'save-succeeded', 'save-failed', 'storage-offline', 'context-stale',
-      'copy-failed', 'package-failed',
+      'default',
     ]),
     route('project-episodes', /^#\/projects\/([^/]+)\/episodes$/, ['projectId'], p => `/projects/${p.projectId}/episodes`, [
       'default', 'empty', 'loading', 'load-failed', 'storage-offline', 'source-picker', 'blank-manual', 'ai-script', 'ai-script-partial', 'novel-split',
@@ -1064,7 +1062,7 @@
           projectLook: {
             name: '尚未设置画面风格', version: 0, status: '可稍后设置', aspectRatio: '9:16', usage: '0 个分镜引用',
             source: '项目默认', visualIntent: [], impact: '尚无生产对象', versionHistory: [],
-            action: { label: '设置画面风格', type: 'open-drawer' },
+            action: { label: '设置画面风格', type: 'open-modal' },
           },
           blockers: [],
         },
@@ -1109,9 +1107,8 @@
               { version: 3, status: '历史', note: '降低整体饱和度' },
             ],
             action: {
-              label: '查看风格',
-              type: 'open-drawer',
-              manageTarget: { routeId: 'project-bible', scenarioId: 'look' },
+              label: '更换风格',
+              type: 'open-modal',
             },
           },
           blockers: [
@@ -1171,9 +1168,8 @@
               { version: 1, status: '历史', note: '建立年代港口基础风格' },
             ],
             action: {
-              label: '查看风格',
-              type: 'open-drawer',
-              manageTarget: { routeId: 'project-bible', scenarioId: 'look' },
+              label: '更换风格',
+              type: 'open-modal',
             },
           },
           blockers: [],
@@ -1182,6 +1178,7 @@
     };
     const project = projects[projectKey];
     if (!project) throw new Error(`Unknown project: ${projectKey}`);
+    const isEmptyProject = projectKey === 'new-project';
     const result = {
       projectId: projectKey,
       scenarioId,
@@ -1190,6 +1187,47 @@
       metadata: [...project.metadata],
       sections: JSON.parse(JSON.stringify(project.sections)),
       viewState: { kind: 'normal', contentAvailable: true, readOnly: false, actions: [] },
+      projectProfile: {
+        name: project.title,
+        cover: { id: 'project-cover', label: isEmptyProject ? '尚未设置封面' : '当前项目封面', tone: 'blue' },
+        aspectRatio: isEmptyProject ? '9:16' : '16:9',
+        genre: isEmptyProject ? '' : '都市悬疑',
+        description: project.description,
+        editableFields: [
+          { id: 'name', label: '项目名称', value: project.title },
+          { id: 'cover', label: '项目封面', value: isEmptyProject ? '' : 'cover-project-7.jpg' },
+          { id: 'aspect-ratio', label: '画幅', value: isEmptyProject ? '9:16' : '16:9' },
+          { id: 'genre', label: '题材', value: isEmptyProject ? '' : '都市悬疑' },
+          { id: 'description', label: '项目简介', value: project.description },
+        ],
+        pathNote: '项目本地路径属于数据与存储管理，请在项目操作或高级数据工具中处理。',
+      },
+      projectStyleSelector: {
+        presentation: 'modal',
+        tabs: [
+          { id: 'presets', label: '预设风格' },
+          { id: 'mine', label: '我的风格' },
+          { id: 'custom', label: '自定义风格' },
+        ],
+        currentStyle: isEmptyProject
+          ? { name: '尚未设置画面风格', version: 0, description: '可在生成前任意时刻设置', updatedAt: '', tone: 'muted' }
+          : { name: '都市悬疑 · 冷暖对撞', version: 4, description: '电影写实基底，冷灰主色配暖色局部光', updatedAt: '今天 09:18', tone: 'blue' },
+        selectedStyle: null,
+        search: { enabled: true, placeholder: '搜索风格名称或分类' },
+        customFields: [
+          { id: 'style-name', label: '风格名称' },
+          { id: 'style-description', label: '风格描述' },
+          { id: 'positive-visual-prompt', label: '正向视觉提示' },
+          { id: 'negative-constraints', label: '负向约束' },
+          { id: 'reference-images', label: '参考图片' },
+        ],
+        applyRule: '更换项目风格只影响之后的新生成和主动刷新，不自动重做已有图片或视频。',
+        confirmAction: { id: 'apply-style', label: '确认应用' },
+      },
+      assetSummary: isEmptyProject
+        ? { total: 0, missingUsable: 0, line: '项目素材：0 个对象', target: { routeId: 'project-assets', params: { projectId: projectKey } } }
+        : { total: 16, missingUsable: 2, line: '项目素材：16 个对象，2 个缺少可用形象', target: { routeId: 'project-assets', params: { projectId: projectKey } } },
+      externalAiPendingTask: null,
     };
 
     if (scenarioId === 'needs-attention') {
@@ -1305,33 +1343,43 @@
       { id: 'stylized-3d', name: '风格化 3D', category: '3D', description: '立体角色、柔和材质和电影级灯光', tone: 'purple' },
       { id: 'graphic-2d', name: '平面漫画', category: '2D', description: '明确线稿、块面色彩和分镜漫画感', tone: 'amber' },
     ];
+    const mine = [
+      { id: 'my-noir-night', name: '私藏 · 高对比夜戏', category: '我的风格', description: '基于电影感悬疑调整的自定义风格', tone: 'blue' },
+    ];
     const normalizedQuery = String(query).trim().toLowerCase();
     const visiblePresets = presets.filter(item => `${item.name} ${item.category} ${item.description}`.toLowerCase().includes(normalizedQuery));
-    const selectedPreset = presets.find(item => item.id === selectedPresetId) || presets[1];
+    const visibleMine = mine.filter(item => `${item.name} ${item.category} ${item.description}`.toLowerCase().includes(normalizedQuery));
+    const selectedPreset = presets.find(item => item.id === selectedPresetId) || mine.find(item => item.id === selectedPresetId) || presets[1];
     return {
       projectId: String(projectId),
+      presentation: 'modal',
       searchEnabled: true,
       query: String(query),
       tabs: [
-        { id: 'presets', label: '预设' },
-        { id: 'custom', label: '自定义' },
+        { id: 'presets', label: '预设风格' },
+        { id: 'mine', label: '我的风格' },
+        { id: 'custom', label: '自定义风格' },
       ],
       presets,
+      mine,
       visiblePresets,
+      visibleMine,
       selectedPreset,
       customFields: [
-        { id: 'medium', label: '媒介与质感' },
-        { id: 'color', label: '色彩策略' },
-        { id: 'lighting', label: '光线策略' },
-        { id: 'camera', label: '镜头语言' },
+        { id: 'style-name', label: '风格名称' },
+        { id: 'style-description', label: '风格描述' },
+        { id: 'positive-visual-prompt', label: '正向视觉提示' },
+        { id: 'negative-constraints', label: '负向约束' },
+        { id: 'reference-images', label: '参考图片' },
       ],
+      applyRule: '更换项目风格只影响之后的新生成和主动刷新，不自动重做已有图片或视频。',
       impactPreview: {
         referencedResults: 10,
         needsUpdate: 6,
         unaffectedHistory: 4,
         autoRegenerate: false,
       },
-      confirmAction: { id: 'create-look-version', label: '创建风格版本 v5' },
+      confirmAction: { id: 'apply-style', label: '确认应用' },
     };
   }
 
@@ -1346,135 +1394,33 @@
   }
 
   function getProjectBibleModel(projectId, scenarioId = 'default') {
-    const overview = getProjectOverviewModel(projectId, 'default');
-    const isEmpty = scenarioId === 'empty';
-    const readOnly = scenarioId === 'storage-offline';
-    const editorStates = {
-      default: { status: 'idle', dirty: false, controlsDisabled: false, canSave: true, closeRequiresConfirmation: false, recoveryActions: [] },
-      dirty: { status: 'dirty', dirty: true, controlsDisabled: false, canSave: true, closeRequiresConfirmation: true, recoveryActions: [] },
-      saving: { status: 'saving', dirty: true, controlsDisabled: true, canSave: false, closeRequiresConfirmation: false, recoveryActions: [] },
-      'save-succeeded': { status: 'saved', dirty: false, controlsDisabled: false, canSave: true, closeRequiresConfirmation: false, recoveryActions: [] },
-      'save-failed': { status: 'error', dirty: true, controlsDisabled: false, canSave: true, closeRequiresConfirmation: true, recoveryActions: ['continue-editing', 'retry-save'] },
-      'storage-offline': { status: 'read-only', dirty: false, controlsDisabled: true, canSave: false, closeRequiresConfirmation: false, recoveryActions: ['open-data-tools'] },
-    };
-    const contextStatus = scenarioId === 'context-stale'
-      ? { id: 'needs-update', label: '项目资料已变化，需要更新', detail: '上次生成：今天 09:18 · 当前资料版本 v18' }
-      : { id: 'current', label: '当前有效', detail: '上次生成：今天 09:18 · 基于项目资料 v17' };
-    const collaborationRecovery = scenarioId === 'copy-failed'
-      ? ['retry-copy', 'download-markdown']
-      : scenarioId === 'package-failed'
-        ? ['retry-package', 'open-task-center']
-        : [];
-    const base = {
-      projectId: overview.projectId,
+    return {
+      projectId: String(projectId),
       scenarioId,
-      title: overview.title,
-      featureName: '项目设置',
-      pageSubtitle: '项目资料、画面风格与外部 AI',
-      managementScope: 'project',
-      sectionOrder: ['project-profile', 'project-look', 'production-objects', 'external-ai'],
-      readOnly,
-      loading: scenarioId === 'loading',
-      editorState: editorStates[scenarioId] || editorStates.default,
-      projectProfile: {
-        name: isEmpty ? '未命名项目' : overview.title,
-        cover: { id: 'project-cover', label: isEmpty ? '尚未设置封面' : '当前项目封面', tone: 'blue' },
-        aspectRatio: '16:9',
-        genre: isEmpty ? '未设置' : '都市悬疑',
-        defaultEpisodeDuration: 90,
-        outputPreference: 'MP4 · H.264 · 1080p',
-        localPath: { value: 'E:/LocalMiniDrama/projects/late-night-room-service', readOnly: true },
-        editableFields: [
-          { id: 'name', label: '项目名称', value: isEmpty ? '未命名项目' : overview.title },
-          { id: 'cover', label: '项目封面', value: isEmpty ? '' : 'cover-project-7.jpg' },
-          { id: 'aspect-ratio', label: '画幅', value: '16:9' },
-          { id: 'genre', label: '题材', value: isEmpty ? '' : '都市悬疑' },
-          { id: 'default-episode-duration', label: '默认单集时长', value: 90 },
-          { id: 'output-preference', label: '输出偏好', value: 'MP4 · H.264 · 1080p' },
-        ],
-      },
-      externalAiCollaboration: {
-        title: '外部 AI 创作',
-        description: '按需复制创作上下文或从安全目标开始创建制作任务；不是核心制作必经步骤。',
-        status: contextStatus,
-        recoveryActions: collaborationRecovery,
-        actions: [
-          { id: 'copy-collaboration-context', label: scenarioId === 'context-stale' ? '更新并复制创作上下文' : '复制创作上下文', presentation: 'drawer' },
-          { id: 'create-external-ai-production-task', label: '创建外部 AI 制作任务', presentation: 'episode-source-center', routeId: 'project-episodes', params: { projectId: overview.projectId, type: 'external_ai' }, scenarioId: 'source-picker', sourceId: 'external_ai' },
-        ],
-      },
-      excludedKnowledgeSystems: [
-        'structured-world-fact-database',
-        'foreshadowing-tracker',
-        'event-timeline',
-      ],
-      context: {
-        title: '外部 AI 创作上下文',
-        summary: isEmpty ? '补充项目信息后，外部 AI 会更准确地延续剧情。' : '夜班酒店中，不存在住客的楼层持续发出服务请求。规则：异常只在凌晨两点后出现。',
-        editableFields: [
-          { id: 'story-foundation', label: '故事基础设定', value: isEmpty ? '' : '当代城市酒店；异常事件只在凌晨两点后发生。' },
-          { id: 'immutable-settings', label: '不可改变的设定', value: isEmpty ? '' : '不存在的 13 层不能被普通住客看到。' },
-          { id: 'continuity-notes', label: '跨集连续性备注', value: isEmpty ? '' : '林夏左手旧伤；第 2 集前不知道 13 层的真实来源。' },
-        ],
-        includedSources: [
-          '项目简介与题材',
-          '故事基础设定',
-          '不可改变的设定',
-          '跨集连续性备注',
-          '相邻剧集与最新剧本',
-          '人物当前状态',
-          '场景索引',
-          '道具索引',
-          'Project Look 摘要',
-        ],
-        missingFields: isEmpty ? ['项目简介', '故事基础设定'] : [],
-      },
-      projectLook: {
-        ...JSON.parse(JSON.stringify(overview.sections.projectLook)),
-        usage: isEmpty ? '尚无引用' : overview.sections.projectLook.usage,
-        changeAction: { id: 'change-project-look', label: '更换画面风格' },
-        historyAction: { id: 'view-look-history', label: '查看版本记录' },
-        action: { routeId: 'project-bible', params: { projectId: overview.projectId }, scenarioId: 'look' },
-      },
-      productionObjects: [
-        { id: 'characters', label: '人物', count: isEmpty ? 0 : 4, issueCount: isEmpty ? 0 : 1, summary: isEmpty ? '尚未创建人物' : '4 名人物 · 12 个状态', warning: isEmpty ? '' : '1 人缺少可用形象', actionLabel: isEmpty ? '创建人物' : '查看人物', target: { routeId: 'project-assets', params: { projectId: overview.projectId, focusId: 'characters' } } },
-        { id: 'scenes', label: '场景', count: isEmpty ? 0 : 5, issueCount: isEmpty ? 0 : 1, summary: isEmpty ? '尚未创建场景' : '5 个场景 · 4 个已有视觉资产', warning: isEmpty ? '' : '1 个场景待确认', actionLabel: isEmpty ? '创建场景' : '查看场景', target: { routeId: 'project-assets', params: { projectId: overview.projectId, focusId: 'scenes' } } },
-        { id: 'props', label: '道具', count: isEmpty ? 0 : 7, issueCount: isEmpty ? 0 : 2, summary: isEmpty ? '尚未创建道具' : '7 件道具 · 2 件关键道具', warning: isEmpty ? '' : '2 件缺少视觉资产', actionLabel: isEmpty ? '创建道具' : '查看道具', target: { routeId: 'project-assets', params: { projectId: overview.projectId, focusId: 'props' } } },
-      ],
-      excludedCapabilities: [
-        'image-candidates',
-        'voice-candidates',
-        'media-generation',
-        'cross-episode-media-usage',
-      ],
-      generationPolicy: {
-        isGeneralPromptSource: false,
-        isGenerationGate: false,
-        directInputs: [
-          'project-look',
-          'character-current-production-state',
-          'scene-current-production-state',
-          'prop-current-production-state',
-        ],
-        contextOnly: [
-          'project-summary',
-          'world-building',
-          'character-background-and-relationships',
-          'cross-episode-story-continuity',
-        ],
-        staleRule: 'only-effective-generation-input-changes',
-      },
+      legacyRoute: true,
+      featureName: '项目设置（已合并到项目概览）',
+      redirectTo: { routeId: 'project-overview', params: { projectId: String(projectId) }, scenarioId: 'default' },
     };
-    if (scenarioId === 'look') {
-      return {
-        ...base,
-        viewId: 'project-look',
-        projectLook: JSON.parse(JSON.stringify(overview.sections.projectLook)),
-        lookEditor: getProjectLookEditorModel(overview.projectId),
-      };
-    }
-    if (scenarioId === 'load-failed') return { ...base, viewId: 'load-failed', recoveryAction: 'retry' };
-    return { ...base, viewId: 'bible-overview' };
+  }
+
+  function getExternalAiContextModel(projectId) {
+    const overview = getProjectOverviewModel(projectId, 'default');
+    return {
+      projectId: overview.projectId,
+      title: '外部 AI 创作上下文',
+      autoCompiled: true,
+      summary: overview.description,
+      includedSources: [
+        '项目简介与题材',
+        '当前画面风格',
+        '已确认的上一集剧本',
+        '人物当前状态',
+        '场景索引',
+        '道具索引',
+        '跨集连续性备注',
+      ],
+      note: '上下文由系统自动汇总；你只需在创建任务时补充本次要求。',
+    };
   }
 
   function getProjectAssetsModel(projectId, scenarioId = 'default', focusId = '') {
@@ -2957,7 +2903,7 @@
       fields:[
         {id:'name',label:'项目名称',control:'text',value:state.name || '',placeholder:'输入项目名称',required:true},
         {id:'aspect-ratio',label:'画幅',control:'select',value:state.aspectRatio || '9:16',options:['9:16','16:9','1:1']},
-        {id:'episode-duration',label:'目标单集时长',control:'duration',value:Number(state.episodeDuration) || 90,presets:[60,90,120],unit:'秒'},
+        {id:'genre',label:'题材',control:'text',value:state.genre || '',placeholder:'例如：都市悬疑',required:false},
         {id:'output-location',label:'保存到',control:'directory',value:state.outputLocation || `E:/LocalMiniDrama/${safeDirectoryName}`,editable:false,preflight:['可写权限','名称冲突','可用空间']},
       ],
       sources:buildEpisodeCreationSources(),
@@ -3118,7 +3064,7 @@
     const saveState=scenarioId==='saving'?'saving':scenarioId==='save-failed'?'failed':scenarioId==='save-conflict'?'conflict':'clean';
     const workspaceChange={current:'E:/LocalMiniDrama',newPath:'尚未选择',state:scenarioId==='workspace-change-pending'?'validating':'idle',requiresMigrationPreview:true,canConfirm:scenarioId!=='active-task-blocking',activeTaskPolicy:'block-dangerous-change',blockers:scenarioId==='active-task-blocking'?['存在运行中的任务']:[],steps:['选择目录','检查数据库和项目结构','检查权限与空间','检查活动任务','预览迁移范围','确认迁移并重新打开工作区'],options:{copyDatabase:true,copyMedia:true,keepOriginal:true,restartRequired:true},rollback:'迁移前创建备份与回滚点'};
     const storageImpact=scenarioId==='storage-offline'?{affects:['播放现有候选','创建新的本地任务','合片和超分'],doesNotAffect:['已保存的剧本','数据库中的任务记录','已完成任务的元数据']}:null;
-    return {scenarioId,scenario:scenarios[scenarioId],featureName:'常规设置',sections:[{id:'workspace',label:'工作区与数据库',fields:['工作区位置','自动备份保留天数']},{id:'output',label:'媒体与交付输出',fields:['媒体根目录','成片输出目录','临时文件目录']},{id:'creation-defaults',label:'创作默认值',fields:['默认画幅','默认单集时长','默认语言']}],paths,backupPolicy:{retentionDays:14,minDays:1,maxDays:90,estimatedUsage:'约 2.4 GB / 14 天',directory:'E:/LocalMiniDrama/backups',canDisable:false,immediateAction:'立即创建备份'},defaults:{aspectRatio:'16:9',episodeDuration:90,language:'简体中文',scope:['新建项目','新建剧集','新任务'],existingUnaffected:true,freezePoint:'任务创建时'},save:{state:saveState,states:['clean','dirty','saving','saved','failed','conflict'],lastSavedAt:scenarioId==='default'?'今天 14:28':null,buttonLabel:saveState==='dirty'?'保存修改':saveState==='saving'?'正在保存…':saveState==='saved'?'已保存':'保存设置',preserveDraftOnFailure:true},workspaceChange,storageImpact,advancedRepairTarget:{routeId:'settings-data',params:{}},savePolicy:'optimistic-revision-with-draft-preservation'};
+    return {scenarioId,scenario:scenarios[scenarioId],featureName:'常规设置',sections:[{id:'workspace',label:'工作区与数据库',fields:['工作区位置','自动备份保留天数']},{id:'output',label:'媒体与交付输出',fields:['媒体根目录','成片输出目录','临时文件目录']},{id:'creation-defaults',label:'创作默认值',fields:['默认画幅','默认语言']}],paths,backupPolicy:{retentionDays:14,minDays:1,maxDays:90,estimatedUsage:'约 2.4 GB / 14 天',directory:'E:/LocalMiniDrama/backups',canDisable:false,immediateAction:'立即创建备份'},defaults:{aspectRatio:'16:9',language:'简体中文',scope:['新建项目','新任务'],existingUnaffected:true,freezePoint:'任务创建时'},save:{state:saveState,states:['clean','dirty','saving','saved','failed','conflict'],lastSavedAt:scenarioId==='default'?'今天 14:28':null,buttonLabel:saveState==='dirty'?'保存修改':saveState==='saving'?'正在保存…':saveState==='saved'?'已保存':'保存设置',preserveDraftOnFailure:true},workspaceChange,storageImpact,advancedRepairTarget:{routeId:'settings-data',params:{}},savePolicy:'optimistic-revision-with-draft-preservation'};
   }
 
   function getLibraryModel(scenarioId = 'default') {
@@ -4516,6 +4462,7 @@
     getProjectBibleModel,
     getProjectLookEditorModel,
     getProjectSettingsEditorUiState,
+    getExternalAiContextModel,
     getProjectCardNavigationTarget,
     getProductNavigationModel,
     getProjectSectionNavigation,
