@@ -1537,11 +1537,11 @@
     const allowedTabs = ['all', 'characters', 'scenes', 'props'];
     const activeTab = allowedTabs.includes(focusId) ? focusId : 'all';
     const baseItems = [
-      { id: 'character-linxia', type: 'characters', name: '林夏', subtitle: '主角 · 4 个状态', description: '夜班前台，冷静敏锐', dataRevision: '资料 r3', currentMediaStatus: '当前图已设置', taskStatus: '1 个新候选', usage: '3 集 · 8 个分镜', usageCount: 8, issue: true, warning: '默认状态缺少侧视图', source: '剧本提取', mediaState: 'current', episodes: ['1', '2', '3'], updatedOrder: 5, imageTone: 'purple', totalStates: 4, voiceStatus: '音色已设置', voiceSource: '本地上传 · 18 秒', statePreviews: [{ name: '日常', tone: 'purple' }, { name: '制服', tone: 'blue' }, { name: '雨夜', tone: 'teal' }] },
-      { id: 'character-manager', type: 'characters', name: '酒店经理', subtitle: '配角 · 2 个状态', description: '谨慎、圆滑，负责酒店夜间值守', dataRevision: '资料 r2', currentMediaStatus: '当前图已设置', taskStatus: '无运行任务', usage: '2 集 · 4 个分镜', usageCount: 4, issue: true, warning: '本集配音策略需要人物音色', source: '外部 AI 导入', mediaState: 'current', episodes: ['1', '2'], updatedOrder: 3, imageTone: 'amber', totalStates: 2, voiceStatus: '音色未设置', voiceSource: '', statePreviews: [{ name: '正装', tone: 'amber' }, { name: '慌乱', tone: 'red' }] },
-      { id: 'scene-corridor', type: 'scenes', name: '208 客房走廊', subtitle: '夜景 · 3 个剧情状态', description: '狭长走廊、冷白灯和 208 门口', dataRevision: '资料 r2', currentMediaStatus: '当前图已设置', taskStatus: '无运行任务', usage: '2 集 · 6 个分镜', usageCount: 6, issue: scenarioId === 'media-offline', warning: scenarioId === 'media-offline' ? '主图文件离线' : '', source: '剧本提取', mediaState: scenarioId === 'media-offline' ? 'offline' : 'current', episodes: ['1', '2'], updatedOrder: 2, imageTone: 'blue', totalStates: 3, statePreviews: [{ name: '常规', tone: 'blue' }, { name: '雨夜', tone: 'teal' }, { name: '停电', tone: 'amber' }], libraryUpdate: scenarioId === 'library-update' ? '资产库有 v3 可用' : '' },
-      { id: 'scene-lobby', type: 'scenes', name: '酒店大堂', subtitle: '主场景 · 2 个剧情状态', description: '暖色石材、玻璃反射和前台区域', dataRevision: '资料 r3', currentMediaStatus: '当前图已设置', taskStatus: scenarioId === 'generation-failed' ? '1 个生成任务失败' : '2 个新候选', usage: '4 集 · 11 个分镜', usageCount: 11, issue: true, warning: scenarioId === 'generation-failed' ? '生成失败，原输入可重试' : '新候选使用不同画面风格', source: '手工创建', mediaState: 'current', episodes: ['1', '2', '3', '4'], updatedOrder: 4, imageTone: 'teal', totalStates: 2, statePreviews: [{ name: '白天', tone: 'teal' }, { name: '深夜', tone: 'blue' }] },
-      { id: 'prop-keycard', type: 'props', name: '13 层门卡', subtitle: '关键道具 · 3 个剧情状态', description: '黑色 RFID 门卡，进入 13 层的线索', dataRevision: '资料 r2', currentMediaStatus: '当前图已设置', taskStatus: '无运行任务', usage: '3 集 · 7 个分镜', usageCount: 7, issue: false, warning: '', source: '外部 AI 导入', mediaState: 'current', episodes: ['1', '2', '3'], updatedOrder: 1, imageTone: 'red', totalStates: 3, statePreviews: [{ name: '完整', tone: 'red' }, { name: '刷卡', tone: 'amber' }, { name: '损坏', tone: 'purple' }] },
+      { id: 'character-linxia', type: 'characters', name: '林夏', subtitle: '主角 · 4 个状态', description: '夜班前台，冷静敏锐', usageCount: 8, issue: false, warning: '', mediaState: 'current', updatedOrder: 5, imageTone: 'purple', statePreviews: [{ name: '日常', tone: 'purple' }, { name: '制服', tone: 'blue' }, { name: '雨夜', tone: 'teal' }] },
+      { id: 'character-manager', type: 'characters', name: '酒店经理', subtitle: '配角 · 2 个状态', description: '谨慎、圆滑，负责酒店夜间值守', usageCount: 4, issue: false, warning: '', mediaState: 'current', updatedOrder: 3, imageTone: 'amber', statePreviews: [{ name: '正装', tone: 'amber' }, { name: '慌乱', tone: 'red' }] },
+      { id: 'scene-corridor', type: 'scenes', name: '208 客房走廊', subtitle: '夜景 · 3 个剧情状态', description: '狭长走廊、冷白灯和 208 门口', usageCount: 6, issue: scenarioId === 'media-offline', warning: scenarioId === 'media-offline' ? '主图文件离线' : '', mediaState: scenarioId === 'media-offline' ? 'offline' : 'current', updatedOrder: 2, imageTone: 'blue', statePreviews: [{ name: '常规', tone: 'blue' }, { name: '雨夜', tone: 'teal' }, { name: '停电', tone: 'amber' }], libraryUpdate: scenarioId === 'library-update' ? '资产库有 v3 可用' : '' },
+      { id: 'scene-lobby', type: 'scenes', name: '酒店大堂', subtitle: '主场景 · 2 个剧情状态', description: '暖色石材、玻璃反射和前台区域', usageCount: 11, issue: scenarioId === 'generation-failed', warning: scenarioId === 'generation-failed' ? '生成失败，原输入可重试' : '', mediaState: 'current', updatedOrder: 4, imageTone: 'teal', statePreviews: [{ name: '白天', tone: 'teal' }, { name: '深夜', tone: 'blue' }] },
+      { id: 'prop-keycard', type: 'props', name: '13 层门卡', subtitle: '关键道具 · 3 个剧情状态', description: '黑色 RFID 门卡，进入 13 层的线索', usageCount: 7, issue: false, warning: '', mediaState: 'current', updatedOrder: 1, imageTone: 'red', statePreviews: [{ name: '完整', tone: 'red' }, { name: '刷卡', tone: 'amber' }, { name: '损坏', tone: 'purple' }] },
     ];
     const items = scenarioId === 'empty' ? [] : baseItems.filter(item => activeTab === 'all' || item.type === activeTab);
     const statValue = value => scenarioId === 'empty' ? 0 : value;
@@ -1566,7 +1566,7 @@
       ],
       filters: ['状态', '使用情况', '来源', '媒体情况', '所在剧集'],
       filterGroups: [
-        { id: 'status', label: '状态', options: [{ id: 'attention', label: '需要处理' }, { id: 'candidate', label: '有新候选' }, { id: 'failed', label: '生成失败' }, { id: 'archived', label: '已归档' }] },
+        { id: 'status', label: '状态', options: [{ id: 'attention', label: '需要处理' }, { id: 'candidate', label: '有新候选' }, { id: 'failed', label: '生成失败' }] },
         { id: 'usage', label: '使用情况', options: [{ id: 'used', label: '已使用' }, { id: 'unused', label: '未使用' }] },
         { id: 'source', label: '来源', options: [{ id: 'script', label: '剧本提取' }, { id: 'manual', label: '手工创建' }, { id: 'external', label: '外部 AI 导入' }, { id: 'library', label: '个人资产库' }] },
         { id: 'media', label: '媒体情况', options: [{ id: 'current', label: '有当前版本' }, { id: 'candidate-only', label: '只有候选' }, { id: 'offline', label: '文件离线' }] },
@@ -1610,7 +1610,6 @@
         { id: 'generate-missing', label: '生成缺失候选' },
         { id: 'set-mode', label: '设置默认生成模式' },
         { id: 'tags', label: '添加或移除标签' },
-        { id: 'archive-unused', label: '归档未使用资产' },
       ],
       items,
       libraryActions: [
@@ -1621,6 +1620,43 @@
         reason: '存在 3 集和 8 个分镜引用',
         recoveryTarget: 'usage-locations',
       } : null,
+    };
+  }
+
+  function getAssetDetailDrawerModel(assetId, { projectId = '', episodeId = '' } = {}) {
+    const projectCard = getProjectAssetsModel(projectId || '7', 'default').items.find(item => item.id === assetId) || null;
+    let episodeCard = null;
+    if (episodeId) {
+      const stage = getEpisodeAssetsStageModel(projectId || '7', String(episodeId), 'default');
+      episodeCard = stage.cards.find(item => item.assetId === assetId) || null;
+    }
+    const isCharacter = projectCard ? projectCard.type === 'characters' : /character|voice/.test(String(assetId));
+    const sections = [
+      { id: 'summary', label: '对象摘要', fields: projectCard ? { type: projectCard.type, name: projectCard.name, subtitle: projectCard.subtitle, description: projectCard.description } : { name: String(assetId) } },
+      { id: 'states', label: '状态切换', states: projectCard ? projectCard.statePreviews : [] },
+      { id: 'current-and-candidates', label: '当前形象与候选', currentSelected: true, candidateActions: ['select', 'remove', 'view'] },
+      { id: 'description', label: '简短资料', fields: ['外观描述', '服饰或环境', '关键识别特征', '负向约束'] },
+      { id: 'generation', label: '生成 / 上传', presentation: 'modal', advancedCollapsed: true, actions: ['generate', 'upload', 'use-project-current', 'use-other-state'] },
+      { id: 'episode-use', label: '使用于本集', visible: Boolean(episodeId), episodeSelection: episodeCard ? { mediaVersionId: episodeCard.mediaVersionId, status: episodeCard.status } : null },
+    ].filter(section => section.id !== 'episode-use' || section.visible);
+    return {
+      assetId: String(assetId),
+      projectId: projectId ? String(projectId) : '7',
+      episodeId: episodeId ? String(episodeId) : null,
+      presentation: 'drawer',
+      width: '560-720px',
+      sections,
+      voiceSection: isCharacter ? { id: 'voice', label: '音色', onlyForCharacters: true, requiredWhenPolicyDemands: true } : null,
+      technicalDetails: {
+        collapsed: true,
+        includes: ['hash', 'revision', '完整 Prompt', 'Provider 参数', '任务日志', '跨项目使用统计'],
+      },
+      deletion: {
+        label: '删除',
+        recoverable: true,
+        archiveExposed: false,
+        referencedImpact: '删除前会列出受影响的剧集、分镜和媒体；可选择替代素材或移入回收站。',
+      },
     };
   }
 
@@ -1647,7 +1683,7 @@
       if (filters.status === 'attention' && !item.issue) return false;
       if (filters.status === 'candidate' && !item.taskStatus.includes('候选')) return false;
       if (filters.status === 'failed' && !item.taskStatus.includes('失败')) return false;
-      if (filters.status === 'archived' && !item.archived) return false;
+
       if (filters.usage === 'used' && !(item.usageCount > 0)) return false;
       if (filters.usage === 'unused' && item.usageCount > 0) return false;
       if (filters.source && item.source !== sourceLabels[filters.source]) return false;
@@ -2269,7 +2305,7 @@
     let blocked = 0;
     for (const item of selectedItems) {
       if (item.mediaState === 'offline') blocked += 1;
-      else if (actionId === 'generate-missing' ? item.issue : true) eligible += 1;
+      else eligible += 1;
     }
     const skipped = selectedItems.length - eligible - blocked;
     return {
@@ -2763,7 +2799,7 @@
     ];
     const page = {
       projectId:String(projectId),episodeId:String(episodeId),scenarioId,scenario:scenarios[scenarioId],
-      featureName:'设定',title:'设定',subtitle:'自动继承项目素材，只需处理差异和阻塞',
+      featureName:'本集设定',title:'本集设定',subtitle:'只展示本集剧本实际引用的人物、场景和道具',
       pageContext:{breadcrumb:['凌晨两点的客房服务','第 1 集'],backLabel:'返回剧集',backTarget:{routeId:'project-episodes',params:{projectId:String(projectId)}}},
       lifecycleMode:scenarioId==='first-preparation'?'first-preparation':scenarioId.startsWith('external-package')?'external-package':'delta-check',
       showAllRequired:scenarioId==='first-preparation',
@@ -2774,6 +2810,12 @@
         {id:'cut',label:'成片',routeId:'studio-cut',state:'blocked',reason:'请先完成分镜'},
       ],
       source:{scriptRevision:'script-r11',projectLookRevision:'look-v4'},
+      tabs:[
+        {id:'characters',label:'角色'},
+        {id:'scenes',label:'场景'},
+        {id:'props',label:'道具'},
+      ],
+      cards:[],
       requiredGroups,
       inheritedSummary:{ready:0,total:7,collapsed:true},
       reviewItems,
@@ -2793,6 +2835,11 @@
         ],
       }:null,
     };
+    page.cards = [
+      ...requiredGroups.find(group => group.id === 'characters').items.map(item => ({ ...item, type: 'characters', assetId: item.id, stateId: item.id, mediaVersionId: item.episodeSelection, name: item.label, referencedByEpisode: true, issue: ['阻塞','文件离线'].includes(item.status) })),
+      ...requiredGroups.find(group => group.id === 'scenes').items.map(item => ({ ...item, type: 'scenes', assetId: item.id, stateId: item.id, mediaVersionId: item.episodeSelection, name: item.label, referencedByEpisode: true, issue: ['阻塞','文件离线'].includes(item.status) })),
+      ...requiredGroups.find(group => group.id === 'props').items.map(item => ({ ...item, type: 'props', assetId: item.id, stateId: item.id, mediaVersionId: item.episodeSelection, name: item.label, referencedByEpisode: true, issue: ['阻塞','文件离线'].includes(item.status) })),
+    ];
     const synced = syncEpisodeAssetsDerived(page);
     if (scenarioId === 'loading') {
       synced.primaryAction={id:'checking',label:'正在检查…',enabled:false};
@@ -4584,6 +4631,7 @@
     getProjectAssetDetailModel,
     getProjectAssetsModel,
     getProjectAssetStatSelection,
+    getAssetDetailDrawerModel,
     getProjectAssetBatchPreview,
     getProjectAssetGenerationEnvelope,
     submitProjectAssetGeneration,

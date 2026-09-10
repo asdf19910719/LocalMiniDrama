@@ -2114,12 +2114,14 @@ test('项目资产按生产对象组织并区分版本、候选、任务和使�
   assert.equal(assets.items.some(item => item.type === 'sounds'), false);
   assert.ok(assets.items.length >= 4);
   const character = assets.items.find(item => item.id === 'character-linxia');
-  assert.equal(character.dataRevision, '资料 r3');
-  assert.equal(character.currentMediaStatus, '当前图已设置');
-  assert.equal(character.taskStatus, '1 个新候选');
-  assert.equal(character.usage, '3 集 · 8 个分镜');
-  assert.equal(character.totalStates, 4);
+  assert.equal('dataRevision' in character, false);
+  assert.equal('taskStatus' in character, false);
+  assert.equal('usage' in character, false);
+  assert.equal('episodes' in character, false);
+  assert.equal('totalStates' in character, false);
   assert.deepEqual(character.statePreviews.map(item => item.name), ['日常', '制服', '雨夜']);
+  assert.equal(character.warning, '');
+  assert.ok(assets.items.every(item => item.issue === false || typeof item.warning === 'string'));
 });
 
 test('项目设定进入项目资产时按 focus 恢复对象筛选', () => {
@@ -2213,18 +2215,49 @@ test('项目资产模型提供真实筛选排序、新建、资产库和批量�
   assert.deepEqual(assets.createTypes.map(item => item.id), ['character', 'scene', 'prop']);
   assert.equal(assets.createTypes.find(item => item.id === 'character').fields.includes('voice'), false);
   assert.ok(assets.libraryItems.length >= 3);
-  assert.deepEqual(assets.batchActions.map(item => item.id), ['generate-missing', 'set-mode', 'tags', 'archive-unused']);
+  assert.deepEqual(assets.batchActions.map(item => item.id), ['generate-missing', 'set-mode', 'tags']);
+  assert.equal(JSON.stringify(assets.batchActions).includes('归档'), false);
+  assert.equal(JSON.stringify(assets.filterGroups).includes('已归档'), false);
   assert.equal(model.getProjectAssetBatchPreview(assets.items, ['character-linxia'], 'generate-missing').autoUseCandidate, false);
+});
+
+test('项目素材卡只显示创作必要信息，本集设定只列当前剧本引用对象', () => {
+  const assets = model.getProjectAssetsModel('7');
+  const linxia = assets.items.find(item => item.id === 'character-linxia');
+  assert.equal('taskStatus' in linxia, false);
+  assert.equal('usage' in linxia, false);
+  assert.equal(linxia.warning, '');
+
+  const setting = model.getEpisodeAssetsStageModel('7', '1');
+  assert.equal(setting.featureName, '本集设定');
+  assert.deepEqual(setting.tabs.map(tab => tab.label), ['角色', '场景', '道具']);
+  assert.ok(setting.cards.every(card => card.referencedByEpisode === true));
+  assert.ok(setting.cards.every(card => card.assetId && card.stateId && card.mediaVersionId));
+  const offline = model.getEpisodeAssetsStageModel('7', '1', 'media-offline');
+  assert.equal(offline.cards.find(card => card.id === 'corridor-night').issue, true);
+
+  const drawer = model.getAssetDetailDrawerModel('character-linxia', { projectId: '7', episodeId: '1' });
+  assert.deepEqual(drawer.sections.map(section => section.id), [
+    'summary', 'states', 'current-and-candidates', 'description', 'generation', 'episode-use',
+  ]);
+  assert.equal(drawer.presentation, 'drawer');
+  assert.equal(drawer.voiceSection.onlyForCharacters, true);
+  assert.equal(drawer.technicalDetails.collapsed, true);
+  assert.equal(drawer.deletion.archiveExposed, false);
+  const sceneDrawer = model.getAssetDetailDrawerModel('scene-corridor', { projectId: '7' });
+  assert.equal(sceneDrawer.voiceSection, null);
+  assert.equal(sceneDrawer.sections.some(section => section.id === 'episode-use'), false);
 });
 
 test('项目资产筛选支持组合条件、搜索、问题优先和精确统计入口', () => {
   const assets = model.getProjectAssetsModel('7');
-  const attention = model.filterAndSortProjectAssets(assets.items, {
-    query: '大堂',
+  assert.equal(assets.items.every(item => item.issue === false), true);
+  const offline = model.getProjectAssetsModel('7', 'media-offline');
+  const attention = model.filterAndSortProjectAssets(offline.items, {
     filters: { issue: 'true' },
     sortId: 'issues-first',
   });
-  assert.deepEqual(attention.map(item => item.id), ['scene-lobby']);
+  assert.deepEqual(attention.map(item => item.id), ['scene-corridor']);
   assert.throws(() => model.getProjectAssetStatSelection('character-states'), /Unknown asset stat/);
   assert.throws(() => model.getProjectAssetStatSelection('unknown'), /Unknown asset stat/);
 });
@@ -2286,8 +2319,11 @@ test('批量操作只计算用户明确选择的对象并支持部分成功', ()
   assert.equal(preview.selected, 3);
   assert.deepEqual(preview.selectedIds, ['character-linxia', 'scene-corridor', 'prop-keycard']);
   assert.equal(preview.eligible + preview.skipped + preview.blocked, 3);
-  assert.equal(preview.partialSuccess, true);
   assert.equal(preview.autoUseCandidate, false);
+  const offline = model.getProjectAssetsModel('7', 'media-offline');
+  const offlinePreview = model.getProjectAssetBatchPreview(offline.items, ['scene-corridor', 'prop-keycard'], 'generate-missing');
+  assert.equal(offlinePreview.blocked, 1);
+  assert.equal(offlinePreview.partialSuccess, true);
 });
 
 test('场景空间模式保留为按需高级能力并声明真实下游用途', () => {
