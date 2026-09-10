@@ -111,13 +111,19 @@ function createStageStateService(db) {
     getStage,
     listStages,
 
-    /** not_started|stale --首次保存草稿/派生新 revision--> in_progress */
+    /** not_started|stale|approved --首次保存草稿/派生新 revision/已批准后编辑--> in_progress */
     markInProgress(episodeId, stage, { contentRevision = null, actor } = {}) {
       const state = getStage(episodeId, stage);
-      if (state && !['not_started', 'stale', 'in_progress'].includes(state.status)) {
+      if (state && !['not_started', 'stale', 'in_progress', 'approved'].includes(state.status)) {
         throw httpError('INVALID_TRANSITION', 409, `阶段 ${stage} 当前为 ${state.status}，不能开始新草稿`);
       }
-      return transition(episodeId, stage, null, 'in_progress', state && state.status === 'stale' ? 'create-revision' : 'first-draft-saved', {
+      const eventType =
+        state && state.status === 'stale'
+          ? 'create-revision'
+          : state && state.status === 'approved'
+            ? 'edit-after-approve'
+            : 'first-draft-saved';
+      return transition(episodeId, stage, null, 'in_progress', eventType, {
         contentRevision: contentRevision ?? ((state?.content_revision || 0) + 1),
         actor,
       });
