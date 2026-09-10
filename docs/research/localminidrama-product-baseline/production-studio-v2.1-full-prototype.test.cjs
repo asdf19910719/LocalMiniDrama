@@ -21,7 +21,7 @@ test('路由注册表覆盖全部一级产品目的地', () => {
   const ids = model.buildPrototypeRouteRegistry().map(item => item.id);
   assert.deepEqual(ids, [
     'projects', 'project-new', 'project-import', 'project-overview',
-    'project-bible', 'project-episodes', 'project-assets',
+    'project-bible', 'project-episodes', 'project-assets', 'external-ai-wizard',
     'studio-script', 'studio-assets', 'studio-storyboard', 'studio-cut',
     'library', 'tasks', 'quick-create', 'canvas', 'settings-ai', 'settings-general', 'settings-data',
   ]);
@@ -185,9 +185,39 @@ test('项目剧集中心统一展示剧集状态、阶段筛选和六类来源',
     completed: 2,
   });
   assert.deepEqual(page.rows.map(item => item.episodeId), ['1', '2', '3']);
-  assert.deepEqual(page.creationSources.map(item => item.id), [
-    'blank', 'ai', 'novel', 'external_ai', 'episode_json', 'source_video',
+  assert.equal(page.creationEntry.primary.id, 'new-episode');
+  assert.deepEqual(page.creationEntry.secondary.items.map(item => item.id), [
+    'package-import', 'external-ai', 'novel-split', 'source-video',
   ]);
+});
+
+test('新建剧集直达空白剧本，外部 AI 通过独立可恢复向导回流草稿', () => {
+  const entry = model.getEpisodeCreationEntryModel('7');
+  assert.equal(entry.primary.id, 'new-episode');
+  assert.equal(entry.primary.target.routeId, 'studio-script');
+  assert.equal(entry.secondary.label, '导入 / 协作');
+  assert.equal(model.getEpisodeCreationSourceTarget('blank', { projectShellCreated: true }).routeId, 'studio-script');
+
+  const wizard = model.getExternalAiWizardModel('7', { step: 'compiled-context' });
+  assert.equal(wizard.presentation, 'page');
+  assert.equal(wizard.resumable, true);
+  assert.deepEqual(wizard.stepOrder, [
+    'target', 'compiled-context', 'task-note', 'package-preview',
+    'waiting-result', 'result-file', 'import-preview', 'imported-draft',
+  ]);
+  assert.equal(wizard.context.compiled, true);
+  assert.equal(wizard.context.readOnly, true);
+  assert.equal(wizard.context.editableFields.length, 1);
+  assert.equal(wizard.context.editableFields[0].id, 'task-note');
+  assert.deepEqual(wizard.package.outputActions.map(item => item.id), [
+    'download-package', 'copy-prompt', 'copy-context', 'open-task-directory',
+  ]);
+  assert.equal(wizard.resultFile.requiredChecks.some(item => item.id === 'package_id'), true);
+  assert.equal(wizard.resultFile.requiredChecks.some(item => item.id === 'assets_digest'), true);
+  assert.equal(wizard.resultFile.requiredChecks.some(item => item.id === 'nonempty-target'), true);
+  assert.equal(wizard.importResult.writesApprovedScript, false);
+  assert.equal(wizard.importResult.createsMediaTasks, false);
+  assert.equal(wizard.importResult.writesDraftOnly, true);
 });
 
 test('默认项目导航隐藏项目设置并将分镜访问与媒体生成分离', () => {
@@ -387,7 +417,7 @@ test('导入成功投影真实目标剧集并把所有成功动作绑定同一�
   assert.equal(imported.highlighted, true);
 });
 
-test('剧集继续动作恢复真实阶段而空白剧集打开同一来源选择器', () => {
+test('剧集继续动作恢复真实阶段而空白剧集直达剧本页', () => {
   assert.equal(typeof model.getEpisodeNavigationTarget, 'function');
   assert.deepEqual(model.getEpisodeNavigationTarget({
     projectId: '7', episodeId: '1', action: 'resume',
@@ -409,9 +439,9 @@ test('剧集继续动作恢复真实阶段而空白剧集打开同一来源选�
   assert.deepEqual(model.getEpisodeNavigationTarget({
     projectId: '7', episodeId: '3', action: 'resume',
   }), {
-    routeId: 'project-episodes',
-    params: { projectId: '7', focusId: '3' },
-    scenarioId: 'source-picker',
+    routeId: 'studio-script',
+    params: { projectId: '7', episodeId: '3' },
+    scenarioId: 'blocked',
   });
 });
 

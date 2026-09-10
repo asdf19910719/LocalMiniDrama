@@ -31,6 +31,9 @@
       'upload-invalid', 'batch-partial', 'adoption-failed', 'read-only', 'low-disk',
       'version-conflict', 'delete-blocked', 'batch-generate', 'library-update', 'publish-blocked',
     ]),
+    route('external-ai-wizard', /^#\/projects\/([^/]+)\/external-ai$/, ['projectId'], p => `/projects/${p.projectId}/external-ai`, [
+      'default',
+    ]),
     route('studio-script', /^#\/projects\/([^/]+)\/episodes\/([^/]+)\/script$/, ['projectId', 'episodeId'], p => `/projects/${p.projectId}/episodes/${p.episodeId}/script`, ['default', 'blocked', 'loading', 'saving', 'save-failed', 'conflict', 'offline', 'stale', 'diff', 'ai-processing', 'ai-partial', 'ai-failed', 'approval-processing', 'approval-succeeded']),
     route('studio-assets', /^#\/projects\/([^/]+)\/episodes\/([^/]+)\/assets$/, ['projectId', 'episodeId'], p => `/projects/${p.projectId}/episodes/${p.episodeId}/assets`, [
       'default', 'blocked', 'stale', 'candidate-compare', 'look-change',
@@ -524,6 +527,111 @@
     return rows.map(item => ({ ...item, stages: withEpisodeStageAccess(item.stages) }));
   }
 
+  function getEpisodeCreationEntryModel(projectId) {
+    const projectKey = String(projectId);
+    return {
+      projectId: projectKey,
+      primary: {
+        id: 'new-episode', label: '新建剧集', description: '创建空白草稿并直接进入剧本页，之后再选择粘贴、AI 或手写。',
+        target: { routeId: 'studio-script', params: { projectId: projectKey, episodeId: 'new' }, scenarioId: 'blocked' },
+      },
+      secondary: {
+        label: '导入 / 协作',
+        items: [
+          { id: 'package-import', label: '导入制作包', description: '五步预览 LocalMiniDrama 或外部制作包，只写入结构化草稿。', flowId: 'episode_json' },
+          { id: 'external-ai', label: '外部 AI 制作', description: '生成任务包，等待外部 AI 完成后把结果 JSON 回流为草稿。', routeId: 'external-ai-wizard', params: { projectId: projectKey } },
+          { id: 'novel-split', label: '小说 / 长文本拆集', description: '预览章节与拆集建议后批量创建剧本草稿。', flowId: 'novel' },
+          { id: 'source-video', label: '从已有视频开始剪辑', description: '登记来源视频并进入成片时间线，不触发生成。', flowId: 'source_video' },
+        ],
+      },
+    };
+  }
+
+  function getExternalAiWizardModel(projectId, state = {}) {
+    const projectKey = String(projectId);
+    const stepLabels = {
+      'target': '选择目标',
+      'compiled-context': '自动汇总上下文',
+      'task-note': '补充本次要求',
+      'package-preview': '预览并创建任务包',
+      'waiting-result': '等待外部结果',
+      'result-file': '选择结果 JSON',
+      'import-preview': '预览导入',
+      'imported-draft': '已导入草稿',
+    };
+    const stepOrder = Object.keys(stepLabels);
+    const step = stepOrder.includes(state.step) ? state.step : 'target';
+    const targetSelector = getEpisodeTargetSelectorModel(projectKey, 'external_ai');
+    const context = getExternalAiContextModel(projectKey);
+    const task = getExternalAiCollaborationTaskModel(projectKey, state.taskStatus || 'waiting', {
+      targetMode: state.targetMode || 'create_new',
+      targetEpisodeId: state.targetEpisodeId || '',
+    });
+    return {
+      projectId: projectKey,
+      featureName: '外部 AI 制作',
+      presentation: 'page',
+      resumable: true,
+      stepOrder,
+      stepLabels,
+      currentStep: step,
+      target: {
+        selector: targetSelector,
+        selectedMode: state.targetMode || 'create_new',
+        selectedEpisodeId: state.targetEpisodeId || '',
+        protection: '非空剧集永不可写入；只能创建下一集或填充空白剧集。',
+      },
+      context: {
+        title: context.title,
+        summary: context.summary,
+        includedSources: context.includedSources,
+        note: context.note,
+        compiled: true,
+        readOnly: true,
+        editableFields: [
+          { id: 'task-note', label: '给外部 AI 的补充说明', value: state.taskNote || '', placeholder: '本次任务的特别要求、本集必须保持或不能改变的设定。' },
+        ],
+      },
+      package: {
+        packageId: task.packageId,
+        packageName: task.packageName,
+        assetsDigest: task.assetsDigest,
+        schemaVersion: task.schemaVersion,
+        downloadFormats: ['任务包.zip', '单文件任务.json'],
+        outputActions: [
+          { id: 'download-package', label: '下载任务包' },
+          { id: 'copy-prompt', label: '复制任务说明' },
+          { id: 'copy-context', label: '复制完整上下文' },
+          { id: 'open-task-directory', label: '打开任务目录' },
+        ],
+      },
+      waitingTask: task,
+      resultFile: {
+        acceptedSchema: task.schemaVersion,
+        requiredChecks: [
+          { id: 'schema', label: 'Schema 协议版本' },
+          { id: 'package_id', label: '任务包 ID 匹配' },
+          { id: 'project_id', label: '目标项目匹配' },
+          { id: 'episode_id', label: '目标剧集匹配' },
+          { id: 'assets_digest', label: '素材快照摘要匹配' },
+          { id: 'context_revision', label: '上下文版本匹配' },
+          { id: 'asset-mapping', label: '人物、场景、道具映射完整' },
+          { id: 'nonempty-target', label: '目标仍为空白剧集' },
+        ],
+      },
+      importPreview: {
+        usesUnifiedFiveStepWizard: true,
+        steps: ['剧本场次', '素材映射', '分镜与时段', '写入摘要'],
+      },
+      importResult: {
+        writesApprovedScript: false,
+        createsMediaTasks: false,
+        writesDraftOnly: true,
+        opensRoute: { routeId: 'studio-script', params: { projectId: projectKey, episodeId: task.target.episodeId || String(task.target.episodeNumber) }, scenarioId: 'blocked' },
+      },
+    };
+  }
+
   function buildEpisodeCreationSources() {
     return [
       { id: 'blank', title: '空白手工', description: '创建空白剧集并进入剧本编辑，不调用 AI。', destination: 'studio-script' },
@@ -621,7 +729,7 @@
       blank: {
         ...common,
         title: '空白手工',
-        steps: ['选择创建新剧集或填充空白剧集', '填写集号、标题和目标时长', '创建空白草稿', '进入剧本'],
+        steps: ['选择创建新剧集或填充空白剧集', '填写集号和可选标题', '创建空白草稿', '进入剧本'],
         destination: 'studio-script',
       },
       ai: {
@@ -676,7 +784,7 @@
       result.creationContext = creationContext;
       result.defaultEpisodeNumber = 1;
       result.targetOptions = [{ id: 'create_new', label: '创建第 1 集' }];
-      if (sourceId === 'blank') result.steps[0] = '确认第 1 集标题和目标时长';
+      if (sourceId === 'blank') result.steps[0] = '确认第 1 集标题';
     }
     return result;
   }
@@ -869,9 +977,9 @@
     if (!row) throw new Error(`Unknown episode: ${episodeKey}`);
     if (action === 'resume') {
       if (row.isBlank) return {
-        routeId: 'project-episodes',
-        params: { projectId: projectKey, focusId: episodeKey },
-        scenarioId: 'source-picker',
+        routeId: 'studio-script',
+        params: { projectId: projectKey, episodeId: episodeKey },
+        scenarioId: 'blocked',
       };
       return {
         routeId: `studio-${row.recentStage}`,
@@ -907,11 +1015,11 @@
     if (!routeScenarios.includes(scenarioId)) throw new Error(`Unknown project episodes scenario: ${scenarioId}`);
     const scenarios = {
       default: null,
-      empty: { kind: 'info', title: '还没有剧集', detail: '从六类来源创建首集；项目本身不会因此自动调用 AI。', actions: [{ id: 'open-sources', label: '新建 / 导入剧集' }] },
+      empty: { kind: 'info', title: '还没有剧集', detail: '点击“新建剧集”创建第 1 集；项目本身不会因此自动调用 AI。', actions: [{ id: 'create-episode', label: '新建剧集' }] },
       loading: { kind: 'loading', title: '正在读取剧集', detail: '项目和当前筛选条件保持不变。', actions: [] },
       'load-failed': { kind: 'recoverable-error', title: '剧集加载失败', detail: '项目数据未改变，可重新读取本页。', actions: [{ id: 'retry-load', label: '重新加载' }] },
       'storage-offline': { kind: 'blocking', title: '部分来源媒体已离线', detail: '剧集结构仍可查看；使用来源视频前需要重新定位文件。', actions: [{ id: 'relocate-media', label: '重新定位媒体' }] },
-      'source-picker': { kind: 'info', title: '选择剧集来源', detail: '六类来源共用同一目标选择和安全边界。', actions: [{ id: 'open-sources', label: '选择来源' }] },
+      'source-picker': { kind: 'info', title: '新建或导入剧集', detail: '普通写作点击“新建剧集”；制作包和协作流程在“导入 / 协作”中。', actions: [{ id: 'open-sources', label: '打开导入 / 协作' }] },
       'blank-manual': { kind: 'success', title: '空白剧集已创建', detail: '未调用 AI，可直接编辑剧本。', actions: [{ id: 'open-script', label: '进入剧本' }] },
       'ai-script': { kind: 'info', title: 'AI 剧本草稿准备中', detail: '完成后仍需人工审阅，不自动解析资产或确认剧本。', actions: [{ id: 'open-task', label: '查看任务' }] },
       'ai-script-partial': { kind: 'warning', title: '3 集草稿已完成 2 集', detail: '成功草稿已经保留；失败的第 11 集可以单独重试。', actions: [{ id: 'retry-failed-draft', label: '重试第 11 集' }, { id: 'open-created-drafts', label: '查看已完成草稿' }] },
@@ -932,7 +1040,7 @@
     let visibleRows = scenarioId === 'empty' ? [] : rows;
     if (activeStatusFilter) visibleRows = rows.filter(item => item.workStatus === activeStatusFilter);
     const emptyState = scenarioId === 'empty'
-      ? { kind: 'project-empty', title: '还没有剧集', detail: '选择一种开始方式创建第 1 集。', action: { id: 'open-sources', label: '新建 / 导入剧集' } }
+      ? { kind: 'project-empty', title: '还没有剧集', detail: '点击“新建剧集”创建第 1 集。', action: { id: 'create-episode', label: '新建剧集' } }
       : visibleRows.length === 0
         ? { kind: 'filter-empty', title: '当前条件下没有剧集', detail: '清除筛选或切换条件后继续。', action: { id: 'clear-filters', label: '清除筛选' } }
         : null;
@@ -960,6 +1068,7 @@
       visibleRows,
       emptyState,
       externalCollaborationTasks: scenarioId === 'external-ai-waiting' ? [getExternalAiCollaborationTaskModel(projectKey, 'waiting')] : [],
+      creationEntry: getEpisodeCreationEntryModel(projectKey),
       creationSources: buildEpisodeCreationSources(),
       managementActions: [
         { id: 'rename', label: '重命名' },
@@ -4478,6 +4587,8 @@
     getProjectEpisodesModel,
     getEpisodeSourceAuditModel,
     getEpisodeNavigationTarget,
+    getEpisodeCreationEntryModel,
+    getExternalAiWizardModel,
     getEpisodeCreationFlow,
     getEpisodeCreationSourceGroups,
     getEpisodeCreationSourceTarget,

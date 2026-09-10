@@ -124,6 +124,7 @@
     let episodeUiState = { query:'', sortId:'number-asc', importStep:1, targetMode:'create_new', assetDecisions:{}, importProtocol:'episode-package' };
     let episodeSearchTimer = null;
     let projectCreateUiState = { name:'', aspectRatio:'9:16', genre:'', outputLocation:'E:/LocalMiniDrama/新项目', locationCustomized:false, selectedSourceId:'', dirty:false, submitting:false };
+    let externalAiUiState = { step:'target', targetMode:'create_new', targetEpisodeId:'', taskNote:'', taskStatus:'waiting' };
     let projectImportUiState = { projectName:'凌晨两点的客房服务（副本）', workspacePath:'E:/LocalMiniDrama/projects', mediaStrategy:'copy' };
     let generalUiState = { dirty:false, fields:{}, status:'clean' };
     let dataToolsUiState = { relocationRoot:'F:\\DramaMedia', relocationSelections:new Map(), cleanupDryRun:false, cleanupConfirmed:false };
@@ -265,25 +266,26 @@
       }).join('');
       const baseEmpty = model.emptyState || { kind:'filter-empty', title:'没有匹配剧集', detail:'清除搜索或筛选后重试。', action:{ id:'clear-filters', label:'清除条件' } };
       const emptyState = episodeUiState.query ? { title:'没有匹配剧集', detail:'清除搜索或切换筛选条件。', action:{ id:'clear-filters', label:'清除条件' } } : baseEmpty;
-      const empty = `<div class="empty"><div><div class="empty-mark">◇</div><h2>${emptyState.title}</h2><p>${emptyState.detail}</p><button class="btn primary" ${emptyState.action.id==='open-sources'?`data-episode-open-sources="${model.projectId}"`:'data-episode-clear-filters'}>${emptyState.action.label}</button></div></div>`;
+      const empty = `<div class="empty"><div><div class="empty-mark">◇</div><h2>${emptyState.title}</h2><p>${emptyState.detail}</p><button class="btn primary" ${emptyState.action.id==='create-episode'?`data-episode-new="${model.projectId}"`:'data-episode-clear-filters'}>${emptyState.action.label}</button></div></div>`;
       const externalTasks = model.externalCollaborationTasks.map(task=>{
         if(task.status==='mismatch') return `<article class="external-task-card attention"><div><span class="tag warn">外部 AI 协作 · 需要你处理</span><h3>${task.creatorStatus}</h3><p>目标：${task.target.label} · ${task.packageName}</p><small>返回结果与任务不匹配；需要你选择处理方式后才能继续。</small></div><button class="btn primary" data-external-task-center="${task.taskId}">去处理</button></article>`;
         return `<article class="external-task-line"><span class="tag">外部 AI 协作</span><b>${task.creatorStatus}</b><small>${task.target.label} · ${task.packageName} · 可离开页面，任务在任务中心同步</small><span class="spacer"></span><button data-external-task-center="${task.taskId}">在任务中心查看</button></article>`;
       }).join('');
       const compactHead = `<div class="episode-compact-head"><div><h1 tabindex="-1">${model.title}</h1><p>${model.metadata.slice(0,2).join(' · ')} · ${model.description}</p></div><div class="actions"><button class="btn" data-route-id="projects">${model.header.backLabel}</button></div></div>`;
       if(model.scenario?.kind==='loading') return `<section class="page" data-feature-id="EPISODES-001">${compactHead}${renderProjectTabs(model.projectId,'project-episodes')}<div class="skeleton" style="margin-top:18px"></div></section>`;
-      return `<section class="page" data-feature-id="EPISODES-001">${compactHead}${renderProjectTabs(model.projectId,'project-episodes')}${scenario}${externalTasks}<div class="episode-stats"><div class="episode-stat"><small>全部</small><b>${model.stats.total}</b></div><div class="episode-stat"><small>制作中</small><b>${model.stats.active}</b></div><div class="episode-stat"><small>需要处理</small><b>${model.stats.needsAttention}</b></div><div class="episode-stat"><small>已完成</small><b>${model.stats.completed}</b></div></div><div class="episode-toolbar"><input class="search" data-episode-search value="${episodeUiState.query}" placeholder="搜索集号、标题或工作位置" aria-label="搜索剧集"><div class="spacer"></div><select class="btn" data-episode-sort aria-label="剧集排序"><option value="number-asc" ${episodeUiState.sortId==='number-asc'?'selected':''}>集号升序</option><option value="updated-desc" ${episodeUiState.sortId==='updated-desc'?'selected':''}>最近工作</option></select><button class="btn" data-episode-reorder="${model.projectId}">排序与管理</button><button class="btn primary" data-episode-open-sources="${model.projectId}">＋ 新建 / 导入剧集</button></div><div class="episode-filter-groups"><div class="episode-filter-line"><small>状态</small>${statusFilters}</div></div><div class="episode-list">${episodeRows || empty}</div><div class="tool-note" style="margin-top:14px">四个阶段随时可以进入查看；确认剧本并准备好设定后才能生成媒体。剧集级导入只创建结构化草稿，不自动生成图片、视频或音频。</div></section>`;
+      return `<section class="page" data-feature-id="EPISODES-001">${compactHead}${renderProjectTabs(model.projectId,'project-episodes')}${scenario}${externalTasks}<div class="episode-stats"><div class="episode-stat"><small>全部</small><b>${model.stats.total}</b></div><div class="episode-stat"><small>制作中</small><b>${model.stats.active}</b></div><div class="episode-stat"><small>需要处理</small><b>${model.stats.needsAttention}</b></div><div class="episode-stat"><small>已完成</small><b>${model.stats.completed}</b></div></div><div class="episode-toolbar"><input class="search" data-episode-search value="${episodeUiState.query}" placeholder="搜索集号、标题或工作位置" aria-label="搜索剧集"><div class="spacer"></div><select class="btn" data-episode-sort aria-label="剧集排序"><option value="number-asc" ${episodeUiState.sortId==='number-asc'?'selected':''}>集号升序</option><option value="updated-desc" ${episodeUiState.sortId==='updated-desc'?'selected':''}>最近工作</option></select><button class="btn" data-episode-reorder="${model.projectId}">排序与管理</button><button class="btn" data-episode-open-sources="${model.projectId}">导入 / 协作</button><button class="btn primary" data-episode-new="${model.projectId}">＋ 新建剧集</button></div><div class="episode-filter-groups"><div class="episode-filter-line"><small>状态</small>${statusFilters}</div></div><div class="episode-list">${episodeRows || empty}</div><div class="tool-note" style="margin-top:14px">四个阶段随时可以进入查看；确认剧本并准备好设定后才能生成媒体。剧集级导入只创建结构化草稿，不自动生成图片、视频或音频。</div></section>`;
     }
 
-    function openEpisodeSourceDrawer(projectId, focusEpisodeId = '', showMore = false) {
-      const groups = fullModel.getEpisodeCreationSourceGroups();
-      const targetNote = focusEpisodeId ? `目标：空白第 ${focusEpisodeId} 集；也可以改为创建新剧集。` : '先选择来源，再确认创建新剧集或填充空白剧集。';
-      const primary = groups.primary.map(item=>`<div class="source-card"><button class="btn" style="width:100%;text-align:left" data-episode-source-choice="${item.id}"><b>${item.label}</b><small>${item.description}</small></button>${item.secondaryAction?`<button class="btn" style="width:100%;margin-top:8px" data-external-ai-secondary>${item.secondaryAction.label}</button>`:''}</div>`).join('');
-      const more = showMore ? `<h3 style="margin-top:16px">更多开始方式</h3><div class="source-grid">${groups.more.map(item=>`<button class="source-card" data-episode-source-choice="${item.id}"><b>${item.label}</b><small>${item.description}</small></button>`).join('')}</div>` : '<button class="btn" style="width:100%;margin-top:12px" data-more-episode-sources>更多开始方式</button>';
-      openDrawer('新建 / 导入剧集', `<div class="tool-note"><b>${targetNote}</b><br>首屏只保留三个高频入口；非空剧集不允许合并、覆盖或追加。</div><div class="source-grid" style="margin-top:12px">${primary}</div>${more}<div class="tool-note" style="margin-top:12px">任何来源都不会因为打开选择器而创建任务或写入项目。</div>`);
-      drawerBody.querySelectorAll('[data-episode-source-choice]').forEach(button=>button.addEventListener('click',()=>openEpisodeCreationSource(projectId,button.dataset.episodeSourceChoice,focusEpisodeId)));
-      drawerBody.querySelector('[data-external-ai-secondary]')?.addEventListener('click',()=>openEpisodeTargetSelector(projectId,'external_ai',focusEpisodeId));
-      drawerBody.querySelector('[data-more-episode-sources]')?.addEventListener('click',()=>openEpisodeSourceDrawer(projectId,focusEpisodeId,true));
+    function openEpisodeSourceDrawer(projectId, focusEpisodeId = '') {
+      const entry = fullModel.getEpisodeCreationEntryModel(projectId);
+      openDrawer('导入 / 协作', `<div class="tool-note">这些流程有各自的数据协议和校验；普通写作请直接点击“新建剧集”。</div><div class="operation-list" style="margin-top:12px">${entry.secondary.items.map(item=>`<button class="operation-card" data-episode-import-item="${item.id}"><span><b>${item.label}</b><small>${item.description}</small></span><span>›</span></button>`).join('')}</div>`);
+      drawerBody.querySelectorAll('[data-episode-import-item]').forEach(button=>button.addEventListener('click',()=>{
+        const id=button.dataset.episodeImportItem;
+        if(id==='package-import'){episodeUiState.importProtocol='episode-package';episodeUiState.targetMode='create_new';episodeUiState.assetDecisions={};openEpisodeImportWizard(projectId,1,{focusEpisodeId});return;}
+        if(id==='external-ai'){closeDrawer();navigate('external-ai-wizard',{projectId});return;}
+        if(id==='novel-split'){openEpisodeCreationSource(projectId,'novel-split',focusEpisodeId);return;}
+        if(id==='source-video'){openEpisodeCreationSource(projectId,'source-video',focusEpisodeId);return;}
+      }));
     }
 
     function openEpisodeTargetSelector(projectId, sourceId, focusEpisodeId = '', creationContext = 'existing-project', selectedTargetId = '') {
@@ -343,7 +345,7 @@
         drawerBody.querySelector('[data-source-back]').addEventListener('click',backToSources);
         drawerBody.querySelector('[data-novel-preview]').addEventListener('click',()=>{closeDrawer();navigate('project-episodes',{projectId},'novel-split')});return;
       }
-      if(legacySourceId==='external_ai'){openExternalAiWorkflow(projectId,'context',focusEpisodeId,creationContext,targetSelection);return;}
+      if(legacySourceId==='external_ai'){closeDrawer();navigate('external-ai-wizard',{projectId});return;}
       if(legacySourceId==='episode_json'){
         episodeUiState.importProtocol='episode-package';episodeUiState.targetMode=targetSelection.mode;episodeUiState.assetDecisions={};openEpisodeImportWizard(projectId,1,{focusEpisodeId:targetSelection.episodeId||'',creationContext,targetSelection});return;
       }
@@ -353,29 +355,6 @@
         drawerBody.querySelector('[data-source-back]').addEventListener('click',backToSources);
         drawerBody.querySelector('[data-source-video-confirm]').addEventListener('click',()=>{closeDrawer();navigate('project-episodes',{projectId},'source-video')});
       }
-    }
-
-    function openExternalAiWorkflow(projectId, phase='context', focusEpisodeId='', creationContext='existing-project', targetSelection=null) {
-      const flow = fullModel.getEpisodeCreationFlow('external_ai');
-      if(!targetSelection){
-        const selector=fullModel.getEpisodeTargetSelectorModel(projectId,'external_ai',{focusEpisodeId,creationContext});
-        if(selector.targets.length>1){openEpisodeTargetSelector(projectId,'external_ai',focusEpisodeId,creationContext);return;}
-        targetSelection=selector.targets[0];
-      }
-      const externalTask=fullModel.getExternalAiCollaborationTaskModel(projectId,'waiting',{targetMode:targetSelection.mode,targetEpisodeId:targetSelection.episodeId||''});
-      const steps = `<div class="drawer-step">${flow.steps.map((item,index)=>`<span class="${(phase==='context'&&index===0)||(phase==='package'&&index===1)?'active':''}">${index+1} ${item}</span>`).join('')}</div>`;
-      if(phase==='package'){
-        openDrawer('外部 AI · 本集制作任务包', `${steps}<div class="tool-note"><b>${externalTask.target.label} · 同一个任务，两种等价载体</b><br>ZIP 和单文件任务 JSON 表示同一份协作任务，不形成两套流程。</div><div class="feature-line"><span>冻结内容</span><b>任务说明 · 项目上下文 ${externalTask.contextRevision} · 素材 ${externalTask.assetSnapshotVersion} · 返回格式</b></div><details style="margin-top:12px"><summary>技术详情</summary><div class="feature-line"><span>package_id</span><b>${externalTask.packageId}</b></div><div class="feature-line"><span>assets_digest</span><b>${externalTask.assetsDigest}</b></div><div class="feature-line"><span>结果 Schema</span><b>${externalTask.schemaVersion}</b></div></details>${flow.package.downloadFormats.map(item=>`<div class="feature-line"><span>${item}</span><button class="btn" data-external-download="${item}">下载</button></div>`).join('')}<div class="mini-actions"><button data-external-copy="prompt">复制任务说明</button><button data-external-copy="context">复制项目说明</button></div><div class="tool-note" style="margin-top:12px">创建制作任务包不会调用外部 AI。等待记录会持久化到剧集中心与全局任务中心。</div><div class="drawer-actions"><button class="btn" data-external-back>返回上下文</button><button class="btn primary" data-external-wait>制作任务包已带走，等待结果</button></div>`);
-        drawerBody.querySelectorAll('[data-external-download]').forEach(button=>button.addEventListener('click',()=>showToast(`${button.dataset.externalDownload} 已准备；原型未写入磁盘`)));
-        drawerBody.querySelectorAll('[data-external-copy]').forEach(button=>button.addEventListener('click',()=>showToast(button.dataset.externalCopy==='prompt'?'任务说明已复制':'项目说明已复制')));
-        drawerBody.querySelector('[data-external-back]').addEventListener('click',()=>openExternalAiWorkflow(projectId,'context',focusEpisodeId,creationContext,targetSelection));
-        drawerBody.querySelector('[data-external-wait]').addEventListener('click',()=>{closeDrawer();navigate('project-episodes',{projectId,focusId:targetSelection.episodeId||String(targetSelection.episodeNumber)},'external-ai-waiting')});return;
-      }
-      const context=fullModel.getExternalAiContextModel(projectId);
-      openDrawer('外部 AI · 生成项目说明', `${steps}<div class="tool-note"><b>${externalTask.target.label} · 用于新的外部 AI 会话</b><br>只提供剧情背景说明，不直接进入生图或视频 Prompt；本地绝对路径和无关字段不会写入制作任务包。</div><div class="settings-form"><label>目标<input value="${externalTask.target.label}" readonly></label><label>上下文生成时间<input value="今天 14:26" readonly></label><label>当前版本<input value="${externalTask.contextRevision} · ${externalTask.assetSnapshotVersion}" readonly></label><label>上下文摘要<textarea readonly>${context.summary}</textarea></label></div><h3>包含的信息（可取消非必要项）</h3><div>${context.includedSources.map(item=>`<label class="asset-chip"><input type="checkbox" checked> ${item}</label>`).join('')}</div><div class="drawer-actions"><button class="btn" data-external-source-back>返回目标</button><button class="btn" data-external-context-copy>复制上下文</button><button class="btn primary" data-external-package-next>继续创建本集制作任务包</button></div>`);
-      drawerBody.querySelector('[data-external-source-back]').addEventListener('click',()=>openEpisodeTargetSelector(projectId,'external_ai',focusEpisodeId,creationContext,targetSelection.id));
-      drawerBody.querySelector('[data-external-context-copy]').addEventListener('click',()=>showToast('项目说明已复制'));
-      drawerBody.querySelector('[data-external-package-next]').addEventListener('click',()=>openExternalAiWorkflow(projectId,'package',focusEpisodeId,creationContext,targetSelection));
     }
 
     function openEpisodeImportWizard(projectId, step=1, {focusEpisodeId='', protocol=episodeUiState.importProtocol, creationContext='existing-project', targetSelection=null}={}) {
@@ -1357,6 +1336,60 @@
       return `<div class="stage-scenario ${scenario.kind}"><span class="tag">${stateLabel}</span><div><b>${scenario.title}</b><small>${scenario.detail}</small></div><div class="actions">${(scenario.actions||[]).map(item=>`<button class="btn" data-stage-scenario-action="${item.id}">${item.label}</button>`).join('')}</div></div>`;
     }
 
+    function renderExternalAiWizard(projectId, scenarioId) {
+      const wizard = fullModel.getExternalAiWizardModel(projectId, {
+        step: externalAiUiState.step,
+        targetMode: externalAiUiState.targetMode,
+        targetEpisodeId: externalAiUiState.targetEpisodeId,
+        taskNote: externalAiUiState.taskNote,
+        taskStatus: externalAiUiState.taskStatus,
+      });
+      const stepIndex = wizard.stepOrder.indexOf(wizard.currentStep);
+      const progress = `<div class="drawer-step">${wizard.stepOrder.map((item,index)=>`<span class="${index===stepIndex?'active':index<stepIndex?'done':''}">${index+1} ${wizard.stepLabels[item]}</span>`).join('')}</div>`;
+      const head = `<header class="studio-head"><button class="btn" data-external-wizard-exit>返回剧集</button><div><h1 tabindex="-1">${wizard.featureName}</h1><p>任务会持久化到剧集中心和任务中心；可随时离开并回来继续。</p></div><div class="spacer"></div></header>`;
+      const target = wizard.target.selector.targets;
+      let body = '';
+      if (wizard.currentStep === 'target') {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels.target}</h2><p class="tool-note">${wizard.target.protection}</p><div class="asset-option-list" style="margin-top:12px">${target.map(item=>`<button class="batch-action ${item.mode===externalAiUiState.targetMode&&(item.mode==='create_new'||String(item.episodeId)===String(externalAiUiState.targetEpisodeId))?'selected':''}" data-external-wizard-target="${item.id}" data-mode="${item.mode}" data-episode-id="${item.episodeId||''}"><b>${item.label}</b><small>${item.mode==='create_new'?'使用项目下一个可用集号':'只写入没有剧本、分镜和媒体的空白剧集'}</small></button>`).join('')}</div><div class="drawer-actions"><button class="btn" data-external-wizard-exit>取消</button><button class="btn primary" data-external-wizard-next data-next="compiled-context">下一步</button></div></section>`;
+      } else if (wizard.currentStep === 'compiled-context') {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['compiled-context']}</h2><div class="tool-note"><b>系统已自动汇总以下内容</b><br>${wizard.context.note}</div><div class="context-summary" style="margin-top:12px"><b>${wizard.context.title}</b><span>${wizard.context.summary}</span></div><details style="margin-top:12px" open><summary>包含的信息</summary><div class="source-list">${wizard.context.includedSources.map(item=>`<span class="tag">${item}</span>`).join('')}</div></details><div class="drawer-actions"><button class="btn" data-external-wizard-back data-back="target">上一步</button><button class="btn primary" data-external-wizard-next data-next="task-note">下一步</button></div></section>`;
+      } else if (wizard.currentStep === 'task-note') {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['task-note']}</h2><p class="tool-note">上下文由系统维护；这里只写本次任务的要求，不会创建一份长期资料。</p><form class="settings-form" data-external-wizard-note-form style="margin-top:12px"><label>${wizard.context.editableFields[0].label}<textarea name="task-note" placeholder="${wizard.context.editableFields[0].placeholder}">${escapePrototypeHtml(externalAiUiState.taskNote)}</textarea></label></form><div class="drawer-actions"><button class="btn" data-external-wizard-back data-back="compiled-context">上一步</button><button class="btn primary" data-external-wizard-next data-next="package-preview">下一步</button></div></section>`;
+      } else if (wizard.currentStep === 'package-preview') {
+        body = `<section class="studio-panel" style="max-width:860px"><h2>${wizard.stepLabels['package-preview']}</h2><div class="batch-summary" style="margin-top:12px"><div class="asset-field"><small>任务包</small><b>${wizard.package.packageId}</b></div><div class="asset-field"><small>素材快照摘要</small><b>${wizard.package.assetsDigest}</b></div><div class="asset-field"><small>返回协议</small><b>${wizard.package.schemaVersion}</b></div></div><details style="margin-top:12px"><summary>技术详情</summary><div class="feature-line"><span>package_id</span><b>${wizard.package.packageId}</b></div><div class="feature-line"><span>assets_digest</span><b>${wizard.package.assetsDigest}</b></div></details><div class="tool-note" style="margin-top:12px">创建任务包不会调用外部 AI，也不会创建任何图片、视频或音频任务。</div><div class="mini-actions" style="margin-top:12px">${wizard.package.outputActions.map(item=>`<button data-external-wizard-output="${item.id}">${item.label}</button>`).join('')}</div><div class="drawer-actions" style="margin-top:16px"><button class="btn" data-external-wizard-back data-back="task-note">上一步</button><button class="btn primary" data-external-wizard-next data-next="waiting-result">创建并等待结果</button></div></section>`;
+      } else if (wizard.currentStep === 'waiting-result') {
+        const task = wizard.waitingTask;
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['waiting-result']}</h2><div class="stage-scenario warning" style="margin-top:12px"><span class="tag warn">等待中</span><div><b>${task.creatorStatus}</b><small>目标：${task.target.label} · ${task.packageId} · 可安全离开，任务已持久化。</small></div></div><div class="mini-actions" style="margin-top:12px"><button data-external-wizard-output="download-package">重新下载任务包</button><button data-external-wizard-output="copy-prompt">复制任务说明</button><button data-external-wizard-cancel>取消任务</button></div><div class="drawer-actions" style="margin-top:16px"><button class="btn" data-external-wizard-back data-back="package-preview">上一步</button><button class="btn primary" data-external-wizard-next data-next="result-file">选择结果 JSON</button></div></section>`;
+      } else if (wizard.currentStep === 'result-file') {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['result-file']}</h2><div class="tool-note"><b>外部AI结果-第${wizard.waitingTask.target.episodeNumber}集.json</b><br>已按协议校验来源；以下检查全部通过后才能预览导入。</div><div class="review-list" style="margin-top:12px">${wizard.resultFile.requiredChecks.map(item=>`<div class="review-item"><div><b>${item.label}</b></div><span class="tag ok">通过</span></div>`).join('')}</div><div class="drawer-actions"><button class="btn" data-external-wizard-back data-back="waiting-result">上一步</button><button class="btn primary" data-external-wizard-next data-next="import-preview">预览导入</button></div></section>`;
+      } else if (wizard.currentStep === 'import-preview') {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['import-preview']}</h2><p class="tool-note">复用统一的五步导入预览；预览过程不会触发图片或视频供应商。</p><div class="feature-line" style="margin-top:12px"><span>预览步骤</span><b>${wizard.importPreview.steps.join(' · ')}</b></div><div class="drawer-actions" style="margin-top:16px"><button class="btn" data-external-wizard-back data-back="result-file">上一步</button><button class="btn primary" data-external-wizard-import>打开五步导入预览</button></div></section>`;
+      } else {
+        body = `<section class="studio-panel" style="max-width:760px"><h2>${wizard.stepLabels['imported-draft']}</h2><div class="stage-scenario success" style="margin-top:12px"><span class="tag ok">完成</span><div><b>已写入结构化草稿</b><small>没有自动确认剧本，也没有创建任何生成任务；请在剧本页人工检查。</small></div></div><div class="drawer-actions" style="margin-top:16px"><button class="btn primary" data-external-wizard-open-script>打开剧本页</button></div></section>`;
+      }
+      return `<section class="studio-page" data-feature-id="I-02">${head}${progress}<div style="margin-top:18px">${body}</div></section>`;
+    }
+
+    function bindExternalAiWizard(projectId) {
+      pageRoot.querySelectorAll('[data-external-wizard-exit]').forEach(button=>button.addEventListener('click',()=>{externalAiUiState={...externalAiUiState,step:'target'};closeDrawer();navigate('project-episodes',{projectId})}));
+      pageRoot.querySelectorAll('[data-external-wizard-target]').forEach(button=>button.addEventListener('click',()=>{
+        const mode=button.dataset.mode;const episodeId=button.dataset.episodeId||'';
+        externalAiUiState={...externalAiUiState,targetMode:mode,targetEpisodeId:episodeId,step:'target'};
+        renderLocation();
+      }));
+      pageRoot.querySelectorAll('[data-external-wizard-back]').forEach(button=>button.addEventListener('click',()=>{externalAiUiState={...externalAiUiState,step:button.dataset.back};renderLocation()}));
+      pageRoot.querySelectorAll('[data-external-wizard-next]').forEach(button=>button.addEventListener('click',()=>{
+        externalAiUiState={...externalAiUiState,step:button.dataset.next};
+        renderLocation();
+      }));
+      const noteForm=pageRoot.querySelector('[data-external-wizard-note-form]');
+      if(noteForm)noteForm.addEventListener('input',()=>{externalAiUiState={...externalAiUiState,taskNote:noteForm.querySelector('[name="task-note"]').value}});
+      pageRoot.querySelectorAll('[data-external-wizard-output]').forEach(button=>button.addEventListener('click',()=>showToast(`${button.textContent} 已准备；原型未写入磁盘`)));
+      pageRoot.querySelectorAll('[data-external-wizard-cancel]').forEach(button=>button.addEventListener('click',()=>showToast('任务已取消；可随时重新创建任务包')));
+      pageRoot.querySelectorAll('[data-external-wizard-import]').forEach(button=>button.addEventListener('click',()=>{episodeUiState.importProtocol='external-ai-result';episodeUiState.targetMode=externalAiUiState.targetMode;episodeUiState.assetDecisions={};openEpisodeImportWizard(projectId,1,{creationContext:'existing-project'})}));
+      pageRoot.querySelectorAll('[data-external-wizard-open-script]').forEach(button=>button.addEventListener('click',()=>{externalAiUiState={...externalAiUiState,step:'target',taskNote:''};navigate('studio-script',{projectId,episodeId:'new'},'blocked')}));
+    }
+
     function renderStoryboardStage(projectId, episodeId, scenarioId, resumeParams = {}) {
       const key=`${projectId}/${episodeId}/${scenarioId}`;
       if(storyboardUiState.key!==key||!storyboardUiState.page){
@@ -1833,6 +1866,7 @@
       else if (state.routeId === 'project-assets') pageRoot.innerHTML = renderProjectAssets(state.params.projectId,state.scenarioId,state.params.focusId);
       else if (state.routeId === 'project-new') pageRoot.innerHTML = renderProjectCreate(state.scenarioId);
       else if (state.routeId === 'project-import') pageRoot.innerHTML = renderProjectImport(state.scenarioId);
+      else if (state.routeId === 'external-ai-wizard') { pageRoot.innerHTML = renderExternalAiWizard(state.params.projectId,state.scenarioId); bindExternalAiWizard(state.params.projectId); }
       else if (state.routeId === 'studio-script') pageRoot.innerHTML = renderScriptStage(state.params.projectId,state.params.episodeId,state.scenarioId);
       else if (state.routeId === 'studio-assets') pageRoot.innerHTML = renderEpisodeAssetsStage(state.params.projectId,state.params.episodeId,state.scenarioId);
       else if (state.routeId === 'studio-storyboard') pageRoot.innerHTML = renderStoryboardStage(state.params.projectId,state.params.episodeId,state.scenarioId,state.params);
@@ -2186,6 +2220,7 @@
       pageRoot.querySelectorAll('[data-episode-status-filter]').forEach(button=>button.addEventListener('click',()=>navigate('project-episodes',{projectId:button.dataset.projectId},button.dataset.episodeStatusFilter==='all'?'default':`filter-status-${button.dataset.episodeStatusFilter}`)));
       pageRoot.querySelector('[data-episode-clear-filters]')?.addEventListener('click',()=>{episodeUiState.query='';navigate('project-episodes',{projectId:currentLocation().params.projectId})});
       pageRoot.querySelectorAll('[data-episode-open-sources]').forEach(button=>button.addEventListener('click',()=>{if(episodeUiState.query){episodeUiState.query='';renderLocation();return;}openEpisodeSourceDrawer(button.dataset.episodeOpenSources)}));
+      pageRoot.querySelectorAll('[data-episode-new]').forEach(button=>button.addEventListener('click',()=>{const projectId=button.dataset.episodeNew;closeDrawer();navigate('studio-script',{projectId,episodeId:'new'},'blocked')}));
       pageRoot.querySelectorAll('[data-episode-resume]').forEach(button=>button.addEventListener('click',()=>{const target=fullModel.getEpisodeNavigationTarget({projectId:button.dataset.projectId,episodeId:button.dataset.episodeResume,action:'resume'});navigate(target.routeId,target.params,target.scenarioId)}));
       pageRoot.querySelectorAll('[data-episode-stage]').forEach(button=>button.addEventListener('click',()=>{const target=fullModel.getEpisodeNavigationTarget({projectId:button.dataset.projectId,episodeId:button.dataset.episodeId,action:'stage',stage:button.dataset.episodeStage});if(target.blocked)showToast(target.reason);navigate(target.routeId,target.params,target.scenarioId)}));
       pageRoot.querySelector('[data-external-task-center]')?.addEventListener('click',buttonEvent=>navigate('tasks',{projectId:currentLocation().params.projectId,focusId:buttonEvent.currentTarget.dataset.externalTaskCenter},'project-filtered'));
