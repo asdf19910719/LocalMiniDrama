@@ -26,6 +26,11 @@ function createApp() {
   const { runMigrationsAndEnsure } = require('./db/migrate.js');
   runMigrationsAndEnsure(db);
 
+  // V2.1 领域事实源与统一任务扩展列（幂等；见 migrations/36_v21_domain.sql）
+  const { ensureV21Domain, ensureAsyncTaskV21Columns } = require('./v21/db.js');
+  ensureAsyncTaskV21Columns(db);
+  ensureV21Domain(db);
+
   // 厂商锁定模式：在迁移完成后同步 vendor_lock 配置
   const { applyVendorLock } = require('./services/aiConfigService');
   applyVendorLock(db, logger, config);
