@@ -72,6 +72,8 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       assetsDigest: row.assets_digest,
       contextVersion: row.context_version || null,
       taskNote: row.task_note || '',
+      instructions: row.instructions_markdown,
+      context: row.context_markdown,
       status: taskStatusOf(row),
       createdAt: row.created_at,
       importedAt: row.imported_at,
@@ -178,7 +180,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       return {
         contentType: 'application/zip',
         contentDisposition: `attachment; filename="${row.package_id}.zip"`,
-        body: Buffer.from(buildTaskZip(getTaskBundle(row.package_id) ? row.package_id : row.package_id)),
+        body: buildTaskZip(getTaskBundle(db, row.package_id)),
       };
     }
     if (format === 'json') {
