@@ -27,6 +27,26 @@ test('路由注册表覆盖全部一级产品目的地', () => {
   ]);
 });
 
+test('剧本草稿在确认前可结构化，AI和历史均按上下文渐进出现', () => {
+  const blank = model.getScriptStageModel('7', '3', 'blocked');
+  assert.deepEqual(blank.emptyStart.actions.map(item => item.id), [
+    'paste-import', 'ai-draft', 'manual-write',
+  ]);
+  assert.equal(blank.emptyStart.actions[1].label, 'AI 生成剧本');
+  assert.equal(blank.stageNavigation[1].label, '设定');
+  assert.equal(blank.versionComparison.canCompare, false);
+
+  const active = model.getScriptStageModel('7', '1', 'stale');
+  assert.equal(active.aiAssistant.presentation, 'menu');
+  assert.equal(active.revisionHistory.presentation, 'drawer');
+  assert.equal(active.revisionHistory.actionLabel, '历史版本');
+  assert.equal(active.primaryAction.label, '检查并确认');
+  assert.equal(active.versionComparison.canCompare, true);
+  assert.deepEqual(active.aiActions.filter(item => item.requiresSelection).map(item => item.id), [
+    'rewrite-selection', 'expand-selection', 'condense-selection',
+  ]);
+});
+
 test('数据管理退出项目一级导航并按职责拆到项目菜单与高级数据工具', () => {
   assert.equal(typeof model.getProjectSectionNavigation, 'function');
   assert.equal(typeof model.getProjectOperationsModel, 'function');

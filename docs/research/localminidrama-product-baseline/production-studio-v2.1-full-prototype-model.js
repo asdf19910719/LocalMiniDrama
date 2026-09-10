@@ -2315,7 +2315,7 @@
     } else if (page.approval.state === 'approved') {
       page.primaryAction = { id:'enter-assets', label:'进入设定', enabled:true, reason:'' };
     } else if (page.approval.check.completed) {
-      page.primaryAction = { id:'confirm-new-version', label:'确认新版本', enabled:true, reason:'' };
+      page.primaryAction = { id:'confirm-new-version', label: page.currentRevision.approvedRevisionId ? '确认修改' : '确认剧本', enabled:true, reason:'' };
     } else {
       page.primaryAction = { id:'check-and-confirm', label:'检查并确认', enabled:true, reason:'' };
     }
@@ -2368,15 +2368,33 @@
       ],
       versionComparison:{
         leftLabel:'已确认版本',rightLabel:'当前草稿',open:scenarioId==='diff',
+        canCompare:false,
         rows:[
           {sceneLabel:'场次 02 · 13 层走廊',kind:'修改',before:'林夏走进走廊，灯光闪烁。',after:'林夏握紧门卡，走廊尽头再次响起服务铃。'},
           {sceneLabel:'场次 03 · 208 门口',kind:'新增',before:'',after:'门牌上的 208 忽然变成了 1308。'},
           {sceneLabel:'场次 04 · 酒店前台',kind:'删除',before:'经理挂断电话后独自离开。',after:''},
         ],
       },
+      emptyStart:{
+        title:'从哪里开始？',
+        detail:'三种方式都会进入同一份可编辑草稿；场次结构在保存后即可查看和调整。',
+        actions:[
+          {id:'paste-import',label:'粘贴或导入剧本'},
+          {id:'ai-draft',label:'AI 生成剧本'},
+          {id:'manual-write',label:'直接开始写'},
+        ],
+      },
+      aiAssistant:{
+        presentation:'menu',
+        action:{id:'ai-draft',label:'AI 生成剧本'},
+        selectionActions:['rewrite-selection','expand-selection','condense-selection'],
+      },
+      revisionHistory:{presentation:'drawer',actionLabel:'历史版本'},
       aiActions:[
         {id:'continue',label:'根据创意继续写',priority:'primary'},
         {id:'rewrite-selection',label:'改写选中内容',priority:'primary',requiresSelection:true},
+        {id:'expand-selection',label:'扩写选中内容',requiresSelection:true},
+        {id:'condense-selection',label:'缩写选中内容',requiresSelection:true},
         {id:'multi-episode',label:'生成多集草稿',priority:'secondary'},
         {id:'copy-project',label:'从其他项目复制',priority:'secondary'},
       ],
@@ -2400,7 +2418,11 @@
       sceneUndo:{available:false,scene:null,index:-1},
     };
 
+    page.versionComparison.canCompare = Boolean(page.currentRevision.approvedRevisionId) && scenarioId !== 'blocked';
     if (scenarioId === 'blocked') {
+      page.versionComparison.canCompare = false;
+      page.aiAssistant.presentation = 'prominent';
+      page.revisionHistory = { presentation:'hidden', actionLabel:'历史版本' };
       page.scenes = [];
       page.selectedSceneId = null;
       page.editor = { ...page.editor, selectedSceneId:null, content:'', dirty:false, isEmpty:true, persistence:{state:'saved',label:'空白草稿',hasRecoveryCopy:false} };
