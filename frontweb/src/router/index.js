@@ -1,58 +1,92 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+// V2.1 canonical 路由（Phase 6 切换）：项目 / 资产库 / 任务 / 设置 + 单集四阶段
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/', redirect: '/projects' },
     {
-      path: '/',
-      name: 'list',
-      component: () => import('@/views/FilmList.vue'),
-      meta: { title: '项目列表' }
+      path: '/projects',
+      name: 'projects',
+      component: () => import('@/views/productionStudio/ProjectsView.vue'),
+      meta: { title: '项目' },
     },
     {
-      path: '/drama/:id',
-      name: 'drama-detail',
-      component: () => import('@/views/DramaDetail.vue'),
-      meta: { title: '剧集管理' }
+      path: '/projects/new',
+      name: 'project-new',
+      component: () => import('@/views/productionStudio/ProjectNewView.vue'),
+      meta: { title: '新建项目' },
     },
     {
-      path: '/film/:id',
-      name: 'film',
-      component: () => import('@/views/FilmCreate.vue'),
-      meta: { title: 'AI 视频生成' }
+      path: '/projects/:projectId',
+      name: 'project-overview',
+      component: () => import('@/views/productionStudio/ProjectOverviewView.vue'),
+      meta: { title: '项目概览' },
     },
     {
-      path: '/film/:id/canvas',
-      name: 'film-canvas',
-      component: () => import('@/views/DramaCanvas.vue'),
-      meta: { title: '画布模式' }
+      path: '/projects/:projectId/episodes',
+      name: 'project-episodes',
+      component: () => import('@/views/productionStudio/ProjectEpisodesView.vue'),
+      meta: { title: '剧集' },
     },
     {
-      // Keep the documented drama URL compatible with the canvas implementation.
-      path: '/drama/:id/canvas',
-      name: 'drama-canvas',
-      component: () => import('@/views/DramaCanvas.vue'),
-      meta: { title: '画布模式' }
+      path: '/projects/:projectId/episodes/external-ai',
+      name: 'external-ai-wizard',
+      component: () => import('@/views/productionStudio/ExternalAiWizardView.vue'),
+      meta: { title: '外部 AI 制作' },
     },
+    {
+      path: '/projects/:projectId/episodes/import-package',
+      name: 'episode-import-package',
+      component: () => import('@/views/productionStudio/EpisodePackageImportView.vue'),
+      meta: { title: '导入制作包' },
+    },
+    {
+      path: '/projects/:projectId/assets',
+      name: 'project-assets',
+      component: () => import('@/views/productionStudio/ProjectAssetsView.vue'),
+      meta: { title: '项目素材' },
+    },
+    {
+      path: '/projects/:projectId/episodes/:episodeId/:stage(script|assets|storyboard|cut)',
+      name: 'studio-stage',
+      component: () => import('@/views/productionStudio/studio/StudioShell.vue'),
+      meta: { title: '制作' },
+    },
+    {
+      path: '/tasks',
+      name: 'tasks',
+      component: () => import('@/views/productionStudio/TasksView.vue'),
+      meta: { title: '任务' },
+    },
+    {
+      path: '/library',
+      name: 'library',
+      component: () => import('@/views/productionStudio/LibraryView.vue'),
+      meta: { title: '资产库' },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/productionStudio/SettingsEntry.vue'),
+      meta: { title: '设置' },
+    },
+    // 既有独立工具页（不属于四阶段制作链，继续可用）
     {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),
-      meta: { title: 'AI 配置' }
-    },
-    {
-      path: '/free-create',
-      name: 'free-create',
-      component: () => import('@/views/FreeCreate.vue'),
-      meta: { title: '自由创作' }
+      meta: { title: 'AI 配置' },
     },
     {
       path: '/media-library',
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
-      meta: { title: '媒体素材库' }
-    }
-  ]
+      meta: { title: '媒体素材库' },
+    },
+    // 旧四阶段前制作页与旧画布已整体删除：不注册旧路由、不提供回退跳转
+    // （迁移矩阵 §2：开发期书签失效不构成产品兼容需求）。
+  ],
 })
 
 router.beforeEach((to) => {
