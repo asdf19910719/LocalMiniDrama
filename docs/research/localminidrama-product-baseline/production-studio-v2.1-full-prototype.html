@@ -95,7 +95,7 @@
 
   <script src="./production-studio-v2.1-project-hub-prototype-model.js?v=20260909-project-create-review"></script>
   <script src="./production-studio-v2.1-prototype-model.js?v=20260909-project-create-review"></script>
-    <script src="./production-studio-v2.1-full-prototype-model.js?v=20260910-data-tools-review2"></script>
+    <script src="./production-studio-v2.1-full-prototype-model.js?v=20260910-data-tools-review3"></script>
   <script>
     const fullModel = window.ProductionStudioV21FullPrototypeModel;
     const hubModel = window.ProductionStudioV21ProjectHubModel;
@@ -2490,8 +2490,8 @@
       pageRoot.querySelectorAll('[data-bible-look]').forEach(button => button.addEventListener('click', () => navigate('project-bible',{projectId:button.dataset.bibleLook},'look')));
       pageRoot.querySelectorAll('[data-project-profile-edit]').forEach(button => button.addEventListener('click', () => openProjectProfileEditor(button.dataset.projectProfileEdit)));
       pageRoot.querySelectorAll('[data-context-edit]').forEach(button => button.addEventListener('click', () => openProjectContextEditor(button.dataset.contextEdit)));
-      pageRoot.querySelectorAll('[data-look-change]').forEach(button => button.addEventListener('click', () => openProjectLookPicker(button.dataset.lookChange)));
-      pageRoot.querySelectorAll('[data-look-edit-rules]').forEach(button => button.addEventListener('click', () => {projectSettingsUiState.lookTab='custom';openProjectLookPicker(button.dataset.lookEditRules)}));
+      pageRoot.querySelectorAll('[data-look-change]').forEach(button => button.addEventListener('click', () => openLookStyleModal(button.dataset.lookChange)));
+      pageRoot.querySelectorAll('[data-look-edit-rules]').forEach(button => button.addEventListener('click', () => {openLookStyleModal(button.dataset.lookEditRules)}));
       pageRoot.querySelectorAll('[data-look-compare]').forEach(button => button.addEventListener('click', () => openDrawer(`比较风格版本 v${button.dataset.lookCompare}`, '<div class="tool-note"><b>只比较视觉规则和真实引用影响</b><br>历史媒体和候选不会被改写。</div><div class="feature-line"><span>色彩策略</span><b>冷青灰 → 冷青灰 + 局部暖光</b></div><div class="feature-line"><span>镜头语言</span><b>稳定构图 → 缓慢推进</b></div>')));
       pageRoot.querySelectorAll('[data-look-history-use]').forEach(button => button.addEventListener('click', () => openProjectLookImpactPreview(currentLocation().params.projectId,'cinematic-suspense')));
       pageRoot.querySelectorAll('[data-settings-object]').forEach(button => button.addEventListener('click', () => {
