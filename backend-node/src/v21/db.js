@@ -73,9 +73,49 @@ function ensureAsyncTaskV21Columns(db) {
   );
 }
 
+/**
+ * V2.1 为外部 AI 任务包表补充向导字段（幂等）：
+ * - task_note：本次任务唯一可编辑的补充说明（EXT-201）
+ * - context_version：上下文冻结版本（sha256(context_markdown + assets_digest)）
+ * - cancelled_at：任务取消时间（等待中可取消，记录保留）
+ */
+function ensureExternalAiTaskV21Columns(db) {
+  const existing = new Set(
+    db.prepare('PRAGMA table_info(external_ai_package_tasks)').all().map((r) => r.name)
+  );
+  const wanted = [['task_note', 'TEXT'], ['context_version', 'TEXT'], ['cancelled_at', 'TEXT']];
+  for (const [name, type] of wanted) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE external_ai_package_tasks ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
+/**
+ * V2.1 为分镜表补充列（幂等）：
+ * - structure_revision：镜头结构修订号（SHOT_REVISION_CONFLICT 乐观锁）
+ * - image_prompt_manual：分镜图提示词手工覆盖标记
+ * - script_revision_id：来源剧本版本（更新结构/导入溯源）
+ */
+function ensureStoryboardV21Columns(db) {
+  const existing = new Set(db.prepare('PRAGMA table_info(storyboards)').all().map((r) => r.name));
+  const wanted = [
+    ['structure_revision', 'INTEGER DEFAULT 1'],
+    ['image_prompt_manual', 'INTEGER DEFAULT 0'],
+    ['script_revision_id', 'INTEGER'],
+  ];
+  for (const [name, type] of wanted) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE storyboards ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
 module.exports = {
   ensureV21Domain,
   getAppSchemaVersion,
   ensureAsyncTaskV21Columns,
+  ensureExternalAiTaskV21Columns,
+  ensureStoryboardV21Columns,
   V21_SCHEMA_VERSION,
 };

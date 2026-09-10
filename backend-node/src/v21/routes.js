@@ -182,9 +182,10 @@ function createV21Router({ db, cfg, log }) {
   const { createAssetQueryService } = require('./assets/assetQueryService.js');
   const nodePath = require('node:path');
   const assetStorage = nodePath.resolve(cfg.storage?.local_path || nodePath.join(process.cwd(), 'data', 'storage'));
+  const v21MockProvider = createMockProvider({ db, log, storageDir: assetStorage });
   const assets = createAssetQueryService(db, {
     log,
-    mockProvider: createMockProvider({ db, log, storageDir: assetStorage }),
+    mockProvider: v21MockProvider,
   });
   r.get('/projects/:id/assets', wrap((req, res) => {
     response.success(res, assets.listAssets(req.params.id, req.query || {}));
@@ -233,6 +234,115 @@ function createV21Router({ db, cfg, log }) {
       episodeId: req.params.episodeId,
       shotId: req.query.shot || null,
     }));
+  }));
+
+  // ---- 分镜阶段（Task 4.x） ----
+  const { createStoryboardService } = require('./storyboard/storyboardService.js');
+  const storyboard = createStoryboardService(db, { log, mockProvider: v21MockProvider });
+  r.post('/episodes/:episodeId/storyboard/create-from-script', wrap((req, res) => {
+    response.created(res, storyboard.createFromScript(req.params.episodeId));
+  }));
+  r.get('/episodes/:episodeId/storyboard', wrap((req, res) => {
+    const shots = storyboard.listShots(req.params.episodeId).map((s) => ({
+      ...s,
+      completion: storyboard.getCompletion(req.params.episodeId),
+    }));
+    response.success(res, { shots, completion: storyboard.getCompletion(req.params.episodeId) });
+  }));
+  r.get('/storyboards/:shotId', wrap((req, res) => {
+    response.success(res, {
+      shot: storyboard.getShotDetail(req.params.shotId),
+      references: storyboard.getReferenceManager(req.params.shotId),
+      imagePrompt: storyboard.getImagePrompt(req.params.shotId),
+      imageCandidates: storyboard.imageCandidates(req.params.shotId),
+      h3Draft: storyboard.getH3Draft(req.params.shotId),
+      video: storyboard.videoCandidates(req.params.shotId),
+      frameChaining: storyboard.getFrameChaining(req.params.shotId),
+    });
+  }));
+  r.patch('/storyboards/:shotId/segments/:segmentId', wrap((req, res) => {
+    response.success(res, storyboard.editSegment(req.params.shotId, req.params.segmentId, req.body || {}));
+  }));
+  r.post('/storyboards/:shotId/segments/:segmentId/split', wrap((req, res) => {
+    response.success(res, storyboard.splitSegment(req.params.shotId, req.params.segmentId, Number(req.body?.atSeconds)));
+  }));
+  r.post('/storyboards/:shotId/segments/:segmentId/merge', wrap((req, res) => {
+    response.success(res, storyboard.mergeSegment(req.params.shotId, req.params.segmentId));
+  }));
+  r.post('/storyboards/:shotId/segments/:segmentId/move', wrap((req, res) => {
+    response.success(res, storyboard.moveSegment(req.params.shotId, req.params.segmentId, req.body?.direction || 'up'));
+  }));
+  r.get('/storyboards/:shotId/references', wrap((req, res) => {
+    response.success(res, storyboard.getReferenceManager(req.params.shotId));
+  }));
+  r.post('/storyboards/:shotId/references', wrap((req, res) => {
+    response.created(res, storyboard.addReference(req.params.shotId, req.body || {}));
+  }));
+  r.delete('/storyboards/:shotId/references/:referenceId', wrap((req, res) => {
+    response.success(res, storyboard.removeReference(req.params.shotId, req.params.referenceId));
+  }));
+  r.get('/storyboards/:shotId/image-prompt', wrap((req, res) => {
+    response.success(res, storyboard.getImagePrompt(req.params.shotId));
+  }));
+  r.put('/storyboards/:shotId/image-prompt', wrap((req, res) => {
+    response.success(res, storyboard.editImagePrompt(req.params.shotId, req.body || {}));
+  }));
+  r.delete('/storyboards/:shotId/image-prompt', wrap((req, res) => {
+    response.success(res, storyboard.resetImagePrompt(req.params.shotId));
+  }));
+  r.post('/storyboards/:shotId/image/generate', wrap((req, res) => {
+    storyboard.generateImage(req.params.shotId, req.body || {}).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/storyboards/:shotId/image/upload', wrap((req, res) => {
+    response.created(res, storyboard.uploadImage(req.params.shotId, req.body || {}));
+  }));
+  r.post('/storyboards/:shotId/image/set-current', wrap((req, res) => {
+    response.success(res, storyboard.setImageCurrent(req.params.shotId, req.body || {}));
+  }));
+  r.post('/storyboards/:shotId/h3/generate', wrap((req, res) => {
+    response.created(res, storyboard.generateH3(req.params.shotId, req.body || {}));
+  }));
+  r.post('/storyboards/:shotId/h3/save', wrap((req, res) => {
+    response.success(res, storyboard.saveH3(req.params.shotId, req.body || {}));
+  }));
+  r.get('/storyboards/:shotId/video/quote', wrap((req, res) => {
+    response.success(res, storyboard.getVideoQuote(req.params.shotId, Number(req.query.count || 1)));
+  }));
+  r.get('/storyboards/:shotId/video/guard', wrap((req, res) => {
+    response.success(res, storyboard.jointGuard(req.params.shotId));
+  }));
+  r.post('/storyboards/:shotId/video/submit', wrap((req, res) => {
+    storyboard.submitVideo(req.params.shotId, req.body || {}).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/video-tasks/:taskId/complete', wrap((req, res) => {
+    storyboard.completeVideoTask(req.params.taskId).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/storyboards/:shotId/video/adopt', wrap((req, res) => {
+    response.success(res, storyboard.adoptVideo(req.params.shotId, req.body?.candidateId, req.body || {}));
+  }));
+  r.post('/storyboards/:shotId/video/undo-adopt', wrap((req, res) => {
+    response.success(res, storyboard.undoAdoptVideo(req.params.shotId));
+  }));
+  r.post('/storyboards/:shotId/frame-link/confirm', wrap((req, res) => {
+    response.success(res, storyboard.confirmFrameLink(req.params.shotId));
+  }));
+  r.delete('/storyboards/:shotId/frame-link', wrap((req, res) => {
+    response.success(res, storyboard.unlinkFrameLink(req.params.shotId));
   }));
 
   // ---- 外部 AI 向导（Task 2.4） ----
