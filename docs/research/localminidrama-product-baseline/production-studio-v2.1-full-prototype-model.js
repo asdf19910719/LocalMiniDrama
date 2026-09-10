@@ -217,7 +217,7 @@
       { id: 'script', label: '剧本', routeId: 'studio-script', params },
       { id: 'assets', label: '设定', routeId: 'studio-assets', params },
       { id: 'storyboard', label: '分镜', routeId: 'studio-storyboard', params },
-      { id: 'cut', label: '成片', routeId: 'studio-cut', params },
+      { id: 'cut', label: '短片', routeId: 'studio-cut', params },
     ];
   }
 
@@ -1166,7 +1166,7 @@
             { id: 'script', label: '剧本', state: '未开始', summary: '0 集', tone: 'muted', unit: 'episode', total: 0 },
             { id: 'assets', label: '设定', state: '未开始', summary: '0 集', tone: 'muted', unit: 'episode', total: 0 },
             { id: 'storyboard', label: '分镜', state: '未开始', summary: '0 集', tone: 'muted', unit: 'episode', total: 0 },
-            { id: 'cut', label: '成片', state: '未开始', summary: '0 集', tone: 'muted', unit: 'episode', total: 0 },
+            { id: 'cut', label: '短片', state: '未开始', summary: '0 集', tone: 'muted', unit: 'episode', total: 0 },
           ],
           projectLook: {
             name: '尚未设置画面风格', version: 0, status: '可稍后设置', aspectRatio: '9:16', usage: '0 个分镜引用',
@@ -1200,7 +1200,7 @@
             { id: 'script', label: '剧本', state: '3 集已确认', summary: '2 集制作中 · 3 集未开始', tone: 'ok', unit: 'episode', total: 8 },
             { id: 'assets', label: '设定', state: '1 集需处理', summary: '1 集就绪 · 6 集未开始', tone: 'warn', unit: 'episode', total: 8 },
             { id: 'storyboard', label: '分镜', state: '1 集制作中', summary: '7 集未开始', tone: 'active', unit: 'episode', total: 8 },
-            { id: 'cut', label: '成片', state: '尚无成片', summary: '8 集未开始', tone: 'muted', unit: 'episode', total: 8 },
+            { id: 'cut', label: '短片', state: '尚无成片', summary: '8 集未开始', tone: 'muted', unit: 'episode', total: 8 },
           ],
           projectLook: {
             name: '都市悬疑 · 冷暖对撞',
@@ -1261,7 +1261,7 @@
             { id: 'script', label: '剧本', state: '4 集已确认', summary: '2 集制作中 · 6 集未开始', tone: 'ok', unit: 'episode', total: 12 },
             { id: 'assets', label: '设定', state: '1 集制作中', summary: '3 集就绪 · 8 集未开始', tone: 'active', unit: 'episode', total: 12 },
             { id: 'storyboard', label: '分镜', state: '2 集制作中', summary: '1 集待确认 · 9 集未开始', tone: 'active', unit: 'episode', total: 12 },
-            { id: 'cut', label: '成片', state: '1 集已完成', summary: '1 集制作中 · 10 集未开始', tone: 'ok', unit: 'episode', total: 12 },
+            { id: 'cut', label: '短片', state: '1 集已完成', summary: '1 集制作中 · 10 集未开始', tone: 'ok', unit: 'episode', total: 12 },
           ],
           projectLook: {
             name: '潮湿胶片 · 低饱和',
@@ -4276,7 +4276,7 @@
         { id: 'script', label: '剧本', routeId: 'studio-script', state: 'done' },
         { id: 'assets', label: '设定', routeId: 'studio-assets', state: 'done' },
         { id: 'storyboard', label: '分镜', routeId: 'studio-storyboard', state: 'current' },
-        { id: 'cut', label: '成片', routeId: 'studio-cut', state: 'available' },
+        { id: 'cut', label: '短片', routeId: 'studio-cut', state: 'available' },
       ],
       layout: ['shot-inspector', 'segment-prompts', 'result-and-generation'],
       sceneSummary: { selected: '场次 02 · 无人楼层', sceneCount: 4, shotCount: 9, totalDuration: '01:08' },

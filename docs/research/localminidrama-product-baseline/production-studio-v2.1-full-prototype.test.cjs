@@ -247,7 +247,7 @@ test('默认项目导航隐藏项目设置并将分镜访问与媒体生成分�
   );
   assert.deepEqual(
     model.getEpisodeStageNavigation('7', '2').map(item => item.label),
-    ['剧本', '设定', '分镜', '成片'],
+    ['剧本', '设定', '分镜', '短片'],
   );
   const episode = model.getProjectEpisodesModel('7').rows.find(item => item.episodeId === '2');
   assert.equal(episode.stages.storyboard.navigationAccess, 'available');
@@ -266,7 +266,7 @@ test('单人创作者导航不暴露项目设置，阶段可进入而媒体生�
   );
   assert.deepEqual(
     model.getEpisodeStageNavigation('7', '2').map(item => item.label),
-    ['剧本', '设定', '分镜', '成片'],
+    ['剧本', '设定', '分镜', '短片'],
   );
   const page = model.getProjectEpisodesModel('7');
   const row = page.rows.find(item => item.episodeId === '2');
@@ -2658,7 +2658,7 @@ test('个人版默认导航只保留项目资产库任务设置并把辅助工�
     '概览', '剧集', '项目素材',
   ]);
   assert.deepEqual(model.getEpisodeStageNavigation('7', '1').map(item => item.label), [
-    '剧本', '设定', '分镜', '成片',
+    '剧本', '设定', '分镜', '短片',
   ]);
   const auxiliary = model.getAuxiliaryToolEntries({ projectId: '7', episodeId: '1' });
   assert.equal(auxiliary.moreTools.some(item => item.id === 'quick-create'), true);

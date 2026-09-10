@@ -103,7 +103,7 @@
     const drawerBackdrop = document.getElementById('drawerBackdrop');
     const drawerTitle = document.getElementById('drawerTitle');
     const drawerBody = document.getElementById('drawerBody');
-    const stageNames = {script:'剧本',assets:'设定',storyboard:'分镜',cut:'成片'};
+    const stageNames = {script:'剧本',assets:'设定',storyboard:'分镜',cut:'短片'};
     const routeLabels = {
       projects:'项目列表','project-new':'新建项目','project-import':'导入项目归档','project-overview':'项目概览',
       'project-bible':'项目设置','project-episodes':'项目剧集','project-assets':'项目素材',
@@ -252,7 +252,7 @@
     function renderProjectEpisodes(projectId, scenarioId) {
       const locationState=currentLocation();
       const model = fullModel.getProjectEpisodesModel(projectId, scenarioId, { resultEpisodeId: locationState.params.focusId || '3' });
-      const stageLabels = { script:'剧本', assets:'设定', storyboard:'分镜', cut:'成片' };
+      const stageLabels = { script:'剧本', assets:'设定', storyboard:'分镜', cut:'短片' };
       let rows = model.visibleRows.filter(item => `${item.number} ${item.title} ${item.recentPosition || ''}`.toLowerCase().includes(episodeUiState.query.trim().toLowerCase()));
       rows = [...rows].sort((a,b)=>episodeUiState.sortId==='updated-desc' ? Date.parse(b.updatedAt)-Date.parse(a.updatedAt) : a.number-b.number);
       const scenario = model.scenario && model.scenario.kind !== 'loading' ? `<div class="stage-scenario ${model.scenario.kind}"><span class="tag">${model.scenario.kind==='blocking'?'阻断':model.scenario.kind==='success'?'完成':model.scenario.kind==='recoverable-error'?'可恢复':'流程提示'}</span><div><b>${model.scenario.title}</b><small>${model.scenario.detail}</small></div><div class="actions">${model.scenario.actions.map(item=>`<button class="btn" data-episode-scenario-action="${item.id}" ${item.episodeId?`data-result-episode-id="${item.episodeId}"`:''}>${item.label}</button>`).join('')}</div></div>` : '';
