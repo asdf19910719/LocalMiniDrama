@@ -208,10 +208,9 @@ test('默认项目导航隐藏项目设置并将分镜访问与媒体生成分�
   assert.equal(episode.stages.storyboard.navigationAccess, 'available');
   assert.equal(episode.stages.storyboard.mediaGenerationAccess, 'blocked');
   assert.deepEqual(model.parsePrototypeLocation('#/projects/7/bible'), {
-    routeId: 'project-overview',
+    routeId: 'project-bible',
     params: { projectId: '7' },
     scenarioId: 'default',
-    redirectedFrom: 'project-bible',
   });
 });
 

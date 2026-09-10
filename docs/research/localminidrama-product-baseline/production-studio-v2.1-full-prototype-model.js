@@ -105,10 +105,6 @@
 
   function parsePrototypeLocation(hash = '#/projects') {
     const normalized = String(hash || '#/projects');
-    const bibleRedirect = normalized.match(/^#\/projects\/([^/]+)\/bible$/);
-    if (bibleRedirect) {
-      return { routeId: 'project-overview', params: { projectId: decodeURIComponent(bibleRedirect[1]) }, scenarioId: 'default', redirectedFrom: 'project-bible' };
-    }
     const [pathPart, query = ''] = normalized.split('?');
     const queryParams = new URLSearchParams(query);
     const requestedScenario = queryParams.get('scenario') || 'default';
