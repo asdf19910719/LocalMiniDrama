@@ -534,6 +534,8 @@ function setupRouter(cfg, db, log) {
     console.warn('Failed to load prompt overrides:', e.message);
   }
 
+  // V2.1 Production Studio 影子路由在 app.js 挂载于 /api/v2（Phase 1–5 不接管正式路由）
+
   return r;
 }
 
