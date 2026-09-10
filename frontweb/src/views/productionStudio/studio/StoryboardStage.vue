@@ -278,10 +278,12 @@ export default {
     async adopt() {
       await v21.adoptVideo(this.currentShotId, this.previewCandidate.candidateId)
       await this.selectShot(this.currentShotId)
+      await this.load()
     },
     async undoAdopt() {
       await v21.undoAdoptVideo(this.currentShotId)
       await this.selectShot(this.currentShotId)
+      await this.load()
     },
     async confirmLink() {
       await v21.confirmFrameLink(this.currentShotId)

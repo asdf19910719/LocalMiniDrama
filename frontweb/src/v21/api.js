@@ -43,7 +43,10 @@ export const v21 = {
   deleteProject: (projectId) => del(`/projects/${projectId}`),
   restoreProject: (projectId) => post(`/projects/${projectId}/restore`),
   // 风格目录（复用既有接口）
-  listStyles: (params) => axios.get('/api/v1/styles', { params }).then(unwrap),
+  listStyles: async (params) => {
+    const data = await axios.get('/api/v1/styles', { params }).then(unwrap)
+    return data && Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : [])
+  },
   // 剧集
   listEpisodes: (projectId, params) => get(`/projects/${projectId}/episodes`, params),
   createEpisode: (projectId, body) => post(`/projects/${projectId}/episodes`, body),

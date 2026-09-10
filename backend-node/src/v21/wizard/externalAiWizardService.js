@@ -331,17 +331,8 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     const manifest = JSON.parse(row.asset_manifest_json);
     const fill = (value) => nonEmpty(value, '未填写');
 
-    const characters = (manifest.characters || []).map((c) => ({
-      source_key: c.source_key,
-      name: fill(c.name),
-      role: ['main', 'supporting', 'minor'].includes(c.role) ? c.role : 'minor',
-      description: fill(c.description),
-      personality: fill(c.personality),
-      appearance: fill(c.appearance),
-      base_image_prompt: typeof c.base_image_prompt === 'string' ? c.base_image_prompt : '',
-      negative_prompt: typeof c.negative_prompt === 'string' ? c.negative_prompt : '',
-      voice_profile: c.voice_profile ? String(c.voice_profile) : null,
-      states: (c.variants || []).map((v) => ({
+    const characters = (manifest.characters || []).map((c) => {
+      const states = (c.variants || []).map((v) => ({
         source_key: v.source_key,
         name: fill(v.name),
         description: fill(v.description),
@@ -349,8 +340,32 @@ function createExternalAiWizardService(db, { log = console } = {}) {
         base_image_prompt: typeof v.base_image_prompt === 'string' ? v.base_image_prompt : '',
         negative_prompt: typeof v.negative_prompt === 'string' ? v.negative_prompt : '',
         is_default: Boolean(v.is_default),
-      })),
-    }));
+      }));
+      // 既有角色没有任何状态时合成默认状态（schema 要求 states ≥ 1 且 is_default）
+      if (states.length === 0) {
+        states.push({
+          source_key: `${c.source_key}_default_state`,
+          name: '默认',
+          description: fill(c.description),
+          appearance: fill(c.appearance),
+          base_image_prompt: typeof c.base_image_prompt === 'string' ? c.base_image_prompt : '',
+          negative_prompt: '',
+          is_default: true,
+        });
+      }
+      return {
+        source_key: c.source_key,
+        name: fill(c.name),
+        role: ['main', 'supporting', 'minor'].includes(c.role) ? c.role : 'minor',
+        description: fill(c.description),
+        personality: fill(c.personality),
+        appearance: fill(c.appearance),
+        base_image_prompt: typeof c.base_image_prompt === 'string' ? c.base_image_prompt : '',
+        negative_prompt: typeof c.negative_prompt === 'string' ? c.negative_prompt : '',
+        voice_profile: c.voice_profile ? String(c.voice_profile) : null,
+        states,
+      };
+    });
 
     const newCharacters = result.new_assets?.characters || [];
     for (const nc of newCharacters) characters.push(nc);
