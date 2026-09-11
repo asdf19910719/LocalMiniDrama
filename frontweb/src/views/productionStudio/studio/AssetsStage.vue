@@ -6,6 +6,12 @@
       <div class="spacer"></div>
       <span style="text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer" @click="recheck">重新检查</span>
     </div>
+    <div v-if="notice" class="notice-strip warn" style="margin-top:8px">
+      <svg style="width:14px;height:14px"><use href="#i-warn"/></svg>
+      {{ notice }}
+      <div class="spacer"></div>
+      <span style="text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer" @click="notice = ''">关闭</span>
+    </div>
 
     <div class="atoolbar">
       <div class="tabs" style="border:none">
@@ -46,7 +52,7 @@
             <div>
               <div class="sec-t" style="margin:0 0 7px">状态切换</div>
               <div class="stchips">
-                <span v-for="st in detail?.states || []" :key="st.id" class="stchip" :class="{ on: st.id === selectedStateId }" @click="selectedStateId = st.id">{{ st.name }}</span>
+                <span v-for="st in detail?.states || []" :key="st.id" class="stchip" :class="{ on: st.id === selectedStateId }" @click="selectState(st)">{{ st.name }}</span>
                 <span class="stchip" style="border-style:dashed" @click="variantModalOpen = true"><svg style="width:11px;height:11px"><use href="#i-plus"/></svg>新增状态</span>
               </div>
             </div>
@@ -199,7 +205,7 @@ export default {
       referenced: { characters: [], scenes: [], props: [] },
       readiness: { status: 'checking' },
       detailOpen: false, detail: null, generating: false, entering: false,
-      selectedStateId: '', techOpen: false,
+      selectedStateId: '', selectionMediaVersionId: null, techOpen: false,
       voiceOpen: false, voiceChoice: null, legacyVoiceUrl: '',
       libraryVoices: [], voiceUploading: false, voiceSaving: false,
       variantModalOpen: false, variantName: '', variantSaving: false,
@@ -247,9 +253,13 @@ export default {
   mounted() { this.load() },
   methods: {
     async load() {
-      const data = await v21.getEpisodeAssets(this.episodeId)
-      this.referenced = data.referenced
-      this.readiness = data.readiness
+      try {
+        const data = await v21.getEpisodeAssets(this.episodeId)
+        this.referenced = data.referenced
+        this.readiness = data.readiness
+      } catch (e) {
+        this.notice = e.message || '本集设定加载失败'
+      }
     },
     async recheck() {
       await this.load()
@@ -258,8 +268,15 @@ export default {
       return { character: '角色', scene: '场景', prop: '道具' }[t] || t
     },
     async openDetail(item) {
-      this.detail = await v21.getAssetDetail(item.assetType, item.assetId)
+      try {
+        this.detail = await v21.getAssetDetail(item.assetType, item.assetId)
+      } catch (e) {
+        this.notice = e.message || '素材详情加载失败'
+        return
+      }
+      // B5：集级选择指针合并进本地 state（getAssetDetail 无 episodeId，指针以本集引用投影为准）
       this.selectedStateId = item.stateId || (this.detail.states?.[0]?.id ?? '')
+      this.selectionMediaVersionId = item.mediaVersionId ?? null
       // B4：预选已保存的音色指针
       this.voiceChoice = item.voice || null
       this.legacyVoiceUrl = ''
@@ -277,6 +294,20 @@ export default {
     },
     pickPreset(p) {
       this.voiceChoice = { type: 'preset', presetId: p.id, name: p.name }
+    },
+    // B5：状态选择持久化（stateId + 当前媒体指针一并落库，失败写 notice 不静默）
+    async selectState(st) {
+      this.selectedStateId = st.id
+      try {
+        await v21.updateSelection(this.episodeId, {
+          assetType: this.detail.assetType,
+          assetId: this.detail.id,
+          stateId: st.id,
+          mediaVersionId: this.selectionMediaVersionId ?? null,
+        })
+      } catch (e) {
+        this.notice = e.message || '状态保存失败，刷新后会回到上次保存的状态'
+      }
     },
     async uploadVoice(event) {
       const file = event.target.files && event.target.files[0]
@@ -314,13 +345,18 @@ export default {
       }
       this.voiceSaving = true
       try {
+        // B5：携带当前选择指针，避免 updateSelection 把 state_id/media_version_id 覆盖为空
         await v21.updateSelection(this.episodeId, {
           assetType: 'character',
           assetId: this.detail.id,
+          stateId: this.selectedStateId || '',
+          mediaVersionId: this.selectionMediaVersionId ?? null,
           voice: this.voiceChoice,
         })
         this.voiceOpen = false
         this.load()
+      } catch (e) {
+        this.notice = e.message || '音色保存失败'
       } finally {
         this.voiceSaving = false
       }
@@ -333,6 +369,8 @@ export default {
         this.variantName = ''
         this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
         this.load()
+      } catch (e) {
+        this.notice = e?.response?.data?.error?.message || e.message || '状态创建失败'
       } finally {
         this.variantSaving = false
       }
@@ -345,8 +383,14 @@ export default {
       const url = this.imgUrlText.trim()
       if (!url) return
       this.imgUrlOpen = false
-      await v21.uploadShotImage(this.detail.id, { imageUrl: url })
-      this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
+      // B6：上传走素材候选端点（仅入候选，不改当前图），而非分镜图片上传
+      try {
+        await v21.uploadAssetCandidate(this.detail.assetType, this.detail.id, url)
+        this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
+        this.notice = '已添加候选，点击候选可设为当前图'
+      } catch (e) {
+        this.notice = e.message || '图片上传失败'
+      }
     },
     async generate() {
       this.generating = true
@@ -358,15 +402,23 @@ export default {
         })
         this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
         this.load()
+      } catch (e) {
+        this.notice = e.message || '候选生成失败'
       } finally {
         this.generating = false
       }
     },
     async useCandidate(candidate) {
-      const result = await v21.useCandidate({ type: this.detail.assetType, assetId: this.detail.id, candidateId: candidate.candidateId })
-      this.detail.currentImage = result.current.imageUrl
-      for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
-      this.load()
+      try {
+        const result = await v21.useCandidate({ type: this.detail.assetType, assetId: this.detail.id, candidateId: candidate.candidateId })
+        this.detail.currentImage = result.current.imageUrl
+        for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
+        // B5：当前图变化后同步本地媒体指针，后续状态/音色保存不会把旧图重新钉回
+        this.selectionMediaVersionId = result.current.imageUrl
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '候选设为当前图失败'
+      }
     },
     async uploadImage() {
       // C1：图片 URL 输入改走专用 Modal
@@ -382,6 +434,8 @@ export default {
           this.notice = `有 ${result.readiness.missing.length} 项可稍后处理，已进入分镜`
         }
         this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/storyboard`)
+      } catch (e) {
+        this.notice = e.message || '进入分镜失败'
       } finally {
         this.entering = false
       }

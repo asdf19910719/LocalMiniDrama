@@ -208,3 +208,61 @@ test('生成守卫：readiness 非 ready 时禁用并给出唯一"去处理"恢�
     params: { projectId: 1, episodeId: 1 },
   });
 });
+
+test('uploadCandidate：URL 上传只入候选（provider=upload），当前图不变', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏', imageUrl: 'http://x/cur.png' });
+  const result = assets.uploadCandidate({ type: 'character', assetId: 1, imageUrl: 'https://cdn.example.com/linxia.png' });
+  assert.equal(result.ok, true, '返回 ok:true');
+  assert.ok(result.candidate.candidateId > 0);
+  assert.equal(result.candidate.provider, 'upload');
+  assert.equal(result.candidate.url, 'https://cdn.example.com/linxia.png');
+  assert.equal(result.candidate.isCurrent, false, '上传候选不设为当前图');
+  const gens = db
+    .prepare("SELECT * FROM image_generations WHERE character_id = 1 AND deleted_at IS NULL")
+    .all();
+  assert.equal(gens.length, 1, '候选数 +1');
+  assert.equal(gens[0].provider, 'upload');
+  assert.equal(db.prepare('SELECT image_url FROM characters WHERE id = 1').get().image_url, 'http://x/cur.png', '当前图不变');
+  // 详情里候选可见且不标当前
+  const detail = assets.getDetail('character', 1);
+  assert.equal(detail.candidates.length, 1);
+  assert.equal(detail.candidates[0].isCurrent, false);
+  assert.equal(detail.currentImage, 'http://x/cur.png');
+});
+
+test('uploadCandidate：软删素材 404 NOT_FOUND', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  db.prepare("UPDATE characters SET deleted_at = '2026-09-11T00:00:00Z' WHERE id = 1").run();
+  assert.throws(
+    () => assets.uploadCandidate({ type: 'character', assetId: 1, imageUrl: 'https://x/a.png' }),
+    (e) => e.code === 'NOT_FOUND' && e.status === 404
+  );
+});
+
+test('uploadCandidate：缺 imageUrl 400 MISSING_IMAGE_URL；道具候选经任务表关联可见', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  assert.throws(
+    () => assets.uploadCandidate({ type: 'character', assetId: 1, imageUrl: '' }),
+    (e) => e.code === 'MISSING_IMAGE_URL' && e.status === 400
+  );
+  assert.throws(
+    () => assets.uploadCandidate({ type: 'character', assetId: 1, imageUrl: '   ' }),
+    (e) => e.code === 'MISSING_IMAGE_URL' && e.status === 400
+  );
+  assert.throws(
+    () => assets.uploadCandidate({ type: 'character', assetId: 1 }),
+    (e) => e.code === 'MISSING_IMAGE_URL' && e.status === 400
+  );
+  // prop 候选经 image_generation_tasks 关联后同样可见（与 generateCandidate 同一存储模式）
+  db.prepare(
+    `INSERT INTO props (id, drama_id, name, type, created_at, updated_at) VALUES (9, 1, '13 层门卡', '钥匙', '2026-09-11', '2026-09-11')`
+  ).run();
+  const r = assets.uploadCandidate({ type: 'prop', assetId: 9, imageUrl: 'https://x/keycard.png' });
+  const detail = assets.getDetail('prop', 9);
+  assert.equal(detail.candidates.length, 1);
+  assert.equal(detail.candidates[0].candidateId, r.candidate.candidateId);
+  assert.equal(detail.candidates[0].url, 'https://x/keycard.png');
+});

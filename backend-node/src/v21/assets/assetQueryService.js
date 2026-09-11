@@ -191,6 +191,46 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     return { candidateId: genId, url: relativeUrl, taskId: submitted.taskId };
   }
 
+  /** URL 上传候选：仅向素材追加一条候选（provider='upload'），绝不改当前图（与"上传只入候选"合同一致） */
+  function uploadCandidate({ type, assetId, imageUrl } = {}) {
+    const row = requireAsset(type, assetId);
+    const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+    if (!url) throw httpError('MISSING_IMAGE_URL', 400, 'imageUrl 必填');
+    const now = nowIso();
+    const info = db
+      .prepare(
+        `INSERT INTO image_generations (drama_id, character_id, scene_id, provider, prompt, image_url, local_path, status, completed_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'upload', '', ?, NULL, 'succeeded', ?, ?, ?)`
+      )
+      .run(
+        row.drama_id == null ? null : Number(row.drama_id),
+        type === 'character' ? row.id : null,
+        type === 'scene' ? row.id : null,
+        url,
+        now,
+        now,
+        now
+      );
+    const genId = Number(info.lastInsertRowid);
+    if (type === 'prop') {
+      // prop 候选经 image_generation_tasks 关联（与 generateCandidate 同一存储模式）
+      db.prepare(
+        `INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, provider, prompt_snapshot, status, image_generation_id, created_at, updated_at)
+         VALUES (?, ?, 'prop', ?, 'upload', 'upload', '', 'succeeded', ?, ?, ?)`
+      ).run(`v21_${genId}`, Number(row.drama_id), row.id, genId, now, now);
+    }
+    return {
+      ok: true,
+      candidate: {
+        candidateId: genId,
+        url,
+        provider: 'upload',
+        createdAt: now,
+        isCurrent: false,
+      },
+    };
+  }
+
   /** 点击候选即当前图；返回旧指针供前端撤销（撤销 = 再次调用并传回旧 imageUrl） */
   function useCandidate({ type, assetId, candidateId = null, imageUrl = null } = {}) {
     const row = requireAsset(type, assetId);
@@ -279,6 +319,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     createAsset,
     getDetail,
     generateCandidate,
+    uploadCandidate,
     useCandidate,
     deleteAsset,
     restoreAsset,

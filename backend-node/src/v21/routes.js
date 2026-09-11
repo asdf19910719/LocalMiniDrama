@@ -226,6 +226,14 @@ function createV21Router({ db, cfg, log }) {
   r.post('/assets/use-candidate', wrap((req, res) => {
     response.success(res, assets.useCandidate(req.body || {}));
   }));
+  // URL 上传候选：仅入候选不改当前图（Task 1.2 / B6）
+  r.post('/assets/:type/:assetId/candidates/upload', wrap((req, res) => {
+    response.created(res, assets.uploadCandidate({
+      type: req.params.type,
+      assetId: req.params.assetId,
+      imageUrl: (req.body || {}).imageUrl,
+    }));
+  }));
   r.delete('/assets/:type/:assetId', wrap((req, res) => {
     response.success(res, assets.deleteAsset({ type: req.params.type, assetId: req.params.assetId }));
   }));
