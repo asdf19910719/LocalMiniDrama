@@ -225,6 +225,46 @@ test('backup/stats：有备份 → 数量/最近时间/预计占用如实统计'
   }
 });
 
+// ---- 目录状态：专用只读端点（无 mkdirSync 副作用，消除假"正常"）----
+
+test('dirs/status：真实临时 dataRoot 返回三行；可写目录 writable:true；不存在目录 exists:false 且不创建目录', async () => {
+  const ctx = await startServer();
+  try {
+    const res = await api(ctx.base, 'GET', '/datatools/dirs/status');
+    assert.equal(res.status, 200, `应 200，实际 ${res.status}：${JSON.stringify(res.error)}`);
+    assert.ok(Array.isArray(res.body) && res.body.length === 3, '应返回 storage/export/tmp 三行');
+    const byKey = Object.fromEntries(res.body.map((r) => [r.key, r]));
+    for (const key of ['storage', 'export', 'tmp']) {
+      assert.ok(byKey[key], `应含 ${key} 行`);
+      assert.ok(byKey[key].label, `${key} 行应带 label`);
+      assert.ok(path.isAbsolute(byKey[key].path), `${key} 行 path 应为绝对路径`);
+    }
+    // storage 尚不存在：exists:false，且探测调用后路径仍不存在（无 mkdirSync 副作用）
+    const storageRow = byKey.storage;
+    assert.equal(storageRow.exists, false);
+    assert.equal(storageRow.writable, false);
+    assert.ok(storageRow.error, '不存在目录应带 error 说明');
+    assert.ok(!fs.existsSync(storageRow.path), '状态探测不得创建目录');
+
+    // 临时目录真实存在且可写
+    assert.equal(byKey.tmp.exists, true);
+    assert.equal(byKey.tmp.writable, true);
+    assert.equal(byKey.tmp.error, null);
+
+    // 建出 storage 后重新检测 → exists:true / writable:true / error null
+    fs.mkdirSync(path.join(ctx.dataRoot, 'storage'), { recursive: true });
+    const again = await api(ctx.base, 'GET', '/datatools/dirs/status');
+    const storageAgain = again.body.find((r) => r.key === 'storage');
+    assert.equal(storageAgain.exists, true);
+    assert.equal(storageAgain.writable, true);
+    assert.equal(storageAgain.error, null);
+    assert.equal(storageAgain.path, storageRow.path, '同 key 前后两次路径解析应一致');
+  } finally {
+    ctx.server.close();
+    ctx.fileDb.close();
+  }
+});
+
 // ---- 新建项目：targetDurationSeconds 暂存前端（不落项目资料、不 400）----
 
 test('createProject：携带 targetDurationSeconds 不再 400，字段被忽略不入 metadata', async () => {

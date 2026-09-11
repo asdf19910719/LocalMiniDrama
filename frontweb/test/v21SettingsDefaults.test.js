@@ -42,12 +42,16 @@ test('② 备份区：真实统计 + 立即创建备份调 backup/run，成功�
   assert.match(view, /backupError/, '失败应有错误行')
 })
 
-test('③ 目录行：重新检测调 workspaceCheck，默认态为未检测', () => {
+test('③ 目录行：重新检测调专用只读端点 dirStatus（不再把展示串发给 workspaceCheck），默认态未检测', () => {
+  const api = read('src/v21/api.js')
   const view = read('src/views/productionStudio/SettingsView.vue')
+  assert.match(api, /dirStatus/, 'api：GET /datatools/dirs/status 只读目录状态')
   assert.match(view, /重新检测/, '每行目录应提供重新检测')
   assert.match(view, /未检测/, '静态“正常”徽标应改为未检测默认态')
-  assert.match(view, /checkDir|recheckDir/, '应绑定检测方法')
+  assert.match(view, /checkDir[\s\S]{0,400}dirStatus\(\)/, '重新检测应调用专用只读端点')
+  assert.doesNotMatch(view, /checkDir\s*\([\s\S]{0,400}workspaceCheck/, '目录行不得再把展示串发给 workspaceCheck（副作用 + 假正常）')
   assert.match(view, /row\.checking/, '检测中应有 loading 态')
+  assert.match(view, /目录不存在|exists/, '应消费 exists/writable/error 字段呈现状态')
   assert.match(view, /前往清理/, '临时目录行应有前往清理链接')
   assert.match(view, /\/settings\/data-tools/, '前往清理应路由到数据工具页')
 })

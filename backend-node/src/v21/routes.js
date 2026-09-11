@@ -701,6 +701,12 @@ function createV21Router({ db, cfg, log }) {
   r.get('/datatools/backup/stats', wrap((req, res) => {
     response.success(res, backupOps.backupStats());
   }));
+  // 目录状态只读探测（评审修复：与 workspaceCheck 分离——不 mkdir、不写探针，消除假"正常"与文件系统副作用）
+  const { createDirStatusService } = require('./datatools/dirStatusService.js');
+  const dirStatus = createDirStatusService({ log, dbPath: cfg?.database?.path || null, storageRoot: assetStorage });
+  r.get('/datatools/dirs/status', wrap((req, res) => {
+    response.success(res, dirStatus.getDirStatus());
+  }));
 
   return r;
 }

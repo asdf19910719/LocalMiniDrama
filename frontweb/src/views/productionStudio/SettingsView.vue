@@ -44,14 +44,12 @@
         </div>
         <div v-for="row in dirs.filter((d) => d.result)" :key="row.key + '-result'" class="frow">
           <div class="flabel"></div>
-          <div v-if="row.result && row.result.ok" class="fhint">
-            目录可写<template v-if="row.result.details && row.result.details.freeBytes != null"> · 剩余空间 {{ formatBytes(row.result.details.freeBytes) }}</template>
+          <div v-if="dirLine(row).ok" class="fhint">
+            目录存在且可写（{{ row.result.path }}）<template v-if="row.result.freeBytes != null"> · 剩余空间 {{ formatBytes(row.result.freeBytes) }}</template>
           </div>
-          <div v-else-if="row.result" class="fhint" style="color:var(--warn)">
-            <template v-for="(b, i) in row.result.blockers || []" :key="i">{{ b.message }}<template v-if="i < (row.result.blockers || []).length - 1">；</template></template>
-          </div>
+          <div v-else class="fhint" style="color:var(--warn)">{{ dirLine(row).text }}（{{ row.result.path }}）</div>
         </div>
-        <div class="frow"><div class="flabel"></div><div class="fhint">「重新检测」逐行检查目录可写性与剩余空间（结果为检测时刻状态）；离线时不自动改写，修复入口在高级数据工具。</div></div>
+        <div class="frow"><div class="flabel"></div><div class="fhint">「重新检测」经只读目录状态端点检查真实目录的存在性、可写性与剩余空间（不创建目录，结果为检测时刻状态）；修复入口在高级数据工具。</div></div>
       </div>
 
       <div class="card pad">
@@ -338,9 +336,16 @@ export default {
       const t = new Date(iso)
       return Number.isNaN(t.getTime()) ? '暂无' : t.toLocaleString()
     },
+    dirLine(row) {
+      const r = row.result
+      if (!r) return { ok: false, text: '' }
+      if (!r.exists) return { ok: false, text: r.error || '目录不存在' }
+      if (r.writable && !r.error) return { ok: true, text: '' }
+      return { ok: false, text: r.error || '目录不可写' }
+    },
     dirBadge(row) {
       if (!row.result) return { cls: 'idle', text: '未检测' }
-      return row.result.ok ? { cls: 'ok', text: '正常' } : { cls: 'warn', text: '有异常' }
+      return this.dirLine(row).ok ? { cls: 'ok', text: '正常' } : { cls: 'warn', text: '有异常' }
     },
     async loadBackupStats() {
       this.backupStatsFailed = false
@@ -355,9 +360,20 @@ export default {
       if (row.checking) return
       row.checking = true
       try {
-        row.result = await v21.workspaceCheck(row.path)
+        // 只读目录状态端点：按 dataRoot/配置解析真实路径并探测，绝不创建目录
+        const rows = await v21.dirStatus()
+        const found = (Array.isArray(rows) ? rows : []).find((r) => r.key === row.key)
+        row.result = found
+          ? {
+              path: found.path != null ? found.path : row.path,
+              exists: !!found.exists,
+              writable: !!found.writable,
+              freeBytes: found.freeBytes != null ? found.freeBytes : null,
+              error: found.error != null ? found.error : null,
+            }
+          : { path: row.path, exists: false, writable: false, freeBytes: null, error: '未返回该目录的状态' }
       } catch (e) {
-        row.result = { ok: false, blockers: [{ code: 'CHECK_FAILED', message: e.message || '检测失败' }], details: {} }
+        row.result = { path: row.path, exists: false, writable: false, freeBytes: null, error: e.message || '检测失败' }
       } finally {
         row.checking = false
       }
