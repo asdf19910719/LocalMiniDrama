@@ -110,6 +110,8 @@ export const v21 = {
   getVideoHistory: (shotId) => get(`/storyboards/${shotId}/video/history`),
   retryVideoTask: (taskId) => post(`/video-tasks/${taskId}/retry`),
   uploadShotImage: (shotId, body) => post(`/storyboards/${shotId}/image/upload`, body),
+  mockQuickGenerate: (kind, prompt) => post('/quick-create/generate', { kind, prompt }),
+  mockQuickComplete: (taskId) => post(`/quick-create/complete`, { taskId }),
   // 成片
   getCut: (episodeId) => get(`/episodes/${episodeId}/cut`),
   composeEpisode: (episodeId, settings) => post(`/episodes/${episodeId}/cut/compose`, settings),

@@ -74,8 +74,27 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: () => import('@/views/productionStudio/SettingsEntry.vue'),
+      component: () => import('@/views/productionStudio/SettingsView.vue'),
       meta: { title: '设置' },
+    },
+    {
+      path: '/settings/data-tools',
+      name: 'data-tools',
+      component: () => import('@/views/productionStudio/DataToolsView.vue'),
+      meta: { title: '高级数据工具' },
+    },
+    {
+      path: '/quick-create',
+      name: 'quick-create',
+      component: () => import('@/views/productionStudio/QuickCreateView.vue'),
+      meta: { title: '自由创作' },
+    },
+    {
+      path: '/projects/:projectId/episodes/:episodeId/canvas',
+      name: 'advanced-canvas',
+      component: () => import('@/views/productionStudio/AdvancedCanvasView.vue'),
+      props: true,
+      meta: { title: '高级画布' },
     },
     // 既有独立工具页（不属于四阶段制作链，继续可用）
     {

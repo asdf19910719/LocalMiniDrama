@@ -467,6 +467,27 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  // ---- 自由创作（快速图片/视频，mock 通道；不参与四阶段 Gate） ----
+  const quickProvider = createMockProvider({ db, log, storageDir: assetStorage });
+  r.post('/quick-create/generate', wrap((req, res) => {
+    const { kind, prompt } = req.body || {};
+    response.created(res, quickProvider.submit({
+      kind: kind === 'video' ? 'video' : 'image',
+      ownerType: 'quick_create',
+      ownerId: 'free',
+      input: { prompt, durationSeconds: 1 },
+      idempotencyKey: null,
+    }));
+  }));
+  r.post('/quick-create/complete', wrap((req, res) => {
+    quickProvider.run(req.body?.taskId).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+
   return r;
 }
 
