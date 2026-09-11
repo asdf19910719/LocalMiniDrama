@@ -351,3 +351,38 @@
 .v21-root .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v21-root .divider { height: 1px; background: var(--line); margin: 12px 0; }
 
+
+/* 覆盖旧主题的 body/#app 背景（仅当页面包含 .v21-root 时生效） */
+body:has(.v21-root) { background: #0b0d12; margin: 0; }
+#app:has(.v21-root) { width: 100%; min-height: 100vh; padding: 0; background: #0b0d12; }
+.v21-root .main { flex: 1; min-width: 0; }
+
+/* 运行时由 App.vue 挂载：强制覆盖旧主题（html.light body 等高特异性规则） */
+html.v21-active, html.v21-active body, html.v21-active #app, html.v21-active .app {
+  background: #0b0d12 !important; margin: 0 !important; padding: 0 !important;
+  width: 100% !important; min-height: 100vh !important; max-width: none !important;
+}
+
+/* V2.1 激活时重定义旧主题变量：让 html.light 下的 !important 组件规则在 Studio 内解析为深色 */
+html.v21-active {
+  --bg-page: #0b0d12;
+  --bg-card: #12151d;
+  --bg-inner: #181c26;
+  --bg-hover: #27272a;
+  --border-color: #2a3040;
+  --border-muted: #3a4256;
+  --text-primary: #f4f6fb;
+  --text-bright: #f4f6fb;
+  --text-muted: #8d95a8;
+  --text-subtle: #8d95a8;
+  --text-faint: #71717a;
+  --shadow: 0 18px 55px rgba(0, 0, 0, .34);
+}
+html.v21-active .card { background: var(--panel) !important; border-color: var(--line) !important; }
+html.v21-active .card .info b, html.v21-active .pcard .name-row h3 { color: var(--text) !important; }
+html.v21-active .card .info p, html.v21-active .pcard .meta { color: var(--muted) !important; }
+html.v21-active .pcard .resume { background: var(--panel2) !important; border-color: var(--line-strong) !important; color: var(--text) !important; }
+
+.v21-root .page-head h1, .v21-root .topbar .crumb .proj, .v21-root .topbar .crumb .ep {
+  white-space: nowrap; flex: 0 0 auto;
+}

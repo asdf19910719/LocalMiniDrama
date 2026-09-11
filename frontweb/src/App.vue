@@ -85,6 +85,14 @@
 <script>
 export default {
   name: 'AppV21',
+  mounted() {
+    document.documentElement.classList.add('v21-active')
+    document.body.classList.add('v21-active')
+  },
+  unmounted() {
+    document.documentElement.classList.remove('v21-active')
+    document.body.classList.remove('v21-active')
+  },
   methods: {
     isActive(prefix) {
       return this.$route.path === prefix || this.$route.path.startsWith(prefix + '/')
