@@ -18,21 +18,26 @@
 
       <div class="grow" style="min-width:0">
         <!-- 完整性检查 -->
-        <div v-if="active === 'integrity'" class="card pad">
+        <div v-else-if="active === 'integrity'" class="card pad">
           <div class="row" style="margin-bottom:12px"><b style="font-size:14px">完整性检查</b><div class="spacer"></div>
-            <button class="btn" :disabled="scanning" @click="runCheck">{{ scanning ? '检查中…' : '开始检查' }}</button>
+            <button class="btn" :disabled="scanning" @click="runCheck">{{ scanning ? '正在检查…' : '开始检查' }}</button>
           </div>
+          <p v-if="!checked && !scanError" class="muted small">默认只读检查；完成后按「正常 / 警告 / 错误」列出结果，每项提供唯一恢复落点。</p>
+          <p v-if="scanError" class="small" style="color:var(--danger)">检查失败：{{ scanError }}</p>
           <template v-if="checked">
             <div class="stats-row">
-              <span class="badge ok">正常 216</span><span class="badge warn">警告 3</span><span class="badge danger">错误 1</span>
+              <span class="badge ok">正常 {{ integrity.summary.ok }}</span>
+              <span class="badge warn">警告 {{ integrity.summary.warn }}</span>
+              <span class="badge danger">错误 {{ integrity.summary.error }}</span>
             </div>
-            <div class="issue"><span class="badge danger">错误</span><span class="ellipsis">媒体文件缺失 · 2 个候选的 local_path 不可访问</span><span class="act">媒体重定位</span></div>
-            <div class="issue"><span class="badge warn">警告</span><span class="ellipsis">任务索引 · 1 个任务无对应资源记录</span><span class="act">重建任务索引</span></div>
-            <div class="issue"><span class="badge warn">警告</span><span class="ellipsis">孤儿文件 · 1 个未引用缩略图</span><span class="act">物理清理</span></div>
-            <div class="issue"><span class="badge warn">警告</span><span class="ellipsis">受控目录 · 1 个文件位于工作区外</span><span class="act">查看路径配置</span></div>
-            <div class="issue"><span class="badge ok">正常</span><span class="ellipsis">SQLite 外键 · 引用完整 · 项目/剧集关系一致</span></div>
+            <div v-for="entry in integrity.items" :key="entry.id" class="issue">
+              <span class="badge" :class="entry.severity === 'ok' ? 'ok' : entry.severity === 'warn' ? 'warn' : 'danger'">
+                {{ entry.severity === 'ok' ? '正常' : entry.severity === 'warn' ? '警告' : '错误' }}
+              </span>
+              <span class="ellipsis">{{ entry.title }} · {{ entry.detail }}</span>
+              <span v-if="recoveryLabel(entry.recovery)" class="act" @click="goRecovery(entry.recovery)">{{ recoveryLabel(entry.recovery) }}</span>
+            </div>
           </template>
-          <p v-else class="muted small">默认只读检查；完成后按「正常 / 警告 / 错误」列出结果，每项提供唯一恢复落点。</p>
         </div>
 
         <!-- 媒体重定位 -->
@@ -81,11 +86,15 @@
 </template>
 
 <script>
+import { v21 } from '../../v21/api.js'
+
 export default {
   name: 'DataToolsView',
   data() {
     return {
       active: 'integrity', scanning: false, checked: false, dryRun: false,
+      integrity: { items: [], summary: { ok: 0, warn: 0, error: 0 } },
+      scanError: '',
       cleanupConfirmText: '', cleanupDone: false,
       tools: [
         { id: 'integrity', label: '完整性检查' },
@@ -93,12 +102,35 @@ export default {
         { id: 'journal', label: '迁移与恢复记录' },
         { id: 'cleanup', label: '物理清理' },
       ],
+      recoveries: {
+        relocation: { label: '媒体重定位', tool: 'relocation' },
+        reindex: { label: '重建任务索引', route: '/tasks' },
+        cleanup: { label: '物理清理', tool: 'cleanup' },
+        paths: { label: '查看路径配置', route: '/settings' },
+      },
     }
   },
   methods: {
-    runCheck() {
+    async runCheck() {
       this.scanning = true
-      setTimeout(() => { this.scanning = false; this.checked = true }, 900)
+      this.scanError = ''
+      try {
+        this.integrity = await v21.runIntegrity()
+        this.checked = true
+      } catch (err) {
+        this.scanError = err.message || '未知错误'
+      } finally {
+        this.scanning = false
+      }
+    },
+    recoveryLabel(key) {
+      return (key && this.recoveries[key] && this.recoveries[key].label) || ''
+    },
+    goRecovery(key) {
+      const target = this.recoveries[key]
+      if (!target) return
+      if (target.tool) this.active = target.tool
+      else if (target.route) this.$router.push(target.route)
     },
     secondConfirm() {
       if (window.confirm('物理清理不可恢复。确认执行永久清理？')) {

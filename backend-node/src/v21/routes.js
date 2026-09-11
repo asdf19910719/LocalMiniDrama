@@ -540,6 +540,13 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  // ---- 数据工具（A2/A3/A5） ----
+  const { createIntegrityService } = require('./datatools/integrityService.js');
+  const integrity = createIntegrityService({ db, log, storageRoot: assetStorage });
+  r.post('/datatools/integrity/run', wrap((req, res) => {
+    response.success(res, integrity.run());
+  }));
+
   return r;
 }
 
