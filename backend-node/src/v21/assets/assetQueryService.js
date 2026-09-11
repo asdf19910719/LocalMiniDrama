@@ -217,7 +217,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       db.prepare(
         `INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, provider, prompt_snapshot, status, image_generation_id, created_at, updated_at)
          VALUES (?, ?, 'prop', ?, 'upload', 'upload', '', 'succeeded', ?, ?, ?)`
-      ).run(`v21_${genId}`, Number(row.drama_id), row.id, genId, now, now);
+      ).run(`v21_${genId}`, row.drama_id == null ? null : Number(row.drama_id), row.id, genId, now, now);
     }
     return {
       ok: true,

@@ -266,3 +266,31 @@ test('uploadCandidate：缺 imageUrl 400 MISSING_IMAGE_URL；道具候选经任�
   assert.equal(detail.candidates[0].candidateId, r.candidate.candidateId);
   assert.equal(detail.candidates[0].url, 'https://x/keycard.png');
 });
+
+test('评审修复：useCandidate 后本集选择行 media_version_id 跟随新当前图（含回退旧图路径）', () => {
+  const { db, assets, episodeAssets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  db.prepare('INSERT INTO episode_characters (episode_id, character_id) VALUES (1, 1)').run();
+  db.prepare(
+    `INSERT INTO image_generations (drama_id, character_id, image_url, local_path, status, created_at, updated_at)
+     VALUES (1, 1, 'http://x/v1.png', '/tmp/v1.png', 'succeeded', '2026-09-11', '2026-09-11')`
+  ).run();
+  const gen1 = db.prepare("SELECT id FROM image_generations WHERE image_url = 'http://x/v1.png'").get().id;
+  const pick1 = assets.useCandidate({ type: 'character', assetId: 1, candidateId: gen1 });
+  // 前端 AssetsStage.useCandidate 换图后按新指针落库（服务级合同：选择行与当前图一致）
+  episodeAssets.updateSelection(1, { assetType: 'character', assetId: 1, stateId: '', mediaVersionId: pick1.current.imageUrl });
+  let sel = db.prepare("SELECT * FROM episode_asset_selections WHERE asset_type = 'character' AND asset_id = 1").get();
+  assert.equal(sel.media_version_id, 'http://x/v1.png');
+  // 回退到旧图：再次换图并按同一规则落库，选择行不残留旧指针
+  db.prepare(
+    `INSERT INTO image_generations (drama_id, character_id, image_url, local_path, status, created_at, updated_at)
+     VALUES (1, 1, 'http://x/v0.png', '/tmp/v0.png', 'succeeded', '2026-09-11', '2026-09-11')`
+  ).run();
+  const gen0 = db.prepare("SELECT id FROM image_generations WHERE image_url = 'http://x/v0.png'").get().id;
+  const pick0 = assets.useCandidate({ type: 'character', assetId: 1, candidateId: gen0 });
+  assert.equal(pick0.current.imageUrl, 'http://x/v0.png');
+  assert.equal(pick0.previous.imageUrl, 'http://x/v1.png');
+  episodeAssets.updateSelection(1, { assetType: 'character', assetId: 1, stateId: '', mediaVersionId: pick0.current.imageUrl });
+  sel = db.prepare("SELECT * FROM episode_asset_selections WHERE asset_type = 'character' AND asset_id = 1").get();
+  assert.equal(sel.media_version_id, 'http://x/v0.png', '选择行跟随最新当前图，重开抽屉合并不再拿到旧值');
+});

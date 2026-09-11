@@ -70,3 +70,21 @@ test('T1.2 B6：素材上传走 candidates/upload 候选端点（后端同步落
   assert.match(service, /MISSING_IMAGE_URL/, '缺 imageUrl 返回 400 MISSING_IMAGE_URL')
   assert.match(service, /'upload'/, '候选 provider 记为 upload')
 })
+
+test('T1.2 评审修复：useCandidate 换图后选择指针落库；enterStoryboard 导航移出 try', () => {
+  const view = read('src/views/productionStudio/studio/AssetsStage.vue')
+  const methodBody = (name) => {
+    const start = view.indexOf('async ' + name + '(')
+    if (start === -1) return null
+    const end = view.indexOf('\n    },', start)
+    return end === -1 ? null : view.slice(start, end)
+  }
+  const useCandidate = methodBody('useCandidate')
+  assert.ok(useCandidate, 'useCandidate 方法存在')
+  assert.match(useCandidate, /selectionMediaVersionId = result\.current\.imageUrl/, '本地指针同步保留')
+  assert.match(useCandidate, /v21\.updateSelection\(this\.episodeId/, '换图后选择指针落库到本集选择行')
+  assert.match(useCandidate, /mediaVersionId: result\.current\.imageUrl/, '落库值为新当前图（回退旧图路径同样成立）')
+  assert.match(useCandidate, /本集选择指针同步失败/, '落库失败写 notice 不静默')
+  const enter = methodBody('enterStoryboard')
+  assert.ok(enter.indexOf('$router.push') > enter.indexOf('catch (e)'), '导航移出 try，路由异常不再误报进入分镜失败')
+})

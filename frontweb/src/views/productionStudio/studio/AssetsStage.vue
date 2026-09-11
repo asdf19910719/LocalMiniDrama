@@ -413,8 +413,19 @@ export default {
         const result = await v21.useCandidate({ type: this.detail.assetType, assetId: this.detail.id, candidateId: candidate.candidateId })
         this.detail.currentImage = result.current.imageUrl
         for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
-        // B5：当前图变化后同步本地媒体指针，后续状态/音色保存不会把旧图重新钉回
+        // 评审修复：换图后把新指针落库到本集选择行（含回退到旧图的路径）——
+        // 只同步本地的话，重开抽屉会从引用投影合并回旧 mediaVersionId，下次状态/音色保存把旧图写回
         this.selectionMediaVersionId = result.current.imageUrl
+        try {
+          await v21.updateSelection(this.episodeId, {
+            assetType: this.detail.assetType,
+            assetId: this.detail.id,
+            stateId: this.selectedStateId || '',
+            mediaVersionId: result.current.imageUrl,
+          })
+        } catch (e) {
+          this.notice = e.message || '本集选择指针同步失败'
+        }
         this.load()
       } catch (e) {
         this.notice = e.message || '候选设为当前图失败'
@@ -426,6 +437,7 @@ export default {
     },
     async enterStoryboard() {
       this.entering = true
+      let failed = false
       try {
         const result = await v21.enterStoryboard(this.episodeId)
         if (result.readiness && result.readiness.status === 'script-unapproved') {
@@ -433,12 +445,14 @@ export default {
         } else if (result.readiness && result.readiness.status === 'needs-attention') {
           this.notice = `有 ${result.readiness.missing.length} 项可稍后处理，已进入分镜`
         }
-        this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/storyboard`)
       } catch (e) {
         this.notice = e.message || '进入分镜失败'
+        failed = true
       } finally {
         this.entering = false
       }
+      // 评审修复：导航移出 try，路由跳转自身的异常不再误报为"进入分镜失败"
+      if (!failed) this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/storyboard`)
     },
   },
 }
