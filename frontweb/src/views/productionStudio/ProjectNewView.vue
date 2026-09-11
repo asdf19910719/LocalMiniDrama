@@ -27,10 +27,28 @@
             </div>
             <div class="frow">
               <div class="flabel">画幅</div>
-              <div class="seg">
-                <span :class="{ on: aspectRatio === '9:16' }" @click="aspectRatio = '9:16'">9:16 竖屏</span>
-                <span :class="{ on: aspectRatio === '16:9' }" @click="aspectRatio = '16:9'">16:9 横屏</span>
-                <span :class="{ on: aspectRatio === '1:1' }" @click="aspectRatio = '1:1'">1:1 方形</span>
+              <div class="grow">
+                <div class="seg">
+                  <span :class="{ on: aspectRatio === '9:16' }" @click="aspectRatio = '9:16'">9:16 竖屏</span>
+                  <span :class="{ on: aspectRatio === '16:9' }" @click="aspectRatio = '16:9'">16:9 横屏</span>
+                  <span :class="{ on: aspectRatio === '1:1' }" @click="aspectRatio = '1:1'">1:1 方形</span>
+                </div>
+                <div class="fhint">默认取自「常规设置 · 创作默认值」。</div>
+              </div>
+            </div>
+            <div class="frow">
+              <div class="flabel">单集目标时长</div>
+              <div class="grow">
+                <div class="row" style="gap:10px; align-items:center">
+                  <input class="input" type="number" min="30" max="600" step="1" style="width:110px" v-model.number="episodeDurationSeconds">
+                  <span class="xs muted">秒</span>
+                  <div class="seg">
+                    <span :class="{ on: episodeDurationSeconds === 60 }" @click="episodeDurationSeconds = 60">60</span>
+                    <span :class="{ on: episodeDurationSeconds === 90 }" @click="episodeDurationSeconds = 90">90</span>
+                    <span :class="{ on: episodeDurationSeconds === 120 }" @click="episodeDurationSeconds = 120">120</span>
+                  </div>
+                </div>
+                <div class="fhint">默认取自全局设置，创建后可在每集设定中单独调整。</div>
               </div>
             </div>
           </div>
@@ -59,7 +77,8 @@
           </div>
 
           <div class="row" style="padding: 2px 4px 18px">
-            <span class="muted xs">创建前不会写入任何数据；取消可随时离开。</span>
+            <span v-if="createError" class="small" style="color:var(--danger)">{{ createError }}</span>
+            <span v-else class="muted xs">创建前不会写入任何数据；取消可随时离开。</span>
             <div class="spacer"></div>
             <button class="btn ghost" @click="$router.push('/projects')">取消</button>
             <button class="btn primary lg" :disabled="!title.trim() || creating" @click="create">
@@ -85,12 +104,18 @@ const SOURCE_META = {
   external_ai: { cta: '创建项目并创建任务包', icon: '#i-spark', title: '外部 AI 协作', desc: '创建任务包，外部会话结果 JSON 回流为草稿。' },
 }
 
+function clampDuration(value) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 30 && n <= 600 ? n : null
+}
+
 export default {
   name: 'ProjectNewView',
   data() {
     return {
       title: '', aspectRatio: '16:9', genre: '', description: '',
-      source: 'script', creating: false,
+      episodeDurationSeconds: 90,
+      source: 'script', creating: false, createError: '',
       sources: ['script', 'ai', 'package'].map((k) => ({ key: k, ...SOURCE_META[k] })),
     }
   },
@@ -99,16 +124,29 @@ export default {
       return SOURCE_META[this.source]?.cta || '创建项目'
     },
   },
+  async mounted() {
+    // 画幅与单集目标时长继承「常规设置 · 创作默认值」（§24.5）；拉取失败保持内置缺省
+    try {
+      const d = await v21.getSettingsDefaults()
+      if (d && typeof d === 'object') {
+        if (d.aspectRatio) this.aspectRatio = d.aspectRatio
+        const dur = clampDuration(d.episodeDurationSeconds)
+        if (dur !== null) this.episodeDurationSeconds = dur
+      }
+    } catch (_) { /* 默认值拉取失败时使用内置缺省 */ }
+  },
   methods: {
     async create() {
       if (this.creating) return
       this.creating = true
+      this.createError = ''
       try {
         const project = await v21.createProject({
           title: this.title.trim(),
           aspectRatio: this.aspectRatio,
           genre: this.genre.trim(),
           description: this.description.trim(),
+          targetDurationSeconds: clampDuration(this.episodeDurationSeconds) || 90,
         })
         const pid = project.id
         if (this.source === 'script' || this.source === 'blank' || this.source === 'ai') {
@@ -126,7 +164,7 @@ export default {
           this.$router.replace(`/projects/${pid}`)
         }
       } catch (e) {
-        alert(e.message)
+        this.createError = e.message || '创建失败'
         this.creating = false
       }
     },

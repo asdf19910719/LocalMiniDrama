@@ -43,6 +43,12 @@ export const v21 = {
   workspaceCheck: (dir) => post('/datatools/workspace/check', { dir }),
   workspacePreview: (dir) => post('/datatools/workspace/preview', { dir }),
   workspaceMigrate: (dir, confirmText) => post('/datatools/workspace/migrate', { dir, confirmText }),
+  // 手动备份（真实执行 backupService.createBackup）与备份目录统计
+  runBackup: () => post('/datatools/backup/run'),
+  backupStats: () => get('/datatools/backup/stats'),
+  // 常规设置 · 创作默认值（默认画幅/单集时长/备份保留天数，§24.5）
+  getSettingsDefaults: () => get('/settings/defaults'),
+  updateSettingsDefaults: (body) => put('/settings/defaults', body),
   // 项目
   listProjects: (params) => get('/projects', params),
   createProject: (body) => post('/projects', body),

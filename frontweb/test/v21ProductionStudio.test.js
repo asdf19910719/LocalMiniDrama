@@ -28,12 +28,14 @@ test('全局 Rail：仅 项目/资产库/任务/设置', () => {
   assert.match(app, /\/settings/)
 })
 
-test('新建项目：无时长/输出偏好字段', () => {
+test('新建项目：无输出偏好字段；单集目标时长继承全局默认（§24.5 取代旧“无时长字段”口径）', () => {
   const view = read('src/views/productionStudio/ProjectNewView.vue')
   assert.match(view, /项目名称/)
   assert.match(view, /画幅/)
   assert.match(view, /题材/)
-  assert.doesNotMatch(view, /时长|duration|输出偏好|output/i)
+  assert.match(view, /单集目标时长/, '§24.5：新建项目含单集目标时长（默认取全局设置）')
+  assert.match(view, /targetDurationSeconds/, '提交时随 createProject 请求体上报')
+  assert.doesNotMatch(view, /输出偏好|output preference/i, '输出偏好字段仍不得出现')
 })
 
 test('单集阶段导航：剧本/设定/分镜/成片', () => {

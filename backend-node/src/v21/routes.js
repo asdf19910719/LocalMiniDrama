@@ -627,6 +627,16 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, taskCenter.listTasks(req.query || {}));
   }));
 
+  // ---- 常规设置 · 创作默认值（Task 4.3，§24.5） ----
+  const { createSettingsDefaultsService } = require('./settings/settingsDefaultsService.js');
+  const settingsDefaults = createSettingsDefaultsService(db);
+  r.get('/settings/defaults', wrap((req, res) => {
+    response.success(res, settingsDefaults.getDefaults());
+  }));
+  r.put('/settings/defaults', wrap((req, res) => {
+    response.success(res, settingsDefaults.updateDefaults(req.body || {}));
+  }));
+
   // ---- 数据工具（A2/A3/A5） ----
   const { createIntegrityService } = require('./datatools/integrityService.js');
   const integrity = createIntegrityService({ db, log, storageRoot: assetStorage });
@@ -680,6 +690,16 @@ function createV21Router({ db, cfg, log }) {
       if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
       else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
     });
+  }));
+  // 手动备份（真实执行 backupService.createBackup）与备份目录统计（Task 4.3）
+  // dbPath 解析与 datatools 同源：cfg.database.path（相对路径按 cwd 解析），backupRoot = <dataRoot>/backups/workspace-migrations
+  const { createBackupOpsService } = require('./datatools/backupOpsService.js');
+  const backupOps = createBackupOpsService({ log, dbPath: cfg?.database?.path || null });
+  r.post('/datatools/backup/run', wrap((req, res) => {
+    response.success(res, backupOps.runBackup());
+  }));
+  r.get('/datatools/backup/stats', wrap((req, res) => {
+    response.success(res, backupOps.backupStats());
   }));
 
   return r;

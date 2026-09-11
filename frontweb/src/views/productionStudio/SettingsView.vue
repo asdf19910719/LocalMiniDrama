@@ -6,9 +6,13 @@
       <span class="sub">工作区 · 目录 · 创作默认值 · 备份</span>
       <div class="spacer"></div>
       <span class="badge" :class="dirty ? 'warn' : 'ok'">{{ dirty ? '有未保存修改' : '已保存' }}</span>
-      <button class="btn primary" :disabled="!dirty" @click="save">保存</button>
+      <button v-if="dirty" class="btn ghost" @click="discard">放弃更改</button>
+      <button class="btn primary" :disabled="!canSave || saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
     </header>
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px; overflow:auto">
+      <div v-if="saveError" class="card pad" style="padding:10px 14px">
+        <div class="issue-row"><span class="badge danger">保存失败</span><span>{{ saveError }}</span></div>
+      </div>
 
       <div class="card pad">
         <div class="sec-title"><svg><use href="#i-folder"/></svg>工作区</div>
@@ -29,9 +33,25 @@
           <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
             <svg><use href="#i-folder"/></svg>{{ row.path }}
           </div>
-          <span class="badge ok" style="flex:0 0 auto">正常</span>
+          <template v-if="row.key !== 'tmp'">
+            <button class="btn" style="flex:0 0 auto" :disabled="row.checking" @click="checkDir(row)">{{ row.checking ? '检测中…' : '重新检测' }}</button>
+            <span class="badge" :class="dirBadge(row).cls" style="flex:0 0 auto">{{ dirBadge(row).text }}</span>
+          </template>
+          <template v-else>
+            <a style="flex:0 0 auto; color:var(--accent); cursor:pointer; font-size:13px" @click="$router.push('/settings/data-tools')">前往清理</a>
+            <span class="badge idle" style="flex:0 0 auto">未检测</span>
+          </template>
         </div>
-        <div class="frow"><div class="flabel"></div><div class="fhint">目录状态每行显示存在性、权限与空间；离线时不自动改写，修复入口在高级数据工具。</div></div>
+        <div v-for="row in dirs.filter((d) => d.result)" :key="row.key + '-result'" class="frow">
+          <div class="flabel"></div>
+          <div v-if="row.result && row.result.ok" class="fhint">
+            目录可写<template v-if="row.result.details && row.result.details.freeBytes != null"> · 剩余空间 {{ formatBytes(row.result.details.freeBytes) }}</template>
+          </div>
+          <div v-else-if="row.result" class="fhint" style="color:var(--warn)">
+            <template v-for="(b, i) in row.result.blockers || []" :key="i">{{ b.message }}<template v-if="i < (row.result.blockers || []).length - 1">；</template></template>
+          </div>
+        </div>
+        <div class="frow"><div class="flabel"></div><div class="fhint">「重新检测」逐行检查目录可写性与剩余空间（结果为检测时刻状态）；离线时不自动改写，修复入口在高级数据工具。</div></div>
       </div>
 
       <div class="card pad">
@@ -42,6 +62,21 @@
             <span :class="{ on: form.aspectRatio === '9:16' }" @click="form.aspectRatio = '9:16'">9:16 竖屏</span>
             <span :class="{ on: form.aspectRatio === '16:9' }" @click="form.aspectRatio = '16:9'">16:9 横屏</span>
             <span :class="{ on: form.aspectRatio === '1:1' }" @click="form.aspectRatio = '1:1'">1:1 方形</span>
+          </div>
+        </div>
+        <div class="frow" style="align-items:center">
+          <div class="flabel">默认单集时长</div>
+          <div class="grow">
+            <div class="row" style="gap:10px; align-items:center">
+              <input class="input" type="number" min="30" max="600" step="1" style="width:110px" v-model.number="form.episodeDurationSeconds">
+              <span class="xs muted">秒</span>
+              <div class="seg">
+                <span :class="{ on: form.episodeDurationSeconds === 60 }" @click="form.episodeDurationSeconds = 60">60</span>
+                <span :class="{ on: form.episodeDurationSeconds === 90 }" @click="form.episodeDurationSeconds = 90">90</span>
+                <span :class="{ on: form.episodeDurationSeconds === 120 }" @click="form.episodeDurationSeconds = 120">120</span>
+              </div>
+            </div>
+            <div v-if="!durationValid" class="fhint" style="color:var(--danger)">默认单集时长需为 30-600 的整数（秒）</div>
           </div>
         </div>
         <div class="frow" style="align-items:center">
@@ -59,20 +94,61 @@
         <div class="frow" style="align-items:center">
           <div class="flabel">备份目录</div>
           <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
-            <svg><use href="#i-folder"/></svg>backend-node/data/backups
+            <svg><use href="#i-folder"/></svg>{{ backupStatsData ? backupStatsData.backupDir : (backupStatsFailed ? '暂不可用' : '读取中…') }}
           </div>
         </div>
-        <div class="frow"><div class="flabel"></div><div class="fhint">首次 V2.1 成功备份默认永久保留；清理需到高级数据工具进行影响预览与二次确认。</div></div>
-        <div class="frow"><div class="flabel"></div><button class="btn" @click="comingSoon('立即创建备份')">立即创建备份</button></div>
+        <div class="frow" style="align-items:center">
+          <div class="flabel">备份保留天数</div>
+          <div class="grow">
+            <div class="row" style="gap:10px; align-items:center">
+              <input class="input" type="number" min="1" max="365" step="1" style="width:110px" v-model.number="form.backupRetentionDays">
+              <span class="xs muted">天（1-365）</span>
+            </div>
+            <div v-if="retentionClosed" class="fhint" style="color:var(--danger)">不允许关闭备份保护：保留天数至少 1 天</div>
+            <div v-else-if="!retentionValid" class="fhint" style="color:var(--danger)">备份保留天数需为 1-365 的整数</div>
+          </div>
+        </div>
+        <div class="frow" style="align-items:center">
+          <div class="flabel">备份统计</div>
+          <div v-if="backupStatsData" class="small">
+            {{ backupStatsData.backupCount }} 个备份 · 最近 {{ backupStatsData.lastBackupAt ? formatTime(backupStatsData.lastBackupAt) : '暂无' }} · 预计占用 {{ formatBytes(backupStatsData.estimatedUsageBytes) }}
+          </div>
+          <div v-else-if="backupStatsFailed" class="small muted">暂不可用</div>
+          <div v-else class="small muted">读取中…</div>
+        </div>
+        <div class="frow"><div class="flabel"></div><div class="fhint">保留天数保存为后续自动清理的策略值；已创建的备份始终完整保留，清理需到高级数据工具进行影响预览与二次确认。</div></div>
+        <div class="frow"><div class="flabel"></div>
+          <button class="btn" :disabled="backupRunning" @click="runBackupNow">{{ backupRunning ? '正在创建备份…' : '立即创建备份' }}</button>
+        </div>
+        <div v-if="backupResult" class="issue-row"><span class="badge ok">备份完成</span><span class="mono">{{ backupResult }}</span></div>
+        <div v-if="backupError" class="issue-row"><span class="badge danger">备份失败</span><span>{{ backupError }}</span></div>
       </div>
 
       <div class="card pad" style="margin-bottom:8px">
         <div class="sec-title"><svg><use href="#i-layers"/></svg>高级数据工具</div>
         <div class="grid-4">
           <div class="tool-card card" @click="$router.push('/settings/data-tools')"><b>完整性检查</b><p>SQLite / 媒体 / 引用 / 任务索引</p></div>
-          <div class="tool-card card" @click="comingSoon('媒体重定位')"><b>媒体重定位</b><p>扫描 → 预览 → 确认更新</p></div>
+          <div class="tool-card card" @click="$router.push('/settings/data-tools')"><b>媒体重定位</b><p>扫描 → 预览 → 确认更新</p></div>
           <div class="tool-card card" @click="$router.push('/settings/data-tools')"><b>迁移与恢复记录</b><p>journal / 备份 / 回滚</p></div>
           <div class="tool-card card" @click="$router.push('/settings/data-tools')"><b>物理清理</b><p>dry-run → 永久清理</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 离开守卫确认（自建弹窗，dirty 时拦截路由离开） -->
+    <div v-if="leaveConfirmOpen" class="scrim" style="z-index:80"></div>
+    <div v-if="leaveConfirmOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>有未保存的修改</h3>
+        </div>
+        <div class="modal-b">
+          <p class="small">当前常规设置尚未保存，离开本页将丢失这些修改。</p>
+        </div>
+        <div class="modal-f" style="justify-content:flex-end">
+          <button class="btn" @click="cancelLeave">继续编辑</button>
+          <button class="btn danger" @click="discardAndLeave">放弃更改并离开</button>
         </div>
       </div>
     </div>
@@ -123,6 +199,10 @@
                     <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">{{ formatBytes(migratePreview.database.bytes) }}</div></div></div>
                     <div class="v-row"><div><b style="font-size:13px">媒体 storage</b><div class="vm">{{ formatBytes(migratePreview.storage.bytes) }} · {{ migratePreview.storage.files }} 个文件</div></div></div>
                   </div>
+                  <div class="grid-2" style="margin-top:10px">
+                    <div class="v-row"><div><b style="font-size:13px">任务</b><div class="vm">{{ migrateCheck.details.activeTasks > 0 ? migrateCheck.details.activeTasks + ' 个进行中任务' : '无进行中任务' }} · 运行中任务将阻断迁移</div></div></div>
+                    <div class="v-row"><div><b style="font-size:13px">备份</b><div class="vm">迁移前自动创建备份（含 SHA-256 清单与回滚点）</div></div></div>
+                  </div>
                   <p class="muted xs" style="margin-top:8px">{{ migratePreview.note }}</p>
                 </template>
               </template>
@@ -170,17 +250,26 @@
 import axios from 'axios'
 import { v21 } from '../../v21/api.js'
 
+function clampIntField(value, min, max) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= min && n <= max ? n : null
+}
+
 export default {
   name: 'SettingsView',
   data() {
     return {
       dirty: false, migrateOpen: false,
-      form: { aspectRatio: '16:9', language: 'zh' },
+      form: { aspectRatio: '16:9', language: 'zh', episodeDurationSeconds: 90, backupRetentionDays: 30 },
       savedForm: '',
+      saving: false, saveError: '',
+      backupStatsData: null, backupStatsFailed: false,
+      backupRunning: false, backupResult: '', backupError: '',
+      leaveConfirmOpen: false, pendingNav: null,
       dirs: [
-        { key: 'media', label: '媒体目录', path: 'backend-node/data/storage' },
-        { key: 'export', label: '成片导出目录', path: 'backend-node/data/storage/v21-exports' },
-        { key: 'tmp', label: '临时目录', path: '系统临时目录' },
+        { key: 'media', label: '媒体目录', path: 'backend-node/data/storage', checking: false, result: null },
+        { key: 'export', label: '成片导出目录', path: 'backend-node/data/storage/v21-exports', checking: false, result: null },
+        { key: 'tmp', label: '临时目录', path: '系统临时目录', checking: false, result: null },
       ],
       migrateStep: 'select', migrateDir: '', migrateChecking: false,
       migrateCheck: null, migratePreview: null, migrateConfirmText: '',
@@ -191,6 +280,18 @@ export default {
     formChanged() {
       return JSON.stringify(this.form) !== this.savedForm
     },
+    durationValid() {
+      return clampIntField(this.form.episodeDurationSeconds, 30, 600) !== null
+    },
+    retentionValid() {
+      return clampIntField(this.form.backupRetentionDays, 1, 365) !== null
+    },
+    retentionClosed() {
+      return Number(this.form.backupRetentionDays) === 0
+    },
+    canSave() {
+      return this.dirty && this.durationValid && this.retentionValid
+    },
     migrateStepLabel() {
       return { select: '选择目录', check: '检查与范围预览', preview: '检查与范围预览', confirm: '确认迁移', executing: '正在迁移', done: '迁移完成' }[this.migrateStep] || '迁移'
     },
@@ -198,13 +299,33 @@ export default {
   watch: {
     form: { deep: true, handler() { this.dirty = JSON.stringify(this.form) !== this.savedForm } },
   },
-  mounted() {
-    axios.get('/api/v1/settings/language').then((r) => {
-      const lang = r.data?.data?.language
-      if (lang) this.form.language = lang
-      this.savedForm = JSON.stringify(this.form)
-      this.dirty = false
-    }).catch(() => {})
+  async mounted() {
+    await Promise.all([
+      axios.get('/api/v1/settings/language').then((r) => {
+        const lang = r.data?.data?.language
+        if (lang) this.form.language = lang
+      }).catch(() => {}),
+      v21.getSettingsDefaults().then((d) => {
+        if (d && typeof d === 'object') {
+          if (d.aspectRatio) this.form.aspectRatio = d.aspectRatio
+          const dur = clampIntField(d.episodeDurationSeconds, 30, 600)
+          if (dur !== null) this.form.episodeDurationSeconds = dur
+          const ret = clampIntField(d.backupRetentionDays, 1, 365)
+          if (ret !== null) this.form.backupRetentionDays = ret
+        }
+      }).catch(() => {}),
+    ])
+    this.savedForm = JSON.stringify(this.form)
+    this.dirty = false
+    this.loadBackupStats()
+  },
+  beforeRouteLeave(to, from, next) {
+    if (!this.dirty) {
+      next()
+      return
+    }
+    this.pendingNav = next
+    this.leaveConfirmOpen = true
   },
   methods: {
     formatBytes(n) {
@@ -212,6 +333,49 @@ export default {
       if (num >= 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`
       if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`
       return `${num} B`
+    },
+    formatTime(iso) {
+      const t = new Date(iso)
+      return Number.isNaN(t.getTime()) ? '暂无' : t.toLocaleString()
+    },
+    dirBadge(row) {
+      if (!row.result) return { cls: 'idle', text: '未检测' }
+      return row.result.ok ? { cls: 'ok', text: '正常' } : { cls: 'warn', text: '有异常' }
+    },
+    async loadBackupStats() {
+      this.backupStatsFailed = false
+      try {
+        this.backupStatsData = await v21.backupStats()
+      } catch (_) {
+        this.backupStatsData = null
+        this.backupStatsFailed = true
+      }
+    },
+    async checkDir(row) {
+      if (row.checking) return
+      row.checking = true
+      try {
+        row.result = await v21.workspaceCheck(row.path)
+      } catch (e) {
+        row.result = { ok: false, blockers: [{ code: 'CHECK_FAILED', message: e.message || '检测失败' }], details: {} }
+      } finally {
+        row.checking = false
+      }
+    },
+    async runBackupNow() {
+      if (this.backupRunning) return
+      this.backupRunning = true
+      this.backupResult = ''
+      this.backupError = ''
+      try {
+        const r = await v21.runBackup()
+        this.backupResult = r.path || ''
+        this.loadBackupStats()
+      } catch (e) {
+        this.backupError = e.message || '备份失败'
+      } finally {
+        this.backupRunning = false
+      }
     },
     async runWorkspaceCheck() {
       this.migrateChecking = true
@@ -244,19 +408,43 @@ export default {
         this.migrateExecuting = false
       }
     },
+    discard() {
+      if (this.savedForm) this.form = JSON.parse(this.savedForm)
+      this.dirty = false
+    },
+    discardAndLeave() {
+      this.discard()
+      this.leaveConfirmOpen = false
+      const nav = this.pendingNav
+      this.pendingNav = null
+      if (nav) nav()
+    },
+    cancelLeave() {
+      this.leaveConfirmOpen = false
+      const nav = this.pendingNav
+      this.pendingNav = null
+      if (nav) nav(false)
+    },
     async save() {
+      if (!this.canSave || this.saving) return
+      this.saving = true
+      this.saveError = ''
       try {
+        await v21.updateSettingsDefaults({
+          aspectRatio: this.form.aspectRatio,
+          episodeDurationSeconds: Number(this.form.episodeDurationSeconds),
+          backupRetentionDays: Number(this.form.backupRetentionDays),
+        })
         if (this.form.language) {
           await axios.put('/api/v1/settings/language', { language: this.form.language })
         }
         this.savedForm = JSON.stringify(this.form)
         this.dirty = false
       } catch (e) {
-        alert(e?.response?.data?.error?.message || e.message)
+        this.saveError = e?.response?.data?.error?.message || e.message || '保存失败'
+      } finally {
+        this.saving = false
       }
-    },
-    comingSoon(name) {
-      alert(`${name}将在本迭代内启用`)
     },
   },
 }
@@ -281,4 +469,5 @@ export default {
 .mono { font-family: Consolas, monospace; }
 .badge.warn { background: var(--warn-subtle); color: var(--warn); }
 .badge.ok { background: var(--ok-subtle); color: var(--ok); }
+.badge.idle { background: var(--panel2); color: var(--muted); }
 </style>

@@ -256,7 +256,8 @@ function createProjectService(db, { log = console } = {}) {
       throw httpError('VALIDATION_ERROR', 400, '项目名称不能为空');
     }
     for (const key of Object.keys(arguments[0] || {})) {
-      if (['title', 'aspectRatio', 'genre', 'description'].includes(key)) continue;
+      // targetDurationSeconds：新建项目页随全局默认值上报（§24.5），暂存前端不落项目资料，忽略不拒绝
+      if (['title', 'aspectRatio', 'genre', 'description', 'targetDurationSeconds'].includes(key)) continue;
       const v = arguments[0][key];
       if (v !== undefined && /duration|output|preference/i.test(key)) {
         throw httpError(
