@@ -14,6 +14,11 @@
     </header>
     <div class="page-body" style="padding:16px 24px 14px">
 
+      <div v-if="notice" class="notice-strip warn" style="margin-bottom:12px">
+        <span style="flex:1">{{ notice }}</span>
+        <span style="text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer" @click="notice = ''">关闭</span>
+      </div>
+
       <div class="stats">
         <div class="card stat"><div class="ic"><svg><use href="#i-user"/></svg></div><div><b>{{ countOf('character') }}</b><span>人物</span></div></div>
         <div class="card stat"><div class="ic"><svg><use href="#i-scene"/></svg></div><div><b>{{ countOf('scene') }}</b><span>场景资产</span></div></div>
@@ -94,18 +99,64 @@
             <div class="im"><img :src="c.url" style="width:100%;height:100%;object-fit:cover"></div>
             <div class="cap" :class="c.isCurrent ? 'ok-t' : ''">{{ c.isCurrent ? '当前图' : '候选' }}</div>
           </div>
-          <div class="cand"><div class="im" style="border:1px dashed var(--line-strong); display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer" @click="generate"><svg style="width:18px;height:18px"><use href="#i-plus"/></svg></div><div class="cap">生成</div></div>
+          <div class="cand"><div class="im" style="border:1px dashed var(--line-strong); display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer" @click="openGenSheet"><svg style="width:18px;height:18px"><use href="#i-plus"/></svg></div><div class="cap">生成</div></div>
         </div>
         <div class="sec-t">简短资料</div>
         <div class="kv"><span class="k">描述</span><span class="v">{{ detail?.description || '—' }}</span></div>
         <div class="kv" v-if="detail?.states?.length"><span class="k">状态</span><span class="v">{{ detail.states.map((s) => s.name).join(' · ') }}</span></div>
       </div>
       <div class="drawer-f">
-        <button class="btn danger" @click="remove"><svg><use href="#i-trash"/></svg>删除</button>
+        <button class="btn danger" @click="askRemove"><svg><use href="#i-trash"/></svg>删除</button>
         <div class="spacer"></div>
-        <button class="btn primary" :disabled="generating" @click="generate"><svg><use href="#i-spark"/></svg>生成候选</button>
+        <button class="btn primary" :disabled="generating" @click="openGenSheet"><svg><use href="#i-spark"/></svg>生成候选</button>
       </div>
     </aside>
+
+    <!-- 删除确认 Modal（B7：确认先行，确认后才调用删除） -->
+    <div v-if="removeOpen" class="scrim" style="z-index:100" @click="removeOpen = false"></div>
+    <div v-if="removeOpen" class="modal-wrap" style="z-index:110">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--danger)"><use href="#i-trash"/></svg>
+          <h3>移入回收站</h3>
+          <button class="icon-btn" @click="removeOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p style="margin:0; line-height:1.6">素材「{{ detail?.name || '—' }}」会移入回收站，可恢复删除。确认移入？</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="removeOpen = false">取消</button>
+          <button class="btn danger" :disabled="removing" @click="confirmRemove">{{ removing ? '删除中…' : '确认删除' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 生成确认 Sheet（P0-7：生成前确认对象 / 通道 / 参数 / 费用） -->
+    <div v-if="genSheetOpen" class="scrim" style="z-index:100" @click="genSheetOpen = false"></div>
+    <div v-if="genSheetOpen" class="modal-wrap" style="z-index:110">
+      <div class="modal" style="width:480px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-spark"/></svg>
+          <h3>生成候选</h3>
+          <button class="icon-btn" @click="genSheetOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <div class="col" style="gap:12px">
+            <div class="kv"><span class="k">对象</span><span class="v">{{ typeLabel(detail?.assetType) }} · {{ detail?.name || '—' }}</span></div>
+            <div class="kv"><span class="k">生成通道</span><span class="v">本地生成（mock 通道）</span></div>
+            <div class="kv"><span class="k">画布尺寸</span><span class="v">{{ genSize }}</span></div>
+            <label class="col" style="gap:4px"><span class="xs muted">提示词（可编辑）</span>
+              <textarea class="input" style="width:100%; height:64px; padding:8px" v-model="genPrompt"></textarea>
+            </label>
+            <div class="kv"><span class="k">任务与费用</span><span class="v">1 个生成任务 · 本地生成，不产生 API 费用</span></div>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="genSheetOpen = false">取消</button>
+          <button class="btn primary" :disabled="generating" @click="confirmGenerate">{{ generating ? '生成中…' : '确认生成' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -119,6 +170,9 @@ export default {
       items: [], type: 'all', q: '',
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
       detailOpen: false, detail: null, generating: false, projectTitle: '',
+      notice: '',
+      removeOpen: false, removing: false,
+      genSheetOpen: false, genPrompt: '', genSize: '720x480',
     }
   },
   computed: {
@@ -166,12 +220,25 @@ export default {
       this.detail = await v21.getAssetDetail(item.assetType, item.id)
       this.detailOpen = true
     },
-    async generate() {
+    // P0-7：生成入口只负责打开确认 Sheet，确认后才真正生成
+    openGenSheet() {
+      if (!this.detail) return
+      this.genPrompt = this.detail.name || ''
+      // 画布尺寸按素材类型的展示比例取默认值（人物 3:4 · 场景 16:9 · 道具 1:1）
+      this.genSize = { character: '720x960', scene: '1280x720', prop: '720x720' }[this.detail.assetType] || '720x480'
+      this.genSheetOpen = true
+    },
+    async confirmGenerate() {
+      if (!this.detail || this.generating) return
       this.generating = true
       try {
-        await v21.generateAssetCandidate(this.projectId, { type: this.detail.assetType, assetId: this.detail.id, prompt: this.detail.name })
+        await v21.generateAssetCandidate(this.projectId, { type: this.detail.assetType, assetId: this.detail.id, prompt: this.genPrompt, size: this.genSize })
         this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
         this.load()
+        this.genSheetOpen = false
+        this.notice = '已生成候选'
+      } catch (e) {
+        this.notice = e.message || '候选生成失败'
       } finally {
         this.generating = false
       }
@@ -182,16 +249,29 @@ export default {
       for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
       this.load()
     },
-    async remove() {
-      const result = await v21.deleteAsset(this.detail.assetType, this.detail.id)
-      if (result.blocked) {
-        alert(result.message)
-        return
+    // B7：删除确认先行——弹窗确认后才调一次 deleteAsset；失败/阻塞时素材保留
+    askRemove() {
+      if (!this.detail) return
+      this.removeOpen = true
+    },
+    async confirmRemove() {
+      if (!this.detail || this.removing) return
+      this.removing = true
+      try {
+        const result = await v21.deleteAsset(this.detail.assetType, this.detail.id)
+        if (result.blocked) {
+          this.notice = result.message || '该素材仍被引用，暂不能删除'
+          return
+        }
+        this.removeOpen = false
+        this.detailOpen = false
+        this.load()
+        this.notice = '已移入回收站'
+      } catch (e) {
+        this.notice = e.message || '删除失败，素材已保留'
+      } finally {
+        this.removing = false
       }
-      if (!window.confirm('素材将移入回收站（可恢复）。确认删除？')) return
-      await v21.deleteAsset(this.detail.assetType, this.detail.id)
-      this.detailOpen = false
-      this.load()
     },
     comingSoon(name) {
       alert(`${name}将在本迭代内启用`)
