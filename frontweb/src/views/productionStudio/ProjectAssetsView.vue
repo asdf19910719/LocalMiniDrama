@@ -37,13 +37,15 @@
           <svg><use href="#i-search"/></svg>
           <input v-model="q" placeholder="搜索素材名称" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13px" @input="load">
         </div>
+        <button class="btn ghost" style="border:1px solid var(--line)" @click="toggleSelectMode"><svg><use href="#i-check"/></svg>{{ selectMode ? '退出选择' : '选择多个' }}</button>
         <span class="muted xs" style="margin-left:auto">缩略比例：人物 3:4 · 场景 16:9 · 道具 1:1</span>
       </div>
 
       <template v-for="grp in grouped" :key="grp.key">
-        <div class="sec-label">{{ grp.label }} <span class="hint muted">· {{ grp.items.length }} 项 · 点击卡片打开详情抽屉</span></div>
+        <div class="sec-label">{{ grp.label }} <span class="hint muted">· {{ grp.items.length }} 项 · {{ selectMode ? '点击卡片切换选中' : '点击卡片打开详情抽屉' }}</span></div>
         <div class="agrid">
-          <div v-for="(item, i) in grp.items" :key="item.assetType + item.id" class="card acard" :class="[item.assetType, { miss: item.blocked }]" @click="openDetail(item)">
+          <div v-for="(item, i) in grp.items" :key="item.assetType + item.id" class="card acard" :class="[item.assetType, { miss: item.blocked, picked: isSelected(item) }]" @click="onCardClick(item)">
+            <span v-if="selectMode" class="pick-box" :class="{ on: isSelected(item) }" @click.stop="toggleSelect(item)"><svg><use href="#i-check"/></svg></span>
             <div class="thumb" :class="item.currentImage ? 'has-img' : 'ph ph-' + ((i + grp.key.length) % 6)">
               <img v-if="item.currentImage" :src="item.currentImage">
               <span class="st badge" :class="item.blocked ? 'danger' : 'ok'">{{ item.blocked ? '缺少当前图' : '已确认' }}</span>
@@ -53,6 +55,14 @@
         </div>
       </template>
       <p v-if="grouped.length === 0" class="muted" style="text-align:center; padding:60px 0">暂无素材</p>
+    </div>
+
+    <!-- 批量操作栏（Task 3.3 / P0-10）：多选态且有选中时固定在页面底部 -->
+    <div v-if="selectMode && selectedItems.length" class="batch-bar">
+      <span class="count">已选 {{ selectedItems.length }} 项</span>
+      <button class="btn ghost sm" @click="selectAllFiltered">全选当前筛选结果</button>
+      <button class="btn ghost sm" @click="clearSelection">清空</button>
+      <button class="btn primary sm" @click="openBatchSheet">批量生成候选</button>
     </div>
 
     <!-- 新增素材 Modal -->
@@ -252,6 +262,44 @@
       </div>
     </div>
 
+    <!-- 批量生成抽屉（Task 3.3 / P0-10）：确认前置 → 逐项顺序执行 → 结果呈现 -->
+    <div v-if="batchOpen" class="scrim" style="z-index:100" @click="closeBatch"></div>
+    <div v-if="batchOpen" class="modal-wrap" style="z-index:110">
+      <div class="modal" style="width:520px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-spark"/></svg>
+          <h3>批量生成候选</h3>
+          <button class="icon-btn" :disabled="batchRunning" @click="closeBatch"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b" style="max-height:60vh; overflow:auto">
+          <div class="col" style="gap:10px">
+            <div class="kv"><span class="k">已选素材</span><span class="v">{{ batchItems.length }} 项 · 每项 1 个生成任务</span></div>
+            <div class="kv"><span class="k">生成通道</span><span class="v">本地生成（mock 通道）</span></div>
+            <div class="kv"><span class="k">费用</span><span class="v">本地生成，不产生 API 费用</span></div>
+            <div class="kv"><span class="k">执行方式</span><span class="v">逐项顺序执行</span></div>
+            <p class="muted" style="margin:0; font-size:12px; line-height:1.6">无当前图与有当前图的素材都会生成——生成只新增候选，不会改动当前图。</p>
+            <div class="batch-list">
+              <div v-for="(it, idx) in batchItems" :key="it.assetType + it.id" class="batch-row">
+                <span class="idx">{{ idx + 1 }}</span>
+                <span class="nm">{{ it.name }}</span>
+                <span class="muted">{{ typeLabel(it.assetType) }} · {{ batchSize(it) }}</span>
+              </div>
+            </div>
+            <div v-if="batchRunning" class="batch-prog">正在生成 {{ batchIndex + 1 }}/{{ batchItems.length }}：{{ batchItems[batchIndex] ? batchItems[batchIndex].name : '—' }}</div>
+            <template v-if="batchPhase === 'done'">
+              <div class="kv"><span class="k">结果</span><span class="v">成功 {{ batchSuccess }} 项 / 失败 {{ batchFailures.length }} 项</span></div>
+              <div v-for="f in batchFailures" :key="f.name" class="err-line" style="margin-bottom:0">{{ f.name }}：{{ f.message }}</div>
+            </template>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" :disabled="batchRunning" @click="closeBatch">取消</button>
+          <button v-if="batchPhase !== 'done'" class="btn primary" :disabled="batchRunning" @click="confirmBatchGenerate">{{ batchRunning ? '生成中…' : '开始生成（' + batchItems.length + ' 项）' }}</button>
+          <button v-else class="btn primary" @click="finishBatch">完成</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 音色设置 Modal（Task 3.2 / P0-9）：上传 / 手动两个来源；提取置灰待 Provider -->
     <div v-if="voiceSheetOpen" class="scrim" style="z-index:100" @click="voiceSheetOpen = false"></div>
     <div v-if="voiceSheetOpen" class="modal-wrap" style="z-index:110">
@@ -353,12 +401,18 @@ export default {
       voiceForm: { name: '', url: '' },
       voiceUploading: false, voiceSaving: false, voiceError: '',
       voiceClearOpen: false, voiceClearing: false, voiceClearError: '',
+      // Task 3.3（P0-10）：批量选择与批量生成（多选 → 批量栏 → 预检抽屉 → 逐项执行）
+      selectMode: false, selectedKeys: [],
+      batchOpen: false, batchItems: [], batchPhase: 'confirm',
+      batchIndex: 0, batchSuccess: 0, batchFailures: [], batchRunning: false,
     }
   },
   computed: {
     projectId() { return this.$route.params.projectId },
     allItems() { return this._all || [] },
     allCount() { return this.allItems.length },
+    // P0-10：已选项映射回素材对象（selectedKeys 存「类型:id」键，跨类型防 id 撞车）
+    selectedItems() { return this.allItems.filter((it) => this.selectedKeys.includes(this.itemKey(it))) },
     blockedCount() { return this.allItems.filter((i) => i.blocked).length },
     grouped() {
       const groups = []
@@ -557,6 +611,104 @@ export default {
     comingSoon(name) {
       this.notice = `${name}将在本迭代内启用`
     },
+    // ---- Task 3.3（P0-10）：批量选择与批量生成 ----
+    // 多选模式切换：进入/退出多选态；退出时清空已选并关闭批量抽屉
+    toggleSelectMode() {
+      this.selectMode = !this.selectMode
+      this.selectedKeys = []
+      if (!this.selectMode) this.batchOpen = false
+    },
+    // 多选态点卡 = 切换选中（不再打开详情）；非多选态保持打开详情抽屉
+    onCardClick(item) {
+      if (this.selectMode) {
+        this.toggleSelect(item)
+        return
+      }
+      this.openDetail(item)
+    },
+    itemKey(item) {
+      return `${item.assetType}:${item.id}`
+    },
+    isSelected(item) {
+      return this.selectedKeys.includes(this.itemKey(item))
+    },
+    toggleSelect(item) {
+      const key = this.itemKey(item)
+      const at = this.selectedKeys.indexOf(key)
+      if (at >= 0) this.selectedKeys.splice(at, 1)
+      else this.selectedKeys.push(key)
+    },
+    selectAllFiltered() {
+      for (const grp of this.grouped) {
+        for (const item of grp.items) {
+          const key = this.itemKey(item)
+          if (!this.selectedKeys.includes(key)) this.selectedKeys.push(key)
+        }
+      }
+    },
+    clearSelection() {
+      this.selectedKeys = []
+    },
+    // 批量抽屉（确认前置）：打开时对已选项做快照，执行不受后续选择变化影响
+    openBatchSheet() {
+      if (!this.selectedItems.length) return
+      this.batchItems = this.selectedItems.slice()
+      this.batchPhase = 'confirm'
+      this.batchIndex = 0
+      this.batchSuccess = 0
+      this.batchFailures = []
+      this.batchOpen = true
+    },
+    closeBatch() {
+      if (this.batchRunning) return
+      this.batchOpen = false
+      this.batchItems = []
+      this.batchPhase = 'confirm'
+      this.batchIndex = 0
+      this.batchSuccess = 0
+      this.batchFailures = []
+    },
+    // 完成：关闭抽屉、清空已选并刷新列表
+    finishBatch() {
+      this.batchOpen = false
+      this.batchItems = []
+      this.batchPhase = 'confirm'
+      this.batchIndex = 0
+      this.batchSuccess = 0
+      this.batchFailures = []
+      this.selectedKeys = []
+      this.load()
+    },
+    // 与单项生成 Sheet 默认口径一致：prompt 取素材名称（名称/描述派生）
+    batchPrompt(item) {
+      return item.name || item.description || ''
+    },
+    // 与 T2.2 单项生成 Sheet 口径一致：画布尺寸按素材类型默认
+    batchSize(item) {
+      return { character: '720x960', scene: '1280x720', prop: '720x720' }[item.assetType] || '720x480'
+    },
+    // 逐项顺序执行：单项失败不中断批次（失败逐项收集呈现）；完成后刷新列表
+    async confirmBatchGenerate() {
+      if (this.batchRunning || !this.batchItems.length) return
+      this.batchRunning = true
+      this.batchPhase = 'running'
+      this.batchIndex = 0
+      this.batchSuccess = 0
+      this.batchFailures = []
+      for (let i = 0; i < this.batchItems.length; i++) {
+        const item = this.batchItems[i]
+        this.batchIndex = i
+        try {
+          await v21.generateAssetCandidate(this.projectId, { type: item.assetType, assetId: item.id, prompt: this.batchPrompt(item), size: this.batchSize(item), stateId: null })
+          this.batchSuccess++
+        } catch (e) {
+          this.batchFailures.push({ name: item.name, message: e.message || '候选生成失败' })
+        }
+      }
+      this.batchRunning = false
+      this.batchPhase = 'done'
+      this.load()
+    },
     // ---- Task 3.2（P0-9）：人物音色管理 ----
     // 打开音色设置弹窗：回填当前音色，来源 tab 按既有 source 归位
     openVoiceSheet() {
@@ -642,7 +794,7 @@ export default {
 .sec-label { font-size: 13px; font-weight: 600; margin: 4px 0 10px; }
 .sec-label .hint { font-weight: 400; font-size: 11.5px; }
 .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 13px; margin-bottom: 20px; }
-.acard { cursor: pointer; overflow: hidden; }
+.acard { cursor: pointer; overflow: hidden; position: relative; }
 .acard .thumb { position: relative; overflow: hidden; }
 .acard.character .thumb { height: 200px; }
 .acard.scene .thumb { height: 144px; }
@@ -700,4 +852,16 @@ export default {
 .ph-3 { background: radial-gradient(120% 100% at 50% 10%, rgba(88,166,255,.30), transparent 55%), linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%); }
 .ph-4 { background: radial-gradient(110% 90% at 30% 75%, rgba(179,160,255,.22), transparent 55%), linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%); }
 .ph-5 { background: radial-gradient(120% 90% at 75% 60%, rgba(69,211,156,.18), transparent 55%), linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%); }
+/* 批量选择与批量生成（Task 3.3 / P0-10） */
+.pick-box { position: absolute; top: 8px; left: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.8); background: rgba(8,10,16,.55); display: flex; align-items: center; justify-content: center; color: transparent; cursor: pointer; }
+.pick-box svg { width: 14px; height: 14px; }
+.pick-box.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.acard.picked { border-color: var(--accent); }
+.batch-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 70; display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 14px; box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.batch-bar .count { font-size: 13px; font-weight: 600; margin-right: 2px; }
+.batch-list { display: flex; flex-direction: column; gap: 6px; }
+.batch-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; }
+.batch-row .idx { width: 20px; height: 20px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; flex: 0 0 auto; }
+.batch-row .nm { font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.batch-prog { background: var(--accent-subtle); color: var(--accent); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
 </style>

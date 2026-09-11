@@ -221,6 +221,94 @@ test('P0-9 集级联动提示：音色区含「本集使用音色在单集设定
   assert.match(src, /本集使用音色在单集设定中另行选择/, 'muted 联动提示文案')
 })
 
+// ---- Task 3.3（P0-10）：项目素材批量生成闭环（多选 → 批量栏 → 预检抽屉 → 逐项执行 → 结果呈现） ----
+
+test('P0-10 多选模式：「选择多个」切换存在，卡片复选框仅多选态渲染，多选态点卡切换选中', () => {
+  const src = view()
+  // 工具栏「选择多个」切换按钮：文案随多选态在「选择多个 / 退出选择」间切换
+  assert.match(src, /@click="toggleSelectMode"/, '工具栏存在「选择多个」切换按钮')
+  assert.match(src, /selectMode \? '退出选择' : '选择多个'/, '按钮文案随多选态切换')
+  const fnToggle = src.match(/toggleSelectMode\(\) \{[\s\S]*?\n    \},\n/)
+  assert.ok(fnToggle, '存在 toggleSelectMode 方法体')
+  assert.match(fnToggle[0], /this\.selectMode = !this\.selectMode/, '切换多选态开关')
+  assert.match(fnToggle[0], /this\.selectedKeys = \[\]/, '退出多选态清空已选')
+  // 卡片复选框仅多选态渲染（v-if="selectMode"），点击切换选中且防冒泡
+  assert.match(src, /v-if="selectMode"[^>]*class="pick-box"/, '卡片复选框仅多选态渲染')
+  assert.match(src, /@click\.stop="toggleSelect\(item\)"/, '复选框点击切换选中（.stop 防冒泡）')
+  // 多选态点卡 = 切换选中，不再打开详情；非多选态保持打开详情抽屉
+  assert.match(src, /@click="onCardClick\(item\)"/, '卡片点击统一走 onCardClick 分支')
+  const fnCard = src.match(/onCardClick\(item\) \{[\s\S]*?\n    \},\n/)
+  assert.ok(fnCard, '存在 onCardClick 方法体')
+  assert.match(fnCard[0], /this\.selectMode/, 'onCardClick 按多选态分支')
+  assert.match(fnCard[0], /toggleSelect\(item\)/, '多选态下点卡切换选中')
+  assert.match(fnCard[0], /openDetail\(item\)/, '非多选态仍打开详情抽屉')
+})
+
+test('P0-10 批量栏：多选态且有选中时出现固定批量栏，绑定打开批量抽屉方法', () => {
+  const src = view()
+  const bar = src.match(/<!-- 批量操作栏[\s\S]*?<\/div>/)
+  assert.ok(bar, '存在批量操作栏区块')
+  assert.match(bar[0], /v-if="selectMode && selectedItems\.length"/, '批量栏仅多选态且有选中时出现')
+  assert.match(bar[0], /已选 \{\{ selectedItems\.length \}\} 项/, '批量栏展示「已选 N 项」')
+  assert.match(bar[0], /@click="openBatchSheet"/, '批量生成候选按钮绑定打开批量抽屉方法 openBatchSheet')
+  assert.match(bar[0], /批量生成候选/, '批量栏有「批量生成候选」按钮')
+  assert.match(bar[0], /@click="selectAllFiltered"/, '批量栏有「全选当前筛选结果」')
+  assert.match(bar[0], /@click="clearSelection"/, '批量栏有「清空」')
+})
+
+test('P0-10 批量抽屉：通道/费用/任务数预检文案 + 逐项名称·类型·尺寸 + 开始生成按钮', () => {
+  const src = view()
+  const drawer = src.match(/<!-- 批量生成抽屉[\s\S]*?(?=    <!-- 音色设置 Modal)/)
+  assert.ok(drawer, '存在批量生成抽屉区块（位于生成 Sheet 与音色 Modal 之间）')
+  assert.match(drawer[0], /本地生成（mock 通道）/, '抽屉展示通道「本地生成（mock 通道）」')
+  assert.match(drawer[0], /本地生成，不产生 API 费用/, '抽屉展示费用「本地生成，不产生 API 费用」')
+  assert.match(drawer[0], /每项 1 个生成任务/, '抽屉展示任务数（每项 1 个生成任务）')
+  assert.match(drawer[0], /逐项顺序执行/, '抽屉说明逐项顺序执行')
+  assert.match(drawer[0], /不会改动当前图/, '抽屉说明生成只入候选、不会改动当前图（无当前图项同样可生成）')
+  // 逐项列表：名称 · 类型 · 尺寸
+  assert.match(drawer[0], /v-for="\(it, idx\) in batchItems"/, '逐项列表渲染 batchItems')
+  assert.match(drawer[0], /it\.name/, '逐项展示名称')
+  assert.match(drawer[0], /typeLabel\(it\.assetType\)/, '逐项展示类型')
+  assert.match(drawer[0], /batchSize\(it\)/, '逐项展示尺寸')
+  // 底部「取消 / 开始生成（N 项）」
+  assert.match(drawer[0], /@click="confirmBatchGenerate"/, '开始生成绑定 confirmBatchGenerate')
+  assert.match(drawer[0], /开始生成（/, '底部有「开始生成（N 项）」按钮')
+  assert.match(drawer[0], /@click="closeBatch"/, '底部有取消（closeBatch）')
+})
+
+test('P0-10 批量执行：循环调用 generateAssetCandidate 且失败逐项收集呈现，执行中禁关闭', () => {
+  const src = view()
+  const fn = src.match(/async confirmBatchGenerate\(\)[\s\S]*?\n    \},\n/)
+  assert.ok(fn, '存在批量执行方法 confirmBatchGenerate')
+  assert.match(fn[0], /for \(/, '逐项循环执行')
+  assert.match(fn[0], /v21\.generateAssetCandidate\(/, '循环内调用 generateAssetCandidate')
+  assert.match(fn[0], /prompt: this\.batchPrompt\(item\)/, 'prompt 与单项 Sheet 默认口径一致（名称派生）')
+  assert.match(fn[0], /size: this\.batchSize\(item\)/, 'size 按类型默认（与 T2.2 口径一致）')
+  assert.match(fn[0], /batchFailures\.push/, '失败逐项收集')
+  assert.match(fn[0], /e\.message/, '失败收集错误信息')
+  // 执行中：进度呈现 + 禁用关闭（防中断产生半批状态）
+  const drawer = src.match(/<!-- 批量生成抽屉[\s\S]*?(?=    <!-- 音色设置 Modal)/)[0]
+  assert.match(drawer, /:disabled="batchRunning"/, '执行中禁用关闭按钮（防中断产生半批状态）')
+  assert.match(src, /正在生成 \{\{ batchIndex \+ 1 \}\}\/\{\{ batchItems\.length \}\}/, '执行中显示进度「正在生成 i/N：<名称>」')
+  // 完成结果：成功 N 项 / 失败 M 项（逐项列出失败名称 + 错误信息）
+  assert.match(drawer, /成功 \{\{ batchSuccess \}\} 项/, '结果区展示成功 N 项')
+  assert.match(drawer, /失败 \{\{ batchFailures\.length \}\} 项/, '结果区展示失败 M 项')
+  assert.match(drawer, /v-for="f in batchFailures"/, '结果区逐项列出失败项')
+  assert.match(drawer, /f\.name/, '失败项展示名称')
+  assert.match(drawer, /f\.message/, '失败项展示错误信息')
+})
+
+test('P0-10 批量完成：批量执行完成后刷新列表，「完成」关闭抽屉', () => {
+  const src = view()
+  const fn = src.match(/async confirmBatchGenerate\(\)[\s\S]*?\n    \},\n/)
+  assert.match(fn[0], /this\.load\(\)/, '批量执行完成后刷新列表')
+  assert.match(src, /@click="finishBatch"/, '完成按钮绑定 finishBatch')
+  const fnFinish = src.match(/finishBatch\(\) \{[\s\S]*?\n    \},\n/)
+  assert.ok(fnFinish, '存在 finishBatch 方法体')
+  assert.match(fnFinish[0], /this\.batchOpen = false/, '完成关闭批量抽屉')
+  assert.match(fnFinish[0], /this\.load\(\)/, '完成后刷新列表')
+})
+
 test('使用位置/生成记录标签：渲染对应数据源字段、用户语言与空态', () => {
   const src = view()
   // 使用位置
