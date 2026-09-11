@@ -97,7 +97,7 @@
           <div class="divider" style="margin:12px 0"></div>
           <div class="xs" style="color:var(--warn); line-height:1.6">
             <svg style="width:12px;height:12px;vertical-align:-1px"><use href="#i-warn"/></svg>
-            回收站保护：30 天内可从「已归档」筛选恢复。运行中任务需先取消；导出成片与外部来源审计记录随项目保留。
+            回收站保护：30 天内可从回收站筛选恢复。运行中任务需先取消；导出成片与外部来源审计记录随项目保留。
           </div>
         </div>
         <div class="modal-f">

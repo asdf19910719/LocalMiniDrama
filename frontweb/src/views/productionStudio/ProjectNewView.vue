@@ -19,6 +19,13 @@
             </div>
             <div class="divider" style="margin:12px 0"></div>
             <div class="frow">
+              <div class="flabel">题材</div>
+              <div class="grow">
+                <input class="input" style="width:100%" v-model="genre" placeholder="如：悬疑、都市奇幻、美食幻想">
+                <div class="fhint">用于项目卡片展示与检索。</div>
+              </div>
+            </div>
+            <div class="frow">
               <div class="flabel">画幅</div>
               <div class="seg">
                 <span :class="{ on: aspectRatio === '9:16' }" @click="aspectRatio = '9:16'">9:16 竖屏</span>
