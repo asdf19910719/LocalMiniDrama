@@ -14,6 +14,7 @@
 
 ### 新增
 
+- **V2.1 自由创作「加入个人资产库」（B6）**：生成产物的「加入个人资产库」按钮由占位替换为真实入库——可选角色/场景/道具三类个人库（复用既有 v1 资产库 create 端点），入库记录携带产物 URL/本地路径、提示词摘要与来源（quick-create + 任务 id）可追溯；放弃确认改走专用 Modal，原生弹窗全部清除
 - **V2.1 人物音色真实来源与本集新增状态（B4/B5）**：音色抽屉由占位替换为真实来源——上传音频接既有角色音色上传端点（mp3/wav/m4a/ogg）、自动读出角色已认证音色资产（seedance2 voice）、素材库音色接人物库列表、带音频文件的音色可直接试听（audio 播放）、「从音视频提取」标注 P2 依赖 Provider；选中音色经 `updateSelection` 以 voice_json 持久化为本集音色指针（不更新/清除语义分明）。本集设定人物详情「新增状态」接 `POST /api/v1/characters/:id/variants` 创建人物状态并即时刷新详情；同视图的图片 URL 输入与进入分镜提示改走专用容器
 - **V2.1 小说拆集与来源视频向导（B2/B3）**：剧集页「导入 / 协作」菜单两项由占位提示替换为真实向导——小说 / 长文本拆集：新增 `v21/import/novelSplitService.js` 与 `POST /api/v2/projects/:id/episodes/import-novel/preview|confirm`（此前 confirm 只解析不落库），预览按规则解析章节并给出字数/建议集号/冲突标注，确认逐集创建草稿剧集与剧本草稿版本（冲突集跳过并给原因，全程零媒体任务）；前端三步向导（粘贴/上传文本 → 章节预览 → 拆集结果）。从已有视频开始剪辑：三步向导（选择目标集 → 本地路径/URL + 合法使用权确认 → 登记并跳转成片页），复用 `POST /episodes/source-video` 零生成登记合同
 - **V2.1 更新分镜结构 diff 向导（B1）**：分镜页更多菜单「更新分镜结构（从已确认剧本重建）」由直接重建改为 diff 向导——新增 `GET/POST /api/v2/episodes/:id/storyboard/structure-diff|apply-structure-diff`：只读推导期望结构与当前结构对比（新增/变更/删除/未变分组），人工改动镜头（structure_revision>1）标注并可勾选「跳过」；应用在事务内按 diff 增/改/软删，删除为回收站式且媒体候选保留，受影响镜头 structure_revision 递增（SHOT_REVISION_CONFLICT 保护不变）；前端向导预览差异行（imp-row 样式）后确认创建新结构版本

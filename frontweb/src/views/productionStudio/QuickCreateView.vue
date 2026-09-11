@@ -62,13 +62,36 @@
       </div>
       <div v-if="result" class="card pad">
         <b style="font-size:13.5px">选择去向</b>
-        <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap">
-          <button class="btn sm" @click="comingSoon('加入个人资产库')">加入个人资产库</button>
+        <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center">
+          <select class="input" style="height:32px" v-model="libraryKind">
+            <option value="character">角色库</option>
+            <option value="scene">场景库</option>
+            <option value="prop">道具库</option>
+          </select>
+          <button class="btn sm" :disabled="librarySaving" @click="addToLibrary">{{ librarySaving ? '入库中…' : '加入个人资产库' }}</button>
           <select class="input" style="height:32px" v-model="destProject">
             <option value="">选择项目…</option>
             <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.title }}</option>
           </select>
           <button class="btn sm primary" :disabled="!destProject" @click="bindToProject">绑定项目素材</button>
+        </div>
+        <p v-if="notice" class="small" :style="{ color: noticeOk ? 'var(--ok)' : 'var(--danger)' }" style="margin-top:8px">{{ notice }}</p>
+      </div>
+    </div>
+
+    <!-- 放弃确认 Modal（C1：专用容器） -->
+    <div v-if="abandonOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:440px">
+        <div class="modal-h">
+          <h3>放弃本次产物</h3>
+          <button class="icon-btn" @click="abandonOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small">放弃后该产物不进入任何库（本地文件保留在磁盘）。确认放弃？</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="abandonOpen = false">返回</button>
+          <button class="btn danger" @click="confirmAbandon">确认放弃</button>
         </div>
       </div>
     </div>
@@ -84,6 +107,8 @@ export default {
     return {
       configOpen: false, kind: 'image', prompt: '', busy: false,
       result: null, projects: [], destProject: '',
+      libraryKind: 'character', librarySaving: false,
+      abandonOpen: false, notice: '', noticeOk: false,
     }
   },
   mounted() {
@@ -103,9 +128,35 @@ export default {
         this.result = { ...result, taskId: submitted.taskId }
         this.configOpen = false
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '生成失败'
+        this.noticeOk = false
       } finally {
         this.busy = false
+      }
+    },
+    async addToLibrary() {
+      if (!this.result) return
+      this.librarySaving = true
+      this.notice = ''
+      try {
+        const body = {
+          name: `${this.kind === 'video' ? '自由视频' : '自由图片'} · ${this.prompt.slice(0, 24) || this.result.taskId.slice(0, 8)}`,
+          image_url: this.kind === 'image' ? this.result.url : '',
+          local_path: this.result.artifactPath || null,
+          description: this.prompt.slice(0, 200),
+          source_type: 'quick-create',
+          source_id: this.result.taskId,
+        }
+        if (this.kind === 'video') body.description = `[视频] ${this.result.url} ${body.description}`
+        await v21.addToLibrary(this.libraryKind, body)
+        this.notice = '已加入个人资产库'
+        this.noticeOk = true
+        this.result = null
+      } catch (e) {
+        this.notice = e.message || '入库失败'
+        this.noticeOk = false
+      } finally {
+        this.librarySaving = false
       }
     },
     download(result) {
@@ -115,9 +166,11 @@ export default {
       a.click()
     },
     abandon() {
-      if (window.confirm('放弃后文件不进入任何库（本地 mock 文件保留在磁盘）。确认放弃？')) {
-        this.result = null
-      }
+      this.abandonOpen = true
+    },
+    confirmAbandon() {
+      this.abandonOpen = false
+      this.result = null
     },
     async bindToProject() {
       const assetType = this.kind === 'image' ? 'scene' : 'prop'
@@ -126,11 +179,11 @@ export default {
         ? await v21.generateAssetCandidate(this.destProject, { type: assetType, assetId: created.id, prompt: this.prompt })
         : null
       if (cand) await v21.useCandidate({ type: assetType, assetId: created.id, candidateId: cand.candidateId })
-      alert('已绑定到项目素材')
+      this.notice = '已绑定到项目素材'
+      this.noticeOk = true
       this.result = null
     },
     fmtTime(t) { return t ? String(t).slice(11, 19) : '' },
-    comingSoon(name) { alert(`${name}将在本迭代内启用`) },
   },
 }
 </script>
