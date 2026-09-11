@@ -59,8 +59,21 @@
         <div class="sc-head" v-if="selectedScene">
           <span class="chip bold">场次标题 · {{ selectedScene.heading }}</span>
           <span class="chip">字数 · {{ selectedScene.chars }}</span>
+          <div class="spacer"></div>
+          <span class="seg" style="height:26px">
+            <span :class="{ on: editMode === 'edit' }" @click="editMode = 'edit'">编辑</span>
+            <span :class="{ on: editMode === 'layout' }" @click="editMode = 'layout'">排版</span>
+          </span>
+        </div>
+        <!-- C2：排版视图（场景标题 chip 行 / 角色名加粗 / 选段高亮） -->
+        <div v-if="editMode === 'layout' && model && model.draft" class="layout-view" title="点击返回编辑">
+          <div v-for="(line, i) in layoutLines" :key="i" class="ln" :class="line.cls" @dblclick="editMode = 'edit'">
+            <template v-if="line.dlg"><b class="dlg-name">{{ line.dlg }}</b>：{{ line.rest }}</template>
+            <template v-else>{{ line.text }}</template>
+          </div>
         </div>
         <textarea
+          v-else
           ref="editor"
           v-model="draftText"
           class="ed-text"
@@ -312,12 +325,29 @@ export default {
       mode: '', pasteText: '', candidate: null, candidateOpen: false, historyOpen: false, diffOpen: false,
       sceneStats: {}, preview: null, sceneQuery: '', selectedSceneIdx: 0,
       confirmOpen: false, busy: false,
-      aiMenuOpen: false, selectionText: '', aiPop: { visible: false, top: 0, right: 60, text: '' },
+      aiMenuOpen: false, selectionText: '', editMode: 'edit', aiPop: { visible: false, top: 0, right: 60, text: '' },
       diffData: null, diffScene: null,
       diffOld: [], diffNew: [],
     }
   },
   computed: {
+    layoutLines() {
+      // C2 排版视图：场景标题行 / 角色名：台词行（加粗）/ 选段高亮
+      const sel = (this.selectionText || '').trim()
+      return String(this.draftText || '').split(/\r?\n/).map((raw) => {
+        const text = raw
+        const isScene = /^(第.{1,6}场|\s*第.{1,6}场|内景|外景)/.test(text.trim())
+        const dlgMatch = text.match(/^([^：:]{1,12})[：:]\s*(.+)$/)
+        const cls = isScene ? 'ln-scene' : dlgMatch ? 'ln-dialogue' : ''
+        const selHit = sel && text.includes(sel)
+        return {
+          text,
+          cls: selHit ? `${cls} sel-hl`.trim() : cls,
+          dlg: !isScene && dlgMatch ? dlgMatch[1] : null,
+          rest: !isScene && dlgMatch ? dlgMatch[2] : '',
+        }
+      })
+    },
     filteredScenes() {
       const list = this.sceneStats.scenes || []
       if (!this.sceneQuery) return list
@@ -527,6 +557,11 @@ export default {
 .ed-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .ed-head .ttl { font-weight: 600; font-size: 14px; }
 .ed-body { flex: 1; overflow: auto; padding: 20px 28px; position: relative; }
+.layout-view { flex: 1; overflow: auto; padding: 18px 22px; cursor: text; line-height: 2; font-size: 14px; }
+.layout-view .ln { white-space: pre-wrap; padding: 1px 6px; border-radius: 5px; }
+.layout-view .ln-scene { font-weight: 600; color: var(--accent); margin: 10px 0 4px; }
+.layout-view .ln-dialogue .dlg-name { font-weight: 700; color: var(--text); }
+.layout-view .sel-hl { background: var(--accent-subtle); outline: 1px solid var(--accent); }
 .ed-text {
   width: 100%; min-height: 320px; flex: 1; resize: vertical;
   background: transparent; border: none; outline: none; color: var(--text-2);
