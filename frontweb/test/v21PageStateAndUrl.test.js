@@ -122,16 +122,17 @@ test('⑥ AssetsStage：加载期间不闪现「本集剧本没有引用…」�
   assert.match(loadFn[0], /catch/, 'load 失败经 notice 呈现（已具备，回归守卫）')
 })
 
-test('⑦ CutStage：补加载态与失败呈现（G8），内容挂载于状态链 v-else', () => {
+test('⑦ CutStage：补加载态与失败呈现（G8），内容挂载于状态链 v-else；仅首次失败显示错误块', () => {
   const src = viewFile('studio/CutStage.vue')
   assert.match(src, /import StateBlock from '@\/components\/v21\/StateBlock\.vue'/, '应引入 StateBlock')
   assert.match(src, /<StateBlock v-if="loading && !loaded" state="loading"/, '加载中渲染骨架')
-  assert.match(src, /<StateBlock v-else-if="loadError[^"]*" state="error"/, '失败渲染错误态')
+  assert.match(src, /<StateBlock v-else-if="loadError && !loaded" state="error"/, '仅首次加载失败渲染错误块')
   const loadFn = loadFnOf(src)
   assert.ok(loadFn, '应能定位 load 方法')
   assert.match(loadFn[0], /catch/, 'load 应有 catch（原为无兜底裸 await）')
   assert.match(loadFn[0], /this\.loadError = /, '失败应写入可见错误状态')
   assert.match(loadFn[0], /this\.loaded = true/, '成功后才置 loaded')
+  assert.match(loadFn[0], /if \(this\.loaded\) \{[\s\S]*?flashNotice/, '重载失败保留内容并以 notice 呈现（口径与分镜页一致）')
   assert.match(src, /<template v-else>/, '工作台内容挂载于状态链 v-else')
 })
 
@@ -155,19 +156,20 @@ test('⑧ TasksView：空态不抢跑 + ?tab= 页签恢复（?focus= 保留）',
   assert.match(src, /consumeFocusQuery/, '?focus= 深链消费保留')
 })
 
-test('⑨ ProjectAssetsView：load 补 catch + ?asset=<type>:<id> 打开详情、写入与清除（ASSETS-030）', () => {
+test('⑨ ProjectAssetsView：load 补 catch + ?asset=<type>:<id> 打开详情、写入与清除（ASSETS-030）；深链失败保留', () => {
   const src = viewFile('ProjectAssetsView.vue')
   assert.match(src, /import StateBlock from '@\/components\/v21\/StateBlock\.vue'/, '应引入 StateBlock')
   assert.match(src, /<StateBlock v-if="loading && !loaded" state="loading"/, '加载中渲染骨架')
-  assert.match(src, /<StateBlock v-else-if="loadError" state="error"/, '失败渲染错误态')
+  assert.match(src, /<StateBlock v-else-if="loadError && !loaded" state="error"/, '仅首次加载失败渲染错误块')
   const loadFn = loadFnOf(src)
   assert.ok(loadFn, '应能定位 load 方法')
   assert.match(loadFn[0], /catch/, 'load 应有 catch（原为无兜底裸 await）')
   assert.match(loadFn[0], /this\.loadError = /, '失败应写入可见错误状态')
   assert.match(loadFn[0], /this\.loaded = true/, '成功后才置 loaded（空态守卫）')
-  // ?asset= 消费：<type>:<id> 定位素材并打开详情
+  // ?asset= 消费：<type>:<id> 定位素材并打开详情；首次加载失败保留参数供重试消费
   const consume = src.match(/consumeAssetQuery\(\) \{[\s\S]*?\n    \},/)
   assert.ok(consume, '应有 consumeAssetQuery 方法')
+  assert.match(consume[0], /if \(!this\.loaded\) return/, '首次加载失败时保留 ?asset= 参数（不在空列表上误清除）')
   assert.match(consume[0], /\$route\.query\.asset/, '应消费 ?asset=')
   assert.match(consume[0], /openDetail/, '命中素材应打开详情抽屉')
   assert.match(consume[0], /clearAssetQuery/, '未命中应清除参数')
@@ -183,17 +185,37 @@ test('⑨ ProjectAssetsView：load 补 catch + ?asset=<type>:<id> 打开详情�
   assert.ok(closeDetail, '应有 closeDetail 方法')
   assert.match(closeDetail[0], /clearAssetQuery/, '关闭详情应清除 ?asset=')
   assert.match(src, /@click="closeDetail"/, '抽屉关闭入口应走 closeDetail（保留列表筛选，仅清 asset 参数）')
+  // 重试路径：重载成功后继续消费挂起的深链
+  const retryLoad = src.match(/async retryLoad\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(retryLoad, '应有 retryLoad 方法（重载成功后补消费深链）')
+  assert.match(retryLoad[0], /consumeAssetQuery/, 'retryLoad 应消费 ?asset=')
+  assert.match(src, /@retry="retryLoad"/, '错误态重试按钮应走 retryLoad')
 })
 
-test('⑩ StoryboardStage：?scene= 恢复场次 + 切换场次/镜头 replace 写入（?shot= 保留）', () => {
+test('⑩ StoryboardStage：?scene= 恢复场次 + 切换场次/镜头 replace 写入（?shot= 保留）；深链竞态守卫与失败保留', () => {
   const src = viewFile('studio/StoryboardStage.vue')
+  // 评审修复：load 内默认选中分支必须带 ?shot= 深链守卫——否则默认选中与深链 selectShot 并发
+  // getShot，晚到响应把选中与 URL 回落第 1 镜，深链（成片页「回分镜处理」落点）静默失效
+  assert.match(
+    src,
+    /if \(this\.currentShotId === null && this\.shots\.length > 0 && !this\.\$route\.query\.shot\) this\.selectShot\(this\.shots\[0\]\.id\)/,
+    'load 内默认选中分支应含 ?shot= 深链守卫（避免并发选中竞态）'
+  )
   const consumeFn = src.match(/async consumeShotQuery\(\) \{[\s\S]*?\n    \},/)
   assert.ok(consumeFn, 'consumeShotQuery 方法存在')
+  assert.match(consumeFn[0], /if \(!this\.loaded\) return/, '首次加载失败时保留 ?shot=/?scene= 参数供重试消费')
   assert.match(consumeFn[0], /query\.shot|\$route\.query\.shot/, '应消费 ?shot= 定位镜头')
   assert.match(consumeFn[0], /selectShot/, '合法 shotId 应复用 selectShot 选中')
   assert.match(consumeFn[0], /catch/, 'selectShot 失败应有 catch 页内提示')
   assert.match(consumeFn[0], /query\.scene|\$route\.query\.scene/, '应消费 ?scene= 恢复场次筛选')
   assert.match(consumeFn[0], /writeSceneShotUrl/, '消费后写回 URL（刷新可恢复）')
+  // 深链失败保留的重试路径
+  const retryLoad = src.match(/async retryLoad\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(retryLoad, '应有 retryLoad 方法（重载成功后补消费深链）')
+  assert.match(retryLoad[0], /consumeShotQuery/, 'retryLoad 应消费 ?shot=/?scene=')
+  assert.match(src, /@retry="retryLoad"/, '错误态重试按钮应走 retryLoad')
+  // 仅首次加载失败渲染错误块（重载失败保留内容走 notice）
+  assert.match(src, /<StateBlock v-else-if="loadError && !loaded" state="error"/, '仅首次加载失败渲染错误块')
   // 写入：router.replace 携带 scene + shot
   const writeFn = src.match(/writeSceneShotUrl\(\) \{[\s\S]*?\n    \},/)
   assert.ok(writeFn, '应有 writeSceneShotUrl 方法')

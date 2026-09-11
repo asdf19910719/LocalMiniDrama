@@ -21,7 +21,7 @@
 
       <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
       <StateBlock v-if="loading && !loaded" state="loading" />
-      <StateBlock v-else-if="loadError" state="error" :message="'项目素材加载失败：' + loadError" @retry="load" />
+      <StateBlock v-else-if="loadError && !loaded" state="error" :message="'项目素材加载失败：' + loadError" @retry="retryLoad" />
       <template v-else>
 
       <div class="stats">
@@ -486,15 +486,28 @@ export default {
         this.loadError = ''
         this.loaded = true
       } catch (e) {
-        // 失败呈现为可重试错误态（原为无兜底裸 await，失败页面白板）
-        this.loadError = e.message || '网络错误'
+        // 首次失败呈现为可重试错误态（原为无兜底裸 await，失败页面白板）；
+        // 已有内容后的重载失败保留列表，错误走页内提示（与分镜/成片页口径一致）
+        if (this.loaded) {
+          this.notice = e.message || '刷新素材列表失败'
+        } else {
+          this.loadError = e.message || '网络错误'
+        }
       } finally {
         this.loading = false
       }
     },
+    // 错误态重试：重载成功后继续消费挂起的 ?asset= 深链（首次加载失败时 consumeAssetQuery 已让位保留）
+    async retryLoad() {
+      await this.load()
+      await this.consumeAssetQuery()
+    },
     // ---- 横切 B：?asset=<type>:<id> URL 恢复（规格 ASSETS-030 本期最小：只做 asset 参数） ----
     // 列表加载后消费深链：命中素材打开详情抽屉；未命中清除参数，不留死链
     async consumeAssetQuery() {
+      // 评审修复：首次加载失败（尚未 loaded）时让位：保留 ?asset= 参数待重试成功后再消费，
+      // 不在空列表上误判「素材不存在」而清除深链
+      if (!this.loaded) return
       const asset = this.$route.query.asset
       if (!asset) return
       const raw = String(asset)

@@ -16,9 +16,9 @@
       <span class="act" style="cursor:pointer; margin-left:auto; color:var(--muted)" @click="notice = ''">关闭</span>
     </div>
 
-    <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
+    <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态；重载失败保留内容走 notice） -->
     <StateBlock v-if="loading && !loaded" state="loading" />
-    <StateBlock v-else-if="loadError" state="error" :message="'分镜加载失败：' + loadError" @retry="load" />
+    <StateBlock v-else-if="loadError && !loaded" state="error" :message="'分镜加载失败：' + loadError" @retry="retryLoad" />
     <template v-else>
     <div v-if="shots.length === 0" class="empty-box">
       <p class="muted">本集还没有分镜</p>
@@ -752,11 +752,23 @@ export default {
         this.loadError = ''
         this.loaded = true
       } catch (e) {
-        this.loadError = e.message || '网络错误'
+        if (this.loaded) {
+          // 重载失败保留已有内容，错误走页内提示条（与成片页口径一致）
+          this.notice = e.message || '刷新分镜失败'
+        } else {
+          this.loadError = e.message || '网络错误'
+        }
       } finally {
         this.loading = false
       }
-      if (this.currentShotId === null && this.shots.length > 0) this.selectShot(this.shots[0].id)
+      // 评审修复：存在待消费的 ?shot= 深链时跳过默认选中——否则默认选中与深链 selectShot 并发
+      // getShot，若第 1 镜响应后到会把选中与 URL 回落第 1 镜，深链（含成片页「回分镜处理」落点）静默失效
+      if (this.currentShotId === null && this.shots.length > 0 && !this.$route.query.shot) this.selectShot(this.shots[0].id)
+    },
+    // 错误态重试：重载成功后继续消费挂起的深链参数（首次加载失败时 consumeShotQuery 已让位保留）
+    async retryLoad() {
+      await this.load()
+      await this.consumeShotQuery()
     },
     async createFromScript() {
       await v21.createFromScript(this.episodeId)
@@ -832,6 +844,9 @@ export default {
       this.historyOpen = true
     },
     async consumeShotQuery() {
+      // 首次加载失败（尚未 loaded）时让位：保留 ?shot=/?scene= 参数，待重试成功后再消费，
+      // 避免在空列表上误判「镜头不存在」并清除深链（评审修复）
+      if (!this.loaded) return
       // 深链消费：?shot=（成片页「回分镜处理」定位）+ ?scene=（横切 B 场次筛选恢复）。
       // 消费后不再单向清除参数——选中/筛选状态经 writeSceneShotUrl 写回 URL，刷新可恢复。
       const query = this.$route.query || {}

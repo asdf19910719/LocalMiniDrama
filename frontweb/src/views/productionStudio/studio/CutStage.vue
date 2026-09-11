@@ -32,7 +32,7 @@
       <span>已取消，任务记录与设置已保留</span>
     </div>
 
-    <!-- 三分状态机：加载骨架 → 错误重试 → 工作台（G8：加载完成前不渲染空数据内容） -->
+    <!-- 三分状态机：加载骨架 → 错误重试 → 工作台（G8：加载完成前不渲染空数据内容；重载失败保留内容走 notice） -->
     <StateBlock v-if="loading && !loaded" state="loading" />
     <StateBlock v-else-if="loadError && !loaded" state="error" :message="'成片数据加载失败：' + loadError" @retry="load" />
     <template v-else>
@@ -290,8 +290,12 @@ export default {
         this.loadError = ''
         this.loaded = true
       } catch (e) {
-        // 失败呈现为可重试错误态（原为无兜底裸 await，失败页面白板）
-        this.loadError = e.message || '网络错误'
+        if (this.loaded) {
+          // 重载失败保留已有内容，错误走页内提示条（与分镜页口径一致）
+          this.flashNotice('danger', e.message || '刷新成片数据失败')
+        } else {
+          this.loadError = e.message || '网络错误'
+        }
       } finally {
         this.loading = false
       }
