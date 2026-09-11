@@ -36,10 +36,23 @@
         <span class="ttl">{{ selectedHeading || '正文' }}</span>
         <div class="chip" v-if="selectedScene">{{ selectedScene.chars }} 字</div>
         <div class="spacer"></div>
-        <button class="btn sm" @click="aiMenuOpen = !aiMenuOpen">
-          <svg style="color:var(--accent)"><use href="#i-spark"/></svg>AI 辅助
-          <svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg>
-        </button>
+        <div class="more-wrap" style="position:relative">
+          <button class="btn sm" @click="aiMenuOpen = !aiMenuOpen">
+            <svg style="color:var(--accent)"><use href="#i-spark"/></svg>AI 辅助
+            <svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg>
+          </button>
+          <!-- C5：AI 辅助下拉（选区存在时追加改写/扩写/缩写） -->
+          <div v-if="aiMenuOpen" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 6px); z-index:70; width:170px" @click="aiMenuOpen = false">
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="aiMenuAction('continue')">续写</button>
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="aiMenuAction('polish')">润色</button>
+            <template v-if="selectionText">
+              <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="aiMenuAction('rewrite')">改写选段</button>
+              <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="aiMenuAction('expand')">扩写选段</button>
+              <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="aiMenuAction('shorten')">缩写选段</button>
+            </template>
+            <div v-else class="xs muted" style="padding:4px 10px">选中正文后可改写 / 扩写 / 缩写</div>
+          </div>
+        </div>
         <span class="muted xs">{{ dirty ? '未保存' : '已保存' }}</span>
       </div>
       <div class="ed-body" style="display:flex; flex-direction:column">
@@ -299,7 +312,7 @@ export default {
       mode: '', pasteText: '', candidate: null, candidateOpen: false, historyOpen: false, diffOpen: false,
       sceneStats: {}, preview: null, sceneQuery: '', selectedSceneIdx: 0,
       confirmOpen: false, busy: false,
-      aiMenuOpen: false, aiPop: { visible: false, top: 0, right: 60, text: '' },
+      aiMenuOpen: false, selectionText: '', aiPop: { visible: false, top: 0, right: 60, text: '' },
       diffData: null, diffScene: null,
       diffOld: [], diffNew: [],
     }
@@ -384,11 +397,21 @@ export default {
       const el = this.$refs.editor
       if (!el) return
       const text = el.value.substring(el.selectionStart, el.selectionEnd).trim()
+      this.selectionText = text
       if (text.length > 4) {
         this.aiPop = { visible: true, top: 140 + Math.random() * 40, right: 120, text }
       } else {
         this.aiPop.visible = false
       }
+    },
+    async aiMenuAction(mode) {
+      this.aiMenuOpen = false
+      const map = { rewrite: 'rewrite', shorten: 'polish', expand: 'continue', continue: 'continue', polish: 'polish' }
+      this.candidate = await v21.generateAiCandidate(this.episodeId, {
+        mode: map[mode] || 'polish',
+        selection: mode === 'continue' || mode === 'polish' ? '' : this.selectionText,
+      })
+      this.candidateOpen = true
     },
     async selectionAi(mode) {
       const map = { rewrite: 'polish', expand: 'continue', shorten: 'polish' }
