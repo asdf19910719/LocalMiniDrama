@@ -93,6 +93,10 @@ export const v21 = {
   generateAssetCandidate: (projectId, body) => post(`/projects/${projectId}/assets/generate-candidate`, body),
   useCandidate: (body) => post('/assets/use-candidate', body),
   deleteAsset: (type, assetId) => del(`/assets/${type}/${assetId}`),
+  // 项目素材：URL 上传候选（仅入候选，不改当前图；Task 1.2 将在后端实现该端点）
+  uploadAssetCandidate: (type, assetId, imageUrl) => post(`/assets/${type}/${assetId}/candidates/upload`, { imageUrl }),
+  // 项目素材恢复（后端已有 POST /assets/:type/:assetId/restore）
+  restoreAsset: (type, assetId) => post(`/assets/${type}/${assetId}/restore`),
   // 本集设定
   getEpisodeAssets: (episodeId) => get(`/episodes/${episodeId}/assets`),
   updateSelection: (episodeId, body) => put(`/episodes/${episodeId}/assets/selection`, body),
@@ -108,6 +112,8 @@ export const v21 = {
   editSegment: (shotId, segmentId, body) => patch(`/storyboards/${shotId}/segments/${segmentId}`, body),
   splitSegment: (shotId, segmentId, atSeconds) => post(`/storyboards/${shotId}/segments/${segmentId}/split`, { atSeconds }),
   mergeSegment: (shotId, segmentId) => post(`/storyboards/${shotId}/segments/${segmentId}/merge`),
+  // 分镜时段移动（后端 storyboardService.moveSegment(shotId, segmentId, direction)）
+  moveSegment: (shotId, segmentId, direction) => post(`/storyboards/${shotId}/segments/${segmentId}/move`, { direction }),
   getReferences: (shotId) => get(`/storyboards/${shotId}/references`),
   addReference: (shotId, body) => post(`/storyboards/${shotId}/references`, body),
   removeReference: (shotId, referenceId) => del(`/storyboards/${shotId}/references/${referenceId}`),
@@ -137,8 +143,12 @@ export const v21 = {
   // 成片
   getCut: (episodeId) => get(`/episodes/${episodeId}/cut`),
   composeEpisode: (episodeId, settings) => post(`/episodes/${episodeId}/cut/compose`, settings),
+  // 成片合成取消（后端已有 POST /episodes/:episodeId/cut/cancel）
+  cancelCutCompose: (episodeId) => post(`/episodes/${episodeId}/cut/cancel`),
   createWaiver: (body) => post('/cut/waivers', body),
   exportCut: (episodeId, format) => post(`/episodes/${episodeId}/cut/export`, { format }),
+  // V2.1 任务中心聚合列表（Task 1.6 将在后端实现 GET /api/v2/tasks）
+  listV21Tasks: (params) => get('/tasks', params),
   // 直接 V2.1 制作包导入
   previewImportPackage: (projectId, body) => post(`/projects/${projectId}/episodes/import-v21/preview`, body),
   confirmImportPackage: (projectId, body) => post(`/projects/${projectId}/episodes/import-v21/confirm`, body),

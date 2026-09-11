@@ -66,7 +66,8 @@ const router = createRouter({
       meta: { title: '项目素材' },
     },
     {
-      path: '/projects/:projectId/episodes/:episodeId/:stage(script|assets|storyboard|cut)',
+      // stage 值在路由层放开（不限定枚举）：未知值由 StudioShell 在运行时回退到该集 /script
+      path: '/projects/:projectId/episodes/:episodeId/:stage',
       name: 'studio-stage',
       component: () => import('@/views/productionStudio/studio/StudioShell.vue'),
       meta: { title: '制作' },
@@ -129,6 +130,12 @@ const router = createRouter({
     },
     // 旧四阶段前制作页与旧画布已整体删除：不注册旧路由、不提供回退跳转
     // （迁移矩阵 §2：开发期书签失效不构成产品兼容需求）。
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/productionStudio/NotFoundView.vue'),
+      meta: { title: '页面不存在' },
+    },
   ],
 })
 

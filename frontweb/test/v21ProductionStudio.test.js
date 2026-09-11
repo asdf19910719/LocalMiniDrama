@@ -11,7 +11,9 @@ const exists = (p) => fs.existsSync(path.join(root, p))
 test('canonical 路由：默认 /projects，单集四阶段，旧制作页路由删除', () => {
   const router = read('src/router/index.js')
   assert.match(router, /path: '\/', redirect: '\/projects'/)
-  assert.match(router, /:stage\(script\|assets\|storyboard\|cut\)/)
+  assert.match(router, /episodes\/:episodeId\/:stage\b/, '单集四阶段路由应接受任意 stage 值（未知值由 StudioShell 运行时回退）')
+  assert.match(router, /pathMatch\(\.\*\)\*/, '应有 catch-all 路由兜底未知路径')
+  assert.match(router, /NotFoundView/, 'catch-all 路由应指向 NotFoundView')
   for (const legacy of ['FilmList', 'DramaDetail', 'FilmCreate', 'DramaCanvas']) {
     assert.doesNotMatch(router, new RegExp(legacy), `路由不得引用旧页面 ${legacy}`)
     assert.equal(exists(`src/views/${legacy}.vue`), false, `旧页面 ${legacy}.vue 应已删除`)
@@ -40,6 +42,8 @@ test('单集阶段导航：剧本/设定/分镜/成片', () => {
   assert.match(shell, /设定/)
   assert.match(shell, /分镜/)
   assert.match(shell, /成片/)
+  assert.match(shell, /\$router\.replace/, '未知 stage 应回退跳转到该集 /script')
+  assert.match(shell, /正在打开剧本阶段/, '未知 stage 替换跳转生效前应有占位兜底')
 })
 
 test('本集设定：三 Tab 引用投影 + 进入分镜即时导航 + readiness 状态条', () => {

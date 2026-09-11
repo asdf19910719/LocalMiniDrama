@@ -32,7 +32,8 @@
     </nav>
 
     <div class="studio-body">
-      <component :is="stageComponent" :project-id="projectId" :episode-id="episodeId" @refresh="loadEpisode" />
+      <component v-if="stageValid" :is="stageComponent" :project-id="projectId" :episode-id="episodeId" @refresh="loadEpisode" />
+      <div v-else class="stage-fallback muted">正在打开剧本阶段…</div>
     </div>
   </div>
 </template>
@@ -67,6 +68,7 @@ export default {
     projectId() { return this.$route.params.projectId },
     episodeId() { return this.$route.params.episodeId },
     stage() { return this.$route.params.stage || 'script' },
+    stageValid() { return STAGES.some((s) => s.id === this.stage) },
     navStages() {
       if (this.nav.stages.length > 0) {
         return this.nav.stages.map((s) => ({ ...s, component: undefined }))
@@ -80,6 +82,13 @@ export default {
   },
   watch: {
     stage() { this.loadNav() },
+  },
+  created() {
+    // 规格 §3.1 要求未知 stage“回退到该集最近有效阶段”，此处最小实现统一回退到该集 /script；
+    // 替换跳转生效前，模板中的“正在打开剧本阶段…”占位负责兜底渲染。
+    if (!this.stageValid) {
+      this.$router.replace(`/projects/${this.projectId}/episodes/${this.episodeId}/script`)
+    }
   },
   mounted() { this.loadEpisode(); this.loadNav() },
   methods: {
@@ -105,4 +114,5 @@ export default {
 <style scoped>
 .studio { display: flex; flex-direction: column; height: 100vh; }
 .studio-body { flex: 1; display: flex; min-height: 0; }
+.stage-fallback { flex: 1; display: flex; align-items: center; justify-content: center; }
 </style>

@@ -289,7 +289,7 @@ export default {
     async confirmRename() {
       if (!this.renameTarget) return
       try {
-        await v21.renameEpisode(this.renameTarget.id, { title: this.renameTitle })
+        await v21.renameEpisode(this.renameTarget.id, this.renameTitle)
         this.renameTarget = null
         this.load()
       } catch (e) {
