@@ -149,3 +149,19 @@ test('retry：失败/取消任务按原输入快照创建新 attempt，不复用
   const result = await provider.run(second.taskId);
   assert.ok(fs.existsSync(result.artifactPath));
 });
+
+test('C3：run 支持可选 delayMs 演示运行态（进度推进后完成）', async () => {
+  const { createMockProvider } = require('../src/v21/mockProvider.js');
+  const { db } = setup();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'v21mock-delay-'));
+  const provider = createMockProvider({ db, log, storageDir: tmp });
+  const { taskId } = provider.submit({ kind: 'image', input: { prompt: 'p', delayMs: 250 } });
+  const started = Date.now();
+  const p = provider.run(taskId);
+  const mid = provider.getTask(taskId);
+  assert.equal(mid.status, 'running', '延迟期间任务处于 running');
+  await p;
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed >= 200, `至少等待 delayMs（实际 ${elapsed}ms）`);
+  assert.equal(provider.getTask(taskId).status, 'completed');
+});

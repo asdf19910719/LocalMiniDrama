@@ -11,6 +11,10 @@
       <svg style="width:14px;height:14px"><use href="#i-check-c"/></svg>素材已准备
       <span class="xs muted" v-if="snapshotAt"> · 快照 {{ snapshotAt }}</span>
     </div>
+    <div class="notice-strip warn" v-if="notice">
+      <svg style="width:14px;height:14px"><use href="#i-warn"/></svg>{{ notice }}
+      <span class="act" style="cursor:pointer; margin-left:auto; color:var(--muted)" @click="notice = ''">关闭</span>
+    </div>
 
     <div v-if="shots.length === 0" class="empty-box">
       <p class="muted">本集还没有分镜</p>
@@ -188,6 +192,17 @@
             <span v-else-if="previewCandidate" class="src badge outline" style="height:22px">候选 · 预览中</span>
           </div>
           <div class="grp-t" style="margin:0">候选胶片条</div>
+          <!-- 进行中任务（C3：异步轮询 + 取消） -->
+          <div v-if="activeVideoTasks.length" class="col" style="gap:6px">
+            <div v-for="t in activeVideoTasks" :key="t.taskId" class="row" style="gap:8px; align-items:center">
+              <span class="xs mono" style="flex:0 0 auto; width:70px">{{ shortId(t.taskId) }}</span>
+              <div class="grow" style="height:6px; border-radius:999px; background:var(--panel2); overflow:hidden">
+                <div :style="{ width: (t.progress || 0) + '%', height: '100%', background: t.status === 'failed' ? 'var(--danger)' : 'var(--info)', transition: 'width .6s' }"></div>
+              </div>
+              <span class="xs" :style="{ color: t.status === 'failed' ? 'var(--danger)' : 'var(--info)' }">{{ taskStatusText(t) }}</span>
+              <button class="btn sm ghost" style="border:1px solid var(--line)" :disabled="t.cancelling" @click="cancelTask(t)">{{ t.cancelling ? '取消中…' : '取消' }}</button>
+            </div>
+          </div>
           <div class="film">
             <div v-for="c in videoCandidates" :key="c.candidateId" class="fcand" :class="{ cur: c.isAdopted }" @click="preview(c)">
               <div class="im" :class="c.isAdopted ? '' : 'ph'">
@@ -242,13 +257,13 @@
           <div class="kv" style="align-items:center"><span class="k">候选数量</span>
             <span class="row" style="gap:10px">
               <span class="seg">
-                <span v-for="n in 3" :key="n" :class="{ on: videoCount === n }" @click="videoCount = n">{{ n }}</span>
+                <span v-for="n in 3" :key="n" :class="{ on: videoCount === n }" @click="setVideoCount(n)">{{ n }}</span>
               </span>
               <span class="muted xs">费用按数量乘算 · 候选并行提交</span>
             </span>
           </div>
           <div class="divider" style="margin:10px 0"></div>
-          <div class="kv"><span class="k">通道 / 模型</span><span class="v">mock 本地通道 · 确定性输出</span></div>
+          <div class="kv"><span class="k">通道 / 模型</span><span class="v">{{ sheetChannelText }}</span></div>
           <div class="kv"><span class="k">输出时长</span><span class="v">{{ current.duration }}s · {{ segments.length }} 个时段</span></div>
           <div class="kv"><span class="k">引用素材</span>
             <span class="row" style="gap:6px; flex-wrap:wrap">
@@ -267,12 +282,18 @@
           <div class="divider" style="margin:10px 0"></div>
           <div class="row" style="background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:10px 14px">
             <div class="grow">
-              <div class="row"><b style="font-size:14px">mock 本地执行 · ¥0</b><span class="badge outline">不产生 API 费用</span></div>
-              <div class="xs muted" style="margin-top:3px">预计耗时 1–2 分钟（非承诺值） · 失败时其余任务继续 · 成功只追加候选，不自动采用</div>
+              <div class="row">
+                <b style="font-size:14px">{{ sheetCostTitle }}</b>
+                <span class="badge outline">{{ sheetQuote?.channel === 'real' ? '真实通道' : '不产生 API 费用' }}</span>
+              </div>
+              <div class="xs muted" style="margin-top:3px">{{ sheetQuote?.estimatedTime || '预计耗时 1–2 分钟（非承诺值）' }} · 失败时其余任务继续 · 成功只追加候选，不自动采用</div>
             </div>
           </div>
         </div>
         <div class="modal-f">
+          <label class="xs muted" style="display:flex; align-items:center; gap:5px; margin-right:auto">
+            <input type="checkbox" v-model="sheetDemoDelay"> 演示运行态（mock 延迟 6s）
+          </label>
           <button class="btn ghost" @click="videoSheetOpen = false">取消</button>
           <button class="btn primary" :disabled="busy" @click="submitVideo"><svg><use href="#i-film"/></svg>创建 {{ videoCount }} 个任务</button>
         </div>
@@ -440,6 +461,9 @@ import v21 from '@/v21/api.js'
 export default {
   name: 'StoryboardStage',
   props: { projectId: String, episodeId: String },
+  beforeUnmount() {
+    if (this.pollTimer) clearInterval(this.pollTimer)
+  },
   data() {
     return {
       shots: [], scenes: [], sceneFilter: 'all', currentShotId: null, current: null,
@@ -447,6 +471,7 @@ export default {
       segments: [], imagePrompt: { text: '', manual: false }, imageCandidates: [],
       h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0, missing: [], staleShots: [] },
       videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1,
+      activeVideoTasks: [], pollTimer: null, sheetQuote: null, sheetDemoDelay: false, notice: '',
       generatingImage: false, readiness: { status: 'checking' },
       frameChaining: { state: 'none', stateLabel: '首镜' },
       trackFilter: 'all', moreOpen: false, batchOpen: false, batch: {}, batchResult: null, busy: false,
@@ -495,6 +520,22 @@ export default {
     },
     quote() {
       return { count: this.videoCount }
+    },
+    sheetChannelText() {
+      const q = this.sheetQuote
+      if (!q) return '读取通道中…'
+      if (q.channel === 'real') return `${q.provider}${q.model ? ' · ' + q.model : ''}${q.h3 ? ' · H3' : ''}`
+      return 'mock 本地通道 · 确定性输出'
+    },
+    sheetCostTitle() {
+      const q = this.sheetQuote
+      if (!q) return '生成报价'
+      const cost = q.estimatedCost || {}
+      if (q.channel === 'real') {
+        const price = cost.estimated != null ? `¥${(Number(cost.estimated) * this.videoCount).toFixed(2)} · ${cost.currency || 'CNY'}` : (cost.note || 'Provider 未返回价格')
+        return `${q.provider} 执行 · ${price}`
+      }
+      return 'mock 本地执行 · ¥0'
     },
     assetSlotLabel() {
       if (this.assetPreviewRefIndex < 0) return '未在本镜引用'
@@ -675,24 +716,82 @@ export default {
       this.h3Dirty = false
       this.refreshGuard()
     },
-    openVideoSheet() {
-      this.videoSheetOpen = true
-    },
     async submitVideo() {
       this.videoSheetOpen = false
       this.busy = true
       try {
-        const submitted = await v21.submitVideo(this.currentShotId, { count: this.videoCount })
-        for (const task of submitted.tasks) {
-          try { await v21.completeVideoTask(task.taskId) } catch { /* 单任务失败不中断 */ }
-        }
-        await this.selectShot(this.currentShotId)
-        await this.load()
+        const submitted = await v21.submitVideo(this.currentShotId, { count: this.videoCount, delayMs: this.sheetDemoDelay ? 6000 : 0 })
+        // C3：异步轮询代替立即 complete——任务进入进行中列表，状态由轮询推进
+        this.activeVideoTasks = submitted.tasks.map((t) => ({ taskId: t.taskId, progress: 1, status: 'pending', message: '已提交' }))
+        this.startPolling()
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '提交失败'
       } finally {
         this.busy = false
       }
+    },
+    setVideoCount(n) {
+      this.videoCount = n
+      this.loadSheetQuote()
+    },
+    async loadSheetQuote() {
+      try {
+        this.sheetQuote = await v21.getVideoQuote(this.currentShotId, this.videoCount)
+      } catch {
+        this.sheetQuote = null
+      }
+    },
+    openVideoSheet() {
+      this.videoSheetOpen = true
+      this.loadSheetQuote()
+    },
+    startPolling() {
+      if (this.pollTimer) return
+      this.pollTimer = setInterval(async () => {
+        if (!this.activeVideoTasks.length) {
+          clearInterval(this.pollTimer)
+          this.pollTimer = null
+          return
+        }
+        let changed = false
+        for (const t of this.activeVideoTasks) {
+          if (t.done) continue
+          try {
+            const status = await v21.getVideoTaskStatus(t.taskId)
+            t.progress = status.progress || 0
+            t.status = status.videoStatus || status.status
+            t.message = status.message || ''
+            t.done = !!status.done
+            if (status.done) {
+              changed = true
+              if (status.ok) await this.selectShot(this.currentShotId)
+              else t.status = 'failed'
+            }
+          } catch { /* 下轮重试 */ }
+        }
+        if (changed) {
+          await this.load()
+          this.activeVideoTasks = this.activeVideoTasks.filter((t) => !t.done || t.status === 'failed')
+        }
+      }, 1500)
+    },
+    async cancelTask(t) {
+      t.cancelling = true
+      try {
+        await v21.cancelVideoTask(t.taskId, '用户取消')
+        t.status = 'cancelled'
+        t.done = true
+        this.activeVideoTasks = this.activeVideoTasks.filter((x) => x.taskId !== t.taskId)
+      } catch (e) {
+        t.message = e.message || '取消失败'
+      } finally {
+        t.cancelling = false
+      }
+    },
+    taskStatusText(t) {
+      if (t.status === 'failed') return '失败'
+      if (t.status === 'cancelled') return '已取消'
+      return `${t.progress || 0}%`
     },
     preview(candidate) {
       this.previewCandidate = candidate

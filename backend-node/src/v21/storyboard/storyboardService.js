@@ -1066,7 +1066,7 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
     return { canSubmit: checks.every((c) => c.ok), checks, shot };
   }
 
-  async function submitVideo(shotId, { count = 1, channelOptions = {} } = {}) {
+  async function submitVideo(shotId, { count = 1, delayMs = 0, channelOptions = {} } = {}) {
     const shot = requireShot(shotId);
     const guard = jointGuard(shotId);
     if (!guard.canSubmit) {
@@ -1095,7 +1095,7 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
         kind: 'video',
         ownerType: 'storyboard_video',
         ownerId: String(shotId),
-        input: { prompt: getH3Draft(shotId)?.text || '', durationSeconds: Math.max(0.5, Number(shot.duration) || 1) },
+        input: { prompt: getH3Draft(shotId)?.text || '', durationSeconds: Math.max(0.5, Number(shot.duration) || 1), delayMs: Math.min(30000, Math.max(0, Number(delayMs) || 0)) },
         cost: quote.estimatedCost,
       });
       tasks.push({ taskId: submitted.taskId, deduped: submitted.deduped });

@@ -180,6 +180,11 @@ function createMockProvider({ db, log = console, storageDir, ffmpegPath } = {}) 
       throw new Error(`任务 ${taskId} 状态为 ${task.status}，不能执行`);
     }
     mark(taskId, 'running', 20, 'mock 通道生成中');
+    // C3：可选延迟（GUI 演示运行态/异步轮询演示）；上限 30s，默认 0 不影响测试与正常使用
+    const delayMs = Math.min(30000, Math.max(0, Number(task.input?.delayMs) || 0));
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
     const kind = task.type === 'v21:mock-video' ? 'video' : 'image';
     let artifactPath;
     let extra = { channel: 'mock' };
