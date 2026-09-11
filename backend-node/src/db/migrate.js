@@ -482,6 +482,7 @@ function ensureAllColumns(database) {
     { name: 'local_path',   type: 'TEXT' },
     { name: 'file_size',    type: 'INTEGER' },
     { name: 'mime_type',    type: 'TEXT' },
+    { name: 'source_meta',  type: 'TEXT' },   // JSON: 来源媒体登记元数据 {sha256,mediaInfo,episodeId}（source-video 登记）
     { name: 'width',        type: 'INTEGER' },
     { name: 'height',       type: 'INTEGER' },
     { name: 'duration',     type: 'REAL' },

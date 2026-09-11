@@ -38,7 +38,7 @@ test('B3 从已有视频开始剪辑：目标集选择 + 许可确认 + 零生�
   assert.match(view, /本地路径/, '本地路径输入')
   assert.match(view, /合法使用权/, '许可确认')
   assert.match(view, /零生成/, '零生成合同明示')
-  assert.match(view, /stage\/cut/, '登记后跳转成片页')
+  assert.match(view, /episodes\/\$\{registeredEpisodeId\}\/cut/, '登记后跳转成片页（studio 路由为 :stage 单段，无 /stage 前缀）')
   const episodes = read('src/views/productionStudio/ProjectEpisodesView.vue')
   assert.doesNotMatch(episodes, /comingSoon\('从已有视频开始剪辑'\)/, '剧集页来源视频入口不再占位')
 })

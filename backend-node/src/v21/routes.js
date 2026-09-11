@@ -135,22 +135,62 @@ function createV21Router({ db, cfg, log }) {
     }));
   }));
 
-  // 从已有视频开始剪辑：登记来源媒体（零生成、零费用）
+  // 从已有视频开始剪辑：登记来源媒体（零生成、零费用）。
+  // episodeId 必传且服务端校验（存在 / 属于该项目 / 未软删）；可选 sha256（64 位十六进制）、
+  // fileSize（正整数，字节）、mediaInfo 写入 assets：file_size 列 + source_meta JSON（Task 4.7）。
   r.post('/projects/:id/episodes/source-video', wrap((req, res) => {
-    const { episodeId, name, url, localPath, fileSize, mimeType } = req.body || {};
+    const { episodeId, name, url, localPath, fileSize, mimeType, sha256, mediaInfo } = req.body || {};
     if (!name || (!url && !localPath)) {
       throw Object.assign(new Error('需要提供媒体名称与文件路径或 URL'), { status: 400, code: 'VALIDATION_ERROR' });
     }
+    if (episodeId === undefined || episodeId === null || episodeId === '') {
+      throw Object.assign(new Error('需要提供目标剧集 episodeId'), { status: 400, code: 'VALIDATION_ERROR' });
+    }
+    const targetEpisodeId = Number(episodeId);
+    if (!Number.isInteger(targetEpisodeId) || targetEpisodeId <= 0) {
+      throw Object.assign(new Error('episodeId 需为正整数'), { status: 400, code: 'VALIDATION_ERROR' });
+    }
+    const episode = db
+      .prepare('SELECT id, drama_id FROM episodes WHERE id = ? AND deleted_at IS NULL')
+      .get(targetEpisodeId);
+    if (!episode) {
+      throw Object.assign(new Error('目标剧集不存在或已删除'), { status: 404, code: 'NOT_FOUND' });
+    }
+    if (episode.drama_id !== Number(req.params.id)) {
+      throw Object.assign(new Error('目标剧集不属于该项目'), { status: 400, code: 'VALIDATION_ERROR' });
+    }
+    let sha256Norm = null;
+    if (sha256 !== undefined && sha256 !== null && String(sha256).trim() !== '') {
+      sha256Norm = String(sha256).trim().toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(sha256Norm)) {
+        throw Object.assign(new Error('sha256 需为 64 位十六进制字符串'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+    }
+    let fileSizeNorm = null;
+    if (fileSize !== undefined && fileSize !== null && fileSize !== '') {
+      fileSizeNorm = Number(fileSize);
+      if (!Number.isInteger(fileSizeNorm) || fileSizeNorm <= 0) {
+        throw Object.assign(new Error('fileSize 需为正整数'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+    }
+    const mediaInfoNorm =
+      mediaInfo === undefined || mediaInfo === null || String(mediaInfo).trim() === ''
+        ? null
+        : String(mediaInfo).trim();
     const now = new Date().toISOString();
+    const sourceMeta = JSON.stringify({ sha256: sha256Norm, mediaInfo: mediaInfoNorm, episodeId: targetEpisodeId });
     const info = db
       .prepare(
-        `INSERT INTO assets (drama_id, name, type, category, url, local_path, file_size, mime_type, created_at, updated_at)
-         VALUES (?, ?, 'video', 'source-video', ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO assets (drama_id, name, type, category, url, local_path, file_size, mime_type, source_meta, created_at, updated_at)
+         VALUES (?, ?, 'video', 'source-video', ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(req.params.id, name, url || null, localPath || null, fileSize || null, mimeType || null, now, now);
+      .run(req.params.id, name, url || null, localPath || null, fileSizeNorm, mimeType || null, sourceMeta, now, now);
     response.created(res, {
       assetId: Number(info.lastInsertRowid),
-      episodeId: episodeId || null,
+      episodeId: targetEpisodeId,
+      sha256: sha256Norm,
+      fileSize: fileSizeNorm,
+      mediaInfo: mediaInfoNorm,
       note: '来源媒体已登记；默认只读引用原文件，可进入短片时间线，不自动生成镜头。',
     });
   }));

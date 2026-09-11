@@ -12,6 +12,13 @@
         </span>
       </div>
 
+      <!-- 错误条：解析/确认失败可见，可保留输入重跑 -->
+      <div v-if="error" class="card pad" style="max-width:860px; border-color:var(--danger); display:flex; align-items:center; gap:10px">
+        <svg style="width:14px; height:14px; color:var(--danger)"><use href="#i-warn"/></svg>
+        <span class="small" style="color:var(--danger); flex:1">{{ error }}</span>
+        <button class="btn sm" :disabled="parsing" @click="preview">{{ parsing ? '解析中…' : '重新解析' }}</button>
+      </div>
+
       <!-- 阶段 1：粘贴/上传文本 -->
       <div v-if="phase === 0" class="card pad" style="max-width:760px">
         <b style="font-size:14px">粘贴小说或长文本</b>
@@ -57,12 +64,13 @@
         <div class="ch-row" v-for="ep in result.episodes" :key="ep.episodeId">
           <span class="badge outline">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
           <b class="ellipsis grow">{{ ep.title }}</b>
-          <button class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${ep.episodeId}/stage/script`)">打开剧本</button>
+          <button class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${ep.episodeId}/script`)">打开剧本</button>
         </div>
         <div class="ch-row" v-for="s in result.skipped" :key="'s' + s.index">
           <span class="badge warn">跳过</span>
           <span class="ellipsis grow">{{ s.title }} · {{ s.reason }}</span>
         </div>
+        <p class="xs muted" v-if="result.skipped.length" style="margin-top:10px">失败/跳过集可修改文本后重新解析（解析按整体进行，不支持逐章重试）。</p>
         <div class="row" style="margin-top:14px; justify-content:flex-end">
           <button class="btn primary" @click="$router.push(`/projects/${projectId}/episodes`)">返回剧集中心</button>
         </div>

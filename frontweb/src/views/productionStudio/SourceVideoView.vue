@@ -12,21 +12,22 @@
         </span>
       </div>
 
-      <!-- 阶段 1：选择目标集 -->
+      <!-- 阶段 1：选择目标集（复用空白剧集 或 创建第 N 集，与剧集页新建口径一致） -->
       <div v-if="phase === 0" class="card pad" style="max-width:640px">
         <b style="font-size:14px">选择目标剧集</b>
         <p class="muted small" style="margin:8px 0 12px">登记后可直接进入该集成片页开始剪辑；不自动生成任何镜头。</p>
         <label class="col" style="gap:4px">
-          <span class="xs muted">目标集（可为空白剧集或下一集）</span>
-          <select class="input" style="width:100%" v-model="episodeId">
-            <option :value="''" disabled>选择剧集…</option>
-            <option v-for="ep in episodes" :key="ep.id" :value="ep.id">
-              E{{ String(ep.episodeNumber).padStart(2, '0') }} · {{ ep.title || '未命名' }}{{ ep.isBlank ? '（空白）' : '' }}
+          <span class="xs muted">目标集（复用空白剧集，或创建下一集）</span>
+          <select class="input" style="width:100%" v-model="targetChoice">
+            <option value="" disabled>选择剧集…</option>
+            <option value="create">{{ createOptionLabel }}</option>
+            <option v-for="b in blankEpisodes" :key="b.id" :value="String(b.id)">
+              复用 E{{ String(b.episodeNumber).padStart(2, '0') }} · {{ b.title || '未命名' }}（空白）
             </option>
           </select>
         </label>
         <div class="row" style="margin-top:14px; justify-content:flex-end">
-          <button class="btn primary" :disabled="!episodeId" @click="phase = 1">下一步</button>
+          <button class="btn primary" :disabled="!targetChoice" @click="phase = 1">下一步</button>
         </div>
       </div>
 
@@ -42,9 +43,23 @@
           <span class="xs muted">本地路径</span>
           <input class="input" style="width:100%" v-model="localPath" placeholder="D:\footage\ep01.mp4">
         </label>
-        <label class="col" style="gap:4px">
+        <label class="col" style="gap:4px; margin-bottom:10px">
           <span class="xs muted">或 URL</span>
           <input class="input" style="width:100%" v-model="url" placeholder="https:// …">
+        </label>
+        <div class="row" style="gap:10px; margin-bottom:10px">
+          <label class="col" style="gap:4px; flex:1">
+            <span class="xs muted">SHA-256（可选）</span>
+            <input class="input" style="width:100%" v-model="sha256" placeholder="可留空；用于后续媒体一致性校验">
+          </label>
+          <label class="col" style="gap:4px" title="按 MB 填写，登记时换算为字节">
+            <span class="xs muted">文件大小（MB，可选）</span>
+            <input class="input" type="number" min="0" step="0.1" style="width:130px" v-model.number="fileSizeMb" placeholder="如：700">
+          </label>
+        </div>
+        <label class="col" style="gap:4px">
+          <span class="xs muted">媒体信息（可选）</span>
+          <input class="input" style="width:100%" v-model="mediaInfo" placeholder="如：1920x1080 · 03:24 · H.264">
         </label>
         <label class="row" style="margin-top:12px; gap:8px; align-items:flex-start">
           <input type="checkbox" v-model="licensed">
@@ -53,7 +68,7 @@
         <div class="row" style="margin-top:14px; justify-content:flex-end; gap:8px">
           <button class="btn ghost" @click="phase = 0">上一步</button>
           <button class="btn primary" :disabled="!name.trim() || (!localPath.trim() && !url.trim()) || !licensed || registering" @click="register">
-            {{ registering ? '登记中…' : '登记并进入成片页' }}
+            {{ registering ? '登记中…' : '完成登记' }}
           </button>
         </div>
       </div>
@@ -64,10 +79,10 @@
           <span class="badge ok">已登记</span>
           <b style="font-size:14px">{{ name }}</b>
         </div>
-        <p class="muted small">来源媒体已登记（零生成、零费用）。可直接进入短片时间线剪辑；原文件保持只读。</p>
+        <p class="muted small">已登记，请在成片页关联使用。来源媒体零生成、零费用；原文件保持只读。</p>
         <div class="row" style="margin-top:14px; justify-content:flex-end; gap:8px">
           <button class="btn" @click="$router.push(`/projects/${projectId}/episodes`)">返回剧集中心</button>
-          <button class="btn primary" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/stage/cut`)">进入成片页</button>
+          <button class="btn primary" @click="$router.push(`/projects/${projectId}/episodes/${registeredEpisodeId}/cut`)">进入成片页</button>
         </div>
       </div>
 
@@ -83,24 +98,36 @@ export default {
   name: 'SourceVideoView',
   data() {
     return {
-      phase: 0, episodes: [], episodeId: '',
+      phase: 0,
+      blankEpisodes: [], targetChoice: '', nextEpisodeNumber: null,
       name: '', localPath: '', url: '', licensed: false,
-      registering: false, error: '',
+      sha256: '', fileSizeMb: null, mediaInfo: '',
+      registering: false, error: '', registeredEpisodeId: null,
     }
   },
   computed: {
     projectId() {
       return this.$route.params.projectId
     },
+    createOptionLabel() {
+      return this.nextEpisodeNumber
+        ? `创建第 ${this.nextEpisodeNumber} 集（空白草稿）`
+        : '创建下一集（空白草稿）'
+    },
   },
   async mounted() {
+    // 与剧集页「新建剧集」选择器同口径：空白集复用 + 创建第 N 集（N = 最大集号 + 1）
     try {
-      const res = await v21.listEpisodes(this.projectId, {})
-      this.episodes = (res.items || []).map((ep) => ({ ...ep, isBlank: ep.status === 'not_started' }))
-      const blank = this.episodes.find((ep) => ep.isBlank)
-      if (blank) this.episodeId = blank.id
+      const [blanks, all] = await Promise.all([
+        v21.listBlankEpisodes(this.projectId),
+        v21.listEpisodes(this.projectId, { sort: 'episode' }),
+      ])
+      this.blankEpisodes = blanks.items || []
+      this.nextEpisodeNumber = Math.max(0, ...(all.items || []).map((i) => Number(i.episodeNumber) || 0)) + 1
+      this.targetChoice = 'create'
     } catch {
-      this.episodes = []
+      this.nextEpisodeNumber = null
+      this.targetChoice = 'create' // 列表失败时降级为服务端默认集号
     }
   },
   methods: {
@@ -108,12 +135,22 @@ export default {
       this.registering = true
       this.error = ''
       try {
-        await v21.registerSourceVideo(this.projectId, {
-          episodeId: this.episodeId || null,
+        let targetEpisodeId = Number(this.targetChoice)
+        if (this.targetChoice === 'create') {
+          // 创建新集 = 先 createEpisode 再登记（集号冲突由服务端 409 拦截）
+          const created = await v21.createEpisode(this.projectId, { episodeNumber: this.nextEpisodeNumber })
+          targetEpisodeId = created.id
+        }
+        const res = await v21.registerSourceVideo(this.projectId, {
+          episodeId: targetEpisodeId,
           name: this.name.trim(),
           localPath: this.localPath.trim() || null,
           url: this.url.trim() || null,
+          sha256: this.sha256.trim() || null,
+          fileSize: this.fileSizeMb ? Math.round(Number(this.fileSizeMb) * 1024 * 1024) : null,
+          mediaInfo: this.mediaInfo.trim() || null,
         })
+        this.registeredEpisodeId = res.episodeId
         this.phase = 2
       } catch (err) {
         this.error = err.message || '登记失败'
