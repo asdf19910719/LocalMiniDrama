@@ -64,21 +64,48 @@
         <div v-else-if="active === 'cleanup'" class="card pad">
           <b style="font-size:14px">物理清理（dry-run）</b>
           <p class="muted small" style="margin:8px 0 12px">只能从 dry-run 清单进入；有引用、任务占用或路径越界的文件会被阻断。</p>
-          <button class="btn primary" @click="dryRun = true">生成 dry-run 清单</button>
-          <template v-if="dryRun">
+          <button class="btn primary" :disabled="cleanupScanning" @click="runCleanupDryRun">{{ cleanupScanning ? '扫描中…' : '生成 dry-run 清单' }}</button>
+          <p v-if="cleanupError" class="small" style="color:var(--danger);margin-top:8px">扫描失败：{{ cleanupError }}</p>
+          <template v-if="cleanupResult">
             <div class="divider"></div>
-            <div class="issue"><span class="badge ok">可清理</span><span class="ellipsis mono xs">tmp/preview-shot-01.png · 0.2 MB</span><span class="act">勾选</span></div>
-            <div class="issue"><span class="badge danger">阻断</span><span class="ellipsis mono xs">storage/character-03.png · 有引用（2 个候选）</span></div>
-            <div class="issue"><span class="badge danger">阻断</span><span class="ellipsis mono xs">storage/shot-05.mp4 · 任务占用</span></div>
+            <div v-for="f in cleanupResult.files" :key="f.path" class="issue">
+              <span v-if="f.eligible" class="badge ok">可清理</span>
+              <span v-else class="badge danger">阻断</span>
+              <span class="ellipsis mono xs">{{ f.path }} · {{ formatBytes(f.sizeBytes) }}<template v-if="!f.eligible"> · {{ f.reason }}</template></span>
+              <label v-if="f.eligible" class="act"><input type="checkbox" :value="f.path" v-model="cleanupSelected"> 勾选</label>
+            </div>
             <div class="divider"></div>
             <div class="row">
-              <span class="small t2">预计回收 0.2 MB · 可清理 1 个文件</span>
+              <span class="small t2">预计回收 {{ formatBytes(cleanupResult.summary.reclaimableBytes) }} · 可清理 {{ cleanupResult.summary.eligible }} 个文件</span>
               <div class="spacer"></div>
-              <input class="input" style="width:170px" v-model="cleanupConfirmText" placeholder='输入「永久清理」'>
-              <button class="btn danger" :disabled="cleanupConfirmText !== '永久清理'" @click="secondConfirm">永久清理</button>
+              <button class="btn danger" :disabled="!cleanupSelected.length" @click="cleanupModalOpen = true">永久清理…</button>
             </div>
-            <p v-if="cleanupDone" class="ok-t small" style="margin-top:10px">已删除 1 个文件 · 报告已保留（含未删除与失败原因）。</p>
+            <template v-if="cleanupDone">
+              <p class="ok-t small" style="margin-top:10px">已删除 {{ cleanupDone.deleted.length }} 个文件<template v-if="cleanupDone.failed.length"> · 未删除 {{ cleanupDone.failed.length }} 个（含原因）</template>。</p>
+              <p v-if="cleanupDone.failed.length" class="small t2" style="margin-top:4px">
+                <span v-for="f in cleanupDone.failed" :key="f.path" class="ellipsis" style="display:block">{{ f.path }} · {{ f.reason }}</span>
+              </p>
+              <p class="muted xs" style="margin-top:6px">报告：{{ cleanupDone.reportPath }}</p>
+            </template>
           </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- 物理清理最终确认 Modal（不可恢复操作走专用容器） -->
+    <div v-if="cleanupModalOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:480px">
+        <div class="modal-h">
+          <h3>确认永久清理</h3>
+          <button class="icon-btn" @click="cleanupModalOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small">即将物理删除 <b>{{ cleanupSelected.length }}</b> 个文件（{{ formatBytes(selectedBytes) }}），此操作不可恢复。</p>
+          <input class="input" style="width:100%;margin-top:12px" v-model="cleanupConfirmText" placeholder='输入「永久清理」以确认'>
+        </div>
+        <div class="modal-f">
+          <button class="btn" @click="cleanupModalOpen = false">取消</button>
+          <button class="btn danger" :disabled="cleanupConfirmText !== '永久清理' || cleanupExecuting" @click="executeCleanup">{{ cleanupExecuting ? '执行中…' : '确认永久清理' }}</button>
         </div>
       </div>
     </div>
@@ -92,10 +119,12 @@ export default {
   name: 'DataToolsView',
   data() {
     return {
-      active: 'integrity', scanning: false, checked: false, dryRun: false,
+      active: 'integrity', scanning: false, checked: false,
       integrity: { items: [], summary: { ok: 0, warn: 0, error: 0 } },
       scanError: '',
-      cleanupConfirmText: '', cleanupDone: false,
+      cleanupScanning: false, cleanupError: '', cleanupResult: null,
+      cleanupSelected: [], cleanupConfirmText: '', cleanupModalOpen: false,
+      cleanupExecuting: false, cleanupDone: null,
       tools: [
         { id: 'integrity', label: '完整性检查' },
         { id: 'relocation', label: '媒体重定位' },
@@ -110,7 +139,21 @@ export default {
       },
     }
   },
+  computed: {
+    selectedBytes() {
+      if (!this.cleanupResult) return 0
+      return this.cleanupResult.files
+        .filter((f) => this.cleanupSelected.includes(f.path))
+        .reduce((sum, f) => sum + f.sizeBytes, 0)
+    },
+  },
   methods: {
+    formatBytes(n) {
+      const num = Number(n) || 0
+      if (num >= 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`
+      if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`
+      return `${num} B`
+    },
     async runCheck() {
       this.scanning = true
       this.scanError = ''
@@ -123,6 +166,33 @@ export default {
         this.scanning = false
       }
     },
+    async runCleanupDryRun() {
+      this.cleanupScanning = true
+      this.cleanupError = ''
+      this.cleanupSelected = []
+      this.cleanupDone = null
+      try {
+        this.cleanupResult = await v21.cleanupDryRun()
+      } catch (err) {
+        this.cleanupError = err.message || '未知错误'
+      } finally {
+        this.cleanupScanning = false
+      }
+    },
+    async executeCleanup() {
+      this.cleanupExecuting = true
+      try {
+        this.cleanupDone = await v21.cleanupExecute(this.cleanupSelected, this.cleanupConfirmText)
+        this.cleanupModalOpen = false
+        this.cleanupConfirmText = ''
+        await this.runCleanupDryRun()
+      } catch (err) {
+        this.cleanupError = err.message || '未知错误'
+        this.cleanupModalOpen = false
+      } finally {
+        this.cleanupExecuting = false
+      }
+    },
     recoveryLabel(key) {
       return (key && this.recoveries[key] && this.recoveries[key].label) || ''
     },
@@ -131,11 +201,6 @@ export default {
       if (!target) return
       if (target.tool) this.active = target.tool
       else if (target.route) this.$router.push(target.route)
-    },
-    secondConfirm() {
-      if (window.confirm('物理清理不可恢复。确认执行永久清理？')) {
-        this.cleanupDone = true
-      }
     },
     comingSoon(name) {
       alert(`${name}将在本迭代内启用`)

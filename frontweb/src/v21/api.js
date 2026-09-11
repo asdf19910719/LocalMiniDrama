@@ -36,6 +36,8 @@ async function del(url) {
 export const v21 = {
   // 数据工具（完整性检查 / 物理清理 / 媒体重定位）
   runIntegrity: () => post('/datatools/integrity/run'),
+  cleanupDryRun: () => post('/datatools/cleanup/dry-run'),
+  cleanupExecute: (items, confirmText) => post('/datatools/cleanup/execute', { items, confirmText }),
   // 项目
   listProjects: (params) => get('/projects', params),
   createProject: (body) => post('/projects', body),

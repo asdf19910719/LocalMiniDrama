@@ -546,6 +546,41 @@ function createV21Router({ db, cfg, log }) {
   r.post('/datatools/integrity/run', wrap((req, res) => {
     response.success(res, integrity.run());
   }));
+  const { createCleanupService } = require('./datatools/cleanupService.js');
+  const cleanup = createCleanupService({ db, log, storageRoot: assetStorage });
+  r.post('/datatools/cleanup/dry-run', wrap((req, res) => {
+    response.success(res, cleanup.dryRun());
+  }));
+  r.post('/datatools/cleanup/execute', wrap((req, res) => {
+    cleanup.execute(req.body?.items || [], req.body?.confirmText).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  const { createRelocationService } = require('./datatools/relocationService.js');
+  const relocation = createRelocationService({ db, log, storageRoot: assetStorage });
+  r.post('/datatools/relocation/scan', wrap((req, res) => {
+    response.success(res, relocation.scan(req.body?.dir));
+  }));
+  r.post('/datatools/relocation/confirm', wrap((req, res) => {
+    response.success(res, relocation.confirm(req.body?.items || []));
+  }));
+
+  const { createCleanupService } = require('./datatools/cleanupService.js');
+  const cleanup = createCleanupService({ db, log, storageRoot: assetStorage });
+  r.post('/datatools/cleanup/dry-run', wrap((req, res) => {
+    response.success(res, cleanup.dryRun());
+  }));
+  r.post('/datatools/cleanup/execute', wrap((req, res) => {
+    cleanup.execute(req.body?.items || [], req.body?.confirmText).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
 
   return r;
 }
