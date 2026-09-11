@@ -1,5 +1,7 @@
 const crypto = require('node:crypto');
 
+const settingsService = require('./settingsService');
+
 const CHANNELS = new Set(['api', 'chatgpt_web']);
 const TARGET_TYPES = new Set([
   'character',
@@ -60,7 +62,10 @@ function assertTargetType(targetType) {
 function getDefaultChannel(db, dramaId) {
   const row = db.prepare('SELECT metadata FROM dramas WHERE id=? AND deleted_at IS NULL').get(Number(dramaId));
   if (!row) throw new Error('Drama not found');
-  const channel = parseMetadata(row.metadata).default_image_generation_channel || 'api';
+  // 解析顺序：项目默认（dramas.metadata）→ 全局默认（global_settings KV，Task 4.2 AI 配置页写入）→ 安装默认 api
+  const channel = parseMetadata(row.metadata).default_image_generation_channel
+    || settingsService.getGlobalSetting(db, 'default_image_generation_channel', '')
+    || 'api';
   return CHANNELS.has(channel) ? channel : 'api';
 }
 

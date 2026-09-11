@@ -637,6 +637,28 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, settingsDefaults.updateDefaults(req.body || {}));
   }));
 
+  // ---- AI 配置（Task 4.2，§13.3：Provider 脱敏聚合 / 默认生图通道 / 连接测试） ----
+  const { createAiConfigOverviewService } = require('./aiConfig/aiConfigOverviewService.js');
+  const aiConfigOverview = createAiConfigOverviewService({ db, log });
+  r.get('/ai-config/overview', wrap((req, res) => {
+    response.success(res, aiConfigOverview.getOverview(req.query.projectId));
+  }));
+  r.put('/ai-config/image-default', wrap((req, res) => {
+    response.success(res, aiConfigOverview.setImageDefault(req.body || {}));
+  }));
+  r.post('/ai-config/providers/:id/test', wrap((req, res) => {
+    aiConfigOverview.testProviderConnection(req.params.id, req.body || {}).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) {
+        res.status(err.status).json({ error: { code: err.code, message: err.message, hint: err.hint } });
+      } else {
+        log.error?.('v2 ai-config test error', { error: err.message });
+        res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+      }
+    });
+  }));
+
   // ---- 数据工具（A2/A3/A5） ----
   const { createIntegrityService } = require('./datatools/integrityService.js');
   const integrity = createIntegrityService({ db, log, storageRoot: assetStorage });

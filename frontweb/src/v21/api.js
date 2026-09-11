@@ -190,6 +190,26 @@ export const v21 = {
   previewImport: (taskId, resultJson, options = {}) => post(`/external-ai/tasks/${taskId}/import/preview`, { resultJson, ...options }),
   confirmImport: (taskId, resultJson, options = {}) => post(`/external-ai/tasks/${taskId}/import/confirm`, { resultJson, ...options }),
   cancelExternalTask: (taskId) => post(`/external-ai/tasks/${taskId}/cancel`),
+  // AI 配置（§13.3 最小闭环：Provider 脱敏聚合 / 默认生图通道 / 连接测试）
+  aiConfigOverview: (projectId) => get('/ai-config/overview', projectId != null ? { projectId } : undefined),
+  setImageDefault: (body) => put('/ai-config/image-default', body),
+  testProviderConnection: (id, body) => post(`/ai-config/providers/${id}/test`, body || {}),
+  // V1 复用：编辑写入与导出聚合（api_key 只在编辑回传、从不展示；导出在前端剔除密钥字段）
+  listV1AiConfigs: async () => {
+    try {
+      const data = unwrap(await axios.get('/api/v1/ai-configs'))
+      return Array.isArray(data) ? data : (data?.items || [])
+    } catch (e) { throw toError(e) }
+  },
+  updateV1AiConfig: async (id, body) => {
+    try { return unwrap(await axios.put(`/api/v1/ai-configs/${id}`, body)) } catch (e) { throw toError(e) }
+  },
+  getV1AiConfig: async (id) => {
+    try { return unwrap(await axios.get(`/api/v1/ai-configs/${id}`)) } catch (e) { throw toError(e) }
+  },
+  getImageGenerationSettings: async () => {
+    try { return unwrap(await axios.get('/api/v1/settings/image-generation')) } catch (e) { throw toError(e) }
+  },
 }
 
 export default v21
