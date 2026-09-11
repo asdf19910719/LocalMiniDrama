@@ -30,19 +30,10 @@ const episodePackageRoutes = require('./episodePackage');
 const videoUpscaleRoutes = require('./videoUpscale');
 const styleRoutes = require('./styles');
 const { createVideoUpscaleRuntime } = require('../services/videoUpscale/videoUpscaleRuntime');
-const { loadRegistry } = require('../director/workflowRegistry');
-const { createComfyUIClient } = require('../director/comfyuiClient');
-const { createGpuMutex } = require('../director/gpuMutex');
 const { createDirectorJobRunner } = require('../director/directorJobRunner');
 const { reconcileRunningJobs } = require('../director/directorJobService');
-const {
-  createComfyUIVideoProvider,
-  createVideoProviderRegistry,
-} = require('../services/videoProviders');
-const { createUnifiedVideoGenerationService } = require('../services/unifiedVideoGenerationService');
 const { createPreparedVideoGenerationService } = require('../services/preparedVideoGenerationService');
 const { getFfmpegPath } = require('../utils/ffmpegPath');
-const { stageReferenceAssets, cleanupReferenceAssets } = require('../services/videoProviders/referenceAssetStaging');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -86,59 +77,25 @@ function setupRouter(cfg, db, log) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
-  const directorRegistry = loadRegistry(cfg.director.workflow_registry_path);
-  // H3 提示词草稿路由与 unified 服务共用同一注册表实例(Task 16 交接①),
-  // 保证草稿快照/指纹与候选生成的解析形状一致,否则门禁恒判 stale。
-  const storyboards = storyboardRoutes(db, log, {
-    workflowRegistry: directorRegistry,
-    allowExperimental: cfg.director.allow_experimental,
-  });
-  const directorArtifactRoot = path.join(process.cwd(), 'data', 'director-artifacts');
-  const directorAllowedRoots = cfg.director.allowed_local_roots.map((root) => path.resolve(root));
-  const createDirectorComfyClient = (baseUrl) => createComfyUIClient({
-    baseUrl,
-    outputDir: directorArtifactRoot,
-    allowExperimental: cfg.director.allow_experimental,
-  });
-  const directorComfyClient = createDirectorComfyClient(
-    process.env.DIRECTOR_COMFYUI_URL || 'http://127.0.0.1:8188',
-  );
-  const comfyInputDir = process.env.DIRECTOR_COMFYUI_INPUT_DIR || null;
-  const videoGpuMutex = createGpuMutex();
-  const videoProviderRegistry = createVideoProviderRegistry({
-    comfyui: createComfyUIVideoProvider({
-      registry: directorRegistry,
-      comfyClient: directorComfyClient,
-      createComfyClient: createDirectorComfyClient,
-      gpuMutex: videoGpuMutex,
-      referenceStager: (refs, context) => stageReferenceAssets(refs, {
-        allowedRoots: directorAllowedRoots,
-        inputDir: comfyInputDir,
-        minReferences: context?.referenceLimits?.min ?? 0,
-        maxReferences: context?.referenceLimits?.max ?? 9,
-        remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
-        client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
-        remote: !comfyInputDir,
-      }),
-      referenceCleanup: (staged, context) => cleanupReferenceAssets(staged, {
-        inputDir: comfyInputDir,
-        remote: !comfyInputDir,
-        remoteKey: String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim(),
-        client: createDirectorComfyClient(String(context?.snapshot?.baseUrl || context?.config?.base_url || '').trim()),
-        log,
-      }),
-      allowExperimental: cfg.director.allow_experimental,
-    }),
-  });
+  // 统一视频生成运行时：/api/v1 与 /api/v2 共享同一注册表 / ComfyUI Provider / GPU 互斥锁
+  const { getSharedVideoRuntime } = require('../services/videoGenerationRuntime.js');
+  const videoRuntime = getSharedVideoRuntime({ db, cfg, log });
+  const directorRegistry = videoRuntime.workflowRegistry;
+  const directorComfyClient = videoRuntime.comfyClient;
+  const createDirectorComfyClient = videoRuntime.createComfyClient;
+  const directorArtifactRoot = videoRuntime.artifactRoot;
+  const directorAllowedRoots = videoRuntime.allowedLocalRoots;
+  const videoGpuMutex = videoRuntime.gpuMutex;
+  const videoProviderRegistry = videoRuntime.providerRegistry;
   const aiConfig = aiConfigRoutes(db, log, cfg, {
     providerRegistry: videoProviderRegistry,
     workflowRegistry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
   });
-  const unifiedVideoGenerationService = createUnifiedVideoGenerationService({
-    db,
-    log,
-    providerRegistry: videoProviderRegistry,
+  const unifiedVideoGenerationService = videoRuntime.unifiedService;
+  // H3 提示词草稿路由与 unified 服务共用同一注册表实例(Task 16 交接①),
+  // 保证草稿快照/指纹与候选生成的解析形状一致,否则门禁恒判 stale。
+  const storyboards = storyboardRoutes(db, log, {
     workflowRegistry: directorRegistry,
     allowExperimental: cfg.director.allow_experimental,
   });

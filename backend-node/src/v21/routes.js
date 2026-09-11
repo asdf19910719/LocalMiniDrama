@@ -256,8 +256,33 @@ function createV21Router({ db, cfg, log }) {
   }));
 
   // ---- 分镜阶段（Task 4.x） ----
+  // A1：真实 Provider 执行器与通道解析（无 Key 时自动回落 mock，铁律 6）
+  const { createProviderRouter } = require('./providerRouter.js');
+  const { createRealImageExecutor } = require('./realImageExecutor.js');
+  const { createRealVideoExecutor } = require('./realVideoExecutor.js');
+  const { createH3PromptDraftService } = require('../services/h3PromptDraftService.js');
+  const realImageExecutor = createRealImageExecutor({ db, log });
+  const realVideoExecutor = createRealVideoExecutor({ db, cfg, log, storageRoot: assetStorage });
+  const legacyH3Drafts = createH3PromptDraftService();
+  const v21ProviderRouter = createProviderRouter({
+    db,
+    log,
+    imageExecutor: realImageExecutor,
+    videoExecutor: realVideoExecutor,
+    h3Executor: {
+      compile: ({ shotId, resolved }) => {
+        // legacy compileDraft：真实 H3 结构编译，写入 storyboard_h3_prompt_drafts（video_config_id = 真实配置 id）
+        return legacyH3Drafts.compileDraft(db, cfg, log, {
+          storyboardId: Number(shotId),
+          videoConfigId: resolved.config.id,
+          workflowId: resolved.model,
+        });
+      },
+      saveText: ({ draftId, text }) => legacyH3Drafts.saveDraftText(db, { draftId: Number(draftId), finalText: String(text || ''), manuallyEdited: true }),
+    },
+  });
   const { createStoryboardService } = require('./storyboard/storyboardService.js');
-  const storyboard = createStoryboardService(db, { log, mockProvider: v21MockProvider });
+  const storyboard = createStoryboardService(db, { log, mockProvider: v21MockProvider, providerRouter: v21ProviderRouter, cfg });
   r.post('/episodes/:episodeId/storyboard/create-from-script', wrap((req, res) => {
     response.created(res, storyboard.createFromScript(req.params.episodeId));
   }));
@@ -324,10 +349,20 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, storyboard.setImageCurrent(req.params.shotId, req.body || {}));
   }));
   r.post('/storyboards/:shotId/h3/generate', wrap((req, res) => {
-    response.created(res, storyboard.generateH3(req.params.shotId, req.body || {}));
+    Promise.resolve(storyboard.generateH3(req.params.shotId, req.body || {})).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
   }));
   r.post('/storyboards/:shotId/h3/save', wrap((req, res) => {
-    response.success(res, storyboard.saveH3(req.params.shotId, req.body || {}));
+    Promise.resolve(storyboard.saveH3(req.params.shotId, req.body || {})).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
   }));
   r.get('/storyboards/:shotId/video/quote', wrap((req, res) => {
     response.success(res, storyboard.getVideoQuote(req.params.shotId, Number(req.query.count || 1)));
@@ -388,7 +423,24 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, storyboard.getVideoHistory(req.params.shotId));
   }));
   r.post('/video-tasks/:taskId/retry', wrap((req, res) => {
-    response.created(res, storyboard.retryTask(req.params.taskId));
+    Promise.resolve(storyboard.retryTask(req.params.taskId)).then((result) => {
+      response.created(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  // C3：生成 Sheet 异步轮询与取消
+  r.get('/video-tasks/:taskId/status', wrap((req, res) => {
+    response.success(res, storyboard.getVideoTaskStatus(req.params.taskId));
+  }));
+  r.post('/video-tasks/:taskId/cancel', wrap((req, res) => {
+    storyboard.cancelVideoTask(req.params.taskId, req.body?.reason || '').then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
   }));
   r.post('/storyboards/:shotId/frame-link/confirm', wrap((req, res) => {
     response.success(res, storyboard.confirmFrameLink(req.params.shotId));

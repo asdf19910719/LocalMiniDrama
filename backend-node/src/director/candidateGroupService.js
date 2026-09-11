@@ -622,4 +622,5 @@ module.exports = {
   getCandidateByVideoGenerationId,
   getCandidateSelectionState,
   linkUnifiedCandidateArtifact,
+  syncUnifiedCandidateGroup,
 };

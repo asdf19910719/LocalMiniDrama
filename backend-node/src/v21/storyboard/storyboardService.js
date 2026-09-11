@@ -26,9 +26,77 @@ const DEFAULT_SHOT_SECONDS = 6;
  * - H3 一等公民：状态机 ai-generated→dirty→saving→valid/invalid；来源变化 stale；永不覆盖人工文本
  * - 视频候选：director 候选三表为唯一事实源；成功只追加候选；采用指针唯一可撤销
  */
-function createStoryboardService(db, { log = console, mockProvider = null } = {}) {
+function createStoryboardService(db, { log = console, mockProvider = null, providerRouter = null, cfg = null } = {}) {
   const { ensureStoryboardV21Columns } = require('../db.js');
   ensureStoryboardV21Columns(db);
+
+  function videoChannel() {
+    if (!providerRouter) return { channel: 'mock' };
+    return providerRouter.resolveVideoChannel();
+  }
+
+  function isRealH3Channel() {
+    if (!providerRouter) return false;
+    const ch = videoChannel();
+    return ch.channel === 'real' && providerRouter.isH3Video(ch.resolved);
+  }
+
+  /** 分镜引用（场景/角色状态/道具）可用的参考图，优先本地路径（供真实图片通道传参考图） */
+  function referenceUrlsForImage(shotId) {
+    const rows = getReferenceRows(shotId);
+    const urls = [];
+    const sb = db.prepare('SELECT scene_id FROM storyboards WHERE id = ?').get(shotId);
+    if (sb && sb.scene_id) {
+      const scene = db.prepare('SELECT image_url, local_path FROM scenes WHERE id = ? AND deleted_at IS NULL').get(sb.scene_id);
+      if (scene) urls.push(scene.local_path || scene.image_url);
+    }
+    for (const ch of rows.characters) {
+      const variant = db.prepare('SELECT image_url, local_path FROM character_variants WHERE id = ?').get(ch.variantId);
+      if (variant) urls.push(variant.local_path || variant.image_url);
+    }
+    for (const prop of rows.props) {
+      const row = db.prepare('SELECT image_url, local_path, ref_image FROM props WHERE id = ? AND deleted_at IS NULL').get(prop.assetId);
+      if (row) urls.push(row.ref_image || row.local_path || row.image_url);
+    }
+    return urls.filter(Boolean);
+  }
+
+  /** 由分段内容合成"业务源文本"，同步进 universal_segment_text（legacy H3 指纹新鲜度依据） */
+  function composeShotSourceText(shotId) {
+    const segments = listSegments(shotId);
+    const lines = [];
+    for (const seg of segments) {
+      const dialogue = (seg.dialogue || '').trim();
+      lines.push(
+        `[${Number(seg.start_seconds).toFixed(1)}–${Number(seg.end_seconds).toFixed(1)}s] ${seg.visual || ''}${
+          dialogue ? `；对白：${dialogue}` : ''
+        }`
+      );
+    }
+    const style = db.prepare('SELECT style_id FROM dramas WHERE id = ?').get(shotEpisodeDrama(shotId));
+    if (style && style.style_id) {
+      try {
+        const { createStyleRegistryService } = require('../../services/styleRegistryService.js');
+        const info = createStyleRegistryService({ db }).requireStyle(style.style_id);
+        lines.push(`风格：${info.labelZh || style.style_id}`);
+      } catch {
+        lines.push(`风格：${style.style_id}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function syncShotSourceColumns(shotId) {
+    try {
+      db.prepare('UPDATE storyboards SET universal_segment_text = ?, updated_at = ? WHERE id = ?').run(
+        composeShotSourceText(shotId),
+        nowIso(),
+        shotId
+      );
+    } catch (_) {
+      // 未迁移的旧库缺列时静默跳过；真实通道此时不可用，mock 不依赖该列
+    }
+  }
 
   function requireEpisode(episodeId) {
     const row = db.prepare('SELECT * FROM episodes WHERE id = ? AND deleted_at IS NULL').get(Number(episodeId));
@@ -200,6 +268,7 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     db.prepare(
       'UPDATE storyboard_segments SET visual = COALESCE(?, visual), dialogue = COALESCE(?, dialogue), sound = COALESCE(?, sound), updated_at = ? WHERE id = ? AND storyboard_id = ?'
     ).run(visual ?? null, dialogue ?? null, sound ?? null, nowIso(), segmentId, shotId);
+    syncShotSourceColumns(shotId);
     const revision = nextShotRevision(shotId);
     return { segments: listSegments(shotId), expectedRevision: revision };
   }
@@ -228,6 +297,7 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
       ).run(shotId, seg.seq + 1, atSeconds, seg.end_seconds, seg.visual, seg.asset_refs_json, nowIso(), nowIso());
     });
     tx();
+    syncShotSourceColumns(shotId);
     const revision = nextShotRevision(shotId);
     void shot;
     return { segments: listSegments(shotId), expectedRevision: revision };
@@ -255,6 +325,7 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
       });
     });
     tx();
+    syncShotSourceColumns(shotId);
     const revision = nextShotRevision(shotId);
     return { segments: listSegments(shotId), expectedRevision: revision };
   }
@@ -286,6 +357,7 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
       db.prepare('UPDATE storyboard_segments SET seq = ? WHERE id = ?').run(a.seq, b.id);
     });
     tx();
+    syncShotSourceColumns(shotId);
     const revision = nextShotRevision(shotId);
     return { segments: listSegments(shotId), expectedRevision: revision };
   }
@@ -443,19 +515,33 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
   }
 
   function imageCandidates(shotId) {
+    // 'succeeded' = V2.1 mock/上传候选；'completed' = 真实 Provider（imageService）产出
     return db
       .prepare(
         `SELECT g.id AS candidateId, g.image_url AS url, g.local_path AS localPath, g.created_at AS createdAt
-         FROM image_generations g WHERE g.storyboard_id = ? AND g.status = 'succeeded' AND g.deleted_at IS NULL
+         FROM image_generations g WHERE g.storyboard_id = ? AND g.status IN ('succeeded','completed') AND g.deleted_at IS NULL
          ORDER BY g.id DESC`
       )
       .all(shotId);
   }
 
-  async function generateImage(shotId, { prompt = null } = {}) {
+  async function generateImage(shotId, { prompt = null, channelOptions = {} } = {}) {
     requireShot(shotId);
-    if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
     const effectivePrompt = prompt || getImagePrompt(shotId).text;
+    if (providerRouter) {
+      const real = await providerRouter.generateImage({
+        shotId,
+        dramaId: shotEpisodeDrama(shotId),
+        prompt: effectivePrompt,
+        referenceUrls: referenceUrlsForImage(shotId),
+        channelOptions,
+      });
+      if (real) {
+        // 真实通道候选行由 imageService 写入 image_generations，服务层不重复落库
+        return { candidateId: real.candidateId, url: real.url, sha256: real.sha256 ?? null, provider: real.provider || null };
+      }
+    }
+    if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
     const submitted = mockProvider.submit({
       kind: 'image',
       ownerType: 'storyboard_image',
@@ -508,11 +594,32 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
   // ---------- H3 ----------
 
   function h3DraftRow(shotId) {
+    if (isRealH3Channel()) {
+      const ch = videoChannel();
+      // 真实 H3 通道：草稿由 h3PromptDraftService.compileDraft 写入（video_config_id = 真实配置 id）
+      return db
+        .prepare(
+          'SELECT * FROM storyboard_h3_prompt_drafts WHERE storyboard_id = ? AND video_config_id = ? ORDER BY id DESC LIMIT 1'
+        )
+        .get(shotId, String(ch.resolved.config.id));
+    }
     return db
       .prepare(
         `SELECT * FROM storyboard_h3_prompt_drafts WHERE storyboard_id = ? AND video_config_id = 'v21' ORDER BY id DESC LIMIT 1`
       )
       .get(shotId);
+  }
+
+  /** 真实通道草稿的过期判定：完整编译行交给 legacy 新鲜度评估；不完整（测试替身）行不判过期 */
+  function realDraftStale(row) {
+    try {
+      const params = row.generation_params ? JSON.parse(row.generation_params) : null;
+      if (!params || params.durationSeconds == null) return false;
+      const { createH3PromptDraftService } = require('../../services/h3PromptDraftService.js');
+      return !!createH3PromptDraftService().evaluateDraftFreshness(db, row).stale;
+    } catch (_) {
+      return false;
+    }
   }
 
   function compileH3Text(shotId) {
@@ -576,11 +683,29 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     return shotSourceFingerprint(shotId);
   }
 
-  function generateH3(shotId) {
+  function generateH3(shotId, options = {}) {
     requireShot(shotId);
     const existing = h3DraftRow(shotId);
-    if (existing && existing.manually_edited === 1 && !arguments[1]?.confirmOverwrite) {
+    if (existing && existing.manually_edited === 1 && !options?.confirmOverwrite) {
       throw httpError('H3_MANUAL_PROTECTED', 409, '存在人工编辑的 H3 草稿；确认后才会重新生成，人工文本不会被覆盖');
+    }
+    if (isRealH3Channel() && providerRouter) {
+      // 真实 H3 通道：先同步业务源文本，再经统一门禁编译（写入 video_config_id = 真实配置 id 的草稿行）
+      syncShotSourceColumns(shotId);
+      const ch = videoChannel();
+      return providerRouter.compileH3Draft({ shotId, resolved: ch.resolved }).then((compiled) => {
+        if (!compiled) throw httpError('PROVIDER_UNAVAILABLE', 503, 'H3 编译通道不可用');
+        return {
+          draftId: compiled.id,
+          status: 'ai-generated',
+          statusLabel: 'AI 生成',
+          text: compiled.final_compiled_prompt,
+          validation: { valid: compiled.status !== 'invalid', checks: [] },
+          manuallyEdited: false,
+          segments: listSegments(shotId),
+          expectedRevision: requireShot(shotId).structure_revision || 1,
+        };
+      });
     }
     const text = compileH3Text(shotId);
     const validation = validateH3Text(shotId, text);
@@ -618,6 +743,33 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     requireShot(shotId);
     const row = h3DraftRow(shotId);
     if (!row) return null;
+    if (isRealH3Channel() && String(row.video_config_id) !== 'v21') {
+      let status;
+      let statusLabel;
+      if (row.status === 'invalid') {
+        status = 'invalid';
+        statusLabel = '校验失败';
+      } else if (realDraftStale(row)) {
+        status = 'stale';
+        statusLabel = '需要更新';
+      } else if (row.manually_edited === 1) {
+        status = 'valid';
+        statusLabel = '已编辑';
+      } else {
+        status = 'ai-generated';
+        statusLabel = 'AI 生成';
+      }
+      return {
+        draftId: row.id,
+        status,
+        statusLabel,
+        text: row.final_compiled_prompt,
+        validation: { valid: row.status !== 'invalid', checks: [] },
+        manuallyEdited: row.manually_edited === 1,
+        segments: listSegments(shotId),
+        expectedRevision: requireShot(shotId).structure_revision || 1,
+      };
+    }
     const currentFingerprint = h3Fingerprint(shotId);
     const validation = validateH3Text(shotId, row.final_compiled_prompt || '');
     let status;
@@ -655,6 +807,23 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
   function saveH3(shotId, { text } = {}) {
     const row = h3DraftRow(shotId);
     if (!row) throw httpError('NOT_FOUND', 404, '尚无 H3 草稿，请先生成');
+    if (isRealH3Channel() && providerRouter && String(row.video_config_id) !== 'v21') {
+      // 真实通道草稿：经 legacy saveDraftText 校验保存（保留 source_fingerprint，提交门禁仍可用）
+      return providerRouter.saveH3DraftText({ draftId: row.id, text }).then((saved) => {
+        if (!saved) throw httpError('PROVIDER_UNAVAILABLE', 503, 'H3 编译通道不可用');
+        const status = saved.status === 'invalid' ? 'invalid' : 'valid';
+        return {
+          draftId: row.id,
+          status,
+          statusLabel: status === 'valid' ? '校验通过' : '校验失败',
+          text: saved.final_compiled_prompt,
+          validation: { valid: status === 'valid', checks: [] },
+          manuallyEdited: true,
+          segments: listSegments(shotId),
+          expectedRevision: requireShot(shotId).structure_revision || 1,
+        };
+      });
+    }
     const validation = validateH3Text(shotId, text);
     const status = validation.valid ? 'valid' : 'invalid';
     db.prepare(
@@ -698,6 +867,20 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     if (!Number.isInteger(n) || n < 1 || n > 3) {
       throw httpError('VALIDATION_ERROR', 400, '生成数量必须为 1–3 的整数');
     }
+    const ch = videoChannel();
+    if (providerRouter && ch.channel === 'real') {
+      const info = providerRouter.videoChannelInfo();
+      return {
+        count: n,
+        outputDuration: `${requireShot(shotId).duration}s`,
+        estimatedCost: providerRouter.estimateVideoCost(ch.resolved),
+        estimatedTime: '取决于 Provider，通常 1–5 分钟（非承诺值）',
+        provider: info.provider,
+        channel: 'real',
+        model: info.model,
+        h3: info.h3 || false,
+      };
+    }
     return {
       count: n,
       outputDuration: `${requireShot(shotId).duration}s`,
@@ -712,7 +895,29 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     const checks = [];
     const rows = getReferenceRows(shotId);
     checks.push({ id: 'references', label: '引用素材', ok: true, detail: `${rows.characters.length + rows.props.length} 个引用` });
-    checks.push({ id: 'capability', label: '模型能力', ok: true, detail: 'mock 通道' });
+    const ch = videoChannel();
+    if (providerRouter && ch.channel === 'real') {
+      // 真实通道：Provider 能力（引用数/时长上限）驱动本行（mock 恒通过）
+      const caps = providerRouter.videoCapabilities(ch.resolved);
+      const refCount = rows.characters.length + rows.props.length;
+      const issues = [];
+      if (caps) {
+        if (caps.maxReferences != null && refCount > caps.maxReferences) {
+          issues.push(`引用数 ${refCount} 超出模型上限 ${caps.maxReferences}`);
+        }
+        if (caps.maxDurationSeconds != null && Number(shot.duration) > caps.maxDurationSeconds) {
+          issues.push(`时长 ${shot.duration}s 超出模型上限 ${caps.maxDurationSeconds}s`);
+        }
+      }
+      checks.push({
+        id: 'capability',
+        label: '模型能力',
+        ok: issues.length === 0,
+        detail: issues.length ? issues.join('；') : `${ch.resolved.provider}/${ch.resolved.model}`,
+      });
+    } else {
+      checks.push({ id: 'capability', label: '模型能力', ok: true, detail: 'mock 通道' });
+    }
     const draft = getH3Draft(shotId);
     const h3Ok = Boolean(draft && ['ai-generated', 'valid'].includes(draft.status));
     checks.push({
@@ -726,13 +931,28 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     return { canSubmit: checks.every((c) => c.ok), checks, shot };
   }
 
-  async function submitVideo(shotId, { count = 1 } = {}) {
+  async function submitVideo(shotId, { count = 1, channelOptions = {} } = {}) {
     const shot = requireShot(shotId);
     const guard = jointGuard(shotId);
     if (!guard.canSubmit) {
       throw httpError('GENERATION_BLOCKED', 409, `存在未通过的前置检查：${guard.checks.filter((c) => !c.ok).map((c) => c.label).join('、')}`);
     }
     const quote = getVideoQuote(shotId, count);
+    if (providerRouter) {
+      const real = await providerRouter.submitVideo({
+        shotId,
+        dramaId: shotEpisodeDrama(shotId),
+        count: quote.count,
+        prompt: getH3Draft(shotId)?.text || '',
+        duration: Math.max(0.5, Number(shot.duration) || 1),
+        h3PromptDraftId: isRealH3Channel() ? (h3DraftRow(shotId)?.id ?? null) : null,
+        groupId: ensureCandidateGroup(shotId),
+        channelOptions,
+      });
+      if (real) {
+        return { tasks: real.tasks.map((t) => ({ taskId: t.taskId, deduped: !!t.deduped })), quote };
+      }
+    }
     if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
     const tasks = [];
     for (let i = 0; i < quote.count; i += 1) {
@@ -749,6 +969,17 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
   }
 
   async function completeVideoTask(taskId) {
+    if (providerRouter) {
+      const real = await providerRouter.waitForVideoTask(taskId);
+      if (real) {
+        return {
+          candidateId: real.candidateId,
+          artifactId: real.artifactId,
+          group: real.group,
+          url: real.url || null,
+        };
+      }
+    }
     if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
     const task = mockProvider.getTask(taskId);
     if (!task) throw httpError('NOT_FOUND', 404, '任务不存在');
@@ -1000,10 +1231,65 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     return { action: 'retry-failed', total: failed.length, results };
   }
 
-  /** 重试：按原输入快照创建新任务（mock 通道） */
-  function retryTask(taskId) {
+  /** 重试：按原输入快照创建新任务（mock 通道走 mockProvider；真实通道走统一服务重试） */
+  async function retryTask(taskId) {
+    if (providerRouter) {
+      const real = await providerRouter.retryVideoTask(taskId);
+      if (real) return real;
+    }
     if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
     return mockProvider.retry(taskId);
+  }
+
+  /** 取消当前任务：mock 立即 cancel-requested；真实通道经统一服务取消并保留记录 */
+  async function cancelVideoTask(taskId, reason = '') {
+    if (providerRouter) {
+      const real = await providerRouter.cancelVideoTask(taskId);
+      if (real) return real;
+    }
+    if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
+    const task = mockProvider.getTask(taskId);
+    if (!task) throw httpError('NOT_FOUND', 404, `任务不存在: ${taskId}`);
+    if (task.status === 'completed') throw httpError('TASK_NOT_CANCELLABLE', 409, '已完成任务不能取消');
+    return mockProvider.cancel(taskId, reason);
+  }
+
+  /** 任务状态视图（生成 Sheet 轮询用）：mock 读 async_tasks；真实通道附 video_generations 终态 */
+  function getVideoTaskStatus(taskId) {
+    const task = db.prepare('SELECT * FROM async_tasks WHERE id = ?').get(taskId);
+    if (!task) throw httpError('NOT_FOUND', 404, `任务不存在: ${taskId}`);
+    const base = {
+      taskId,
+      status: task.status,
+      progress: task.progress ?? 0,
+      message: task.message || '',
+      cancelRequested: task.cancel_state === 'cancelled',
+      done: ['completed', 'failed', 'cancelled'].includes(task.status),
+      ok: task.status === 'completed',
+      result: task.result ? JSON.parse(task.result) : null,
+      error: task.error || null,
+    };
+    if (providerRouter && task.input_json) {
+      try {
+        const parsed = JSON.parse(task.input_json);
+        if (parsed && parsed.videoGenerationId != null) {
+          const gen = db.prepare('SELECT id, status, video_url FROM video_generations WHERE id = ?').get(Number(parsed.videoGenerationId));
+          if (gen) {
+            const videoDone = ['review', 'completed', 'selected'].includes(gen.status);
+            base.videoStatus = gen.status;
+            if (videoDone) {
+              base.done = true;
+              base.ok = true;
+              base.result = { candidateId: `cand_${taskId}`, artifactId: `unified-video-${gen.id}`, url: gen.video_url };
+            } else if (['failed', 'cancelled', 'interrupted'].includes(gen.status)) {
+              base.done = true;
+              base.ok = false;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    return base;
   }
 
   /** 生成历史抽屉（28）：任务记录（含失败/取消）+ 候选列表 */
@@ -1067,6 +1353,8 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     batchGenerateMissingVideos,
     batchRetryFailed,
     getVideoHistory,
+    cancelVideoTask,
+    getVideoTaskStatus,
   };
 }
 
