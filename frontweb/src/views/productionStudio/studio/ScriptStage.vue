@@ -131,8 +131,8 @@
       </div>
 
       <div style="margin-top:auto; display:flex; flex-direction:column; gap:8px">
-        <button class="btn primary" style="width:100%" :disabled="!canConfirm || busy" @click="openConfirm">
-          {{ confirmLabel }}
+        <button class="btn primary" style="width:100%" :disabled="mainCtaDisabled" @click="mainCtaClick">
+          {{ mainCtaLabel }}
         </button>
         <div class="muted xs" style="text-align:center">确认只创建新版本并标记过期，不会自动重新生成媒体。</div>
       </div>
@@ -216,11 +216,24 @@
             <div class="ic" style="background:var(--panel2); color:var(--muted)"><svg><use href="#i-image"/></svg></div>
             <div><b>{{ preview?.downstream?.shotImagesKeep }} 张镜头图可保留</b><span>未被本次修改影响 · 建议复核后继续使用</span></div>
           </div>
+          <!-- B9：影响明细（展开后列出新增/修改/删除候选的逐场清单） -->
+          <div v-if="confirmDetailOpen" class="cn-detail">
+            <div v-for="cat in detailItems" :key="cat.key" style="margin-bottom:8px">
+              <div class="xs" style="font-weight:600">{{ cat.label }}（{{ cat.rows.length }}）</div>
+              <template v-if="cat.rows.length">
+                <div v-for="(row, i) in cat.rows" :key="cat.key + i" class="xs" style="padding:2px 0">
+                  场次 {{ row.sceneNumber }} · {{ row.heading }}
+                </div>
+              </template>
+              <div v-else class="xs muted">无</div>
+            </div>
+          </div>
           <div class="divider" style="margin:12px 0 10px"></div>
           <div class="xs muted" style="line-height:1.6">确认只创建新剧本版本并标记过期对象，不会自动删除媒体、不会触发任何重新生成；被过期的内容可随时从历史版本恢复。</div>
+          <div v-if="confirmError" class="xs" style="color:var(--danger); padding:8px 0 0">{{ confirmError }}</div>
         </div>
         <div class="modal-f" style="justify-content:space-between">
-          <button class="btn ghost" @click="confirmOpen = false">查看影响明细</button>
+          <button class="btn ghost" @click="confirmDetailOpen = !confirmDetailOpen">{{ confirmDetailOpen ? '收起影响明细' : '查看影响明细' }}</button>
           <span class="row">
             <button class="btn ghost" @click="confirmOpen = false">取消</button>
             <button class="btn primary" :disabled="busy" @click="doConfirm">确认新修订</button>
@@ -324,7 +337,7 @@ export default {
       model: null, draftText: '', dirty: false, saving: false, lastSavedAt: '',
       mode: '', pasteText: '', candidate: null, candidateOpen: false, historyOpen: false, diffOpen: false,
       sceneStats: {}, preview: null, sceneQuery: '', selectedSceneIdx: 0,
-      confirmOpen: false, busy: false,
+      confirmOpen: false, confirmDetailOpen: false, confirmError: '', busy: false, saveConflict: false,
       aiMenuOpen: false, selectionText: '', editMode: 'edit', aiPop: { visible: false, top: 0, right: 60, text: '' },
       diffData: null, diffScene: null,
       diffOld: [], diffNew: [],
@@ -369,6 +382,26 @@ export default {
     },
     confirmLabel() {
       return this.model?.approved ? '确认新版本' : '确认剧本'
+    },
+    // B8：动作→mode 统一映射（下拉与浮层共用），缩写=condense、改写=rewrite、扩写=expand
+    aiModeMap() {
+      return { continue: 'continue', polish: 'polish', rewrite: 'rewrite', expand: 'expand', shorten: 'condense' }
+    },
+    // 409 保存冲突：主 CTA 变“重试保存”，成功保存后恢复确认文案
+    mainCtaLabel() {
+      return this.saveConflict ? '重试保存' : this.confirmLabel
+    },
+    mainCtaDisabled() {
+      return this.busy || this.saving || (!this.saveConflict && !this.canConfirm)
+    },
+    // B9 影响明细：三类逐场清单（空类显示“无”）
+    detailItems() {
+      const items = this.preview?.assetChanges?.items || {}
+      return [
+        { key: 'added', label: '新增场次', rows: items.added || [] },
+        { key: 'changed', label: '修改场次', rows: items.changed || [] },
+        { key: 'removed', label: '删除候选', rows: items.removed || [] },
+      ]
     },
     diffOld() {
       return this.buildInlineDiff(this.model?.draft?.content || '', this.candidate?.text || '', 'old')
@@ -434,23 +467,35 @@ export default {
         this.aiPop.visible = false
       }
     },
-    async aiMenuAction(mode) {
-      this.aiMenuOpen = false
-      const map = { rewrite: 'rewrite', shorten: 'polish', expand: 'continue', continue: 'continue', polish: 'polish' }
-      this.candidate = await v21.generateAiCandidate(this.episodeId, {
-        mode: map[mode] || 'polish',
-        selection: mode === 'continue' || mode === 'polish' ? '' : this.selectionText,
-      })
-      this.candidateOpen = true
+    async runAiCandidate(action, selection) {
+      try {
+        this.candidate = await v21.generateAiCandidate(this.episodeId, {
+          mode: this.aiModeMap[action] || 'polish',
+          selection: selection || '',
+        })
+        this.candidateOpen = true
+      } catch (e) {
+        this.setSave(e.message || 'AI 候选生成失败', true)
+      }
     },
-    async selectionAi(mode) {
-      const map = { rewrite: 'polish', expand: 'continue', shorten: 'polish' }
-      this.candidate = await v21.generateAiCandidate(this.episodeId, {
-        mode: map[mode] || 'polish',
-        selection: this.aiPop.text,
-      })
+    async aiMenuAction(action) {
+      this.aiMenuOpen = false
+      const needSelection = action === 'rewrite' || action === 'expand' || action === 'shorten'
+      const selection = needSelection ? this.selectionText : ''
+      if (needSelection && !selection) {
+        this.setSave('请先在正文中选择要处理的文本', true)
+        return
+      }
+      await this.runAiCandidate(action, selection)
+    },
+    async selectionAi(action) {
       this.aiPop.visible = false
-      this.candidateOpen = true
+      const selection = this.aiPop.text || this.selectionText
+      if (!selection) {
+        this.setSave('请先在正文中选择要处理的文本', true)
+        return
+      }
+      await this.runAiCandidate(action, selection)
     },
     async aiStart() {
       const cand = await v21.generateAiCandidate(this.episodeId, { mode: 'continue' })
@@ -470,17 +515,37 @@ export default {
           expectedRevision: expectedRevision ?? this.model?.draft?.revision ?? null,
         })
         this.dirty = false
+        this.saveConflict = false
         const now = new Date()
         this.lastSavedAt = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
         this.setSave(`已保存 · ${this.lastSavedAt}`)
         await this.load()
         return result
       } catch (e) {
-        this.setSave(e.code === 'REVISION_CONFLICT' ? '保存冲突：另一窗口已更新，请刷新比较' : `保存失败 · ${e.message}`, true)
+        if (e.code === 'REVISION_CONFLICT' || e.status === 409) {
+          this.saveConflict = true
+          this.setSave('保存冲突：另一窗口已保存新版本，可点击「重试保存」', true)
+        } else {
+          this.setSave(`保存失败 · ${e.message}`, true)
+        }
         return null
       } finally {
         this.saving = false
       }
+    },
+    // 409 重试：先取最新修订号再按正常保存流程保存本地内容；仍失败保持冲突态
+    async retrySave() {
+      if (this.saving) return
+      try {
+        this.model = await v21.getScript(this.episodeId)
+      } catch {
+        // 取不到最新修订号时按原修订号重试，失败仍保持冲突态
+      }
+      await this.saveDraft(this.draftText, this.model?.draft?.revision)
+    },
+    mainCtaClick() {
+      if (this.saveConflict) this.retrySave()
+      else this.openConfirm()
     },
     async appendScene() {
       const text = (this.draftText || '') + `\n第${(this.sceneStats.totalScenes || 0) + 1}场 内景·地点·时间\n`
@@ -489,15 +554,23 @@ export default {
       this.selectedSceneIdx = (this.sceneStats.scenes?.length || 1) - 1
     },
     openConfirm() {
+      this.confirmDetailOpen = false
+      this.confirmError = ''
       this.refreshPreview().then(() => { this.confirmOpen = true })
     },
     async doConfirm() {
       this.busy = true
+      this.confirmError = ''
       try {
         await v21.confirmScript(this.episodeId, this.model?.draft?.revision ?? null)
         this.confirmOpen = false
+        this.confirmDetailOpen = false
         await this.load()
         this.$emit('refresh')
+      } catch (e) {
+        // 确认失败：弹窗保持打开并给出提示，禁止无反馈
+        this.confirmError = e.message || '确认失败，请重试'
+        this.setSave(this.confirmError, true)
       } finally {
         this.busy = false
       }
@@ -588,6 +661,8 @@ export default {
 .imp-row .ic svg { width: 15px; height: 15px; }
 .imp-row b { font-size: 13px; display: block; }
 .imp-row span { font-size: 11.5px; color: var(--muted); display: block; margin-top: 2px; }
+.cn-detail { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-top: 8px; max-height: 180px; overflow: auto; background: var(--bg); }
+.cn-detail .xs { color: var(--text-2); }
 .v-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 9px; background: var(--panel2); }
 .v-row.cur { border-color: var(--accent); background: var(--accent-subtle); }
 .v-row .vn { font-size: 14px; font-weight: 700; width: 34px; }

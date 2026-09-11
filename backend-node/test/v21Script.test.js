@@ -90,6 +90,85 @@ test('AI 候选（无 Key）：mock 生成候选 → 与草稿 diff → 应用�
   assert.equal(svc.getStageModel(1).draft.content, candidate.text);
 });
 
+/** 断言只有选区被替换为 middle，选区外文本逐字不变 */
+function assertOnlySelectionChanged(base, text, sel, checkMiddle) {
+  const at = base.indexOf(sel);
+  assert.ok(at >= 0, '选区存在于原文');
+  const prefix = base.slice(0, at);
+  const suffix = base.slice(at + sel.length);
+  assert.ok(text.startsWith(prefix) && text.endsWith(suffix), '选区外文本逐字不变');
+  const middle = text.slice(prefix.length, text.length - suffix.length);
+  checkMiddle(middle);
+}
+
+test('AI 五模式 continue：续写只追加不改原文（选区外逐字不变）', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  const candidate = svc.generateAiCandidate(1, { mode: 'continue' });
+  assert.ok(candidate.text.startsWith(SCRIPT_TEXT), '原文逐字保留在前');
+  assert.ok(candidate.text.length > SCRIPT_TEXT.length, '续写追加了新内容');
+});
+
+test('AI 五模式 polish：有选区时仅对选区行尾加润色标记，选区外逐字不变', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  const sel = '林夏走到 208 门前，脚步声在走廊回响。';
+  const candidate = svc.generateAiCandidate(1, { mode: 'polish', selection: sel });
+  assertOnlySelectionChanged(SCRIPT_TEXT, candidate.text, sel, (middle) => {
+    assert.notEqual(middle, sel, '选区被润色处理');
+    assert.ok(middle.startsWith(sel), '润色保留选区原文');
+    assert.ok(middle.includes('（润色）'), '选区带润色标记');
+  });
+});
+
+test('AI 五模式 rewrite：选区被替换为改写结果，选区外逐字不变', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  const sel = '林夏走到 208 门前，脚步声在走廊回响。';
+  const candidate = svc.generateAiCandidate(1, { mode: 'rewrite', selection: sel });
+  assertOnlySelectionChanged(SCRIPT_TEXT, candidate.text, sel, (middle) => {
+    assert.notEqual(middle, sel, '选区被改写替换');
+    assert.ok(middle.length > 0, '改写结果非空');
+  });
+});
+
+test('AI 五模式 expand：选区原文保留并在其后追加扩写，选区外逐字不变', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  const sel = '林夏走到 208 门前，脚步声在走廊回响。';
+  const candidate = svc.generateAiCandidate(1, { mode: 'expand', selection: sel });
+  assertOnlySelectionChanged(SCRIPT_TEXT, candidate.text, sel, (middle) => {
+    assert.ok(middle.startsWith(sel), '扩写保留选区原文');
+    assert.ok(middle.length > sel.length, '选区后追加了扩写内容');
+  });
+});
+
+test('AI 五模式 condense：选区压缩为更短文本，选区外逐字不变', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  const sel = '林夏走到 208 门前，脚步声在走廊回响。';
+  const candidate = svc.generateAiCandidate(1, { mode: 'condense', selection: sel });
+  assertOnlySelectionChanged(SCRIPT_TEXT, candidate.text, sel, (middle) => {
+    assert.ok(middle.length > 0, '缩写结果非空');
+    assert.ok(middle.length < sel.length, '缩写结果比选区更短');
+  });
+});
+
+test('AI 五模式：rewrite/expand/condense 缺少选区 → 400 SELECTION_REQUIRED（用户语言提示）', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_TEXT });
+  for (const mode of ['rewrite', 'expand', 'condense']) {
+    assert.throws(
+      () => svc.generateAiCandidate(1, { mode }),
+      (err) =>
+        err.code === 'SELECTION_REQUIRED' &&
+        err.status === 400 &&
+        /请先在正文中选择/.test(err.message),
+      `${mode} 缺选区应返回 SELECTION_REQUIRED`
+    );
+  }
+});
+
 test('confirmScript：草稿批准为 approved；再次编辑派生新草稿；确认修改使旧版 superseded', () => {
   const { db, svc } = setup();
   svc.saveDraft(1, { content: SCRIPT_TEXT });

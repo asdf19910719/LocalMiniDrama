@@ -65,6 +65,28 @@ test('getConfirmPreview：确认前检查/预计素材变化/下游影响/修订
   assert.equal(preview.revisionChain.approvedRevision, 1);
 });
 
+test('getConfirmPreview：assetChanges.items 逐项明细与计数字段一致（含场次号/标题）', () => {
+  const { svc } = setup();
+  svc.saveDraft(1, { content: SCRIPT_V1 });
+  svc.confirmScript(1, { expectedRevision: 1 });
+  svc.saveDraft(1, { content: SCRIPT_V2 });
+  const preview = svc.getConfirmPreview(1);
+  const { added, changed, removed, items } = preview.assetChanges;
+  assert.equal(items.added.length, added, '新增明细数与计数字段一致');
+  assert.equal(items.changed.length, changed, '修改明细数与计数字段一致');
+  assert.equal(items.removed.length, removed, '删除明细数与计数字段一致');
+  assert.equal(items.added[0].sceneNumber, 2);
+  assert.equal(items.added[0].heading, '内景·公寓卧室·深夜');
+  assert.equal(items.changed[0].sceneNumber, 1);
+  assert.equal(items.changed[0].heading, '内景·公寓客厅·雨夜');
+  for (const list of [items.added, items.changed, items.removed]) {
+    for (const row of list) {
+      assert.ok(Number.isInteger(row.sceneNumber), '明细含场次序号');
+      assert.ok(typeof row.heading === 'string' && row.heading.length > 0, '明细含场次标题');
+    }
+  }
+});
+
 test('getDiff：场次级行 diff（绿增/红删）', () => {
   const { svc } = setup();
   svc.saveDraft(1, { content: SCRIPT_V1 });

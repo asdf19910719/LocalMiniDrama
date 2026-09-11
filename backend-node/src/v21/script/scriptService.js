@@ -173,22 +173,52 @@ function createScriptService(db, { log = console } = {}) {
       .all(Number(episodeId));
   }
 
-  /** AI 候选（无 Key 时确定性 mock：追加场次骨架并标注） */
+  /** 选区确定性变换（无 Key mock 通道）：逐行处理非空行 */
+  function transformSelectionLines(sel, transform) {
+    return String(sel)
+      .split('\n')
+      .map((line) => (line.trim() ? transform(line) : line))
+      .join('\n');
+  }
+
+  /** 缩写单行：截取首个分句（到第一个分句标点为止）；无标点保持原行 */
+  function condenseLine(line) {
+    const idx = line.search(/[，。！？；、]/);
+    return idx >= 0 ? line.slice(0, idx + 1) : line;
+  }
+
+  /** AI 候选（无 Key 时确定性 mock）。五模式语义：
+   * - continue 续写：文末追加续写段落（不改原文）
+   * - polish 润色：无选区=非标题行行尾加（润色）；有选区=仅选区行尾加（润色）
+   * - rewrite 改写（需选区）：选区替换为确定性改写结果，选区外不变
+   * - expand 扩写（需选区）：保留选区原文并在其后追加确定性扩写句
+   * - condense 缩写（需选区）：选区压缩为更短结果（每行取首个分句）
+   */
   function generateAiCandidate(episodeId, { mode = 'polish', selection = '' } = {}) {
     const draft = getDraftRow(episodeId);
     if (!draft) throw httpError('NOT_FOUND', 404, '尚无草稿，请先保存');
     const base = String(draft.content || '');
+    const sel = String(selection || '');
+    if ((mode === 'rewrite' || mode === 'expand' || mode === 'condense') && !sel.trim()) {
+      throw httpError('SELECTION_REQUIRED', 400, '请先在正文中选择要处理的文本');
+    }
     let text;
-    if (mode === 'polish' || mode === 'rewrite') {
+    if (mode === 'rewrite') {
+      text = base.replace(sel, () => transformSelectionLines(sel, (line) => `（改写）${line}`));
+    } else if (mode === 'expand') {
+      text = base.replace(sel, () => `${sel}（扩写）晨光在此处停留，细节逐渐清晰。`);
+    } else if (mode === 'condense') {
+      text = base.replace(sel, () => transformSelectionLines(sel, condenseLine));
+    } else if (mode === 'polish' && sel.trim()) {
+      text = base.replace(sel, () => transformSelectionLines(sel, (line) => `${line}（润色）`));
+    } else if (mode === 'polish') {
       text = base
         .split('\n')
         .map((line) => (line.trim() && !/^(第.*场|内景|外景)/.test(line.trim()) ? `${line}（润色）` : line))
         .join('\n');
     } else {
+      // continue（含未知模式兜底）：追加续写段落
       text = `${base}\n\n第三场 内景·酒店前台·清晨\n（AI 续写）晨光穿过旋转门，林夏攥着未写完的交接单。`;
-    }
-    if (selection) {
-      text = base.replace(selection, `${selection}（已改写）`);
     }
     const diff = computeDiff(base, text);
     return {
@@ -373,12 +403,26 @@ function createScriptService(db, { log = console } = {}) {
     const approvedBlocks = approved ? splitSceneBlocks(approved.content) : [];
     const approvedHeadings = new Map(approvedBlocks.map((b) => [b.heading, b]));
 
-    const added = draftBlocks.filter((b) => !approvedHeadings.has(b.heading)).length;
-    const changed = draftBlocks.filter((b) => {
+    // 逐项明细与计数用同一份对比结果（保证 items 数量恒等于计数字段）；
+    // 对比 key 沿用场次标题（场次序号会随插入/删除整体位移，标题更稳）
+    const addedItems = [];
+    const changedItems = [];
+    draftBlocks.forEach((b, idx) => {
       const old = approvedHeadings.get(b.heading);
-      return old && old.lines.join('\n') !== b.lines.join('\n');
-    }).length;
-    const removed = approvedBlocks.filter((b) => !draftBlocks.some((d) => d.heading === b.heading)).length;
+      if (!old) addedItems.push({ sceneNumber: idx + 1, heading: b.heading });
+      else if (old.lines.join('\n') !== b.lines.join('\n')) {
+        changedItems.push({ sceneNumber: idx + 1, heading: b.heading });
+      }
+    });
+    const removedItems = [];
+    approvedBlocks.forEach((b, idx) => {
+      if (!draftBlocks.some((d) => d.heading === b.heading)) {
+        removedItems.push({ sceneNumber: idx + 1, heading: b.heading });
+      }
+    });
+    const added = addedItems.length;
+    const changed = changedItems.length;
+    const removed = removedItems.length;
 
     const storyboardCount = db
       .prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
@@ -399,7 +443,12 @@ function createScriptService(db, { log = console } = {}) {
         blockers: (draft.content || '').trim() ? 0 : 1,
         suggestions: stats.suggestions,
       },
-      assetChanges: { added, changed, removed },
+      assetChanges: {
+        added,
+        changed,
+        removed,
+        items: { added: addedItems, changed: changedItems, removed: removedItems },
+      },
       downstream: {
         storyboardPackagesStale: storyboardCount,
         shotImagesKeep: shotImageCount,
