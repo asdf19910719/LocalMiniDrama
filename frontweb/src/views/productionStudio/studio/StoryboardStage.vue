@@ -25,7 +25,8 @@
       <button class="btn primary" @click="createFromScript">从已确认剧本创建分镜</button>
     </div>
 
-    <template v-else>
+    <!-- current 未就绪（getShot 飞行期间/非法深链兜底中）不渲染依赖 current.* 的内容，避免渲染抛错 -->
+    <template v-else-if="current">
       <!-- 一级工具栏 -->
       <div class="row" style="padding:8px 16px; border-bottom:1px solid var(--line); gap:8px">
         <div class="select" style="height:32px; cursor:pointer">
@@ -256,6 +257,9 @@
         </button>
       </div>
     </template>
+    <div v-else class="empty-box">
+      <p class="muted">正在载入镜头…</p>
+    </div>
     </template>
 
     <!-- 生成确认 Sheet（16） -->
@@ -860,7 +864,16 @@ export default {
             this.notice = e.message || '定位镜头失败'
           }
         } else {
-          this.notice = '定位镜头失败：镜头不存在或已删除'
+          // 评审修复轮 2：非法深链（如镜头已被「更新分镜结构」删除）不再让 current 悬空——
+          // 回退选中第 1 镜（带 catch）；非法参数经末尾 writeSceneShotUrl replace 清除为合法值
+          this.notice = '未找到该镜头，已回到第 1 镜'
+          if (this.shots.length > 0) {
+            try {
+              await this.selectShot(this.shots[0].id)
+            } catch (e) {
+              this.notice = e.message || '定位镜头失败'
+            }
+          }
         }
       }
       const scene = query.scene

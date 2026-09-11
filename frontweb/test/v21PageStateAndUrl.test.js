@@ -216,6 +216,11 @@ test('⑩ StoryboardStage：?scene= 恢复场次 + 切换场次/镜头 replace �
   assert.match(src, /@retry="retryLoad"/, '错误态重试按钮应走 retryLoad')
   // 仅首次加载失败渲染错误块（重载失败保留内容走 notice）
   assert.match(src, /<StateBlock v-else-if="loadError && !loaded" state="error"/, '仅首次加载失败渲染错误块')
+  // 评审修复轮 2：非法深链回退 + current 空值渲染兜底
+  assert.match(consumeFn[0], /未找到该镜头，已回到第 1 镜/, '未命中分支保留可读 notice 语义')
+  assert.match(consumeFn[0], /selectShot\(this\.shots\[0\]\.id\)/, '未命中分支应回退选中第 1 镜（带 catch，避免 current 悬空卡死骨架）')
+  assert.match(src, /v-else-if="current"/, '内容分支应带 current 守卫（getShot 飞行期间不渲染 current.*）')
+  assert.match(src, /正在载入镜头…/, 'current 未就绪时显示载入占位')
   // 写入：router.replace 携带 scene + shot
   const writeFn = src.match(/writeSceneShotUrl\(\) \{[\s\S]*?\n    \},/)
   assert.ok(writeFn, '应有 writeSceneShotUrl 方法')
