@@ -62,6 +62,9 @@ function createV21Router({ db, cfg, log }) {
   r.patch('/episodes/:episodeId', wrap((req, res) => {
     response.success(res, episodes.renameEpisode(req.params.episodeId, req.body || {}));
   }));
+  r.post('/episodes/:episodeId/copy-draft', wrap((req, res) => {
+    response.created(res, episodes.copyDraftEpisode(req.params.episodeId));
+  }));
   r.put('/projects/:id/episodes/order', wrap((req, res) => {
     response.success(res, episodes.reorderEpisodes(req.params.id, req.body || {}));
   }));

@@ -13,9 +13,11 @@ function nowIso() {
 
 /**
  * V2.1 剧集中心（EP-201 / NAV-201 收敛口径）：
- * - 新建剧集 = 空白草稿 + 直达剧本页；无目标时长字段；
- * - 筛选只有 全部/需要处理/制作中/已完成；
+ * - 新建剧集 = 空白草稿 + 直达剧本页；目标时长 targetDuration（10-3600 秒，可清除）；
+ * - 筛选 全部/需要处理/制作中/已完成/空白/已归档（archived=回收站，可恢复）；
+ * - 排序 sort=episode（集号升序，默认）| recent（最近工作）；
  * - 删除 = 回收站式可恢复，删除前列影响；
+ * - 复制为草稿 = 新集承接源集最新剧本内容，零媒体任务；
  * - 非空剧集不可被外部导入写入（23.5 判定）。
  */
 function createEpisodeCenterService(db, { log = console } = {}) {
@@ -140,13 +142,20 @@ function createEpisodeCenterService(db, { log = console } = {}) {
     return { stage, status };
   }
 
-  function listEpisodes(dramaId, { status = 'all', q = '' } = {}) {
+  function listEpisodes(dramaId, { status = 'all', q = '', sort = 'episode' } = {}) {
     requireProject(dramaId);
-    let rows = db
-      .prepare(
-        'SELECT * FROM episodes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY episode_number ASC'
-      )
-      .all(Number(dramaId));
+    const archivedOnly = status === 'archived';
+    let rows = archivedOnly
+      ? db
+          .prepare(
+            'SELECT * FROM episodes WHERE drama_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, episode_number ASC'
+          )
+          .all(Number(dramaId))
+      : db
+          .prepare(
+            'SELECT * FROM episodes WHERE drama_id = ? AND deleted_at IS NULL ORDER BY episode_number ASC'
+          )
+          .all(Number(dramaId));
     if (q && String(q).trim()) {
       const needle = String(q).trim().toLowerCase();
       rows = rows.filter(
@@ -169,10 +178,15 @@ function createEpisodeCenterService(db, { log = console } = {}) {
         needsAttention: proj.status === 'needs-attention',
         lastWorkedAt: r.updated_at,
         hasImportSource: hasImport,
+        targetDuration: r.target_duration_seconds === undefined || r.target_duration_seconds === null ? null : r.target_duration_seconds,
         updatedAt: r.updated_at,
+        ...(archivedOnly ? { deletedAt: r.deleted_at } : {}),
       };
     });
-    if (status && status !== 'all') {
+    if (sort === 'recent') {
+      items.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    }
+    if (status && status !== 'all' && !archivedOnly) {
       items = items.filter((i) => i.status === status);
     }
     return { items, total: items.length };
@@ -196,19 +210,86 @@ function createEpisodeCenterService(db, { log = console } = {}) {
       title: row.title,
       status: proj.status,
       stage: proj.stage,
+      targetDuration:
+        row.target_duration_seconds === undefined || row.target_duration_seconds === null
+          ? null
+          : row.target_duration_seconds,
       updatedAt: row.updated_at,
     };
   }
 
-  function renameEpisode(episodeId, { title } = {}) {
+  function renameEpisode(episodeId, { title, targetDuration } = {}) {
     const row = requireEpisode(episodeId);
-    if (title === undefined || title === null) throw httpError('VALIDATION_ERROR', 400, '标题不能为空');
-    db.prepare('UPDATE episodes SET title = ?, updated_at = ? WHERE id = ?').run(
-      String(title),
-      nowIso(),
-      row.id
-    );
+    if (title === undefined && targetDuration === undefined) {
+      throw httpError('VALIDATION_ERROR', 400, '标题不能为空');
+    }
+    if (title !== undefined && (title === null || !String(title).trim())) {
+      throw httpError('VALIDATION_ERROR', 400, '标题不能为空');
+    }
+    let duration = null;
+    if (targetDuration !== undefined && targetDuration !== null) {
+      const n = Number(targetDuration);
+      if (!Number.isFinite(n) || n < 10 || n > 3600) {
+        throw httpError('VALIDATION_ERROR', 400, '目标时长需为 10-3600 秒的数字，或 null 清除');
+      }
+      duration = n;
+    }
+    const now = nowIso();
+    if (title !== undefined) {
+      db.prepare('UPDATE episodes SET title = ?, updated_at = ? WHERE id = ?').run(
+        String(title),
+        now,
+        row.id
+      );
+    }
+    if (targetDuration !== undefined) {
+      db.prepare('UPDATE episodes SET target_duration_seconds = ?, updated_at = ? WHERE id = ?').run(
+        duration,
+        now,
+        row.id
+      );
+    }
     return getEpisode(row.id);
+  }
+
+  /** 源集当前最新剧本内容：最新版本优先，退回 episodes.script_content */
+  function latestScriptContent(row) {
+    const rev = db
+      .prepare(
+        'SELECT content FROM episode_script_revisions WHERE episode_id = ? ORDER BY revision DESC LIMIT 1'
+      )
+      .get(row.id);
+    if (rev && String(rev.content || '').trim()) return String(rev.content);
+    return String(row.script_content || '').trim() ? String(row.script_content) : '';
+  }
+
+  /** 复制为草稿：新集（集号 MAX+1，标题「原标题（草稿副本）」）承接源集最新剧本内容，零媒体任务 */
+  function copyDraftEpisode(episodeId) {
+    const row = requireEpisode(episodeId);
+    const content = latestScriptContent(row);
+    const title = `${row.title || '未命名'}（草稿副本）`;
+    const created = createEpisode(row.drama_id, { title });
+    if (content) {
+      const nextRev =
+        db
+          .prepare('SELECT COALESCE(MAX(revision), 0) AS n FROM episode_script_revisions WHERE episode_id = ?')
+          .get(created.id).n + 1;
+      const now = nowIso();
+      const tx = db.transaction(() => {
+        db.prepare(
+          `INSERT INTO episode_script_revisions (episode_id, revision, status, title, content, source, parent_revision_id, created_at, updated_at)
+           VALUES (?, ?, 'draft', ?, ?, 'copy-draft', NULL, ?, ?)`
+        ).run(created.id, nextRev, title, content, now, now);
+        db.prepare('UPDATE episodes SET script_content = ?, updated_at = ? WHERE id = ?').run(
+          content,
+          now,
+          created.id
+        );
+      });
+      tx();
+      log.info?.('V2.1 剧集已复制为草稿副本', { sourceId: row.id, episodeId: created.id });
+    }
+    return getEpisode(created.id);
   }
 
   function reorderEpisodes(dramaId, { order } = {}) {
@@ -340,6 +421,7 @@ function createEpisodeCenterService(db, { log = console } = {}) {
     listEpisodes,
     listBlankEpisodes,
     renameEpisode,
+    copyDraftEpisode,
     reorderEpisodes,
     softDeleteEpisode,
     restoreEpisode,

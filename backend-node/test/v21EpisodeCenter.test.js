@@ -148,6 +148,105 @@ test('listBlankEpisodes：目标选择器只列空白剧集', () => {
   assert.equal(blanks.items[0].id, e1.id);
 });
 
+test('copyDraftEpisode：复制为草稿副本（两集共存、内容一致、新集零媒体）', () => {
+  const { db, svc } = setup();
+  const src = svc.createEpisode(1, { title: '雨夜追踪' });
+  db.prepare(
+    `INSERT INTO episode_script_revisions (episode_id, revision, status, title, content, source, parent_revision_id, created_at, updated_at)
+     VALUES (?, 1, 'draft', '雨夜追踪', '第一场 雨夜 天台……', 'manual', NULL, datetime('now'), datetime('now'))`
+  ).run(src.id);
+  // 源集已有分镜/媒体 → 副本不得携带
+  db.prepare(
+    `INSERT INTO storyboards (episode_id, storyboard_number, created_at, updated_at)
+     VALUES (?, 1, datetime('now'), datetime('now'))`
+  ).run(src.id);
+  const copy = svc.copyDraftEpisode(src.id);
+  // 源/新两集各自存在
+  const list = svc.listEpisodes(1, {});
+  assert.deepEqual(
+    list.items.map((i) => i.id).sort(),
+    [src.id, copy.id].sort()
+  );
+  // 集号 = MAX+1，标题 = 原标题（草稿副本）
+  assert.equal(copy.episodeNumber, 2);
+  assert.equal(copy.title, '雨夜追踪（草稿副本）');
+  // 剧本草稿内容与源集最新剧本一致
+  const copyRev = db
+    .prepare('SELECT content FROM episode_script_revisions WHERE episode_id = ? ORDER BY revision DESC LIMIT 1')
+    .get(copy.id);
+  assert.equal(copyRev.content, '第一场 雨夜 天台……');
+  // 新集零媒体任务：无分镜、无图片/视频生成
+  const boards = db.prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ?').get(copy.id).n;
+  assert.equal(boards, 0);
+  const media = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM image_generations g JOIN storyboards sb ON sb.id = g.storyboard_id WHERE sb.episode_id = ?`
+    )
+    .get(copy.id).n;
+  assert.equal(media, 0);
+});
+
+test('copyDraftEpisode：源集无剧本时副本为空白草稿', () => {
+  const { svc } = setup();
+  const src = svc.createEpisode(1, { title: '空集' });
+  const copy = svc.copyDraftEpisode(src.id);
+  assert.equal(copy.episodeNumber, 2);
+  assert.equal(copy.status, 'blank');
+  assert.equal(copy.title, '空集（草稿副本）');
+});
+
+test('renameEpisode：支持设置与清除目标时长；越界 400；列表行回带 targetDuration', () => {
+  const { db, svc } = setup();
+  const e1 = svc.createEpisode(1, { title: '带时长的集' });
+  assert.ok(
+    db.prepare('PRAGMA table_info(episodes)').all().some((c) => c.name === 'target_duration_seconds'),
+    'episodes 表应有 target_duration_seconds 列'
+  );
+  // 仅传 targetDuration（不传 title）也应可用
+  assert.equal(svc.renameEpisode(e1.id, { targetDuration: 90 }).targetDuration, 90);
+  assert.equal(svc.listEpisodes(1, {}).items[0].targetDuration, 90);
+  assert.equal(svc.renameEpisode(e1.id, { targetDuration: null }).targetDuration, null);
+  assert.throws(
+    () => svc.renameEpisode(e1.id, { targetDuration: 9 }),
+    (err) => err.status === 400
+  );
+  assert.throws(
+    () => svc.renameEpisode(e1.id, { targetDuration: 3601 }),
+    (err) => err.status === 400
+  );
+  assert.throws(
+    () => svc.renameEpisode(e1.id, { targetDuration: 'abc' }),
+    (err) => err.status === 400
+  );
+});
+
+test('listEpisodes：sort=recent 按 updated_at 倒序，默认与 sort=episode 按集号升序', () => {
+  const { db, svc } = setup();
+  const e1 = svc.createEpisode(1, { title: '第一集' });
+  const e2 = svc.createEpisode(1, { title: '第二集' });
+  db.prepare('UPDATE episodes SET updated_at = ? WHERE id = ?').run('2026-09-01T08:00:00Z', e1.id);
+  db.prepare('UPDATE episodes SET updated_at = ? WHERE id = ?').run('2026-09-10T08:00:00Z', e2.id);
+  const byEpisode = svc.listEpisodes(1, {});
+  assert.deepEqual(byEpisode.items.map((i) => i.episodeNumber), [1, 2]);
+  assert.deepEqual(svc.listEpisodes(1, { sort: 'episode' }).items.map((i) => i.id), [e1.id, e2.id]);
+  const byRecent = svc.listEpisodes(1, { sort: 'recent' });
+  assert.deepEqual(byRecent.items.map((i) => i.id), [e2.id, e1.id]);
+});
+
+test('listEpisodes：status=archived 列出已删除剧集（供恢复入口）', () => {
+  const { svc } = setup();
+  const e1 = svc.createEpisode(1, { title: '待归档' });
+  svc.softDeleteEpisode(e1.id);
+  assert.equal(svc.listEpisodes(1, {}).items.length, 0);
+  const archived = svc.listEpisodes(1, { status: 'archived' });
+  assert.equal(archived.items.length, 1);
+  assert.equal(archived.items[0].id, e1.id);
+  assert.ok(archived.items[0].deletedAt, '归档行应带 deletedAt');
+  svc.restoreEpisode(e1.id);
+  assert.equal(svc.listEpisodes(1, { status: 'archived' }).items.length, 0);
+  assert.equal(svc.listEpisodes(1, {}).items.length, 1);
+});
+
 test('getImportSource：无来源时返回 null，有来源返回只读审计', () => {
   const { db, svc } = setup();
   const e1 = svc.createEpisode(1, {});

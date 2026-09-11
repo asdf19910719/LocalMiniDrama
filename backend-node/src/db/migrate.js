@@ -170,6 +170,7 @@ function ensureAllColumns(database) {
     { name: 'deleted_at',     type: 'TEXT' },
     { name: 'audio_plan',     type: 'TEXT' },
     { name: 'production_profile', type: 'TEXT' },
+    { name: 'target_duration_seconds', type: 'INTEGER' },
   ]);
 
   // --- storyboards ---

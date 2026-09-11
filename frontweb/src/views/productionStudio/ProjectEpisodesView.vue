@@ -22,6 +22,8 @@
           <span :class="{ on: status === 'making' }" @click="setStatus('making')">制作中 {{ counts.making }}</span>
           <span :class="{ on: status === 'needs-attention' }" @click="setStatus('needs-attention')">需要处理 {{ counts.needsAttention }}</span>
           <span :class="{ on: status === 'completed' }" @click="setStatus('completed')">已完成 {{ counts.completed }}</span>
+          <span :class="{ on: status === 'blank' }" @click="setStatus('blank')">空白 {{ counts.blank }}</span>
+          <span :class="{ on: status === 'archived' }" @click="setStatus('archived')">已归档 {{ counts.archived }}</span>
         </div>
         <div class="spacer"></div>
         <button class="btn" @click="importOpen = !importOpen">
@@ -51,8 +53,39 @@
         </div>
       </div>
 
+      <!-- 第二层：阶段筛选 + 排序 + 集序管理 -->
+      <div class="ep-toolbar" style="margin-top:10px">
+        <div class="seg">
+          <span :class="{ on: stageFilter === '' }" @click="setStageFilter('')">全部阶段</span>
+          <span :class="{ on: stageFilter === 'script' }" @click="setStageFilter('script')">剧本</span>
+          <span :class="{ on: stageFilter === 'assets' }" @click="setStageFilter('assets')">设定</span>
+          <span :class="{ on: stageFilter === 'storyboard' }" @click="setStageFilter('storyboard')">分镜</span>
+          <span :class="{ on: stageFilter === 'cut' }" @click="setStageFilter('cut')">成片</span>
+        </div>
+        <div class="spacer"></div>
+        <div class="select" style="cursor:pointer" title="列表排序">
+          <select v-model="sort" class="sort-native" @change="load">
+            <option value="episode">集号升序（默认）</option>
+            <option value="recent">最近工作</option>
+          </select>
+          <svg class="chev"><use href="#i-chev-d"/></svg>
+        </div>
+        <button class="btn" @click="openReorderPanel()">
+          <svg><use href="#i-more"/></svg>排序与管理
+        </button>
+      </div>
+
       <div class="ep-toolbar" style="margin-top:10px">
         <span v-if="notice" class="badge warn">{{ notice }}<span style="cursor:pointer; margin-left:6px" @click="notice = ''">×</span></span>
+      </div>
+
+      <!-- 导入成功回写横幅（?imported=<episodeId>） -->
+      <div v-if="importedBanner" class="card row" style="padding:10px 14px; margin-bottom:14px; border-color:var(--accent); gap:10px; align-items:center">
+        <svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-check-c"/></svg>
+        <b class="xs" style="font-size:13px">{{ importedBanner }}</b>
+        <div class="spacer"></div>
+        <button class="btn primary sm" @click="openImportedScript">打开剧本</button>
+        <button class="icon-btn" title="关闭" @click="importedId = ''"><svg><use href="#i-close"/></svg></button>
       </div>
 
       <!-- 外部 AI 任务卡（离页恢复入口；空状态不显示） -->
@@ -77,9 +110,12 @@
       </div>
 
       <div class="ep-list">
-        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention || (highlightId && String(ep.id) === highlightId) }">
+        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention || isHighlighted(ep) }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
-          <div class="ep-title"><b>{{ ep.title || '未命名' }}</b></div>
+          <div class="ep-title">
+            <b>{{ ep.title || '未命名' }}</b>
+            <span v-if="ep.targetDuration">目标 {{ ep.targetDuration }}s</span>
+          </div>
           <div class="ep-src">
             <span v-if="ep.hasImportSource" class="badge accent">外部 AI 导入</span>
             <span v-else class="badge outline">{{ sourceLabel(ep) }}</span>
@@ -92,19 +128,28 @@
           </div>
           <div class="ep-last">上次 · {{ stageLabel(ep.stage) }}<br>{{ relTime(ep.lastWorkedAt) }}</div>
           <div class="row">
-            <button v-if="ep.status !== 'blank'" class="btn primary sm" @click="open(ep)">继续制作</button>
-            <button v-else class="btn sm" @click="open(ep)">开始创建</button>
-            <div class="more-wrap" style="position:relative">
-              <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
-              <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:130px" @click="rowMenuId = null">
-                <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startRename(ep)">重命名</button>
-                <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startReorder(ep)">调整集序</button>
-                <button class="btn ghost sm" style="width:100%;justify-content:flex-start; color:var(--danger)" @click="startDelete(ep)">删除（回收站）</button>
+            <template v-if="status === 'archived'">
+              <span class="xs muted">归档于 {{ relTime(ep.deletedAt) }}</span>
+              <button class="btn sm" @click="restoreEp(ep)"><svg><use href="#i-refresh"/></svg>恢复</button>
+            </template>
+            <template v-else>
+              <button v-if="ep.status !== 'blank'" class="btn primary sm" @click="open(ep)">继续制作</button>
+              <button v-else class="btn sm" @click="open(ep)">开始创建</button>
+              <div class="more-wrap" style="position:relative">
+                <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
+                <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:170px" @click="rowMenuId = null">
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startRename(ep)">重命名</button>
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="copyDraft(ep)">复制为草稿</button>
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startTargetDuration(ep)">设置目标时长<span v-if="ep.targetDuration" class="xs muted" style="margin-left:auto">{{ ep.targetDuration }}s</span></button>
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openReorderPanel()">调整集序</button>
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start; color:var(--danger)" @click="startDelete(ep)">删除（回收站）</button>
+                  <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openImportSource(ep)">查看导入来源</button>
+                </div>
               </div>
-            </div>
+            </template>
           </div>
         </div>
-        <p v-if="items.length === 0" class="muted" style="text-align:center; padding:60px 0">还没有剧集，点击「新建剧集」直达空白剧本</p>
+        <p v-if="items.length === 0" class="muted" style="text-align:center; padding:60px 0">{{ emptyText }}</p>
       </div>
     </div>
 
@@ -139,20 +184,28 @@
       </div>
     </div>
 
-    <!-- 新建剧集 · 集号 Modal（C1） -->
+    <!-- 新建剧集 · 目标选择器（创建下一集 / 复用空白剧集） -->
     <div v-if="newEpOpen" class="scrim" style="z-index:80" @click="newEpOpen = false"></div>
     <div v-if="newEpOpen" class="modal-wrap" style="z-index:90">
-      <div class="modal" style="width:400px">
+      <div class="modal" style="width:420px">
         <div class="modal-h"><h3>新建剧集</h3><button class="icon-btn" @click="newEpOpen = false"><svg><use href="#i-close"/></svg></button></div>
         <div class="modal-b">
-          <p class="xs muted" style="margin-bottom:8px">创建空白草稿并直接进入剧本页。</p>
-          <label class="col" style="gap:4px"><span class="xs muted">集号</span>
-            <input class="input" type="number" min="1" v-model.number="newEpNumber">
+          <p class="xs muted" style="margin-bottom:10px">选择目标：创建下一集空白草稿，或复用已有空白剧集。非空剧集不会被覆盖。</p>
+          <label class="row" style="gap:8px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; cursor:pointer; align-items:center" :style="newEpChoice === 'create' ? 'border-color:var(--accent)' : ''">
+            <input type="radio" value="create" v-model="newEpChoice">
+            <span class="xs"><b>创建第 {{ newEpNextNumber }} 集</b>（空白草稿，直达剧本页）</span>
           </label>
+          <template v-if="blankEpisodes.length">
+            <div class="xs muted" style="margin:12px 0 6px">或复用已有空白剧集：</div>
+            <label v-for="b in blankEpisodes" :key="b.id" class="row" style="gap:8px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; cursor:pointer; margin-bottom:6px; align-items:center" :style="newEpChoice === 'blank-' + b.id ? 'border-color:var(--accent)' : ''">
+              <input type="radio" :value="'blank-' + b.id" v-model="newEpChoice">
+              <span class="xs">E{{ String(b.episodeNumber).padStart(2, '0') }} {{ b.title || '未命名' }}</span>
+            </label>
+          </template>
         </div>
         <div class="modal-f">
           <button class="btn ghost" @click="newEpOpen = false">取消</button>
-          <button class="btn primary" :disabled="!newEpNumber || newEpNumber < 1" @click="confirmNewEpisode">创建并进入剧本</button>
+          <button class="btn primary" :disabled="!newEpChoice" @click="confirmNewEpisode">{{ newEpChoice === 'create' ? '创建并进入剧本' : '进入该空白集' }}</button>
         </div>
       </div>
     </div>
@@ -174,36 +227,99 @@
       </div>
     </div>
 
-    <!-- 调整集序 Modal（C1） -->
-    <div v-if="reorderTarget" class="scrim" style="z-index:80" @click="reorderTarget = null"></div>
-    <div v-if="reorderTarget" class="modal-wrap" style="z-index:90">
+    <!-- 设置目标时长 Modal（60/90/120 预设 + 清除） -->
+    <div v-if="targetTarget" class="scrim" style="z-index:80" @click="targetTarget = null"></div>
+    <div v-if="targetTarget" class="modal-wrap" style="z-index:90">
       <div class="modal" style="width:400px">
-        <div class="modal-h"><h3>调整集序</h3><button class="icon-btn" @click="reorderTarget = null"><svg><use href="#i-close"/></svg></button></div>
+        <div class="modal-h"><h3>设置目标时长</h3><button class="icon-btn" @click="targetTarget = null"><svg><use href="#i-close"/></svg></button></div>
         <div class="modal-b">
-          <label class="col" style="gap:4px"><span class="xs muted">「{{ reorderTarget.title || '未命名' }}」移动到第几集</span>
-            <input class="input" type="number" min="1" v-model.number="reorderNumber">
+          <p class="xs muted" style="margin-bottom:8px">「{{ targetTarget.title || '未命名' }}」的单集目标时长（10-3600 秒），用于规划分镜与成片节奏。</p>
+          <label class="col" style="gap:4px"><span class="xs muted">秒</span>
+            <input class="input" type="number" min="10" max="3600" v-model.number="targetDurationInput">
           </label>
+          <div class="row" style="gap:8px; margin-top:10px">
+            <button class="btn sm" @click="targetDurationInput = 60">60 秒</button>
+            <button class="btn sm" @click="targetDurationInput = 90">90 秒</button>
+            <button class="btn sm" @click="targetDurationInput = 120">120 秒</button>
+          </div>
+          <p v-if="targetDurationInput !== null && targetDurationInput !== '' && !validTargetDuration" class="xs" style="color:var(--danger); margin-top:8px">目标时长需在 10-3600 秒之间</p>
         </div>
         <div class="modal-f">
-          <button class="btn ghost" @click="reorderTarget = null">取消</button>
-          <button class="btn primary" :disabled="!reorderNumber || reorderNumber < 1" @click="confirmReorder">确认调整</button>
+          <button class="btn ghost" @click="clearTargetDuration">清除</button>
+          <button class="btn ghost" @click="targetTarget = null">取消</button>
+          <button class="btn primary" :disabled="!validTargetDuration" @click="confirmTargetDuration">保存</button>
         </div>
       </div>
     </div>
+
+    <!-- 调整集序 · 排序与管理面板（全列表上移/下移） -->
+    <div v-if="reorderPanelOpen" class="scrim" style="z-index:80" @click="reorderPanelOpen = false"></div>
+    <div v-if="reorderPanelOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:480px">
+        <div class="modal-h"><h3>排序与管理</h3><button class="icon-btn" @click="reorderPanelOpen = false"><svg><use href="#i-close"/></svg></button></div>
+        <div class="modal-b">
+          <p class="xs muted" style="margin-bottom:8px">按当前顺序对全列表上移/下移；保存后集号将按新顺序重排为 1..N。</p>
+          <div style="max-height:320px; overflow:auto">
+            <div v-for="(ep, idx) in reorderDraft" :key="ep.id" class="row" style="gap:8px; padding:7px 0; border-bottom:1px solid var(--line); align-items:center">
+              <b class="xs" style="width:36px; color:var(--text-2)">E{{ String(idx + 1).padStart(2, '0') }}</b>
+              <span class="xs" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ ep.title || '未命名' }}</span>
+              <button class="icon-btn" title="上移" :disabled="idx === 0" @click="moveReorder(idx, -1)">↑</button>
+              <button class="icon-btn" title="下移" :disabled="idx === reorderDraft.length - 1" @click="moveReorder(idx, 1)">↓</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="reorderPanelOpen = false">取消</button>
+          <button class="btn primary" :disabled="reorderDraft.length === 0" @click="confirmReorder">保存集序</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 查看导入来源 · 只读抽屉 -->
+    <div v-if="importSourceOpen" class="scrim" style="z-index:80" @click="importSourceOpen = false"></div>
+    <aside v-if="importSourceOpen" class="card" style="position:fixed; right:0; top:0; bottom:0; width:440px; max-width:94vw; z-index:90; border-radius:0; border-top:none; border-bottom:none; border-right:none; overflow:auto">
+      <div class="modal-h" style="padding:16px 18px">
+        <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-doc"/></svg>
+        <h3>导入来源<template v-if="importSourceEp"> · E{{ String(importSourceEp.episodeNumber).padStart(2, '0') }}</template></h3>
+        <button class="icon-btn" @click="importSourceOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div style="padding:0 18px 18px">
+        <template v-if="importSource">
+          <p class="xs muted" style="margin-bottom:10px">最近一次成功导入的只读审计记录。</p>
+          <div class="imp-rows">
+            <div class="kv"><span class="k">协议</span><span class="v">{{ importSource.schemaName || '—' }}{{ importSource.schemaVersion ? ` v${importSource.schemaVersion}` : '' }}</span></div>
+            <div class="kv"><span class="k">任务包</span><span class="v mono">{{ importSource.packageId || '—' }}</span></div>
+            <div class="kv"><span class="k">文件名</span><span class="v">{{ importSource.sourceFilename || '—' }}</span></div>
+            <div class="kv"><span class="k">SHA-256</span><span class="v mono" style="word-break:break-all; font-size:11px">{{ importSource.sourceSha256 || '—' }}</span></div>
+            <div class="kv"><span class="k">导入时间</span><span class="v">{{ importSource.importedAt || '—' }}</span></div>
+          </div>
+          <p class="xs muted" style="margin-top:10px">来源记录随项目保留，不可编辑或删除。</p>
+        </template>
+        <p v-else-if="!importSourceLoading" class="muted" style="padding:24px 0">本集为直接创建，无导入来源</p>
+        <p v-else class="muted" style="padding:24px 0">加载中…</p>
+      </div>
+    </aside>
   </div>
 </template>
 
 <script>
 import v21 from '@/v21/api.js'
 
+const STAGE_ORDER = ['script', 'assets', 'storyboard', 'cut']
+
 export default {
   name: 'ProjectEpisodesView',
   data() {
     return {
-      items: [], q: '', status: 'all', importOpen: false,
+      items: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
       projectTitle: '', deleteTarget: null, deleteImpact: {},
-      rowMenuId: null, newEpOpen: false, newEpNumber: 1,
-      renameTarget: null, renameTitle: '', reorderTarget: null, reorderNumber: 1, notice: '',
+      rowMenuId: null,
+      newEpOpen: false, newEpChoice: 'create', newEpNextNumber: 1, blankEpisodes: [],
+      renameTarget: null, renameTitle: '', notice: '',
+      targetTarget: null, targetDurationInput: null,
+      reorderPanelOpen: false, reorderDraft: [],
+      importSourceOpen: false, importSourceEp: null, importSource: null, importSourceLoading: false,
+      flashId: '', importedId: '',
       externalTasks: [], cancellingTaskId: '',
     }
   },
@@ -214,22 +330,59 @@ export default {
       const h = this.$route.query.highlight
       return h ? String(h) : ''
     },
+    importedBanner() {
+      if (!this.importedId) return ''
+      const ep = this.allItems.find((i) => String(i.id) === this.importedId)
+      return ep ? `导入完成：《${ep.title || '未命名'}》已创建` : ''
+    },
     counts() {
       return {
         all: this.allItems.length,
         making: this.allItems.filter((i) => i.status === 'making').length,
         needsAttention: this.allItems.filter((i) => i.status === 'needs-attention').length,
         completed: this.allItems.filter((i) => i.status === 'completed').length,
+        blank: this.allItems.filter((i) => i.status === 'blank').length,
+        archived: this.archivedItems.length,
       }
     },
     allItems() { return this._allItems || [] },
+    archivedItems() { return this._archivedItems || [] },
+    validTargetDuration() {
+      const n = Number(this.targetDurationInput)
+      return Number.isFinite(n) && n >= 10 && n <= 3600
+    },
+    emptyText() {
+      if (this.status === 'archived') return '回收站为空：被删除的剧集会在这里保留 30 天，可随时恢复'
+      if (this.status === 'blank') return '没有空白剧集：所有剧集都已有内容'
+      if (this.stageFilter) return '当前阶段筛选下没有剧集：切回「全部阶段」查看'
+      return this.status === 'all' ? '还没有剧集，点击「新建剧集」直达空白剧本' : '当前筛选下没有剧集'
+    },
   },
-  mounted() { this.load() },
+  mounted() {
+    // 消费 ?imported=<episodeId>：顶部横幅 + 高亮该行
+    const imported = this.$route.query.imported
+    if (imported) this.importedId = String(imported)
+    // 消费 ?stage=（P3.5 概览深链）：设置第二层阶段筛选
+    const stage = this.$route.query.stage
+    if (stage && STAGE_ORDER.includes(String(stage))) this.stageFilter = String(stage)
+    if (imported || stage) this.consumeQuery(['imported', 'stage'])
+    this.load()
+  },
   methods: {
     async load() {
-      const data = await v21.listEpisodes(this.projectId, { q: this.q })
-      this._allItems = data.items || []
-      this.items = this.status === 'all' ? this._allItems : this._allItems.filter((i) => i.status === this.status)
+      const params = { q: this.q, sort: this.sort }
+      if (this.status === 'archived') params.status = 'archived'
+      const data = await v21.listEpisodes(this.projectId, params)
+      if (this.status === 'archived') {
+        this._archivedItems = data.items || []
+      } else {
+        this._allItems = data.items || []
+        try {
+          const archived = await v21.listEpisodes(this.projectId, { status: 'archived' })
+          this._archivedItems = archived.items || []
+        } catch { /* 徽标计数失败不影响主列表 */ }
+      }
+      this.applyFilters()
       try {
         this.externalTasks = (await v21.listExternalTasks(this.projectId)) || []
       } catch { this.externalTasks = [] }
@@ -238,6 +391,34 @@ export default {
         this.projectTitle = overview.hero.title
       } catch { /* ignore */ }
     },
+    applyFilters() {
+      let list
+      if (this.status === 'archived') list = this.archivedItems
+      else if (this.status === 'all') list = this.allItems
+      else list = this.allItems.filter((i) => i.status === this.status)
+      if (this.stageFilter && this.status !== 'archived') {
+        // 筛「有该阶段工作的集」：阶段单元格为「未开始」的不显示
+        list = list.filter((ep) => ep.stage && STAGE_ORDER.indexOf(this.stageFilter) <= STAGE_ORDER.indexOf(ep.stage))
+      }
+      this.items = list
+    },
+    consumeQuery(keys) {
+      const query = { ...this.$route.query }
+      let changed = false
+      keys.forEach((k) => {
+        if (k in query) { delete query[k]; changed = true }
+      })
+      if (changed) this.$router.replace({ query })
+    },
+    isHighlighted(ep) {
+      return (
+        String(ep.id) === String(this.highlightId || '') ||
+        String(ep.id) === String(this.flashId || '') ||
+        String(ep.id) === String(this.importedId || '')
+      )
+    },
+    setStatus(s) { this.status = s; this.load() },
+    setStageFilter(s) { this.stageFilter = s; this.applyFilters() },
     extStatusLabel(s) {
       return { waiting_external: '等待外部结果', imported: '已导入', cancelled: '已取消' }[s] || s
     },
@@ -256,7 +437,6 @@ export default {
         this.cancellingTaskId = ''
       }
     },
-    setStatus(s) { this.status = s; this.load() },
     stageLabel(stage) {
       return { script: '剧本', assets: '本集设定', storyboard: '分镜', cut: '成片' }[stage] || '—'
     },
@@ -269,7 +449,7 @@ export default {
         return stage === 'script' ? 'empty-start' : 'locked'
       }
       if (ep.needsAttention) return 'warn-cell'
-      const order = ['script', 'assets', 'storyboard', 'cut']
+      const order = STAGE_ORDER
       const idx = order.indexOf(ep.stage)
       const stageIdx = order.indexOf(stage)
       if (stageIdx < idx) return 'ok'
@@ -316,15 +496,38 @@ export default {
       const stage = ep.stage || 'script'
       this.$router.push(`/projects/${this.projectId}/episodes/${ep.id}/${stage}`)
     },
-    newEpisode() {
-      this.newEpNumber = (this.allItems.length || 0) + 1
+    openImportedScript() {
+      if (!this.importedId) return
+      this.$router.push(`/projects/${this.projectId}/episodes/${this.importedId}/script`)
+    },
+    async newEpisode() {
+      this.newEpChoice = 'create'
+      this.blankEpisodes = []
+      this.newEpNextNumber = Math.max(0, ...this.allItems.map((i) => Number(i.episodeNumber) || 0)) + 1
       this.newEpOpen = true
+      try {
+        const [blanks, all] = await Promise.all([
+          v21.listBlankEpisodes(this.projectId),
+          v21.listEpisodes(this.projectId, { sort: 'episode' }),
+        ])
+        this.blankEpisodes = blanks.items || []
+        this.newEpNextNumber = Math.max(0, ...(all.items || []).map((i) => Number(i.episodeNumber) || 0)) + 1
+      } catch { /* 用本地估算兜底 */ }
     },
     async confirmNewEpisode() {
+      if (!this.newEpChoice) return
       try {
-        const created = await v21.createEpisode(this.projectId, { episodeNumber: Number(this.newEpNumber) || undefined })
-        this.newEpOpen = false
-        this.$router.push(`/projects/${this.projectId}/episodes/${created.id}/script`)
+        if (this.newEpChoice === 'create') {
+          const created = await v21.createEpisode(this.projectId, { episodeNumber: this.newEpNextNumber })
+          this.newEpOpen = false
+          this.$router.push(`/projects/${this.projectId}/episodes/${created.id}/script`)
+        } else {
+          const id = Number(String(this.newEpChoice).replace('blank-', ''))
+          const target = this.blankEpisodes.find((b) => b.id === id)
+          if (!target) throw new Error('该集已不再空白，请刷新后重试')
+          this.newEpOpen = false
+          this.$router.push(`/projects/${this.projectId}/episodes/${id}/script`)
+        }
       } catch (e) {
         this.notice = e.message || '创建失败'
         this.newEpOpen = false
@@ -346,25 +549,81 @@ export default {
         this.renameTarget = null
       }
     },
-    startReorder(ep) {
+    async copyDraft(ep) {
       this.rowMenuId = null
-      this.reorderTarget = ep
-      this.reorderNumber = ep.episodeNumber
+      try {
+        const created = await v21.copyEpisodeDraft(ep.id)
+        this.flashId = String(created.id)
+        this.notice = `已复制为草稿副本：E${String(created.episodeNumber).padStart(2, '0')}（承接剧本内容，零媒体任务）`
+        await this.load()
+      } catch (e) {
+        this.notice = e.message || '复制失败'
+      }
+    },
+    startTargetDuration(ep) {
+      this.rowMenuId = null
+      this.targetTarget = ep
+      this.targetDurationInput = ep.targetDuration || null
+    },
+    async confirmTargetDuration() {
+      if (!this.targetTarget || !this.validTargetDuration) return
+      try {
+        await v21.setEpisodeTargetDuration(this.targetTarget.id, Number(this.targetDurationInput))
+        this.targetTarget = null
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '设置失败'
+        this.targetTarget = null
+      }
+    },
+    async clearTargetDuration() {
+      if (!this.targetTarget) return
+      try {
+        await v21.setEpisodeTargetDuration(this.targetTarget.id, null)
+        this.targetTarget = null
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '清除失败'
+        this.targetTarget = null
+      }
+    },
+    async openReorderPanel() {
+      this.rowMenuId = null
+      try {
+        const data = await v21.listEpisodes(this.projectId, { sort: 'episode' })
+        this.reorderDraft = (data.items || []).map((i) => ({ id: i.id, episodeNumber: i.episodeNumber, title: i.title }))
+        this.reorderPanelOpen = true
+      } catch (e) {
+        this.notice = e.message || '加载剧集失败'
+      }
+    },
+    moveReorder(idx, delta) {
+      const to = idx + delta
+      if (to < 0 || to >= this.reorderDraft.length) return
+      const arr = this.reorderDraft.slice()
+      const moved = arr.splice(idx, 1)[0]
+      arr.splice(to, 0, moved)
+      this.reorderDraft = arr
     },
     async confirmReorder() {
-      const ep = this.reorderTarget
-      if (!ep) return
-      const ids = this.allItems.map((i) => i.id)
-      const from = ids.indexOf(ep.id)
-      ids.splice(from, 1)
-      ids.splice(Math.max(0, Number(this.reorderNumber) - 1), 0, ep.id)
+      if (!this.reorderDraft.length) return
       try {
-        await v21.reorderEpisodes(this.projectId, ids)
-        this.reorderTarget = null
+        await v21.reorderEpisodes(this.projectId, this.reorderDraft.map((i) => i.id))
+        this.reorderPanelOpen = false
         this.load()
       } catch (e) {
         this.notice = e.message || '调整失败'
-        this.reorderTarget = null
+        this.reorderPanelOpen = false
+      }
+    },
+    async restoreEp(ep) {
+      try {
+        await v21.restoreEpisode(ep.id)
+        this.flashId = String(ep.id)
+        this.notice = ''
+        await this.load()
+      } catch (e) {
+        this.notice = e.message || '恢复失败'
       }
     },
     startDelete(ep) {
@@ -380,12 +639,31 @@ export default {
       this.deleteTarget = null
       this.load()
     },
+    async openImportSource(ep) {
+      this.rowMenuId = null
+      this.importSourceEp = ep
+      this.importSource = null
+      this.importSourceLoading = true
+      this.importSourceOpen = true
+      try {
+        this.importSource = await v21.getImportSource(ep.id)
+      } catch {
+        this.importSource = null
+      } finally {
+        this.importSourceLoading = false
+      }
+    },
   },
 }
 </script>
 
 <style scoped>
 .ep-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.sort-native {
+  background: transparent; border: none; outline: none; color: var(--text);
+  font-size: 13.5px; appearance: none; cursor: pointer; padding-right: 4px;
+}
+.sort-native option { background: var(--panel2); color: var(--text); }
 .ext-tasks-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; }
 .ext-task-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .4px; }

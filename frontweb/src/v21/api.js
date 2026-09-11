@@ -62,6 +62,10 @@ export const v21 = {
   listBlankEpisodes: (projectId) => get(`/projects/${projectId}/episodes/blank`),
   getEpisode: (episodeId) => get(`/episodes/${episodeId}`),
   renameEpisode: (episodeId, title) => patch(`/episodes/${episodeId}`, { title }),
+  // 目标时长（10-3600 秒；null 清除）
+  setEpisodeTargetDuration: (episodeId, targetDuration) => patch(`/episodes/${episodeId}`, { targetDuration }),
+  // 复制为草稿副本（承接最新剧本内容，零媒体任务）
+  copyEpisodeDraft: (episodeId) => post(`/episodes/${episodeId}/copy-draft`),
   reorderEpisodes: (projectId, order) => put(`/projects/${projectId}/episodes/order`, { order }),
   deleteEpisode: (episodeId) => del(`/episodes/${episodeId}`),
   restoreEpisode: (episodeId) => post(`/episodes/${episodeId}/restore`),

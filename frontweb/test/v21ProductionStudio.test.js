@@ -226,11 +226,14 @@ test('外部 AI 向导：8 步流程且全程零媒体任务文案', () => {
   assert.match(view, /不会创建图片\/视频\/音频任务|零媒体任务|零费用/)
 })
 
-test('剧集页：新建剧集直达剧本 + 导入/协作菜单 + 回收站删除（无归档字样）', () => {
+test('剧集页：新建剧集直达剧本 + 导入/协作菜单 + 回收站删除（§23.3 含已归档/目标时长）', () => {
   const view = read('src/views/productionStudio/ProjectEpisodesView.vue')
   assert.match(view, /新建剧集/)
   assert.match(view, /导入 \/ 协作|导入\/协作/)
   assert.match(view, /外部 AI 制作/)
   assert.match(view, /回收站/)
-  assert.doesNotMatch(view, /归档|目标时长/)
+  // Task 3.6 起规格 §23.3 明确要求第一层筛选含「已归档」、行菜单含「设置目标时长」，
+  // 原收敛期「无归档字样」断言随之废止（详见 task-3.6 报告）。
+  assert.match(view, /已归档/)
+  assert.match(view, /设置目标时长/)
 })
