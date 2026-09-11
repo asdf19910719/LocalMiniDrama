@@ -92,6 +92,8 @@ export const v21 = {
   getMediaGuard: (episodeId, shot) => get(`/episodes/${episodeId}/media-guard`, { shot }),
   // 分镜
   createFromScript: (episodeId) => post(`/episodes/${episodeId}/storyboard/create-from-script`),
+  previewStructureDiff: (episodeId) => get(`/episodes/${episodeId}/storyboard/structure-diff`),
+  applyStructureDiff: (episodeId, diff) => post(`/episodes/${episodeId}/storyboard/apply-structure-diff`, { diff }),
   getStoryboard: (episodeId) => get(`/episodes/${episodeId}/storyboard`),
   getShot: (shotId) => get(`/storyboards/${shotId}`),
   editSegment: (shotId, segmentId, body) => patch(`/storyboards/${shotId}/segments/${segmentId}`, body),

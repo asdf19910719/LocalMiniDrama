@@ -183,6 +183,141 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
     return { created: scenes.length };
   }
 
+  // ---------- 结构 diff（B1 更新分镜结构向导） ----------
+
+  /** 从已确认剧本重新推导期望结构（与 createFromScript 同一推导，只读） */
+  function deriveExpectedStructure(episodeId) {
+    const approved = requireApprovedScript(episodeId);
+    const scenes = db
+      .prepare('SELECT * FROM story_scenes WHERE episode_id = ? ORDER BY scene_number')
+      .all(episodeId);
+    if (scenes.length === 0) throw httpError('NO_SCENES', 400, '剧本没有可用的场次结构');
+    return {
+      approvedId: approved.id,
+      expected: scenes.map((scene, index) => ({
+        title: scene.heading || `镜头 ${index + 1}`,
+        description: scene.summary || '',
+        action: scene.summary || scene.heading || '',
+        duration: DEFAULT_SHOT_SECONDS,
+        visual: scene.summary || scene.heading || '',
+      })),
+    };
+  }
+
+  function previewStructureDiff(episodeId) {
+    requireEpisode(episodeId);
+    const { expected } = deriveExpectedStructure(episodeId);
+    const current = listShots(episodeId);
+    const added = [];
+    const changed = [];
+    const removed = [];
+    let unchanged = 0;
+    const pairCount = Math.min(expected.length, current.length);
+    for (let i = 0; i < pairCount; i += 1) {
+      const exp = expected[i];
+      const cur = current[i];
+      const fields = [];
+      if ((cur.title || '') !== exp.title) fields.push('title');
+      const detail = getShotDetail(cur.id);
+      const seg = detail.segments[0];
+      if (((seg && seg.visual) || '') !== exp.visual) fields.push('visual');
+      if (Number(cur.duration || 0) !== exp.duration) fields.push('duration');
+      if (fields.length) {
+        changed.push({
+          shotId: cur.id,
+          number: cur.storyboard_number,
+          title: cur.title,
+          fields,
+          expected: exp,
+          humanEdited: (cur.structure_revision || 1) > 1,
+        });
+      } else {
+        unchanged += 1;
+      }
+    }
+    const baseNumber = current.length || 0;
+    for (let i = pairCount; i < expected.length; i += 1) {
+      added.push({ ...expected[i], storyboardNumber: baseNumber + added.length + 1 });
+    }
+    for (let i = pairCount; i < current.length; i += 1) {
+      const cur = current[i];
+      removed.push({
+        shotId: cur.id,
+        number: cur.storyboard_number,
+        title: cur.title,
+        humanEdited: (cur.structure_revision || 1) > 1,
+      });
+    }
+    return { added, changed, removed, unchanged };
+  }
+
+  function applyStructureDiff(episodeId, diff = {}, _options = {}) {
+    requireEpisode(episodeId);
+    const { approvedId } = deriveExpectedStructure(episodeId);
+    const now = nowIso();
+    let addedCount = 0;
+    let changedCount = 0;
+    let removedCount = 0;
+    let skipped = 0;
+    const tx = db.transaction(() => {
+      for (const item of diff.added || []) {
+        const base = db
+          .prepare('SELECT COALESCE(MAX(storyboard_number), 0) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
+          .get(episodeId).n;
+        const info = db
+          .prepare(
+            `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, duration, action, status, structure_revision, script_revision_id, created_at, updated_at)
+             VALUES (?, NULL, ?, ?, ?, ?, ?, 'draft', 1, ?, ?, ?)`
+          )
+          .run(episodeId, base + 1, item.title || `镜头 ${base + 1}`, item.description || '', item.duration || DEFAULT_SHOT_SECONDS, item.action || item.description || '', approvedId, now, now);
+        const storyboardId = Number(info.lastInsertRowid);
+        db.prepare(
+          `INSERT INTO storyboard_segments (storyboard_id, seq, start_seconds, end_seconds, visual, dialogue, sound, asset_refs_json, created_at, updated_at)
+           VALUES (?, 1, 0, ?, ?, '', '', '[]', ?, ?)`
+        ).run(storyboardId, item.duration || DEFAULT_SHOT_SECONDS, item.visual || item.description || '', now, now);
+        addedCount += 1;
+      }
+      for (const item of diff.changed || []) {
+        if (item.skip) {
+          skipped += 1;
+          continue;
+        }
+        const shot = requireShot(item.shotId);
+        const exp = item.expected || {};
+        db.prepare(
+          'UPDATE storyboards SET title = COALESCE(?, title), description = COALESCE(?, description), duration = COALESCE(?, duration), action = COALESCE(?, action), updated_at = ? WHERE id = ?'
+        ).run(
+          item.fields && item.fields.includes('title') ? exp.title : null,
+          item.fields && item.fields.includes('description') ? exp.description : null,
+          item.fields && item.fields.includes('duration') ? exp.duration : null,
+          item.fields && (item.fields.includes('visual') || item.fields.includes('action')) ? (exp.action || exp.description || '') : null,
+          now,
+          shot.id
+        );
+        if (item.fields && item.fields.includes('visual')) {
+          const seg = listSegments(shot.id)[0];
+          if (seg) {
+            db.prepare('UPDATE storyboard_segments SET visual = ?, updated_at = ? WHERE id = ?').run(exp.visual || '', now, seg.id);
+          }
+        }
+        nextShotRevision(shot.id);
+        changedCount += 1;
+      }
+      for (const item of diff.removed || []) {
+        if (item.skip) {
+          skipped += 1;
+          continue;
+        }
+        // 回收站式软删：媒体候选（image_generations/director 三表）一律保留
+        db.prepare('UPDATE storyboards SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, item.shotId);
+        removedCount += 1;
+      }
+    });
+    tx();
+    touchStage(episodeId);
+    return { applied: { added: addedCount, changed: changedCount, removed: removedCount, skipped } };
+  }
+
   function listShots(episodeId) {
     return db
       .prepare(
@@ -1317,6 +1452,8 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
 
   return {
     createFromScript,
+    previewStructureDiff,
+    applyStructureDiff,
     listShots,
     getShotDetail,
     editSegment,

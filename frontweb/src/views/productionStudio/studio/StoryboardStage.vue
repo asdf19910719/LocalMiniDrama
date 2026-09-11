@@ -43,7 +43,7 @@
         <div class="more-wrap">
           <button class="btn ghost" style="border:1px solid var(--line)" @click="moreOpen = !moreOpen">更新分镜结构 / 导入 / 导出<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
           <div v-if="moreOpen" class="card more-pop" @click="moreOpen = false">
-            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="createFromScript">更新分镜结构（从已确认剧本重建）</button>
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openStructureDiff">更新分镜结构（从已确认剧本重建）</button>
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportSrt">导出 SRT 字幕</button>
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportShotPackages">导出 Shot Package JSON</button>
           </div>
@@ -279,6 +279,50 @@
       </div>
     </div>
 
+    <!-- 更新分镜结构 diff 向导（B1 / 设计稿 10 更多菜单 / STORYBOARD-016） -->
+    <div v-if="diffOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:640px">
+        <div class="modal-h">
+          <h3>更新分镜结构 · 与已确认剧本对比</h3>
+          <button class="icon-btn" @click="diffOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b" style="max-height:420px; overflow:auto">
+          <p v-if="diffLoading" class="muted small">正在推导结构差异…</p>
+          <template v-if="diff">
+            <div class="row" style="margin-bottom:10px">
+              <span class="badge ok">未变 {{ diff.unchanged }}</span>
+              <span class="badge warn">变更 {{ diff.changed.length }}</span>
+              <span class="badge danger">删除 {{ diff.removed.length }}</span>
+              <span class="badge outline">新增 {{ diff.added.length }}</span>
+            </div>
+            <div v-for="c in diff.changed" :key="'c' + c.shotId" class="imp-row">
+              <span class="badge warn">变更</span>
+              <span class="ellipsis grow">镜头 {{ c.number }} · {{ c.fields.join(' / ') }} → {{ c.expected.title }}</span>
+              <label v-if="c.humanEdited" class="xs" style="white-space:nowrap">
+                <input type="checkbox" v-model="diffSkips['c' + c.shotId]"> 跳过（保留人工改动）
+              </label>
+            </div>
+            <div v-for="(a, i) in diff.added" :key="'a' + i" class="imp-row">
+              <span class="badge ok">新增</span>
+              <span class="ellipsis grow">镜头 {{ a.storyboardNumber }} · {{ a.title }}</span>
+            </div>
+            <div v-for="r in diff.removed" :key="'r' + r.shotId" class="imp-row">
+              <span class="badge danger">删除</span>
+              <span class="ellipsis grow">镜头 {{ r.number }} · {{ r.title }}（媒体候选保留）</span>
+              <label v-if="r.humanEdited" class="xs" style="white-space:nowrap">
+                <input type="checkbox" v-model="diffSkips['r' + r.shotId]"> 跳过（保留人工改动）
+              </label>
+            </div>
+            <p class="xs muted" style="margin-top:8px">确认后创建新的结构版本：删除为回收站式软删，媒体历史不删除；人工改动镜头默认跳过。</p>
+          </template>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="diffOpen = false">取消</button>
+          <button class="btn primary" :disabled="diffLoading || diffApplying" @click="applyDiff">{{ diffApplying ? '应用中…' : '确认创建新结构版本' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 批量生成预检抽屉（25） -->
     <div v-if="batchOpen" class="scrim" style="z-index:80" @click="batchOpen = false"></div>
     <aside v-if="batchOpen" class="drawer narrow" style="z-index:90">
@@ -406,6 +450,7 @@ export default {
       generatingImage: false, readiness: { status: 'checking' },
       frameChaining: { state: 'none', stateLabel: '首镜' },
       trackFilter: 'all', moreOpen: false, batchOpen: false, batch: {}, batchResult: null, busy: false,
+      diffOpen: false, diffLoading: false, diffApplying: false, diff: null, diffSkips: {},
       refManageOpen: false, assetPool: [],
       assetPreviewOpen: false, assetPreview: null, assetPreviewRefIndex: -1,
       historyOpen: false, history: {},
@@ -504,6 +549,40 @@ export default {
     async createFromScript() {
       await v21.createFromScript(this.episodeId)
       await this.load()
+    },
+    async openStructureDiff() {
+      this.diffOpen = true
+      this.diffLoading = true
+      this.diff = null
+      this.diffSkips = {}
+      try {
+        const diff = await v21.previewStructureDiff(this.episodeId)
+        // 人工改动镜头默认勾选「跳过」
+        const skips = {}
+        for (const c of diff.changed || []) skips['c' + c.shotId] = !!c.humanEdited
+        for (const r of diff.removed || []) skips['r' + r.shotId] = !!r.humanEdited
+        this.diffSkips = skips
+        this.diff = diff
+      } catch (err) {
+        this.diff = { added: [], changed: [], removed: [], unchanged: 0, error: err.message }
+      } finally {
+        this.diffLoading = false
+      }
+    },
+    async applyDiff() {
+      this.diffApplying = true
+      try {
+        await v21.applyStructureDiff(this.episodeId, {
+          added: this.diff.added,
+          changed: (this.diff.changed || []).map((c) => ({ ...c, skip: !!this.diffSkips['c' + c.shotId] })),
+          removed: (this.diff.removed || []).map((r) => ({ ...r, skip: !!this.diffSkips['r' + r.shotId] })),
+        })
+        this.diffOpen = false
+        await this.load()
+        if (this.currentShotId != null) await this.selectShot(this.currentShotId)
+      } finally {
+        this.diffApplying = false
+      }
     },
     async selectShot(shotId) {
       this.currentShotId = shotId
@@ -773,6 +852,7 @@ export default {
 
 <style scoped>
 .sb-main { flex: 1; display: flex; min-height: 0; }
+.imp-row { display: flex; align-items: flex-start; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .insp { width: 272px; flex: 0 0 272px; border-right: 1px solid var(--line); background: var(--panel); padding: 10px 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
 .insp .grp-t { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin-top: 2px; }
 .ref-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; cursor: pointer; }

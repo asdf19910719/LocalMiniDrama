@@ -286,6 +286,13 @@ function createV21Router({ db, cfg, log }) {
   r.post('/episodes/:episodeId/storyboard/create-from-script', wrap((req, res) => {
     response.created(res, storyboard.createFromScript(req.params.episodeId));
   }));
+  // B1 更新分镜结构 diff 向导
+  r.get('/episodes/:episodeId/storyboard/structure-diff', wrap((req, res) => {
+    response.success(res, storyboard.previewStructureDiff(req.params.episodeId));
+  }));
+  r.post('/episodes/:episodeId/storyboard/apply-structure-diff', wrap((req, res) => {
+    response.success(res, storyboard.applyStructureDiff(req.params.episodeId, req.body?.diff || {}, req.body || {}));
+  }));
   r.get('/episodes/:episodeId/storyboard', wrap((req, res) => {
     const shots = storyboard.listShots(req.params.episodeId).map((s) => ({
       ...s,
