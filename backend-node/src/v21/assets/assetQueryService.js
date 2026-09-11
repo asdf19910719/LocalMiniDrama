@@ -98,11 +98,45 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
 
   // PATCH 白名单：以各表实际列为准（场景 name=location，道具 type，人物 role）
   const UPDATE_FIELDS_BY_TYPE = {
-    character: ['name', 'role', 'description'],
+    character: ['name', 'role', 'description', 'voice'],
     scene: ['name', 'time', 'description'],
     prop: ['name', 'type', 'description'],
   };
   const NAME_COLUMN_BY_TYPE = { scene: 'location' };
+  const VOICE_SOURCES = ['upload', 'manual', 'library'];
+
+  /** 校验并规范化人物音色：null=清除；否则 {name,url,source}（url 非空字符串，source 白名单内，缺省 manual） */
+  function normalizeVoice(value) {
+    if (value == null) return null;
+    if (typeof value !== 'object' || Array.isArray(value)) {
+      throw httpError('VALIDATION_ERROR', 400, 'voice 必须是对象或 null');
+    }
+    if (typeof value.name !== 'string' || typeof value.url !== 'string' || !value.url.trim()) {
+      throw httpError('VALIDATION_ERROR', 400, 'voice.name/url 必须是字符串且 url 非空');
+    }
+    const source = value.source == null || value.source === '' ? 'manual' : value.source;
+    if (!VOICE_SOURCES.includes(source)) {
+      throw httpError('VALIDATION_ERROR', 400, "voice.source 必须是 'upload' | 'manual' | 'library'");
+    }
+    return { name: value.name, url: value.url.trim(), source };
+  }
+
+  /** 解析 voice_json；缺失/损坏/非法形态一律返回 null */
+  function parseVoice(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    try {
+      const v = JSON.parse(raw);
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+      if (typeof v.url !== 'string' || !v.url) return null;
+      return {
+        name: typeof v.name === 'string' ? v.name : '',
+        url: v.url,
+        source: VOICE_SOURCES.includes(v.source) ? v.source : 'manual',
+      };
+    } catch (_) {
+      return null;
+    }
+  }
 
   /** PATCH 素材资料：白名单更新行字段；软删 404；空 name 400 */
   function updateAsset(type, assetId, body = {}) {
@@ -116,6 +150,13 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     for (const field of fields) {
       if (!(field in body)) continue;
       let value = body[field];
+      if (field === 'voice') {
+        // 人物音色：对象/null（null=清除），序列化后落 voice_json 列
+        value = normalizeVoice(value);
+        updates.push('voice_json = ?');
+        params.push(value == null ? null : JSON.stringify(value));
+        continue;
+      }
       if (field === 'name') {
         if (typeof value !== 'string' || !value.trim()) {
           throw httpError('VALIDATION_ERROR', 400, '名称不能为空');
@@ -143,6 +184,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       assetId: fresh.id,
       name: fresh.name || fresh.location || '',
       description: fresh.description || null,
+      voice: parseVoice(fresh.voice_json),
     };
   }
 
@@ -284,6 +326,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       id: row.id,
       name: row.name || row.location || '',
       description: row.description || null,
+      voice: parseVoice(row.voice_json),
       currentImage: currentImageOf(type, row),
       states,
       candidates,

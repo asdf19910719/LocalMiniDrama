@@ -244,6 +244,7 @@ function ensureAllColumns(database) {
     { name: 'local_path',        type: 'TEXT' },
     { name: 'extra_images',      type: 'TEXT' },
     { name: 'voice_style',       type: 'TEXT' },
+    { name: 'voice_json',        type: 'TEXT' },   // JSON: 人物音色 {name,url,source}，source ∈ 'upload'|'manual'|'library'；NULL=未设置（勿与遗留文案字段 voice_style 混用）
     { name: 'sort_order',        type: 'INTEGER DEFAULT 0' },
     { name: 'error_msg',         type: 'TEXT' },
     { name: 'identity_anchors',  type: 'TEXT' },   // JSON: 6层视觉锚点（骨相/五官/辨识标记/色值/皮肤/发型）

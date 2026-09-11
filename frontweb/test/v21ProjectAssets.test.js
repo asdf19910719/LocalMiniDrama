@@ -160,6 +160,67 @@ test('概览标签：资料编辑保存调用 PATCH 端点，保存中/失败在
   assert.match(api, /updateAsset: \(type, assetId, body\) => patch\(`\/assets\/\$\{type\}\/\$\{assetId\}`, body\)/, 'api.js 提供 updateAsset PATCH 封装')
 })
 
+// ---- Task 3.2（P0-9）：人物音色管理 ----
+
+test('P0-9 人物音色区：版本与候选标签内渲染音色区/试听元素/设置入口，仅人物显示', () => {
+  const src = view()
+  const versions = src.match(/<!-- 标签 2：版本与候选[\s\S]*?(?=<!-- 标签 3)/)
+  assert.ok(versions, '定位版本与候选标签面板')
+  assert.match(versions[0], /人物音色/, '版本与候选标签内存在「人物音色」区')
+  assert.match(versions[0], /detail\?\.assetType === 'character'/, '音色区仅人物素材显示')
+  assert.match(src, /<audio[^>]*controls/, '存在试听元素（audio controls）')
+  assert.match(src, /@click="openVoiceSheet"/, '存在「设置音色」入口')
+  assert.match(src, /设置音色/, '设置音色文案')
+})
+
+test('P0-9 音色设置弹窗：上传/手动两个来源 tab + 提取置灰 + 保存走 PATCH voice', () => {
+  const src = view()
+  assert.match(src, /voiceSheetOpen/, '存在音色设置弹窗状态位 voiceSheetOpen')
+  assert.match(src, /voiceTab === 'upload'/, '来源 tab：上传音频')
+  assert.match(src, /voiceTab === 'manual'/, '来源 tab：手动填写')
+  assert.match(src, /type="file"/, '上传 tab 有文件选择')
+  assert.match(src, /accept="audio\/\*"/, '文件选择仅收音频')
+  // 「从音视频提取」保持禁用态（P2 Provider 依赖），不得假装可用
+  assert.match(src, /从音视频提取/, '存在「从音视频提取」按钮')
+  assert.match(src, /依赖语音 Provider，暂未开放/, '置灰按钮旁有禁用原因提示')
+  assert.match(src, /<button[^>]*disabled[^>]*>[^<]*从音视频提取/, '提取按钮必须 disabled 置灰')
+  // 保存：PATCH voice，成功提示、失败呈现在弹窗体内
+  const fnSave = src.match(/async saveVoice\(\)[\s\S]*?\n    \},\n/)
+  assert.ok(fnSave, '能定位 saveVoice 方法体')
+  assert.match(fnSave[0], /v21\.updateAsset\(/, '保存调 PATCH 封装 updateAsset')
+  assert.match(fnSave[0], /\{ voice \}/, 'PATCH 提交 voice 对象')
+  assert.match(fnSave[0], /音色已更新/, '成功提示「音色已更新」')
+  assert.match(fnSave[0], /this\.voiceError = /, '失败写弹窗内错误行 voiceError')
+})
+
+test('P0-9 音色上传走 /api/v1/upload/audio，成功后回填 url + 文件名', () => {
+  const api = read('src/v21/api.js')
+  assert.match(api, /uploadAudio/, 'api.js 提供 uploadAudio 封装')
+  assert.match(api, /\/api\/v1\/upload\/audio/, '上传端点为 /api/v1/upload/audio')
+  const src = view()
+  const fnUp = src.match(/async uploadVoiceFile\(event\)[\s\S]*?\n    \},\n/)
+  assert.ok(fnUp, '能定位 uploadVoiceFile 方法体')
+  assert.match(fnUp[0], /v21\.uploadAudio\(/, '上传走 api 封装')
+  assert.match(fnUp[0], /filename/, '成功后回填文件名')
+  assert.match(fnUp[0], /voiceForm\.url = /, '成功后回填 url')
+  assert.match(fnUp[0], /this\.voiceError = /, '上传失败呈现在弹窗内错误行')
+})
+
+test('P0-9 清除音色确认先行：确认弹窗后才 PATCH voice=null', () => {
+  const src = view()
+  assert.match(src, /@click="askClearVoice"/, '清除按钮绑定确认入口 askClearVoice')
+  assert.match(src, /voiceClearOpen/, '存在清除确认弹窗状态位 voiceClearOpen')
+  const fn = src.match(/async confirmClearVoice\(\)[\s\S]*?\n    \},\n/)
+  assert.ok(fn, '能定位 confirmClearVoice 方法体')
+  assert.match(fn[0], /voice: null/, '确认后 PATCH voice=null 清除')
+  assert.match(fn[0], /this\.voiceClearError = /, '失败呈现在弹窗内错误行')
+})
+
+test('P0-9 集级联动提示：音色区含「本集使用音色在单集设定中另行选择」说明', () => {
+  const src = view()
+  assert.match(src, /本集使用音色在单集设定中另行选择/, 'muted 联动提示文案')
+})
+
 test('使用位置/生成记录标签：渲染对应数据源字段、用户语言与空态', () => {
   const src = view()
   // 使用位置

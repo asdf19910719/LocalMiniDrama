@@ -321,6 +321,8 @@ function setupRouter(cfg, db, log) {
 
   // ---------- upload ----------
   r.post('/upload/image', uploadModule.multerSingle, uploadHandlers.uploadImage);
+  // 通用音频上传（人物音色等；仅音频 MIME，≤10MB，字段名 file）
+  r.post('/upload/audio', uploadModule.multerAudioSingle, uploadHandlers.uploadAudio);
 
   // ---------- episodes ----------
   // 注意：drama.generateStoryboard 已处理所有逻辑（包括参数解析），这里统一使用 drama 模块的实现

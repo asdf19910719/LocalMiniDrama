@@ -248,6 +248,63 @@ test('setStateImage：设置状态当前图并反映到 states；scene 类型 40
   );
 });
 
+// ---- Task 3.2（P0-9）：人物音色 voice_json ----
+
+test('updateAsset：character 白名单接受 voice，getDetail 返回 voice（落库 voice_json）', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  assert.equal(assets.getDetail('character', 1).voice, null, '未设置时 voice 为 null');
+  const voice = { name: '温柔女声', url: '/static/uploads/a.mp3', source: 'upload' };
+  const r = assets.updateAsset('character', 1, { voice });
+  assert.deepEqual(r.voice, voice, 'PATCH 响应带回 voice');
+  assert.deepEqual(
+    JSON.parse(db.prepare('SELECT voice_json FROM characters WHERE id = 1').get().voice_json),
+    voice,
+    'voice 落库为 voice_json JSON'
+  );
+  assert.deepEqual(assets.getDetail('character', 1).voice, voice, 'getDetail 返回 voice');
+});
+
+test('updateAsset：voice=null 清除音色；不带 voice 的 PATCH 不动音色', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  assets.updateAsset('character', 1, { voice: { name: '低音男声', url: '/static/uploads/b.wav', source: 'manual' } });
+  assets.updateAsset('character', 1, { description: '只改描述' });
+  assert.ok(assets.getDetail('character', 1).voice, '不传 voice 时保持不变');
+  assets.updateAsset('character', 1, { voice: null });
+  assert.equal(assets.getDetail('character', 1).voice, null, 'voice=null 清除');
+  assert.equal(db.prepare('SELECT voice_json FROM characters WHERE id = 1').get().voice_json, null);
+});
+
+test('updateAsset：非法 voice 400（name/url 非字符串、url 空、source 非白名单、非对象）', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  const bads = [
+    { url: '/static/x.mp3' },
+    { name: 123, url: '/static/x.mp3' },
+    { name: '温柔女声' },
+    { name: '温柔女声', url: '   ' },
+    { name: 'a', url: '/x.mp3', source: 'magic' },
+    '温柔女声',
+  ];
+  for (const voice of bads) {
+    assert.throws(
+      () => assets.updateAsset('character', 1, { voice }),
+      (e) => e.code === 'VALIDATION_ERROR' && e.status === 400,
+      `非法 voice ${JSON.stringify(voice)} 应 400`
+    );
+  }
+});
+
+test('getDetail：voice_json 损坏 JSON 返回 null，不抛错', () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  db.prepare('UPDATE characters SET voice_json = ? WHERE id = 1').run('{broken json');
+  assert.equal(assets.getDetail('character', 1).voice, null, '损坏 JSON 返回 null');
+  db.prepare('UPDATE characters SET voice_json = ? WHERE id = 1').run('"just a string"');
+  assert.equal(assets.getDetail('character', 1).voice, null, '合法 JSON 但非对象也返回 null');
+});
+
 // ---- generateCandidate 支持 stateId（可选顺手项） ----
 
 test('generateCandidate：stateId 注入状态名前缀（仅提示词组装，不改表）', async () => {

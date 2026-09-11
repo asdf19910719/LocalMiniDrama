@@ -92,6 +92,50 @@ function routes(cfg, log, db) {
         response.internalError(res, err.message || '上传失败');
       }
     },
+    // 通用音频上传（人物音色等场景；仅音频 MIME，≤10MB，字段名 file）
+    uploadAudio: (req, res) => {
+      if (!req.file || !req.file.buffer) {
+        return response.badRequest(res, '请选择音频文件');
+      }
+      try {
+        const rawStorage = cfg?.storage?.local_path || './data/storage';
+        const storagePath = path.isAbsolute(rawStorage)
+          ? rawStorage
+          : path.join(process.cwd(), rawStorage);
+        const baseUrl = cfg?.storage?.base_url || '';
+        let projectSubdir = null;
+        if (db) {
+          const raw = req.body?.drama_id;
+          const did =
+            raw !== undefined && raw !== null && String(raw).trim() !== ''
+              ? Number(raw)
+              : NaN;
+          if (Number.isFinite(did) && did > 0) {
+            projectSubdir = storageLayout.getProjectStorageSubdir(db, did);
+          }
+        }
+        const result = uploadService.uploadFile(
+          storagePath,
+          baseUrl,
+          log,
+          req.file.buffer,
+          req.file.originalname || 'audio.mp3',
+          req.file.mimetype,
+          'uploads',
+          projectSubdir
+        );
+        response.success(res, {
+          url: result.url,
+          path: result.local_path,
+          local_path: result.local_path,
+          filename: req.file.originalname,
+          size: req.file.size,
+        });
+      } catch (err) {
+        log.error('upload audio', { error: err.message });
+        response.internalError(res, err.message || '上传失败');
+      }
+    },
   };
 }
 

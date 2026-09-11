@@ -92,6 +92,15 @@ export const v21 = {
   getAssetDetail: (type, assetId) => get(`/assets/${type}/${assetId}`),
   // PATCH 素材资料（name/description 等白名单字段；软删 404、空名 400）
   updateAsset: (type, assetId, body) => patch(`/assets/${type}/${assetId}`, body),
+  // 音频上传（人物音色等；/api/v1 通用上传端点，字段名 file，返回 {url,filename,...}）
+  uploadAudio: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return axios
+      .post('/api/v1/upload/audio', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then(unwrap)
+      .catch((e) => { throw toError(e) })
+  },
   generateAssetCandidate: (projectId, body) => post(`/projects/${projectId}/assets/generate-candidate`, body),
   useCandidate: (body) => post('/assets/use-candidate', body),
   deleteAsset: (type, assetId) => del(`/assets/${type}/${assetId}`),

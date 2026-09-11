@@ -141,6 +141,25 @@
               </div>
             </div>
             <p v-else class="muted" style="font-size:12px">该人物还没有状态（如"常服 / 夜班服"），可经制作包导入或状态管理创建</p>
+            <!-- 人物音色（Task 3.2 / P0-9）：项目级音色管理最小闭环 -->
+            <div class="sec-t">人物音色</div>
+            <p class="muted" style="font-size:11.5px; margin:0 0 8px">本集使用音色在单集设定中另行选择</p>
+            <div class="voice-box">
+              <template v-if="detail?.voice">
+                <div class="voice-cur">
+                  <span class="voice-name">{{ detail.voice.name || '未命名音色' }}</span>
+                  <audio v-if="detail.voice.url" controls :src="detail.voice.url" class="voice-audio"></audio>
+                </div>
+                <div class="voice-acts">
+                  <button class="btn ghost sm" @click="openVoiceSheet">设置音色</button>
+                  <button class="btn ghost sm" @click="askClearVoice">清除</button>
+                </div>
+              </template>
+              <template v-else>
+                <span class="muted" style="font-size:12.5px">未设置音色</span>
+                <button class="btn ghost sm" @click="openVoiceSheet">设置音色</button>
+              </template>
+            </div>
           </template>
         </div>
 
@@ -232,6 +251,72 @@
         </div>
       </div>
     </div>
+
+    <!-- 音色设置 Modal（Task 3.2 / P0-9）：上传 / 手动两个来源；提取置灰待 Provider -->
+    <div v-if="voiceSheetOpen" class="scrim" style="z-index:100" @click="voiceSheetOpen = false"></div>
+    <div v-if="voiceSheetOpen" class="modal-wrap" style="z-index:110">
+      <div class="modal" style="width:440px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-vol"/></svg>
+          <h3>设置音色</h3>
+          <button class="icon-btn" @click="voiceSheetOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <div class="col" style="gap:10px">
+            <div v-if="voiceError" class="err-line">{{ voiceError }}</div>
+            <div class="tabs" style="padding:0">
+              <span class="tab" :class="{ on: voiceTab === 'upload' }" @click="voiceTab = 'upload'">上传音频</span>
+              <span class="tab" :class="{ on: voiceTab === 'manual' }" @click="voiceTab = 'manual'">手动填写</span>
+            </div>
+            <div v-if="voiceTab === 'upload'" class="col" style="gap:8px">
+              <label class="upload-pick">
+                <svg><use href="#i-vol"/></svg>选择音频文件（mp3 / wav / m4a / ogg）
+                <input type="file" accept="audio/*" style="display:none" @change="uploadVoiceFile">
+              </label>
+              <p v-if="voiceUploading" class="xs muted">音频上传中…</p>
+              <p v-if="voiceForm.url" class="ok-line" style="margin:0">已上传「{{ voiceForm.name }}」，可试听确认</p>
+              <audio v-if="voiceForm.url" controls :src="voiceForm.url" class="voice-audio"></audio>
+            </div>
+            <div v-else class="col" style="gap:8px">
+              <label class="col" style="gap:4px"><span class="xs muted">音色名称</span>
+                <input class="input" style="width:100%" v-model="voiceForm.name" placeholder="如：温柔女声">
+              </label>
+              <label class="col" style="gap:4px"><span class="xs muted">音频 URL</span>
+                <input class="input" style="width:100%" v-model="voiceForm.url" placeholder="https:// 或 /static/ 路径">
+              </label>
+            </div>
+            <div class="extract-row">
+              <button class="btn ghost sm" disabled>从音视频提取</button>
+              <span class="xs muted">依赖语音 Provider，暂未开放</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="voiceSheetOpen = false">取消</button>
+          <button class="btn primary" :disabled="voiceSaving || voiceUploading || !voiceForm.url" @click="saveVoice">{{ voiceSaving ? '保存中…' : '保存音色' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 清除音色确认 Modal（Task 3.2：确认先行，确认后才 PATCH voice=null） -->
+    <div v-if="voiceClearOpen" class="scrim" style="z-index:100" @click="voiceClearOpen = false"></div>
+    <div v-if="voiceClearOpen" class="modal-wrap" style="z-index:110">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--danger)"><use href="#i-trash"/></svg>
+          <h3>清除音色</h3>
+          <button class="icon-btn" @click="voiceClearOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <div v-if="voiceClearError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px; margin-bottom:12px">{{ voiceClearError }}</div>
+          <p style="margin:0; line-height:1.6">将清除人物「{{ detail?.name || '—' }}」的当前音色设置。确认清除？</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="voiceClearOpen = false">取消</button>
+          <button class="btn danger" :disabled="voiceClearing" @click="confirmClearVoice">{{ voiceClearing ? '清除中…' : '确认清除' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -263,6 +348,11 @@ export default {
       undoStrip: null, undoTimer: null,
       // P0-6：状态候选生成（打开既有生成 Sheet，prompt 注入状态名并透传 stateId）
       genStateId: null, genStateName: '',
+      // Task 3.2（P0-9）：人物音色管理
+      voiceSheetOpen: false, voiceTab: 'upload',
+      voiceForm: { name: '', url: '' },
+      voiceUploading: false, voiceSaving: false, voiceError: '',
+      voiceClearOpen: false, voiceClearing: false, voiceClearError: '',
     }
   },
   computed: {
@@ -327,6 +417,11 @@ export default {
       this.undoStrip = null
       this.genStateId = null
       this.genStateName = ''
+      this.voiceSheetOpen = false
+      this.voiceClearOpen = false
+      this.voiceForm = { name: '', url: '' }
+      this.voiceError = ''
+      this.voiceClearError = ''
       this.detailOpen = true
     },
     // 概览标签：资料编辑保存（PATCH /assets/:type/:assetId），保存中/失败在标签内呈现
@@ -462,6 +557,75 @@ export default {
     comingSoon(name) {
       this.notice = `${name}将在本迭代内启用`
     },
+    // ---- Task 3.2（P0-9）：人物音色管理 ----
+    // 打开音色设置弹窗：回填当前音色，来源 tab 按既有 source 归位
+    openVoiceSheet() {
+      if (!this.detail) return
+      this.voiceForm = { name: this.detail.voice?.name || '', url: this.detail.voice?.url || '' }
+      this.voiceTab = this.detail.voice?.source === 'manual' ? 'manual' : 'upload'
+      this.voiceError = ''
+      this.voiceSheetOpen = true
+    },
+    // 上传音频 → /api/v1/upload/audio，成功后回填 url + 文件名
+    async uploadVoiceFile(event) {
+      const file = event.target.files && event.target.files[0]
+      if (!file || this.voiceUploading) return
+      this.voiceUploading = true
+      this.voiceError = ''
+      try {
+        const data = await v21.uploadAudio(file)
+        this.voiceForm.url = data?.url || ''
+        if (!this.voiceForm.url) throw new Error('上传响应缺少 url')
+        this.voiceForm.name = data?.filename || file.name
+      } catch (e) {
+        this.voiceError = e.message || '音频上传失败'
+      } finally {
+        this.voiceUploading = false
+        event.target.value = ''
+      }
+    },
+    // 保存音色：PATCH voice；成功提示、失败呈现在弹窗体内
+    async saveVoice() {
+      if (!this.detail || this.voiceSaving || !this.voiceForm.url) return
+      this.voiceSaving = true
+      this.voiceError = ''
+      try {
+        const voice = {
+          name: this.voiceForm.name || '未命名音色',
+          url: this.voiceForm.url,
+          source: this.voiceTab === 'upload' ? 'upload' : 'manual',
+        }
+        const result = await v21.updateAsset(this.detail.assetType, this.detail.id, { voice })
+        this.detail.voice = result.voice || voice
+        this.voiceSheetOpen = false
+        this.notice = '音色已更新'
+      } catch (e) {
+        this.voiceError = e.message || '保存失败，请重试'
+      } finally {
+        this.voiceSaving = false
+      }
+    },
+    // 清除音色：确认弹窗先行，确认后才 PATCH voice=null
+    askClearVoice() {
+      if (!this.detail) return
+      this.voiceClearError = ''
+      this.voiceClearOpen = true
+    },
+    async confirmClearVoice() {
+      if (!this.detail || this.voiceClearing) return
+      this.voiceClearing = true
+      this.voiceClearError = ''
+      try {
+        await v21.updateAsset(this.detail.assetType, this.detail.id, { voice: null })
+        this.detail.voice = null
+        this.voiceClearOpen = false
+        this.notice = '音色已更新'
+      } catch (e) {
+        this.voiceClearError = e.message || '清除失败，请重试'
+      } finally {
+        this.voiceClearing = false
+      }
+    },
   },
 }
 </script>
@@ -510,6 +674,16 @@ export default {
 .def-badge { font-size: 10px; padding: 0 6px; }
 .mini-btn { margin-top: 4px; width: 100%; height: 22px; font-size: 10.5px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
 .mini-btn:hover { color: var(--text-2); border-color: var(--line-strong); }
+/* 人物音色（Task 3.2 / P0-9） */
+.voice-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.voice-cur { display: flex; flex-direction: column; gap: 6px; }
+.voice-name { font-size: 13px; font-weight: 500; }
+.voice-audio { width: 100%; height: 32px; }
+.voice-acts { display: flex; gap: 8px; }
+.upload-pick { display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 12px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.upload-pick:hover { color: var(--text-2); border-color: var(--accent); }
+.upload-pick svg { width: 14px; height: 14px; }
+.extract-row { display: flex; align-items: center; gap: 8px; }
 .usage-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; color: var(--text); text-decoration: none; font-size: 13px; }
 .usage-row:hover { border-color: var(--line-strong); }
 .usage-row .go-tip { margin-left: auto; font-size: 11.5px; }
