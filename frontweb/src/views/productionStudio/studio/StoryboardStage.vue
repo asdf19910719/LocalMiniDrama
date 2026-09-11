@@ -87,7 +87,7 @@
 
           <div class="grp-t">分镜图（输入）</div>
           <div class="row" style="gap:6px; padding:0 4px; flex-wrap:wrap">
-            <div v-for="c in imageCandidates" :key="c.candidateId" class="img-cand" :class="{ cur: currentImage && currentImage.url === c.url }" @click="setCurrentImage(c)" :title="'候选 ' + c.candidateId">
+            <div v-for="c in imageCandidates" :key="c.candidateId" class="img-cand" :class="{ cur: currentImage && currentImage.url === c.url }" @click="previewImageCandidate(c)" :title="'候选 ' + c.candidateId">
               <img :src="c.url" style="width:100%;height:100%;object-fit:cover">
             </div>
           </div>
@@ -150,7 +150,7 @@
                 四项校验：<template v-for="(c, i) in h3.validation.checks" :key="c.id">{{ i > 0 ? ' · ' : '' }}{{ c.label }} {{ c.ok ? '✓' : '×' }}</template>
               </span>
               <div class="spacer"></div>
-              <button class="btn ghost sm" style="border:1px solid var(--line)" @click="generateH3">
+              <button class="btn ghost sm" style="border:1px solid var(--line)" @click="openH3Sheet">
                 <svg><use href="#i-refresh"/></svg>{{ h3.draftId ? '重新生成' : '生成 H3 提示词' }}
               </button>
             </div>
@@ -182,7 +182,7 @@
           <div class="row">
             <b style="font-size:13px">视频审核</b><span class="badge outline" style="height:20px">输出</span>
             <div class="spacer"></div>
-            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="historyOpen = true"><svg><use href="#i-hist"/></svg>生成历史</button>
+            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="openHistory()"><svg><use href="#i-hist"/></svg>生成历史</button>
           </div>
           <div class="player" :class="previewUrl ? '' : 'ph'">
             <video v-if="previewUrl" :key="previewUrl" :src="previewUrl" controls style="width:100%;height:100%;border-radius:10px;object-fit:contain;background:#000"></video>
@@ -237,7 +237,7 @@
           </div>
         </div>
         <div class="spacer"></div>
-        <button class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/cut`)">
+        <button class="btn sm" @click="openCutSummary">
           进入成片审核（{{ completion.adopted }}/{{ completion.total }}）
         </button>
       </div>
@@ -470,6 +470,86 @@
       </div>
       <div class="drawer-f"><span class="muted xs">按原输入重试创建新任务，不覆盖历史记录</span></div>
     </aside>
+
+    <!-- H3 生成确认抽屉（T2.5：生成前置确认 + 人工草稿保护） -->
+    <div v-if="h3SheetOpen" class="scrim" style="z-index:80" @click="h3SheetOpen = false"></div>
+    <div v-if="h3SheetOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:480px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-spark"/></svg>
+          <h3>{{ h3.draftId ? '重新生成 H3 提示词' : '生成 H3 提示词' }} · 分镜 {{ pad(current.number) }}</h3>
+          <button class="icon-btn" @click="h3SheetOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <div class="kv"><span class="k">来源</span><span class="v">基于当前时段与引用状态</span></div>
+          <div class="kv"><span class="k">结构输入</span><span class="v">时段数 {{ segments.length }} · 引用槽位数 {{ referenceChips.length }}</span></div>
+          <div class="kv" v-if="referenceChips.length"><span class="k">引用素材</span>
+            <span class="row" style="gap:6px; flex-wrap:wrap; justify-content:flex-end">
+              <span v-for="(chip, i) in referenceChips" :key="i" class="chip" style="height:22px"><span class="at">@图片{{ i + 1 }}</span>{{ chip.name }}</span>
+            </span>
+          </div>
+          <p class="xs muted" style="margin-top:8px">重新生成不会覆盖人工修改的词条草稿（需显式确认）。</p>
+          <label v-if="h3.manuallyEdited" class="xs" style="display:flex; align-items:center; gap:5px; margin-top:8px; color:var(--warn)">
+            <input type="checkbox" v-model="h3ConfirmOverwrite"> 我确认覆盖人工修改
+          </label>
+          <div v-if="h3SheetError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px; margin-top:8px">{{ h3SheetError }}</div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="h3SheetOpen = false">取消</button>
+          <button class="btn primary" :disabled="h3Generating || (h3.manuallyEdited && !h3ConfirmOverwrite)" @click="confirmGenerateH3">
+            {{ h3Generating ? '生成中…' : (h3.draftId ? '确认重新生成' : '确认生成') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分镜图候选预览抽屉（T2.5：预览前置，确认后才设为当前） -->
+    <div v-if="imgPreviewOpen" class="scrim" style="z-index:80" @click="imgPreviewOpen = false"></div>
+    <aside v-if="imgPreviewOpen" class="drawer" style="z-index:90; width:480px">
+      <div class="drawer-h">
+        <h3>分镜图候选 <span class="muted" style="font-weight:400; font-size:12px">· 候选 {{ shortId(imgPreview?.candidateId) }}</span></h3>
+        <button class="icon-btn" @click="imgPreviewOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div v-if="imgPreview?.url" style="border-radius:10px; overflow:hidden; margin-bottom:12px">
+          <img :src="imgPreview.url" style="width:100%; display:block">
+        </div>
+        <div class="kv"><span class="k">候选</span><span class="v mono">{{ imgPreview?.candidateId || '—' }}</span></div>
+        <div class="kv"><span class="k">生成时间</span><span class="v">{{ fmtTime(imgPreview?.createdAt) || '—' }}</span></div>
+        <div class="kv"><span class="k">分镜图提示词</span><span class="v ellipsis" style="max-width:280px" :title="imagePrompt.text">{{ imagePrompt.text || '—' }}</span></div>
+        <div v-if="imgPreviewError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px; margin-top:8px">{{ imgPreviewError }}</div>
+      </div>
+      <div class="drawer-f" style="justify-content:flex-end">
+        <button class="btn ghost" @click="imgPreviewOpen = false">取消</button>
+        <button class="btn primary" :disabled="imgPreviewBusy" @click="confirmSetCurrentImage">{{ imgPreviewBusy ? '设置中…' : '设为当前分镜图' }}</button>
+      </div>
+    </aside>
+
+    <!-- 进入成片审核摘要抽屉（T2.5：三组计数确认前置） -->
+    <div v-if="cutSummaryOpen" class="scrim" style="z-index:80" @click="cutSummaryOpen = false"></div>
+    <div v-if="cutSummaryOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:480px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-film"/></svg>
+          <h3>进入成片审核 · 摘要</h3>
+          <button class="icon-btn" @click="cutSummaryOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="xs muted" style="margin-bottom:6px">进入成片前请确认分镜完成度：</p>
+          <template v-if="cutSummary">
+            <div class="kv"><span class="k">候选未采用 · 需确认</span><span class="v">{{ cutSummary.notAdopted }} 镜</span></div>
+            <div class="kv"><span class="k">尚未生成</span><span class="v">{{ cutSummary.missingVideos }} 镜</span></div>
+            <div class="kv"><span class="k">生成失败</span><span class="v">{{ cutSummary.failed }} 镜</span></div>
+          </template>
+          <p v-else-if="cutSummaryLoading" class="muted small">正在统计…</p>
+          <div v-if="cutSummaryError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px; margin-top:8px">{{ cutSummaryError }}</div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="cutSummaryOpen = false">留在分镜</button>
+          <button class="btn primary" :disabled="cutSummaryLoading" @click="goCutReview">仍要进入成片审核</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -500,6 +580,9 @@ export default {
       assetPreviewOpen: false, assetPreview: null, assetPreviewRefIndex: -1,
       historyOpen: false, history: {},
       imgPromptOpen: false, videoSheetOpen: false, snapshotAt: '',
+      h3SheetOpen: false, h3SheetError: '', h3ConfirmOverwrite: false, h3Generating: false,
+      imgPreviewOpen: false, imgPreview: null, imgPreviewBusy: false, imgPreviewError: '',
+      cutSummaryOpen: false, cutSummary: null, cutSummaryLoading: false, cutSummaryError: '',
     }
   },
   computed: {
@@ -597,7 +680,7 @@ export default {
       if (e.key === ']') this.step(1)
     }
     window.addEventListener('keydown', this.keyHandler)
-    this.load()
+    this.load().then(() => this.consumeShotQuery())
   },
   unmounted() {
     window.removeEventListener('keydown', this.keyHandler)
@@ -672,7 +755,8 @@ export default {
       const fc = detail.frameChaining
       this.frameChaining = { ...fc, stateLabel: { linked: '已衔接', linkable: '可衔接', waiting: '等待上一镜完成', none: '首镜' }[fc.state] }
       this.refreshGuard()
-      this.loadHistory()
+      // T2.5：历史抽屉开着时切镜需重拉，避免展示上一镜的陈旧任务；关着时留给 openHistory 按需拉取
+      if (this.historyOpen) await this.loadHistory()
     },
     async refreshGuard() {
       this.guard = await v21.getVideoGuard(this.currentShotId)
@@ -681,6 +765,22 @@ export default {
       try {
         this.history = await v21.getVideoHistory(this.currentShotId)
       } catch { this.history = {} }
+    },
+    async openHistory() {
+      // T2.5：开门前清空陈旧数据并重拉本镜历史，避免直连 historyOpen 展示上一镜内容
+      this.history = {}
+      await this.loadHistory()
+      this.historyOpen = true
+    },
+    async consumeShotQuery() {
+      // T2.5：消费成片页「回分镜处理」带来的 ?shot= 定位参数，选中后清除 query
+      const shotId = this.$route.query.shot
+      if (!shotId) return
+      const target = this.shots.find((s) => String(s.id) === String(shotId))
+      if (target) await this.selectShot(target.id)
+      const query = { ...this.$route.query }
+      delete query.shot
+      this.$router.replace({ query })
     },
     async saveSegment(seg) {
       try {
@@ -738,19 +838,53 @@ export default {
       const detail = await v21.getShot(this.currentShotId)
       this.imageCandidates = detail.imageCandidates
     },
+    previewImageCandidate(candidate) {
+      // T2.5：候选缩略图点击只打开预览抽屉，采纳需在抽屉内显式确认
+      this.imgPreviewError = ''
+      this.imgPreview = candidate
+      this.imgPreviewOpen = true
+    },
+    async confirmSetCurrentImage() {
+      if (this.imgPreviewBusy || !this.imgPreview) return
+      this.imgPreviewBusy = true
+      this.imgPreviewError = ''
+      try {
+        await this.setCurrentImage(this.imgPreview)
+        this.imgPreviewOpen = false
+      } catch (e) {
+        this.imgPreviewError = e.message || '设为当前分镜图失败'
+      } finally {
+        this.imgPreviewBusy = false
+      }
+    },
     async setCurrentImage(candidate) {
       const result = await v21.setShotImageCurrent(this.currentShotId, candidate.candidateId)
       this.h3 = result.h3Draft
       await this.selectShot(this.currentShotId)
       await this.load()
     },
-    async generateH3() {
+    openH3Sheet() {
+      // T2.5：生成/重新生成 H3 前先经确认抽屉（展示结构输入与人工草稿保护语义）
+      this.h3SheetError = ''
+      this.h3ConfirmOverwrite = false
+      this.h3SheetOpen = true
+    },
+    async confirmGenerateH3() {
+      if (this.h3Generating) return
+      // 后端 generateH3 对人工编辑过的草稿抛 H3_MANUAL_PROTECTED，需勾选后透传 confirmOverwrite
+      const protectedDraft = this.h3.manuallyEdited === true
+      if (protectedDraft && !this.h3ConfirmOverwrite) return
+      this.h3Generating = true
+      this.h3SheetError = ''
       try {
-        this.h3 = await v21.generateH3(this.currentShotId, {})
+        this.h3 = await v21.generateH3(this.currentShotId, protectedDraft ? { confirmOverwrite: true } : {})
         this.h3Dirty = false
+        this.h3SheetOpen = false
         this.refreshGuard()
       } catch (e) {
-        this.notice = e.message || '生成失败'
+        this.h3SheetError = e.message || '生成失败'
+      } finally {
+        this.h3Generating = false
       }
     },
     async saveH3() {
@@ -871,6 +1005,29 @@ export default {
       const idx = list.findIndex((s) => s.id === this.currentShotId)
       const next = idx + delta
       if (next >= 0 && next < list.length) this.selectShot(list[next].id)
+    },
+    async openCutSummary() {
+      // T2.5：进入成片审核前先展示三组计数摘要（数据源：批量预检 + 完成度统计）
+      this.cutSummaryError = ''
+      this.cutSummary = null
+      this.cutSummaryOpen = true
+      this.cutSummaryLoading = true
+      try {
+        const precheck = await v21.getBatchPrecheck(this.episodeId)
+        const missingVideos = (precheck.missingVideos || []).length
+        const failed = (precheck.failed || []).length
+        // 未采用且有候选（需人工确认）= 未采用镜头数 - 从未生成过候选的镜头数
+        const notAdopted = Math.max(0, (this.completion.missing || []).length - missingVideos)
+        this.cutSummary = { notAdopted, missingVideos, failed }
+      } catch (e) {
+        this.cutSummaryError = e.message || '预检失败'
+      } finally {
+        this.cutSummaryLoading = false
+      }
+    },
+    goCutReview() {
+      this.cutSummaryOpen = false
+      this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/cut`)
     },
     async openBatch() {
       // B1：先拉预检数据再开门；失败时 notice 提示且不打开抽屉

@@ -97,6 +97,102 @@ test('分镜页交互修复：批量/引用按钮走加载函数，时段移动�
   assert.match(moveFn[0], /this\.notice = /, 'moveSegment 失败应呈现到 notice 条')
 })
 
+test('分镜页确认抽屉：H3 生成确认前置（人工保护需勾选覆盖）', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  // H3 生成按钮必须先走确认抽屉，不得直连 v21.generateH3
+  assert.match(view, /@click="openH3Sheet"/, 'H3 生成按钮应绑定 openH3Sheet 打开确认抽屉')
+  assert.doesNotMatch(view, /@click="generateH3"/, 'H3 生成按钮不得绕过抽屉直连 generateH3')
+  const openH3Sheet = view.match(/openH3Sheet\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(openH3Sheet, 'openH3Sheet 方法存在')
+  // 抽屉展示结构输入（时段数/引用槽位数）与来源说明
+  assert.match(view, /时段数/, '确认抽屉应展示时段数')
+  assert.match(view, /引用槽位/, '确认抽屉应展示引用槽位数')
+  assert.match(view, /基于当前时段与引用状态/, '确认抽屉应标注生成来源')
+  assert.match(view, /重新生成不会覆盖人工修改/, '确认抽屉应说明人工草稿保护语义')
+  // 确认方法调 v21.generateH3，受保护时透传后端 confirmOverwrite 参数
+  const confirmFn = view.match(/async confirmGenerateH3\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(confirmFn, 'confirmGenerateH3 方法存在')
+  assert.match(confirmFn[0], /v21\.generateH3\(this\.currentShotId/, '确认方法应调用 v21.generateH3')
+  assert.match(confirmFn[0], /confirmOverwrite: true/, '受保护时确认方法应透传 confirmOverwrite: true')
+  // 受保护（h3.manuallyEdited）时必须勾选「我确认覆盖人工修改」才能提交
+  assert.match(view, /我确认覆盖人工修改/, '抽屉应有覆盖人工修改确认勾选')
+  assert.match(confirmFn[0], /manuallyEdited/, '确认方法应检测 h3.manuallyEdited 保护态')
+  assert.match(confirmFn[0], /h3ConfirmOverwrite/, '确认方法应以勾选状态为提交前置')
+  // 提交中防重复与抽屉内错误呈现
+  assert.match(confirmFn[0], /h3Generating/, '确认方法应有提交中防重复标记')
+  assert.match(view, /h3SheetError/, '抽屉内应有错误行呈现')
+})
+
+test('分镜页确认抽屉：分镜图候选先预览再采纳', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  // 候选缩略图点击只打开预览抽屉，不得直接采纳
+  assert.match(view, /@click="previewImageCandidate\(c\)"/, '候选点击应绑定 previewImageCandidate 打开预览抽屉')
+  assert.doesNotMatch(view, /@click="setCurrentImage\(c\)"/, '候选点击不得直接 setCurrentImage 采纳')
+  const previewFn = view.match(/previewImageCandidate\(candidate\) \{[\s\S]*?\n    \},/)
+  assert.ok(previewFn, 'previewImageCandidate 方法存在')
+  assert.match(previewFn[0], /imgPreviewOpen = true/, 'previewImageCandidate 应打开预览抽屉')
+  // 预览抽屉：大图 + 图片提示词 + 「设为当前分镜图」按钮确认后才采纳
+  assert.match(view, /设为当前分镜图/, '预览抽屉应有「设为当前分镜图」按钮')
+  const confirmSet = view.match(/async confirmSetCurrentImage\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(confirmSet, 'confirmSetCurrentImage 方法存在')
+  assert.match(confirmSet[0], /setCurrentImage\(this\.imgPreview\)/, '确认方法应调用 setCurrentImage 采纳候选')
+  assert.match(view, /分镜图提示词/, '预览抽屉应展示该图图片提示词')
+  assert.match(confirmSet[0], /imgPreviewBusy/, '采纳确认应有提交中防重复标记')
+  assert.match(view, /imgPreviewError/, '预览抽屉内应有错误行呈现')
+})
+
+test('分镜页确认抽屉：进入成片审核前展示三组计数摘要', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  // 进入成片审核按钮必须先走摘要抽屉，不得直连 push cut 路由
+  assert.match(view, /@click="openCutSummary"/, '进入成片审核按钮应绑定 openCutSummary')
+  assert.doesNotMatch(view, /@click="\$router\.push\(`\/projects\/\$\{projectId\}\/episodes\/\$\{episodeId\}\/cut`\)"/, '按钮不得绕过摘要抽屉直接 push cut 路由')
+  const openFn = view.match(/async openCutSummary\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(openFn, 'openCutSummary 方法存在')
+  assert.match(openFn[0], /getBatchPrecheck/, 'openCutSummary 应拉取批量预检作为计数数据源')
+  assert.match(openFn[0], /catch/, '预检失败应有 catch 兜底')
+  // 摘要三组计数：需确认 / 尚未生成 / 生成失败
+  assert.match(view, /需确认/, '摘要应含「候选未采用/需确认」计数')
+  assert.match(view, /尚未生成/, '摘要应含「尚未生成」计数')
+  assert.match(view, /生成失败/, '摘要应含「生成失败」计数')
+  assert.match(view, /cutSummary\./, '摘要计数应渲染 cutSummary 数据')
+  // 「仍要进入」方法才 push cut 路由；「留在分镜」仅关门
+  assert.match(view, /仍要进入成片审核/, '摘要抽屉应有「仍要进入成片审核」按钮')
+  assert.match(view, /留在分镜/, '摘要抽屉应有「留在分镜」按钮')
+  const goCut = view.match(/goCutReview\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(goCut, 'goCutReview 方法存在')
+  assert.match(goCut[0], /\$router\.push\(`\/projects\/\$\{this\.projectId\}\/episodes\/\$\{this\.episodeId\}\/cut`\)/, '仍要进入应 push cut 路由')
+  assert.match(view, /cutSummaryError/, '摘要抽屉内应有错误行呈现')
+})
+
+test('分镜页：?shot= 定位消费 + 生成历史经 openHistory 加载', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  // mounted/created 消费 route.query.shot：合法时选中该镜头并清除 query
+  assert.match(view, /consumeShotQuery/, '应有 consumeShotQuery 消费 ?shot= 定位参数')
+  const consumeFn = view.match(/async consumeShotQuery\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(consumeFn, 'consumeShotQuery 方法存在')
+  assert.match(consumeFn[0], /\$route\.query\.shot/, '应读取 route.query.shot')
+  assert.match(consumeFn[0], /selectShot/, '合法 shotId 应复用 selectShot 选中')
+  assert.match(consumeFn[0], /\$router\.replace/, '消费后应 replace 清除 query')
+  // 生成历史按钮走 openHistory（清空→拉取→开门），不得直连 historyOpen = true
+  assert.match(view, /@click="openHistory\(\)"/, '生成历史按钮应绑定 openHistory')
+  assert.doesNotMatch(view, /@click="historyOpen = true"/, '生成历史按钮不得绕过加载直连开门')
+  const openHistory = view.match(/async openHistory\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(openHistory, 'openHistory 方法存在')
+  assert.match(openHistory[0], /this\.history = \{\}/, 'openHistory 应先清空陈旧 history')
+  assert.match(openHistory[0], /loadHistory\(\)/, 'openHistory 应拉取本镜历史')
+  assert.match(openHistory[0], /historyOpen = true/, 'openHistory 拉取后才开门')
+  // 切镜时若历史抽屉已开则重拉，避免展示上一镜的陈旧数据
+  const selectShot = view.match(/async selectShot\(shotId\) \{[\s\S]*?\n    \},/)
+  assert.ok(selectShot, 'selectShot 方法存在')
+  assert.match(selectShot[0], /historyOpen[\s\S]*?loadHistory/, '切镜时历史抽屉已开应重拉历史')
+})
+
+test('v21-ui.css：notice-strip danger 变体（T2.1 成片页失败条依赖）', () => {
+  const css = read('src/styles/v21-ui.css')
+  assert.match(css, /\.notice-strip\.danger/, 'notice-strip 应有 danger 变体')
+  assert.match(css, /\.notice-strip\.danger[^}]*--danger-subtle/, 'danger 变体应使用 --danger-subtle 令牌')
+})
+
 test('成片页：审片+合片单屏；门禁禁用可解释；导出 MP4/SRT', () => {
   const view = read('src/views/productionStudio/studio/CutStage.vue')
   for (const keyword of ['生成成片', '连续播放', '回分镜修复', '导出 MP4', '导出 SRT', '成片设置']) {

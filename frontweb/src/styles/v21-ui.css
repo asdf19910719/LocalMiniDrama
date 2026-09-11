@@ -150,6 +150,7 @@
 .v21-root .notice-strip.ok { border-color: rgba(69, 211, 156, .3); background: var(--ok-subtle); color: var(--ok); }
 .v21-root .notice-strip.warn { border-color: rgba(255, 182, 92, .3); background: var(--warn-subtle); color: var(--warn); }
 .v21-root .notice-strip.info { border-color: rgba(88, 166, 255, .3); background: var(--info-subtle); color: var(--info); }
+.v21-root .notice-strip.danger { border-color: rgba(255, 107, 120, .3); background: var(--danger-subtle); color: var(--danger); }
 
 /* ============ 按钮 ============ */
 .v21-root .btn {
