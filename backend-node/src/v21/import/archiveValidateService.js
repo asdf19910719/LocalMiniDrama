@@ -2,10 +2,13 @@
 /**
  * 归档导入真实校验（Task 5-C）。
  * 收 JSON { path }（本地 zip 路径），用 adm-zip 读取并产出：
- * - 硬错误：path 缺失 400 / 文件不存在 404 / 非 zip 400（与导入端点"只收本地路径"的诚实口径一致）；
+ * - 硬错误：path 缺失 400；文件不存在 / 路径非文件 / 非 zip 统一 400 + 同一模糊文案
+ *   「无法读取该归档文件」（评审裁决：本地单用户应用、CORS 通配为全应用既有姿态、
+ *   导入 UX 需要任意路径，故不做受控根限制，以统一 400 消除存在性探测差分）；
  * - 七项检查矩阵（格式/版本/结构/完整性/媒体/名称/空间）逐项 pass/warn/block/unsupported + 原因；
  * - 概要指标（项目名/剧集数/媒体条目数/预计大小）；
- * - 版本校验对照 2.1 协议：V1 导出（project.json version=1.7）如实返回 unsupported，不伪装通过。
+ * - 版本校验对照 2.1 协议：V1 导出（project.json version=1.7）如实返回 unsupported，不伪装通过；
+ * - 空间检查探测数据目录所在盘（导入的媒体落在数据盘）。
  */
 const fs = require('fs');
 const path = require('path');
@@ -17,9 +20,32 @@ function httpError(code, status, message) {
   return Object.assign(new Error(message), { code, status });
 }
 
-function createArchiveValidateService({ db, log }) {
-  /** 七项检查矩阵（顺序即呈现顺序）；spaceProbeDir 为磁盘剩余空间的探测目录 */
-  function buildChecks({ zip, manifest, projectName }, { spaceProbeDir } = {}) {
+/**
+ * 数据目录所在盘解析（与 datatools/migrationRecordsService 同源）：
+ * dataDir 注入优先，否则按配置 dbPath 解析，兜底 <cwd>/data/drama_generator.db 的目录。
+ * 空间检查探测该目录所在盘——导入的媒体落在这里，探测归档所在盘会错报。
+ */
+function resolveDataRoot({ dbPath = null, dataDir = null } = {}) {
+  if (dataDir) return path.resolve(dataDir);
+  let resolvedDb = null;
+  if (dbPath) {
+    resolvedDb = path.resolve(dbPath);
+  } else {
+    try {
+      const { loadConfig } = require('../../config/index.js');
+      const configured = loadConfig().database?.path || './data/drama_generator.db';
+      resolvedDb = path.resolve(path.isAbsolute(configured) ? configured : path.join(process.cwd(), configured));
+    } catch (_) {
+      resolvedDb = path.resolve(process.cwd(), 'data', 'drama_generator.db');
+    }
+  }
+  return path.resolve(path.dirname(resolvedDb), '.');
+}
+
+function createArchiveValidateService({ db, log, dbPath = null, dataDir = null } = {}) {
+  const dataRoot = resolveDataRoot({ dbPath, dataDir });
+  /** 七项检查矩阵（顺序即呈现顺序） */
+  function buildChecks({ zip, manifest, projectName }) {
     const checks = [];
 
     // 1. 格式：走到这里说明文件存在且 adm-zip 可打开（否则已在硬错误阶段 404/400）
@@ -93,20 +119,19 @@ function createArchiveValidateService({ db, log }) {
     }
     checks.push({ id: 'name', label: '项目名称', status: nameStatus, detail: nameDetail });
 
-    // 7. 空间：解压后预计大小 vs 磁盘剩余（探测归档所在盘）
+    // 7. 空间：解压后预计大小 vs 数据目录所在盘剩余（导入的媒体落在数据盘，探测归档所在盘会错报）
     let spaceCheck;
     try {
-      const probeDir = spaceProbeDir || process.cwd();
-      const stats = fs.statfsSync(probeDir);
+      const stats = fs.statfsSync(dataRoot);
       const freeBytes = Number(stats.bsize) * Number(stats.bavail);
       const fmt = (n) => `${(Number(n) / 1048576).toFixed(1)} MB`;
       if (freeBytes > estimatedSizeBytes) {
-        spaceCheck = { id: 'space', label: '磁盘空间', status: 'pass', detail: `磁盘剩余约 ${fmt(freeBytes)}，解压预计需要 ${fmt(estimatedSizeBytes)}` };
+        spaceCheck = { id: 'space', label: '磁盘空间', status: 'pass', detail: `数据盘剩余约 ${fmt(freeBytes)}，解压预计需要 ${fmt(estimatedSizeBytes)}` };
       } else {
-        spaceCheck = { id: 'space', label: '磁盘空间', status: 'block', detail: `磁盘剩余不足：约 ${fmt(freeBytes)}，解压预计需要 ${fmt(estimatedSizeBytes)}` };
+        spaceCheck = { id: 'space', label: '磁盘空间', status: 'block', detail: `数据盘剩余不足：约 ${fmt(freeBytes)}，解压预计需要 ${fmt(estimatedSizeBytes)}` };
       }
     } catch (_) {
-      spaceCheck = { id: 'space', label: '磁盘空间', status: 'warn', detail: '无法检测磁盘剩余空间，请在导入前自行确认' };
+      spaceCheck = { id: 'space', label: '磁盘空间', status: 'warn', detail: '无法检测数据盘剩余空间，请在导入前自行确认' };
     }
     checks.push(spaceCheck);
 
@@ -116,28 +141,24 @@ function createArchiveValidateService({ db, log }) {
   /**
    * 校验本地归档 zip。返回 { overall, archiveVersion, supportedVersion, summary, checks }。
    * overall：ok（全部通过）/ unsupported（版本不受支持，其余照实呈现）/ error（结构或完整性阻断）。
+   * 错误口径（评审裁决）：文件不存在 / 路径非文件 / 非 zip 统一 400 + 同一模糊文案
+   * 「无法读取该归档文件」，消除存在性探测差分；本地单用户应用不做受控根限制。
    */
-  function validate({ path: archivePath }, opts = {}) {
+  function validate({ path: archivePath }) {
     if (!archivePath || !String(archivePath).trim()) {
       throw httpError('VALIDATION_ERROR', 400, '请提供归档文件路径');
     }
     const rawPath = String(archivePath).trim();
     let stat;
-    try {
-      stat = fs.statSync(rawPath);
-    } catch (_) {
-      throw httpError('NOT_FOUND', 404, '归档文件不存在，请确认路径');
-    }
-    if (!stat.isFile()) {
-      throw httpError('ARCHIVE_INVALID', 400, '路径不是文件');
-    }
     let zip;
     try {
+      stat = fs.statSync(rawPath);
+      if (!stat.isFile()) throw new Error('not a file');
       zip = new AdmZip(rawPath);
       zip.getEntries();
     } catch (err) {
-      log.warn?.('archive validate: bad zip', { path: rawPath, error: err.message });
-      throw httpError('ARCHIVE_INVALID', 400, '文件不是有效的 ZIP 归档');
+      log.warn?.('archive validate: unreadable', { path: rawPath, error: err.message });
+      throw httpError('ARCHIVE_UNREADABLE', 400, '无法读取该归档文件');
     }
 
     const manifestEntry = zip.getEntry('project.json');
@@ -151,10 +172,7 @@ function createArchiveValidateService({ db, log }) {
     }
     const projectName = manifest && manifest.drama ? String(manifest.drama.title || '') : '';
 
-    const { checks, mediaCount, estimatedSizeBytes } = buildChecks(
-      { zip, manifest, projectName },
-      { spaceProbeDir: opts.spaceProbeDir || path.dirname(rawPath) }
-    );
+    const { checks, mediaCount, estimatedSizeBytes } = buildChecks({ zip, manifest, projectName });
 
     const hasBlock = checks.some((c) => c.status === 'block');
     const overall = checks.some((c) => c.status === 'unsupported')

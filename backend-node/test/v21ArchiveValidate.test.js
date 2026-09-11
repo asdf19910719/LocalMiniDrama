@@ -116,33 +116,23 @@ test('batchPrecheck：返回 processing（有 pending/running 视频任务的未
 
 // ---------- POST /api/v2/archive/validate ----------
 
-test('validate：缺少 path → 400；不存在的文件 → 404', async () => {
-  const db = new Database(':memory:');
-  runMigrationsAndEnsure(db);
-  ensureV21Domain(db);
-  const ctx = await startServer({ db });
-  try {
-    const noPath = await api(ctx.base, 'POST', '/archive/validate', {});
-    assert.equal(noPath.status, 400);
-    const missing = await api(ctx.base, 'POST', '/archive/validate', { path: path.join(os.tmpdir(), `v21-no-such-${Date.now()}.zip`) });
-    assert.equal(missing.status, 404, `应 404，实际 ${missing.status}`);
-  } finally {
-    ctx.server.close();
-    db.close();
-  }
-});
-
-test('validate：非 zip 文件 → 400', async () => {
+test('validate：缺少 path → 400；不存在与非 zip 同为 400 + 同一模糊文案（消除存在性 oracle）', async () => {
   const db = new Database(':memory:');
   runMigrationsAndEnsure(db);
   ensureV21Domain(db);
   const ctx = await startServer({ db });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'v21archive-'));
   try {
+    const noPath = await api(ctx.base, 'POST', '/archive/validate', {});
+    assert.equal(noPath.status, 400);
+    const missing = await api(ctx.base, 'POST', '/archive/validate', { path: path.join(os.tmpdir(), `v21-no-such-${Date.now()}.zip`) });
+    assert.equal(missing.status, 400, `应 400（不区分存在性），实际 ${missing.status}`);
     const plain = path.join(tmp, 'plain.txt');
     fs.writeFileSync(plain, 'not a zip');
-    const res = await api(ctx.base, 'POST', '/archive/validate', { path: plain });
-    assert.equal(res.status, 400, `应 400，实际 ${res.status}`);
+    const badZip = await api(ctx.base, 'POST', '/archive/validate', { path: plain });
+    assert.equal(badZip.status, 400);
+    assert.equal(missing.error.message, badZip.error.message, '不存在与非 zip 返回同一模糊文案');
+    assert.equal(missing.error.message, '无法读取该归档文件');
   } finally {
     ctx.server.close();
     db.close();
@@ -189,6 +179,9 @@ test('validate：V1 导出归档 → unsupported + 七项检查矩阵 + 概要�
     assert.equal(byId.name.status, 'warn', '与现有项目重名 → warn');
     assert.ok(byId.name.detail.includes('归档校验剧'));
     assert.ok(['pass', 'warn'].includes(byId.space.status), '正常磁盘下空间检查不阻断');
+    if (byId.space.status === 'pass') {
+      assert.match(byId.space.detail, /数据盘/, '空间检查探测并注明数据目录所在盘');
+    }
 
     // 移除同名项目 → 名称检查 pass
     db.prepare('DELETE FROM dramas WHERE id = ?').run(dramaId);

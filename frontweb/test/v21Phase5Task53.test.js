@@ -32,6 +32,10 @@ test('① 制作头：剧集下拉（listEpisodes）+ dirty 切换守卫 + warn 
   const script = read('src/views/productionStudio/studio/ScriptStage.vue')
   assert.match(script, /studioSave\.dirty\s*=/, 'ScriptStage 向通道上报 dirty')
   assert.match(script, /studioSave\.save\s*=/, 'ScriptStage 向通道注册保存方法（供“保存并切换”调用）')
+
+  // 评审 C1：动态组件随集重建 + 卸载前清自动保存定时器（防跨集写稿/放弃后仍写库）
+  assert.match(shell, /<component[^>]*:key="episodeId"/s, '阶段组件以 episodeId 为 key，切集强制重建')
+  assert.match(script, /beforeUnmount\(\) \{\s*clearTimeout\(this\.timer\)/, 'ScriptStage 卸载前清 800ms 自动保存定时器')
 })
 
 test('② 归档导入：validate() 调 /archive/validate 并渲染检查矩阵；unsupported 呈现版本说明；导入动作保持现状', async () => {
@@ -62,6 +66,10 @@ test('② 归档导入：validate() 调 /archive/validate 并渲染检查矩阵�
   // 导入动作保持现状且注明不覆盖
   assert.match(view, /\/api\/v1\/dramas\/import/, '导入动作保持 POST /api/v1/dramas/import')
   assert.match(view, /导入不覆盖现有项目/, '页面注明导入不覆盖现有项目')
+  // 评审 M2：error 态禁用导入；校验与导入同一路径（路径漂移需重新校验）
+  assert.match(view, /存在阻断项，无法导入/, 'overall error 时禁用导入并提示')
+  assert.match(view, /pathDrifted/, '存在路径漂移判定（validate 与导入同一 path）')
+  assert.match(view, /重新校验/, '路径漂移提供重新校验动作')
 })
 
 test('③ P2-1 剧集中心：completed 剧集主按钮为“查看成片”', () => {

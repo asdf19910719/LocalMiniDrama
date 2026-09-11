@@ -71,9 +71,14 @@
         </div>
         <div class="row" style="margin-top:16px; justify-content:flex-end; gap:8px">
           <button class="btn ghost" @click="phase = 0">上一步</button>
-          <button class="btn primary" :disabled="importing || !file" :title="file ? '' : '请返回上一步选择归档文件（导入走文件上传）'" @click="doImport">{{ importing ? '导入中…' : '仍然导入为新项目' }}</button>
+          <button class="btn primary" :disabled="importing || !file || importBlockedReason !== ''" :title="importBlockedReason || ''" @click="doImport">{{ importing ? '导入中…' : '仍然导入为新项目' }}</button>
         </div>
-        <p v-if="!file" class="xs muted" style="margin-top:8px; text-align:right">校验只需归档本地路径；执行导入需在第一阶段选择归档文件。</p>
+        <p v-if="importBlockedReason" class="xs" style="margin-top:8px; text-align:right; color:var(--warn)">
+          <svg style="width:12px;height:12px;vertical-align:-1px"><use href="#i-warn"/></svg>
+          {{ importBlockedReason }}
+          <span v-if="pathDrifted" class="act" style="color:var(--accent); cursor:pointer" @click="validate">重新校验</span>
+        </p>
+        <p v-else-if="!file" class="xs muted" style="margin-top:8px; text-align:right">校验只需归档本地路径；执行导入需在第一阶段选择归档文件。</p>
       </div>
 
       <!-- 阶段 3：导入结果 -->
@@ -106,9 +111,21 @@ export default {
   data() {
     return {
       phase: 0, file: null, localPath: '',
-      validating: false, validateError: '', validateResult: null,
+      validating: false, validateError: '', validateResult: null, validatedPath: '',
       finalName: '', importing: false, error: '', importedProjectId: null,
     }
+  },
+  computed: {
+    // 校验与导入同源：路径在校验后被改动 → 阻止导入并提示重新校验（校验结果不再对应所填路径）
+    pathDrifted() {
+      return Boolean(this.validateResult) && (this.localPath || '').trim() !== this.validatedPath
+    },
+    // 存在阻断项（overall error）不允许导入；unsupported 仅警示不阻断（V1 导入端点可处理）
+    importBlockedReason() {
+      if (this.validateResult && this.validateResult.overall === 'error') return '存在阻断项，无法导入'
+      if (this.pathDrifted) return '归档路径已变更，校验结果不再对应所填路径，请重新校验'
+      return ''
+    },
   },
   methods: {
     onFile(e) {
@@ -125,6 +142,7 @@ export default {
       this.validateError = ''
       try {
         this.validateResult = await v21.validateArchive(path)
+        this.validatedPath = path
         if (this.validateResult?.summary?.projectName && (!this.finalName || this.phase === 0)) {
           this.finalName = this.validateResult.summary.projectName
         }

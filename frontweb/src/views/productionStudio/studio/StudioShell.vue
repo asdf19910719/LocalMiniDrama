@@ -46,7 +46,9 @@
     </nav>
 
     <div class="studio-body">
-      <component v-if="stageValid" :is="stageComponent" :project-id="projectId" :episode-id="episodeId" @refresh="loadEpisode" />
+      <!-- :key=episodeId：切集必须重建阶段组件——同路由记录下复用实例会停留旧集内容，
+           且剧本页 800ms 自动保存定时器会带着旧集草稿按新 episodeId 写库（跨集污染） -->
+      <component v-if="stageValid" :is="stageComponent" :key="episodeId" :project-id="projectId" :episode-id="episodeId" @refresh="loadEpisode" />
       <div v-else class="stage-fallback muted">正在打开剧本阶段…</div>
     </div>
   </div>
@@ -108,6 +110,12 @@ export default {
         this.saveState.error = false
         this.saveState.dirty = false
       }
+    },
+    // 切集后刷新头部（当前集标题/下拉）与阶段导航，清掉未消费的守卫目标
+    episodeId() {
+      this.pendingEpisodeId = null
+      this.loadEpisode()
+      this.loadNav()
     },
   },
   created() {

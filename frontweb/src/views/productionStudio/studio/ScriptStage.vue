@@ -427,6 +427,11 @@ export default {
     }
     window.addEventListener('keydown', this.keyHandler)
   },
+  // 卸载前清掉 800ms 自动保存定时器：切集（制作头 :key 重建）或离开制作台时，
+  // 定时器若存活会在卸载后仍触发保存——把被放弃/未保存的草稿写回库（放弃并切换路径同样被此兜住）
+  beforeUnmount() {
+    clearTimeout(this.timer)
+  },
   unmounted() {
     window.removeEventListener('keydown', this.keyHandler)
     // 卸载时清空通道上的脏标记与保存方法，避免残留状态误触守卫

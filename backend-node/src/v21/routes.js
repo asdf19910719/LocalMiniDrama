@@ -624,7 +624,7 @@ function createV21Router({ db, cfg, log }) {
   // 收 JSON { path }（本地 zip 路径）——导入本身仍走 POST /api/v1/dramas/import 的 multipart 上传，
   // 此端点只做真实校验：404/400 硬错误 + 七项检查矩阵 + 概要指标；V1 导出版本如实标 unsupported。
   const { createArchiveValidateService } = require('./import/archiveValidateService.js');
-  const archiveValidate = createArchiveValidateService({ db, log });
+  const archiveValidate = createArchiveValidateService({ db, log, dbPath: cfg?.database?.path || null });
   r.post('/archive/validate', wrap((req, res) => {
     response.success(res, archiveValidate.validate({ path: (req.body || {}).path }));
   }));
