@@ -25,6 +25,10 @@
     </div>
 
     <div class="agrid">
+      <!-- 加载中显示骨架占位，避免空态文案抢跑（G6） -->
+      <div v-if="loading" style="grid-column:1/-1">
+        <StateBlock state="loading" />
+      </div>
       <div v-for="(item, i) in referenced[tab] || []" :key="item.assetId" class="card acard" :class="{ miss: item.blocked }" @click="openDetail(item, i)">
         <div class="thumb" :class="[item.currentImage ? '' : 'ph', 'ph-' + (i % 6)]">
           <img v-if="item.currentImage" :src="item.currentImage" style="width:100%;height:100%;object-fit:cover">
@@ -32,7 +36,7 @@
         </div>
         <div class="info"><b>{{ item.name }}</b><p>{{ item.description || typeLabel(item.assetType) + ' · 本集引用' }}</p></div>
       </div>
-      <p v-if="(referenced[tab] || []).length === 0" class="xs muted" style="padding:12px">本集剧本没有引用{{ tabLabel }}</p>
+      <p v-if="!loading && (referenced[tab] || []).length === 0" class="xs muted" style="padding:12px">本集剧本没有引用{{ tabLabel }}</p>
     </div>
 
     <!-- 素材详情抽屉（09） -->
@@ -199,11 +203,13 @@
 <script>
 import axios from 'axios'
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'AssetsStage',
   mixins: [escMixin],
+  components: { StateBlock },
   props: { projectId: String, episodeId: String },
   data() {
     return {
@@ -214,6 +220,7 @@ export default {
         { id: 'props', label: '道具' },
       ],
       referenced: { characters: [], scenes: [], props: [] },
+      loading: false,
       readiness: { status: 'checking' },
       detailOpen: false, detail: null, generating: false, entering: false,
       selectedStateId: '', selectionMediaVersionId: null, techOpen: false,
@@ -275,12 +282,15 @@ export default {
       return false
     },
     async load() {
+      this.loading = true
       try {
         const data = await v21.getEpisodeAssets(this.episodeId)
         this.referenced = data.referenced
         this.readiness = data.readiness
       } catch (e) {
         this.notice = e.message || '本集设定加载失败'
+      } finally {
+        this.loading = false
       }
     },
     async recheck() {

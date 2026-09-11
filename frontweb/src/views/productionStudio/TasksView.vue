@@ -41,6 +41,8 @@
     </div>
 
     <div class="tlist">
+      <!-- 三分状态机：首次加载骨架（加载完成前不渲染空态） -->
+      <StateBlock v-if="loading && !loaded && !loadError" state="loading" />
       <div v-for="t in displayedTasks" :key="t.id" class="card trow" :class="{ sel: selected === t.id }" @click="openDetail(t)">
         <div class="ic" :style="{ color: typeColor(t) }"><svg><use :href="typeIcon(t)"/></svg></div>
         <div class="tt grow"><b>{{ t.title }}</b><span>{{ taskSource(t) }}</span></div>
@@ -54,7 +56,7 @@
         <router-link v-if="targetRoute(t)" class="btn sm route" :to="targetRoute(t)" @click.stop>打开对象</router-link>
         <button class="btn sm" @click.stop="openDetail(t)">查看任务</button>
       </div>
-      <p v-if="!loadError && displayedTasks.length === 0" class="muted" style="text-align:center; padding:50px 0">{{ q || projectFilter ? '没有匹配的任务' : '此分组暂无任务' }}</p>
+      <p v-if="!loadError && loaded && !loading && displayedTasks.length === 0" class="muted" style="text-align:center; padding:50px 0">{{ q || projectFilter ? '没有匹配的任务' : '此分组暂无任务' }}</p>
       <div class="row" style="padding:8px 4px; align-items:center; gap:10px">
         <span class="xs muted">共 {{ total }} 项<template v-if="projectFilter"> · 当前筛选显示 {{ displayedTasks.length }} 项</template></span>
         <button v-if="hasMore" class="btn sm" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '加载中…' : '加载更多' }}</button>
@@ -158,6 +160,7 @@
 
 <script>
 import v21 from '../../v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import { v21Toast } from '../../v21/ui.js'
 import escMixin from '../../v21/escMixin.js'
 
@@ -169,6 +172,7 @@ const STAGE_LABELS = { storyboard: '分镜阶段', cut: '成片阶段', episodes
 export default {
   name: 'TasksView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
       all: [],
@@ -181,6 +185,7 @@ export default {
       pageSize: 100,
       total: 0,
       loadingMore: false,
+      loaded: false,
       detail: null,
       selected: null,
       techOpen: false,
@@ -211,7 +216,7 @@ export default {
     },
   },
   watch: {
-    tab() { this.load() },
+    tab() { this.writeTabUrl(); this.load() },
     typeFilter() { this.load() },
     q() {
       clearTimeout(this.qTimer)
@@ -220,6 +225,8 @@ export default {
   },
   async mounted() {
     this.bindEsc(this.onEsc)
+    // 横切 B：消费 ?tab= 页签恢复（focus 深链在 load 后消费，可覆盖页签）
+    this.consumeTabQuery()
     await this.load()
     await this.consumeFocusQuery()
     this.timer = setInterval(() => this.load(), 5000)
@@ -264,6 +271,7 @@ export default {
         }
         this.loadError = ''
         this.lastSync = new Date().toLocaleTimeString()
+        this.loaded = true
         // 轮询后让打开中的抽屉跟随最新数据（任务已不在本页签时保留旧快照）
         if (this.detail) {
           const fresh = this.all.find((t) => t.id === this.detail.id)
@@ -312,6 +320,18 @@ export default {
       } finally {
         this.$router.replace({ query: {} })
       }
+    },
+    // 横切 B：?tab= 页签恢复（in_progress 不写入 URL，保持默认态干净）
+    consumeTabQuery() {
+      const tab = String(this.$route?.query?.tab || '')
+      if (['in_progress', 'attention', 'done'].includes(tab)) this.tab = tab
+      this.writeTabUrl()
+    },
+    writeTabUrl() {
+      const query = { ...this.$route.query }
+      if (this.tab !== 'in_progress') query.tab = this.tab
+      else delete query.tab
+      this.$router.replace({ query })
     },
     statusTab(status) {
       if (['failed', 'waiting_external'].includes(status)) return 'attention'

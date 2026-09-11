@@ -16,6 +16,10 @@
       <span class="act" style="cursor:pointer; margin-left:auto; color:var(--muted)" @click="notice = ''">关闭</span>
     </div>
 
+    <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
+    <StateBlock v-if="loading && !loaded" state="loading" />
+    <StateBlock v-else-if="loadError" state="error" :message="'分镜加载失败：' + loadError" @retry="load" />
+    <template v-else>
     <div v-if="shots.length === 0" class="empty-box">
       <p class="muted">本集还没有分镜</p>
       <button class="btn primary" @click="createFromScript">从已确认剧本创建分镜</button>
@@ -251,6 +255,7 @@
           进入成片审核（{{ completion.adopted }}/{{ completion.total }}）
         </button>
       </div>
+    </template>
     </template>
 
     <!-- 生成确认 Sheet（16） -->
@@ -572,11 +577,13 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'StoryboardStage',
   mixins: [escMixin],
+  components: { StateBlock },
   props: { projectId: String, episodeId: String },
   beforeUnmount() {
     if (this.pollTimer) clearInterval(this.pollTimer)
@@ -584,6 +591,7 @@ export default {
   data() {
     return {
       shots: [], scenes: [], sceneFilter: 'all', currentShotId: null, current: null,
+      loading: false, loaded: false, loadError: '',
       references: { characters: [], props: [], scene: {} },
       segments: [], imagePrompt: { text: '', manual: false }, imageCandidates: [],
       h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0, missing: [], staleShots: [] },
@@ -691,6 +699,10 @@ export default {
         this.assetPreview.candidates[0].url !== this.assetPreview.currentImage
     },
   },
+  watch: {
+    // 横切 B：切换场次时把 sceneFilter 持久化到 URL（replace，刷新可恢复）
+    sceneFilter() { this.writeSceneShotUrl() },
+  },
   mounted() {
     this.bindEsc(this.onEsc)
     this.keyHandler = (e) => {
@@ -723,18 +735,27 @@ export default {
       return false
     },
     async load() {
-      const data = await v21.getStoryboard(this.episodeId)
-      this.shots = data.shots || []
-      this.completion = data.completion || this.completion
+      this.loading = true
       try {
-        const guard = await v21.getMediaGuard(this.episodeId)
-        this.readiness = { status: guard.readiness }
-        const assets = await v21.getEpisodeAssets(this.episodeId)
-        if (assets.readiness?.status === 'ready') this.readiness = { status: 'ready' }
-      } catch { /* keep */ }
-      try {
-        this.scenes = (await v21.getScript(this.episodeId)).scenes || []
-      } catch { this.scenes = [] }
+        const data = await v21.getStoryboard(this.episodeId)
+        this.shots = data.shots || []
+        this.completion = data.completion || this.completion
+        try {
+          const guard = await v21.getMediaGuard(this.episodeId)
+          this.readiness = { status: guard.readiness }
+          const assets = await v21.getEpisodeAssets(this.episodeId)
+          if (assets.readiness?.status === 'ready') this.readiness = { status: 'ready' }
+        } catch { /* keep */ }
+        try {
+          this.scenes = (await v21.getScript(this.episodeId)).scenes || []
+        } catch { this.scenes = [] }
+        this.loadError = ''
+        this.loaded = true
+      } catch (e) {
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
+      }
       if (this.currentShotId === null && this.shots.length > 0) this.selectShot(this.shots[0].id)
     },
     async createFromScript() {
@@ -793,6 +814,8 @@ export default {
       this.refreshGuard()
       // T2.5：历史抽屉开着时切镜需重拉，避免展示上一镜的陈旧任务；关着时留给 openHistory 按需拉取
       if (this.historyOpen) await this.loadHistory()
+      // 横切 B：切换镜头时把 shot 持久化到 URL（replace，刷新可恢复）
+      this.writeSceneShotUrl()
     },
     async refreshGuard() {
       this.guard = await v21.getVideoGuard(this.currentShotId)
@@ -809,19 +832,36 @@ export default {
       this.historyOpen = true
     },
     async consumeShotQuery() {
-      // T2.5：消费成片页「回分镜处理」带来的 ?shot= 定位参数；无论选中成败都清除 query（评审修复）
-      const shotId = this.$route.query.shot
-      if (!shotId) return
-      const target = this.shots.find((s) => String(s.id) === String(shotId))
-      try {
-        if (target) await this.selectShot(target.id)
-      } catch (e) {
-        this.notice = e.message || '定位镜头失败'
-      } finally {
-        const query = { ...this.$route.query }
-        delete query.shot
-        this.$router.replace({ query })
+      // 深链消费：?shot=（成片页「回分镜处理」定位）+ ?scene=（横切 B 场次筛选恢复）。
+      // 消费后不再单向清除参数——选中/筛选状态经 writeSceneShotUrl 写回 URL，刷新可恢复。
+      const query = this.$route.query || {}
+      const shotId = query.shot
+      if (shotId) {
+        const target = this.shots.find((s) => String(s.id) === String(shotId))
+        if (target) {
+          try {
+            await this.selectShot(target.id)
+          } catch (e) {
+            this.notice = e.message || '定位镜头失败'
+          }
+        } else {
+          this.notice = '定位镜头失败：镜头不存在或已删除'
+        }
       }
+      const scene = query.scene
+      if (scene && this.scenes.some((s) => String(s.id) === String(scene))) {
+        this.sceneFilter = String(scene)
+      }
+      this.writeSceneShotUrl()
+    },
+    // 横切 B：场次/镜头选中状态写入 URL（保留其它参数；replace 不产生历史记录）
+    writeSceneShotUrl() {
+      const query = { ...this.$route.query }
+      if (this.sceneFilter !== 'all') query.scene = String(this.sceneFilter)
+      else delete query.scene
+      if (this.currentShotId != null) query.shot = String(this.currentShotId)
+      else delete query.shot
+      this.$router.replace({ query })
     },
     async saveSegment(seg) {
       try {

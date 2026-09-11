@@ -166,18 +166,24 @@ test('分镜页确认抽屉：进入成片审核前展示三组计数摘要', ()
   assert.match(view, /cutSummaryError/, '摘要抽屉内应有错误行呈现')
 })
 
-test('分镜页：?shot= 定位消费 + 生成历史经 openHistory 加载', () => {
+test('分镜页：?shot= 定位消费 + ?scene= 场次恢复与 replace 写入 + 生成历史经 openHistory 加载', () => {
   const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
-  // mounted/created 消费 route.query.shot：合法时选中该镜头并清除 query
+  // mounted/created 消费 route.query.shot：合法时选中该镜头（横切 B：消费后写回 URL 而非单向清除，刷新可恢复）
   assert.match(view, /consumeShotQuery/, '应有 consumeShotQuery 消费 ?shot= 定位参数')
   const consumeFn = view.match(/async consumeShotQuery\(\) \{[\s\S]*?\n    \},/)
   assert.ok(consumeFn, 'consumeShotQuery 方法存在')
-  assert.match(consumeFn[0], /\$route\.query\.shot/, '应读取 route.query.shot')
+  assert.match(consumeFn[0], /query\.shot|\$route\.query\.shot/, '应读取 route.query.shot')
   assert.match(consumeFn[0], /selectShot/, '合法 shotId 应复用 selectShot 选中')
-  assert.match(consumeFn[0], /\$router\.replace/, '消费后应 replace 清除 query')
-  // 评审修复：selectShot 失败时 query 也必须清理（finally），且失败走页内错误提示
-  assert.match(consumeFn[0], /finally/, '清 query 应在 finally 中（selectShot 失败也清理）')
   assert.match(consumeFn[0], /catch/, 'selectShot 失败应有 catch 页内提示')
+  assert.match(consumeFn[0], /writeSceneShotUrl/, '消费后应写回 URL（选中状态持久化，刷新可恢复）')
+  // 横切 B：?scene= 场次筛选恢复 + 切换场次/镜头时 replace 写入
+  assert.match(consumeFn[0], /query\.scene|\$route\.query\.scene/, '应消费 ?scene= 恢复场次筛选')
+  const writeFn = view.match(/writeSceneShotUrl\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(writeFn, 'writeSceneShotUrl 方法存在')
+  assert.match(writeFn[0], /\$router\.replace/, '写入应使用 router.replace（不产生历史记录）')
+  assert.match(writeFn[0], /query\.scene/, '写入应包含 scene 参数')
+  assert.match(writeFn[0], /query\.shot/, '写入应包含 shot 参数')
+  assert.match(view, /sceneFilter\(\) \{ this\.writeSceneShotUrl\(\) \},/, '切换场次时（watcher）应 replace 写入 URL')
   // 生成历史按钮走 openHistory（清空→拉取→开门），不得直连 historyOpen = true
   assert.match(view, /@click="openHistory\(\)"/, '生成历史按钮应绑定 openHistory')
   assert.doesNotMatch(view, /@click="historyOpen = true"/, '生成历史按钮不得绕过加载直连开门')
@@ -190,6 +196,7 @@ test('分镜页：?shot= 定位消费 + 生成历史经 openHistory 加载', () 
   const selectShot = view.match(/async selectShot\(shotId\) \{[\s\S]*?\n    \},/)
   assert.ok(selectShot, 'selectShot 方法存在')
   assert.match(selectShot[0], /historyOpen[\s\S]*?loadHistory/, '切镜时历史抽屉已开应重拉历史')
+  assert.match(selectShot[0], /writeSceneShotUrl/, '切换镜头时应 replace 写入 URL')
 })
 
 test('分镜页评审修复：retryCandidate 先拉本镜历史再查找，不做静默兜底提交', () => {

@@ -32,6 +32,10 @@
       <span>已取消，任务记录与设置已保留</span>
     </div>
 
+    <!-- 三分状态机：加载骨架 → 错误重试 → 工作台（G8：加载完成前不渲染空数据内容） -->
+    <StateBlock v-if="loading && !loaded" state="loading" />
+    <StateBlock v-else-if="loadError && !loaded" state="error" :message="'成片数据加载失败：' + loadError" @retry="load" />
+    <template v-else>
     <div class="toolbar">
       <span class="chip">{{ review.completed || 0 }}/{{ review.total || 0 }} 已完成</span>
       <button class="btn sm" @click="playAll">{{ playAllText }}</button>
@@ -115,6 +119,7 @@
       </div>
       <button v-if="blockedShots.length" class="btn sm" style="flex:0 0 auto" @click="repair">回分镜处理（{{ blockedShots.length }}）</button>
     </footer>
+    </template>
 
     <!-- 生成成片确认抽屉 -->
     <div v-if="composeConfirmOpen" class="modal-wrap" @click.self="composeConfirmOpen = false">
@@ -159,6 +164,7 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
 const BLOCKER_REASONS = {
@@ -171,10 +177,12 @@ const BLOCKER_REASONS = {
 export default {
   name: 'CutStage',
   mixins: [escMixin],
+  components: { StateBlock },
   props: { projectId: String, episodeId: String },
   data() {
     return {
       review: { shots: [], gate: { canCompose: false, blockers: [] }, completed: 0, total: 0, waivedShots: [] },
+      loading: false, loaded: false, loadError: '',
       currentIndex: 0,
       settings: { bgmOn: false, narrationTts: false, subtitleBurn: false, upscale: false },
       composing: false,
@@ -273,10 +281,20 @@ export default {
       this.noticeTimer = setTimeout(() => { this.notice = '' }, 4000)
     },
     async load() {
-      const data = await v21.getCut(this.episodeId)
-      this.review = data
-      this.versions = data.versions || { items: [] }
-      if (!this.currentShot && this.review.shots.length > 0) this.currentIndex = 0
+      this.loading = true
+      try {
+        const data = await v21.getCut(this.episodeId)
+        this.review = data
+        this.versions = data.versions || { items: [] }
+        if (!this.currentShot && this.review.shots.length > 0) this.currentIndex = 0
+        this.loadError = ''
+        this.loaded = true
+      } catch (e) {
+        // 失败呈现为可重试错误态（原为无兜底裸 await，失败页面白板）
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
+      }
     },
     selectShot(shot) {
       this.currentIndex = this.review.shots.indexOf(shot)

@@ -26,15 +26,20 @@
       </button>
     </header>
     <div class="page-body">
-      <div v-if="items.length === 0" class="empty-box">
-        <svg><use href="#i-film"/></svg>
-        <div>
-          <p style="font-size:13.5px">{{ status === 'archived' ? '回收站为空' : '还没有项目' }}</p>
-          <p class="xs muted" style="margin-top:4px">{{ status === 'archived' ? '删除的项目会在这里保留 30 天' : '从一部短剧的剧本开始，创建第一个项目' }}</p>
+      <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
+      <StateBlock v-if="loading && !loaded" state="loading" />
+      <StateBlock v-else-if="loadError" state="error" :message="'项目列表加载失败：' + loadError" @retry="load" />
+      <template v-else>
+        <div v-if="items.length === 0" class="empty-box">
+          <svg><use :href="hasFilter ? '#i-search' : '#i-film'"/></svg>
+          <div>
+            <p style="font-size:13.5px">{{ emptyTitle }}</p>
+            <p class="xs muted" style="margin-top:4px">{{ emptyHint }}</p>
+          </div>
+          <button v-if="hasFilter" class="btn" @click="clearFilters">清除条件</button>
+          <button v-else-if="status !== 'archived'" class="btn primary" @click="$router.push('/projects/new')">新建项目</button>
         </div>
-        <button v-if="status !== 'archived'" class="btn primary" @click="$router.push('/projects/new')">新建项目</button>
-      </div>
-      <div class="proj-grid">
+        <div v-else class="proj-grid">
         <div v-for="(card, idx) in items" :key="card.id" class="card pcard" tabindex="0" role="button"
              @click="enter(card)" @keydown.enter="enter(card)">
           <div class="cover" :class="[card.thumbnail ? 'has-img' : 'ph', 'ph-' + (idx % 6)]">
@@ -76,7 +81,8 @@
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </template>
     </div>
 
     <!-- 移入回收站确认 Modal（替代原生 confirm） -->
@@ -102,16 +108,19 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectsView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
       items: [], total: 0, q: '', status: 'all', sort: 'recent',
       searchTimer: null, openMenuId: null,
       deleteConfirmOpen: false, deleteTarget: null,
+      loading: false, loaded: false, loadError: '',
       statusOptions: [
         { key: 'all', label: '全部' },
         { key: 'making', label: '制作中' },
@@ -120,6 +129,20 @@ export default {
         { key: 'archived', label: '已归档' },
       ],
     }
+  },
+  computed: {
+    // 筛选空与真空态区分：有搜索词或非「全部」页签即为筛选态
+    hasFilter() {
+      return !!this.q.trim() || this.status !== 'all'
+    },
+    emptyTitle() {
+      if (this.hasFilter) return '没有匹配的项目'
+      return this.status === 'archived' ? '回收站为空' : '还没有项目'
+    },
+    emptyHint() {
+      if (this.hasFilter) return '换个关键词或页签，或清除条件后重试'
+      return this.status === 'archived' ? '删除的项目会在这里保留 30 天' : '从一部短剧的剧本开始，创建第一个项目'
+    },
   },
   watch: {
     '$route.query': { immediate: true, handler() { this.syncFromUrl(); this.load() } },
@@ -163,9 +186,25 @@ export default {
       this.load()
     },
     async load() {
-      const data = await v21.listProjects({ q: this.q, status: this.status, sort: this.sort })
-      this.items = data.items || []
-      this.total = data.total || 0
+      this.loading = true
+      try {
+        const data = await v21.listProjects({ q: this.q, status: this.status, sort: this.sort })
+        this.items = data.items || []
+        this.total = data.total || 0
+        this.loadError = ''
+        this.loaded = true
+      } catch (e) {
+        // 失败呈现为可重试错误态，不再伪装成「还没有项目」
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
+      }
+    },
+    clearFilters() {
+      this.q = ''
+      this.status = 'all'
+      this.writeUrl()
+      this.load()
     },
     statusBadgeClass(key) {
       return { making: 'info', 'needs-attention': 'warn', completed: 'ok', blank: 'neutral' }[key] || 'info'

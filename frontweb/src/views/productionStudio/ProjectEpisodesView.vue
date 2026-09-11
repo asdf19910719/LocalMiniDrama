@@ -11,7 +11,7 @@
       <div class="spacer"></div>
       <div class="input" style="width:220px">
         <svg><use href="#i-search"/></svg>
-        <input v-model="q" placeholder="集号 / 标题" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13.5px" @input="load">
+        <input v-model="q" placeholder="集号 / 标题" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13.5px" @input="onSearchInput">
       </div>
     </header>
     <div class="page-body">
@@ -114,7 +114,10 @@
         </div>
       </div>
 
-      <div class="ep-list">
+      <!-- 三分状态机：加载骨架 → 错误重试 → 列表（加载完成前不渲染空态） -->
+      <StateBlock v-if="loading && !loaded" state="loading" />
+      <StateBlock v-else-if="loadError" state="error" :message="'剧集列表加载失败：' + loadError" @retry="load" />
+      <div v-else class="ep-list">
         <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: isHighlighted(ep), attention: ep.needsAttention && !isHighlighted(ep) }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
           <div class="ep-title">
@@ -309,17 +312,21 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import { v21Toast } from '@/v21/ui.js'
 import escMixin from '@/v21/escMixin.js'
 
 const STAGE_ORDER = ['script', 'assets', 'storyboard', 'cut']
+const STATUS_KEYS = ['all', 'making', 'needs-attention', 'completed', 'blank', 'archived']
 
 export default {
   name: 'ProjectEpisodesView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
       items: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
+      loading: false, loaded: false, loadError: '',
       projectTitle: '', deleteTarget: null, deleteImpact: {},
       rowMenuId: null,
       newEpOpen: false, newEpChoice: 'create', newEpNextNumber: 1, blankEpisodes: [],
@@ -374,6 +381,11 @@ export default {
     // 消费 ?stage=（P3.5 概览深链）：设置第二层阶段筛选
     const stage = this.$route.query.stage
     if (stage && STAGE_ORDER.includes(String(stage))) this.stageFilter = String(stage)
+    // 横切 B：消费 ?status=&q= 筛选恢复（随后 writeFilterUrl 持久化到 URL，刷新可恢复）
+    const status = String(this.$route.query.status || '')
+    if (STATUS_KEYS.includes(status)) this.status = status
+    const q = String(this.$route.query.q || '')
+    if (q) this.q = q
     if (imported || stage) this.consumeQuery(['imported', 'stage'])
     this.load()
   },
@@ -391,26 +403,50 @@ export default {
       return false
     },
     async load() {
-      const params = { q: this.q, sort: this.sort }
-      if (this.status === 'archived') params.status = 'archived'
-      const data = await v21.listEpisodes(this.projectId, params)
-      if (this.status === 'archived') {
-        this._archivedItems = data.items || []
-      } else {
-        this._allItems = data.items || []
+      this.loading = true
+      try {
+        const params = { q: this.q, sort: this.sort }
+        if (this.status === 'archived') params.status = 'archived'
+        const data = await v21.listEpisodes(this.projectId, params)
+        if (this.status === 'archived') {
+          this._archivedItems = data.items || []
+        } else {
+          this._allItems = data.items || []
+          try {
+            const archived = await v21.listEpisodes(this.projectId, { status: 'archived' })
+            this._archivedItems = archived.items || []
+          } catch { /* 徽标计数失败不影响主列表 */ }
+        }
+        this.applyFilters()
         try {
-          const archived = await v21.listEpisodes(this.projectId, { status: 'archived' })
-          this._archivedItems = archived.items || []
-        } catch { /* 徽标计数失败不影响主列表 */ }
+          this.externalTasks = (await v21.listExternalTasks(this.projectId)) || []
+        } catch { this.externalTasks = [] }
+        try {
+          const overview = await v21.getOverview(this.projectId)
+          this.projectTitle = overview.hero.title
+        } catch { /* ignore */ }
+        this.loadError = ''
+        this.loaded = true
+      } catch (e) {
+        // 失败呈现为可重试错误态，不再伪装成空列表
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
       }
-      this.applyFilters()
-      try {
-        this.externalTasks = (await v21.listExternalTasks(this.projectId)) || []
-      } catch { this.externalTasks = [] }
-      try {
-        const overview = await v21.getOverview(this.projectId)
-        this.projectTitle = overview.hero.title
-      } catch { /* ignore */ }
+    },
+    // 横切 B：筛选状态写入 URL（保留 highlight 等其它参数；replace 不产生历史记录）
+    writeFilterUrl() {
+      this.$router.replace({
+        query: {
+          ...this.$route.query,
+          q: this.q || undefined,
+          status: this.status !== 'all' ? this.status : undefined,
+        },
+      })
+    },
+    onSearchInput() {
+      this.writeFilterUrl()
+      this.load()
     },
     applyFilters() {
       let list
@@ -438,7 +474,7 @@ export default {
         String(ep.id) === String(this.importedId || '')
       )
     },
-    setStatus(s) { this.status = s; this.load() },
+    setStatus(s) { this.status = s; this.writeFilterUrl(); this.load() },
     setStageFilter(s) { this.stageFilter = s; this.applyFilters() },
     extStatusLabel(s) {
       return { waiting_external: '等待外部结果', imported: '已导入', cancelled: '已取消' }[s] || s

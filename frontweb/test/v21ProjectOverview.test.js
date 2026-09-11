@@ -106,12 +106,12 @@ test('风格 Modal 三标签：预设/我的/自定义，按 type 过滤或诚�
   assert.match(v, /安装自定义风格目录后开放/, '自定义风格 tab 应诚实禁用并说明')
 })
 
-test('概览加载失败不伪装：catch + 错误卡 + 重试（O7）', () => {
+test('概览加载失败不伪装：catch + 错误卡 + 重试（O7；Task 5-B 收口为 StateBlock 统一呈现）', () => {
   const v = view()
   const load = v.match(/async load\(\) \{[\s\S]*?\n    \},/)
   assert.ok(load, 'load 方法应存在')
   assert.match(load[0], /catch/, 'load 应有 catch')
   assert.match(load[0], /loadError/, '失败应记录 loadError')
   assert.match(v, /项目信息加载失败/, '模板应有失败错误卡')
-  assert.match(v, /@click="load"/, '应有「重试」按钮绑 load')
+  assert.match(v, /@retry="load"/, '应有「重试」按钮经 StateBlock 绑 load')
 })

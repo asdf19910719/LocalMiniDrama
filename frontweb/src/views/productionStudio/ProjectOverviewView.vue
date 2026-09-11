@@ -26,12 +26,9 @@
     </header>
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
 
-      <!-- 加载失败（不伪装） -->
-      <div class="card pad" v-if="loadError" style="display:flex; align-items:center; gap:12px">
-        <span style="color:var(--danger)">项目信息加载失败：{{ loadError }}</span>
-        <div class="spacer"></div>
-        <button class="btn" @click="load">重试</button>
-      </div>
+      <!-- 三分状态机：加载骨架 → 错误重试（P3.5 失败不伪装，收口为统一呈现） -->
+      <StateBlock v-if="loading && !overview && !loadError" state="loading" />
+      <StateBlock v-else-if="loadError" state="error" :message="'项目信息加载失败：' + loadError" @retry="load" />
 
       <!-- Hero -->
       <div class="card hero" v-if="overview">
@@ -270,15 +267,17 @@
 <script>
 import axios from 'axios'
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import { v21Toast } from '@/v21/ui.js'
 import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectOverviewView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
-      overview: null, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
+      overview: null, loading: false, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
       styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
       styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
       styleDrawerOpen: false,
@@ -326,6 +325,7 @@ export default {
       return false
     },
     async load() {
+      this.loading = true
       this.loadError = ''
       try {
         this.overview = await v21.getOverview(this.projectId)
@@ -340,6 +340,8 @@ export default {
       } catch (e) {
         this.overview = null
         this.loadError = e.message || '未知错误'
+      } finally {
+        this.loading = false
       }
     },
     async exportBackup() {

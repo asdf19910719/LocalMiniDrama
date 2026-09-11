@@ -28,22 +28,33 @@
         <span class="muted xs">人物 3:4 · 场景 16:9 · 道具 1:1 · 音色以波形卡展示</span>
       </div>
 
-      <div v-for="grp in grouped" :key="grp.key">
-        <div class="sec-label">{{ grp.label }} <span class="hint muted">· {{ grp.items.length }} 项 · 点击打开详情抽屉</span></div>
-        <div class="agrid">
-          <div v-for="(item, i) in grp.items" :key="grp.key + item.id" class="card acard" :class="[grp.key, { offline: !item.local_path && !item.image_url }]" @click="openDetail(grp.key, item)">
-            <div class="thumb" :class="item.image_url ? 'has-img' : 'ph ph-' + ((i + grp.key.length) % 6)">
-              <img v-if="item.image_url" :src="item.image_url">
-              <span v-if="!item.local_path && !item.image_url" class="st badge danger">文件不可访问</span>
-              <span v-else class="st badge neutral">v1</span>
+      <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
+      <StateBlock v-if="loading && !loaded" state="loading" />
+      <StateBlock v-else-if="loadError" state="error" :message="'资产库加载失败：' + loadError" @retry="load" />
+      <template v-else>
+        <div v-for="grp in grouped" :key="grp.key">
+          <div class="sec-label">{{ grp.label }} <span class="hint muted">· {{ grp.items.length }} 项 · 点击打开详情抽屉</span></div>
+          <div class="agrid">
+            <div v-for="(item, i) in grp.items" :key="grp.key + item.id" class="card acard" :class="[grp.key, { offline: !item.local_path && !item.image_url }]" @click="openDetail(grp.key, item)">
+              <div class="thumb" :class="item.image_url ? 'has-img' : 'ph ph-' + ((i + grp.key.length) % 6)">
+                <img v-if="item.image_url" :src="item.image_url">
+                <span v-if="!item.local_path && !item.image_url" class="st badge danger">文件不可访问</span>
+                <span v-else class="st badge neutral">v1</span>
+              </div>
+              <div class="info"><b>{{ item.name || item.location }}</b><p>{{ descOf(item) }}</p></div>
             </div>
-            <div class="info"><b>{{ item.name || item.location }}</b><p>{{ descOf(item) }}</p></div>
           </div>
         </div>
-      </div>
-      <p v-if="grouped.length === 0 && loaded" class="muted" style="text-align:center; padding:60px 0">
-        资产库为空 · 从项目素材或本地导入添加
-      </p>
+        <!-- 空态区分：筛选无结果（清除条件） vs 资产库真空态 -->
+        <StateBlock
+          v-if="grouped.length === 0"
+          state="empty"
+          :icon="hasFilter ? '#i-search' : '#i-cube'"
+          :message="hasFilter ? '没有匹配的资产：换个关键词或类型页签，或清除条件后重试' : '资产库为空 · 从项目素材或本地导入添加'"
+        >
+          <button v-if="hasFilter" class="btn" @click="clearFilters">清除条件</button>
+        </StateBlock>
+      </template>
     </div>
 
     <!-- 资产库详情抽屉（33） -->
@@ -279,6 +290,7 @@
 <script>
 import axios from 'axios'
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import { findConflictingItem } from '@/v21/libraryIdentity.js'
 import { v21Toast } from '@/v21/ui.js'
 import escMixin from '@/v21/escMixin.js'
@@ -286,9 +298,10 @@ import escMixin from '@/v21/escMixin.js'
 export default {
   name: 'LibraryView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
-      type: 'all', q: '', loaded: false,
+      type: 'all', q: '', loaded: false, loading: false, loadError: '',
       chars: [], scenes: [], props: [],
       detail: null, useOpen: false, useTarget: '', projects: [],
       // 添加到资产库（P0-13）：入口选择器 + 双路径三步向导 + 同来源冲突处理
@@ -304,6 +317,10 @@ export default {
   },
   computed: {
     totalAll() { return this.chars.length + this.scenes.length + this.props.length },
+    // 筛选空与真空态区分：有搜索词或类型页签非「全部」即为筛选态
+    hasFilter() {
+      return this.type !== 'all' || !!this.q.trim()
+    },
     grouped() {
       const groups = []
       for (const [key, label, items] of [
@@ -346,7 +363,7 @@ export default {
       return false
     },
     async load() {
-      this.loaded = true
+      this.loading = true
       try {
         const [c, s, p] = await Promise.all([
           axios.get('/api/v1/character-library', { params: { page: 1, page_size: 200 } }).then((r) => r.data?.data?.items || []),
@@ -356,7 +373,15 @@ export default {
         this.chars = c.map((x) => ({ ...x, _kind: 'character' }))
         this.scenes = s.map((x) => ({ ...x, _kind: 'scene' }))
         this.props = p.map((x) => ({ ...x, _kind: 'prop' }))
-      } catch { /* 保留空态 */ }
+        this.loadError = ''
+        // 数据到达后才置 loaded：加载中绝不渲染空态（原实现提前置位导致空态抢跑）
+        this.loaded = true
+      } catch (e) {
+        // 失败呈现为可重试错误态，不再静默伪装成空态
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
+      }
       try {
         const proj = await v21.listProjects({})
         this.projects = proj.items || []
@@ -364,6 +389,11 @@ export default {
     },
     countOf(t) {
       return { character: this.chars.length, scene: this.scenes.length, prop: this.props.length }[t] || 0
+    },
+    // 筛选空态清除条件：重置搜索词与类型页签（客户端筛选，grouped 计算属性即时生效）
+    clearFilters() {
+      this.q = ''
+      this.type = 'all'
     },
     typeLabel(t) {
       return { character: '角色', scene: '场景', prop: '道具' }[t] || t

@@ -19,6 +19,11 @@
         <span style="text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer" @click="notice = ''">关闭</span>
       </div>
 
+      <!-- 三分状态机：加载骨架 → 错误重试 → 内容（加载完成前不渲染空态） -->
+      <StateBlock v-if="loading && !loaded" state="loading" />
+      <StateBlock v-else-if="loadError" state="error" :message="'项目素材加载失败：' + loadError" @retry="load" />
+      <template v-else>
+
       <div class="stats">
         <div class="card stat"><div class="ic"><svg><use href="#i-user"/></svg></div><div><b>{{ countOf('character') }}</b><span>人物</span></div></div>
         <div class="card stat"><div class="ic"><svg><use href="#i-scene"/></svg></div><div><b>{{ countOf('scene') }}</b><span>场景资产</span></div></div>
@@ -63,6 +68,7 @@
         <button v-if="q" class="btn" @click="q = ''; load()">清除搜索</button>
         <button v-else class="btn primary" @click="createOpen = true">新增第一个素材</button>
       </div>
+      </template>
     </div>
 
     <!-- 批量操作栏（Task 3.3 / P0-10）：多选态且有选中时固定在页面底部 -->
@@ -100,12 +106,12 @@
       </div>
     </div>
 
-    <!-- 素材详情 Drawer（P0-5：五标签结构） -->
-    <div v-if="detailOpen" class="scrim" style="z-index:80" @click="detailOpen = false"></div>
+    <!-- 素材详情 Drawer（P0-5：五标签结构；关闭入口统一走 closeDetail 以清除 ?asset=） -->
+    <div v-if="detailOpen" class="scrim" style="z-index:80" @click="closeDetail"></div>
     <aside v-if="detailOpen" class="drawer" style="z-index:90">
       <div class="drawer-h">
         <h3>{{ detail?.name || '素材' }} <span class="muted" style="font-weight:400; font-size:12px">· 项目素材</span></h3>
-        <button class="icon-btn" @click="detailOpen = false"><svg><use href="#i-close"/></svg></button>
+        <button class="icon-btn" @click="closeDetail"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="tabs" style="padding:0 16px">
         <span v-for="t in drawerTabs" :key="t.key" class="tab" :class="{ on: activeTab === t.key }" @click="activeTab = t.key">{{ t.label }}</span>
@@ -385,14 +391,17 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectAssetsView',
   mixins: [escMixin],
+  components: { StateBlock },
   data() {
     return {
       items: [], type: 'all', q: '',
+      loading: false, loaded: false, loadError: '',
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
       detailOpen: false, detail: null, generating: false, projectTitle: '',
       notice: '',
@@ -448,7 +457,8 @@ export default {
   },
   mounted() {
     this.bindEsc(this.onEsc)
-    this.load()
+    // 横切 B：?asset=<type>:<id> 深链在列表加载后消费（命中即打开详情抽屉并写回 URL）
+    this.load().then(() => this.consumeAssetQuery())
     v21.getOverview(this.projectId).then((o) => { this.projectTitle = o.hero.title }).catch(() => {})
   },
   methods: {
@@ -463,14 +473,61 @@ export default {
       }
       if (this.genSheetOpen) { this.genSheetOpen = false; return true }
       if (this.removeOpen) { this.removeOpen = false; return true }
-      if (this.detailOpen) { this.detailOpen = false; return true }
+      if (this.detailOpen) { this.closeDetail(); return true }
       if (this.createOpen) { this.createOpen = false; return true }
       return false
     },
     async load() {
-      const data = await v21.listAssets(this.projectId, { type: this.type, q: this.q })
-      this.items = data.items || []
-      this._all = await v21.listAssets(this.projectId, { type: 'all', q: this.q }).then((d) => d.items || [])
+      this.loading = true
+      try {
+        const data = await v21.listAssets(this.projectId, { type: this.type, q: this.q })
+        this.items = data.items || []
+        this._all = await v21.listAssets(this.projectId, { type: 'all', q: this.q }).then((d) => d.items || [])
+        this.loadError = ''
+        this.loaded = true
+      } catch (e) {
+        // 失败呈现为可重试错误态（原为无兜底裸 await，失败页面白板）
+        this.loadError = e.message || '网络错误'
+      } finally {
+        this.loading = false
+      }
+    },
+    // ---- 横切 B：?asset=<type>:<id> URL 恢复（规格 ASSETS-030 本期最小：只做 asset 参数） ----
+    // 列表加载后消费深链：命中素材打开详情抽屉；未命中清除参数，不留死链
+    async consumeAssetQuery() {
+      const asset = this.$route.query.asset
+      if (!asset) return
+      const raw = String(asset)
+      const idx = raw.indexOf(':')
+      const type = idx > 0 ? raw.slice(0, idx) : ''
+      const id = idx > 0 ? raw.slice(idx + 1) : ''
+      const item = type && id
+        ? this.allItems.find((i) => i.assetType === type && String(i.id) === id)
+        : null
+      if (item) {
+        try {
+          await this.openDetail(item)
+        } catch {
+          this.clearAssetQuery()
+        }
+      } else {
+        this.clearAssetQuery()
+      }
+    },
+    // 打开详情时写入 ?asset=<type>:<id>（replace 不产生历史记录）
+    writeAssetUrl() {
+      if (!this.detail) return
+      const query = { ...this.$route.query }
+      query.asset = `${this.detail.assetType}:${this.detail.id}`
+      this.$router.replace({ query })
+    },
+    // 关闭详情时清除 ?asset=（保留列表筛选等其它参数）
+    clearAssetQuery() {
+      const query = { ...this.$route.query }
+      if ('asset' in query) {
+        delete query.asset
+        this.$router.replace({ query })
+      }
     },
     setType(t) { this.type = t; this.load() },
     countOf(t) { return this.allItems.filter((i) => i.assetType === t).length },
@@ -510,6 +567,12 @@ export default {
       this.voiceError = ''
       this.voiceClearError = ''
       this.detailOpen = true
+      this.writeAssetUrl()
+    },
+    // 关闭详情抽屉：清除 ?asset= 参数（保留列表筛选，规格 ASSETS-030）
+    closeDetail() {
+      this.detailOpen = false
+      this.clearAssetQuery()
     },
     // 概览标签：资料编辑保存（PATCH /assets/:type/:assetId），保存中/失败在标签内呈现
     async saveProfile() {
@@ -632,7 +695,7 @@ export default {
           return
         }
         this.removeOpen = false
-        this.detailOpen = false
+        this.closeDetail()
         this.load()
         this.notice = '已移入回收站'
       } catch (e) {

@@ -625,6 +625,23 @@ html.v21-active .pcard .resume { background: var(--panel2) !important; border-co
 }
 .v21-root .v21-toast.danger { border-left-color: var(--danger); }
 
+/* --- 页面状态机三分（Task 5-B：StateBlock loading / error / empty） --- */
+.v21-root .v21-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 56px 20px; color: var(--muted);
+}
+.v21-root .v21-state .v21-state-ic { width: 34px; height: 34px; }
+.v21-root .v21-state .v21-state-msg { font-size: 13px; text-align: center; line-height: 1.6; }
+.v21-root .v21-state .btn svg { width: 14px; height: 14px; }
+.v21-root .v21-state-error { color: var(--danger); }
+.v21-root .v21-state-skeleton {
+  width: min(560px, 100%); display: flex; flex-direction: column; gap: 12px;
+}
+.v21-root .v21-state-skeleton .sk-line {
+  display: block; height: 14px; border-radius: 6px; background: var(--panel2);
+}
+.v21-root .v21-state-skeleton .sk-line:first-child { height: 18px; }
+
 /* --- 浮层入场动效（尊重系统减弱动态设置） --- */
 @keyframes v21-slide-in-right {
   from { transform: translateX(28px); opacity: 0; }
