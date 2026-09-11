@@ -243,6 +243,34 @@ function createEpisodeCenterService(db, { log = console } = {}) {
     return { updated: requested.length };
   }
 
+  /** 删除前影响清单（设计稿 32 删除确认 Modal） */
+  function getDeleteImpact(episodeId) {
+    const row = requireEpisode(episodeId);
+    const scriptRevisions = db
+      .prepare('SELECT COUNT(*) AS n FROM episode_script_revisions WHERE episode_id = ?')
+      .get(row.id).n;
+    const storyboards = db
+      .prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
+      .get(row.id).n;
+    const segments = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM storyboard_segments sg
+         JOIN storyboards sb ON sb.id = sg.storyboard_id WHERE sb.episode_id = ? AND sb.deleted_at IS NULL`
+      )
+      .get(row.id).n;
+    const candidates = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM director_candidate_groups g
+         JOIN storyboards sb ON CAST(g.shot_id AS INTEGER) = sb.id
+         WHERE sb.episode_id = ? AND sb.deleted_at IS NULL`
+      )
+      .get(row.id).n;
+    const imports = db
+      .prepare('SELECT COUNT(*) AS n FROM episode_imports WHERE episode_id = ?')
+      .get(row.id).n;
+    return { scriptRevisions, storyboards, segments, candidates, imports };
+  }
+
   function softDeleteEpisode(episodeId) {
     const row = requireEpisode(episodeId);
     const impacts = {
@@ -315,6 +343,7 @@ function createEpisodeCenterService(db, { log = console } = {}) {
     reorderEpisodes,
     softDeleteEpisode,
     restoreEpisode,
+    getDeleteImpact,
     getImportSource,
     getBlankStatus,
   };

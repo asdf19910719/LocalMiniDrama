@@ -68,6 +68,9 @@ function createV21Router({ db, cfg, log }) {
   r.get('/episodes/:episodeId', wrap((req, res) => {
     response.success(res, episodes.getEpisode(req.params.episodeId));
   }));
+  r.get('/episodes/:episodeId/delete-impact', wrap((req, res) => {
+    response.success(res, episodes.getDeleteImpact(req.params.episodeId));
+  }));
   r.delete('/episodes/:episodeId', wrap((req, res) => {
     response.success(res, episodes.softDeleteEpisode(req.params.episodeId));
   }));

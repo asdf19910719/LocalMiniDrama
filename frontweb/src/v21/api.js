@@ -57,6 +57,7 @@ export const v21 = {
   deleteEpisode: (episodeId) => del(`/episodes/${episodeId}`),
   restoreEpisode: (episodeId) => post(`/episodes/${episodeId}/restore`),
   getImportSource: (episodeId) => get(`/episodes/${episodeId}/import-source`),
+  getDeleteImpact: (episodeId) => get(`/episodes/${episodeId}/delete-impact`),
   // 剧本
   getScript: (episodeId) => get(`/episodes/${episodeId}/script`),
   getStageNav: (episodeId) => get(`/episodes/${episodeId}/script/stage-nav`),
