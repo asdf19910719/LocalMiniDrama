@@ -170,6 +170,22 @@ function createV21Router({ db, cfg, log }) {
   r.post('/episodes/:episodeId/script/confirm', wrap((req, res) => {
     response.success(res, script.confirmScript(req.params.episodeId, req.body || {}));
   }));
+  r.get('/episodes/:episodeId/script/stage-nav', wrap((req, res) => {
+    response.success(res, script.getStageNav(req.params.episodeId));
+  }));
+  r.get('/episodes/:episodeId/script/scene-stats', wrap((req, res) => {
+    response.success(res, script.getSceneStats(req.params.episodeId));
+  }));
+  r.get('/episodes/:episodeId/script/confirm-preview', wrap((req, res) => {
+    response.success(res, script.getConfirmPreview(req.params.episodeId));
+  }));
+  r.get('/episodes/:episodeId/script/diff', wrap((req, res) => {
+    response.success(res, script.getDiff(
+      req.params.episodeId,
+      Number(req.query.from),
+      Number(req.query.to)
+    ));
+  }));
   r.get('/episodes/:episodeId/script/history', wrap((req, res) => {
     response.success(res, { items: script.listHistory(req.params.episodeId) });
   }));

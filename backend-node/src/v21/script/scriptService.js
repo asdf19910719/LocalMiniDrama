@@ -319,8 +319,231 @@ function createScriptService(db, { log = console } = {}) {
     };
   }
 
+  /** 把正文按场次标题拆成块（场次导航统计与 diff 的共同基础） */
+  function splitSceneBlocks(content) {
+    const blocks = [];
+    let current = null;
+    for (const line of String(content || '').split('\n')) {
+      const t = line.trim();
+      const headingLike = /^(第[一二三四五六七八九十百千0-9]+场|\d{1,3}[.、、])|^((内景|外景)[·\s])/.test(t);
+      if (headingLike && t.length <= 40 && t) {
+        current = { heading: t.replace(/^第[一二三四五六七八九十百千0-9]+场\s*/, ''), lines: [] };
+        blocks.push(current);
+      } else if (current && t) {
+        current.lines.push(t);
+      }
+    }
+    return blocks;
+  }
+
+  /** 场次导航统计：每场字数/内外景/对白数 + 全集合计与建议 */
+  function getSceneStats(episodeId) {
+    const draft = getDraftRow(episodeId);
+    const blocks = splitSceneBlocks(draft ? draft.content : '');
+    const scenes = blocks.map((b, i) => {
+      const chars = b.lines.join('').length;
+      const dialogueCount = b.lines.filter((l) => /^[^：:]{1,12}[：:]/.test(l)).length;
+      const ie = /^(内景|内)/.test(b.heading) ? '内景' : /^(外景|外)/.test(b.heading) ? '外景' : '';
+      return {
+        no: `${i + 1}`,
+        heading: b.heading,
+        interiorExterior: ie,
+        chars,
+        dialogueCount,
+        suggestion: chars > 400 ? '场次偏长' : dialogueCount >= 4 ? '对白过密' : null,
+      };
+    });
+    const bodyChars = scenes.reduce((s, x) => s + x.chars, 0);
+    return {
+      scenes,
+      totalScenes: scenes.length,
+      totalChars: (draft ? draft.content : '').replace(/\s/g, '').length,
+      estimatedSeconds: Math.round(bodyChars / 24),
+      suggestions: scenes.filter((s) => s.suggestion).map((s) => `场次 ${s.no} ${s.suggestion}`),
+    };
+  }
+
+  /** 确认前检查 + 预计素材变化 + 下游影响（设计稿 08 右栏 / 18 影响摘要） */
+  function getConfirmPreview(episodeId) {
+    const draft = getDraftRow(episodeId);
+    if (!draft) throw httpError('NOT_FOUND', 404, '尚无草稿');
+    const approved = getApprovedRow(episodeId);
+    const stats = getSceneStats(episodeId);
+    const draftBlocks = splitSceneBlocks(draft.content);
+    const approvedBlocks = approved ? splitSceneBlocks(approved.content) : [];
+    const approvedHeadings = new Map(approvedBlocks.map((b) => [b.heading, b]));
+
+    const added = draftBlocks.filter((b) => !approvedHeadings.has(b.heading)).length;
+    const changed = draftBlocks.filter((b) => {
+      const old = approvedHeadings.get(b.heading);
+      return old && old.lines.join('\n') !== b.lines.join('\n');
+    }).length;
+    const removed = approvedBlocks.filter((b) => !draftBlocks.some((d) => d.heading === b.heading)).length;
+
+    const storyboardCount = db
+      .prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
+      .get(episodeId).n;
+    const shotImageCount = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM image_generations g
+         JOIN storyboards sb ON sb.id = g.storyboard_id
+         WHERE sb.episode_id = ? AND g.status = 'succeeded' AND g.deleted_at IS NULL`
+      )
+      .get(episodeId).n;
+
+    return {
+      check: {
+        scenes: stats.totalScenes,
+        chars: stats.totalChars,
+        estimatedSeconds: stats.estimatedSeconds,
+        blockers: (draft.content || '').trim() ? 0 : 1,
+        suggestions: stats.suggestions,
+      },
+      assetChanges: { added, changed, removed },
+      downstream: {
+        storyboardPackagesStale: storyboardCount,
+        shotImagesKeep: shotImageCount,
+      },
+      revisionChain: {
+        draftRevision: draft.revision,
+        nextRevision: approved ? approved.revision + 1 : draft.revision,
+        approvedRevision: approved ? approved.revision : null,
+      },
+    };
+  }
+
+  /** 版本比较：场次级行 diff（绿增/红删/同） */
+  function getDiff(episodeId, fromRevision, toRevision) {
+    const from = getRevisionContent(episodeId, fromRevision);
+    const to = getRevisionContent(episodeId, toRevision);
+    if (!from || !to) throw httpError('NOT_FOUND', 404, '版本不存在');
+    const fromBlocks = splitSceneBlocks(from.content);
+    const toBlocks = splitSceneBlocks(to.content);
+    const count = Math.max(fromBlocks.length, toBlocks.length);
+    const scenes = [];
+    for (let i = 0; i < count; i += 1) {
+      const a = fromBlocks[i];
+      const b = toBlocks[i];
+      const oldLines = a ? a.lines : [];
+      const newLines = b ? b.lines : [];
+      const n = oldLines.length;
+      const m = newLines.length;
+      const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      for (let x = n - 1; x >= 0; x -= 1) {
+        for (let y = m - 1; y >= 0; y -= 1) {
+          dp[x][y] = oldLines[x] === newLines[y] ? dp[x + 1][y + 1] + 1 : Math.max(dp[x + 1][y], dp[x][y + 1]);
+        }
+      }
+      const lines = [];
+      let x = 0;
+      let y = 0;
+      while (x < n && y < m) {
+        if (oldLines[x] === newLines[y]) {
+          lines.push({ type: 'same', text: newLines[y] });
+          x += 1;
+          y += 1;
+        } else if (dp[x + 1][y] >= dp[x][y + 1]) {
+          lines.push({ type: 'del', text: oldLines[x] });
+          x += 1;
+        } else {
+          lines.push({ type: 'add', text: newLines[y] });
+          y += 1;
+        }
+      }
+      while (x < n) { lines.push({ type: 'del', text: oldLines[x] }); x += 1; }
+      while (y < m) { lines.push({ type: 'add', text: newLines[y] }); y += 1; }
+      scenes.push({
+        no: i + 1,
+        heading: (b || a || {}).heading || '',
+        status: !a ? 'added' : !b ? 'removed' : lines.some((l) => l.type !== 'same') ? 'changed' : 'same',
+        lines,
+      });
+    }
+    return {
+      fromRevision,
+      toRevision,
+      scenes,
+      summary: {
+        changed: scenes.filter((s) => s.status === 'changed').length,
+        added: scenes.filter((s) => s.status === 'added').length,
+        removed: scenes.filter((s) => s.status === 'removed').length,
+      },
+    };
+  }
+
+  /** 阶段导航 meta（设计稿 stagenav：每阶段序号+名+状态副文本+warn 徽标） */
+  function getStageNav(episodeId) {
+    const episode = requireEpisode(episodeId);
+    const draft = getDraftRow(episodeId);
+    const approved = getApprovedRow(episodeId);
+    const { createStageStateService } = require('../stage/stageStateService.js');
+    const stages = createStageStateService(db);
+    stages.ensureStage(episode.drama_id, episodeId, 'script');
+    const states = ['script', 'assets', 'storyboard', 'cut'].map((st) => stages.getStage(episodeId, st));
+
+    const totalShots = db
+      .prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
+      .get(episodeId).n;
+    const adoptedShots = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM director_candidate_groups g
+         JOIN storyboards sb ON CAST(g.shot_id AS INTEGER) = sb.id
+         WHERE sb.episode_id = ? AND sb.deleted_at IS NULL AND g.selected_candidate_id IS NOT NULL`
+      )
+      .get(episodeId).n;
+    const assetsReady = db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM episode_characters ec JOIN characters c ON c.id = ec.character_id
+             WHERE ec.episode_id = ? AND c.deleted_at IS NULL AND c.image_url IS NOT NULL AND c.image_url != '') +
+           (SELECT COUNT(*) FROM scenes WHERE episode_id = ? AND deleted_at IS NULL AND image_url IS NOT NULL AND image_url != '') AS ready,
+           (SELECT COUNT(*) FROM episode_characters ec JOIN characters c ON c.id = ec.character_id
+             WHERE ec.episode_id = ? AND c.deleted_at IS NULL) +
+           (SELECT COUNT(*) FROM scenes WHERE episode_id = ? AND deleted_at IS NULL) AS total`
+      )
+      .get(episodeId, episodeId, episodeId, episodeId);
+    const cutVersion = db
+      .prepare('SELECT version FROM episode_cut_versions WHERE episode_id = ? ORDER BY version DESC LIMIT 1')
+      .get(episodeId);
+
+    const scriptMeta = [];
+    if (draft) scriptMeta.push(`草稿 v${draft.revision}`);
+    if (approved) scriptMeta.push(`已确认 v${approved.revision}`);
+    if (scriptMeta.length === 0) scriptMeta.push('未开始');
+
+    const percent = Math.round(
+      states.reduce((sum, s) => {
+        const st = s ? s.status : 'not_started';
+        return sum + ({ not_started: 0, in_progress: 40, ready_for_review: 75, approved: 100, stale: 60 }[st] || 0);
+      }, 0) / states.length
+    );
+
+    return {
+      stages: [
+        { id: 'script', idx: 1, label: '剧本', meta: scriptMeta.join(' · '), warn: 0 },
+        {
+          id: 'assets', idx: 2, label: '设定',
+          meta: assetsReady.total > 0 ? `${assetsReady.ready}/${assetsReady.total} 已确认` : '未开始',
+          warn: 0,
+        },
+        {
+          id: 'storyboard', idx: 3, label: '分镜',
+          meta: totalShots > 0 ? `${adoptedShots}/${totalShots} 已采用` : '未开始',
+          warn: Math.max(0, totalShots - adoptedShots),
+        },
+        { id: 'cut', idx: 4, label: '成片', meta: cutVersion ? `成片 v${cutVersion.version}` : '未开始', warn: 0 },
+      ],
+      completionPercent: percent,
+      basedOnApprovedRevision: approved ? approved.revision : null,
+    };
+  }
+
   return {
     getStageModel,
+    getStageNav,
+    getSceneStats,
+    getConfirmPreview,
+    getDiff,
     saveDraft,
     parseScenes,
     listScenes,

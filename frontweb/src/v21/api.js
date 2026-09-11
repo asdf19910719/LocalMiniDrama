@@ -59,6 +59,10 @@ export const v21 = {
   getImportSource: (episodeId) => get(`/episodes/${episodeId}/import-source`),
   // 剧本
   getScript: (episodeId) => get(`/episodes/${episodeId}/script`),
+  getStageNav: (episodeId) => get(`/episodes/${episodeId}/script/stage-nav`),
+  getSceneStats: (episodeId) => get(`/episodes/${episodeId}/script/scene-stats`),
+  getConfirmPreview: (episodeId) => get(`/episodes/${episodeId}/script/confirm-preview`),
+  getScriptDiff: (episodeId, from, to) => get(`/episodes/${episodeId}/script/diff`, { from, to }),
   saveScriptDraft: (episodeId, body) => put(`/episodes/${episodeId}/script/draft`, body),
   generateAiCandidate: (episodeId, body) => post(`/episodes/${episodeId}/script/ai-candidate`, body),
   applyAiCandidate: (episodeId, candidate) => post(`/episodes/${episodeId}/script/ai-candidate/apply`, { candidate }),
