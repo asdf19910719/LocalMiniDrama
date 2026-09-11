@@ -122,6 +122,7 @@
           <button class="icon-btn" @click="removeOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b">
+          <div v-if="removeError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px; margin-bottom:12px">{{ removeError }}</div>
           <p style="margin:0; line-height:1.6">素材「{{ detail?.name || '—' }}」会移入回收站，可恢复删除。确认移入？</p>
         </div>
         <div class="modal-f">
@@ -142,6 +143,7 @@
         </div>
         <div class="modal-b">
           <div class="col" style="gap:12px">
+            <div v-if="genError" style="background:var(--danger-subtle); color:var(--danger); border-radius:8px; padding:8px 12px; font-size:12.5px">{{ genError }}</div>
             <div class="kv"><span class="k">对象</span><span class="v">{{ typeLabel(detail?.assetType) }} · {{ detail?.name || '—' }}</span></div>
             <div class="kv"><span class="k">生成通道</span><span class="v">本地生成（mock 通道）</span></div>
             <div class="kv"><span class="k">画布尺寸</span><span class="v">{{ genSize }}</span></div>
@@ -171,8 +173,8 @@ export default {
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
       detailOpen: false, detail: null, generating: false, projectTitle: '',
       notice: '',
-      removeOpen: false, removing: false,
-      genSheetOpen: false, genPrompt: '', genSize: '720x480',
+      removeOpen: false, removing: false, removeError: '',
+      genSheetOpen: false, genPrompt: '', genSize: '720x480', genError: '',
     }
   },
   computed: {
@@ -226,11 +228,13 @@ export default {
       this.genPrompt = this.detail.name || ''
       // 画布尺寸按素材类型的展示比例取默认值（人物 3:4 · 场景 16:9 · 道具 1:1）
       this.genSize = { character: '720x960', scene: '1280x720', prop: '720x720' }[this.detail.assetType] || '720x480'
+      this.genError = ''
       this.genSheetOpen = true
     },
     async confirmGenerate() {
       if (!this.detail || this.generating) return
       this.generating = true
+      this.genError = ''
       try {
         await v21.generateAssetCandidate(this.projectId, { type: this.detail.assetType, assetId: this.detail.id, prompt: this.genPrompt, size: this.genSize })
         this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
@@ -238,29 +242,37 @@ export default {
         this.genSheetOpen = false
         this.notice = '已生成候选'
       } catch (e) {
-        this.notice = e.message || '候选生成失败'
+        // 失败时 Sheet 仍打开，错误必须呈现在 Sheet 体内（页面 notice 会被遮罩遮挡）
+        this.genError = e.message || '候选生成失败'
       } finally {
         this.generating = false
       }
     },
     async useCandidate(candidate) {
-      const result = await v21.useCandidate({ type: this.detail.assetType, assetId: this.detail.id, candidateId: candidate.candidateId })
-      this.detail.currentImage = result.current.imageUrl
-      for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
-      this.load()
+      try {
+        const result = await v21.useCandidate({ type: this.detail.assetType, assetId: this.detail.id, candidateId: candidate.candidateId })
+        this.detail.currentImage = result.current.imageUrl
+        for (const c of this.detail.candidates || []) c.isCurrent = c.candidateId === candidate.candidateId
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '候选设为当前图失败'
+      }
     },
     // B7：删除确认先行——弹窗确认后才调一次 deleteAsset；失败/阻塞时素材保留
     askRemove() {
       if (!this.detail) return
+      this.removeError = ''
       this.removeOpen = true
     },
     async confirmRemove() {
       if (!this.detail || this.removing) return
       this.removing = true
+      this.removeError = ''
       try {
         const result = await v21.deleteAsset(this.detail.assetType, this.detail.id)
         if (result.blocked) {
-          this.notice = result.message || '该素材仍被引用，暂不能删除'
+          // 弹窗仍打开，阻塞原因呈现在弹窗体内（页面 notice 会被遮罩遮挡）
+          this.removeError = result.message || '该素材仍被引用，暂不能删除'
           return
         }
         this.removeOpen = false
@@ -268,13 +280,13 @@ export default {
         this.load()
         this.notice = '已移入回收站'
       } catch (e) {
-        this.notice = e.message || '删除失败，素材已保留'
+        this.removeError = e.message || '删除失败，素材已保留'
       } finally {
         this.removing = false
       }
     },
     comingSoon(name) {
-      alert(`${name}将在本迭代内启用`)
+      this.notice = `${name}将在本迭代内启用`
     },
   },
 }

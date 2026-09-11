@@ -51,3 +51,29 @@ test('P0-7 生成确认 Sheet：两个生成入口都改为打开确认 Sheet，
   assert.match(fn[0], /已生成候选/, '生成成功提示「已生成候选」')
   assert.match(src, /:disabled="generating"/, '提交中按钮禁用防重复提交')
 })
+
+test('评审修复：失败/阻塞呈现在弹窗体内（removeError/genError），原生弹窗清零', () => {
+  const src = view()
+  // 删除确认弹窗体内含 removeError 错误行；生成 Sheet 体内含 genError 错误行
+  const removeModal = src.match(/<!-- 删除确认 Modal[\s\S]*?<!-- 生成确认 Sheet/)
+  assert.ok(removeModal, '定位删除确认 Modal 块')
+  assert.match(removeModal[0], /v-if="removeError"/, '删除弹窗体内含 removeError 错误行')
+  const genSheet = src.match(/<!-- 生成确认 Sheet[\s\S]*<\/template>/)
+  assert.ok(genSheet, '定位生成确认 Sheet 块')
+  assert.match(genSheet[0], /v-if="genError"/, '生成 Sheet 体内含 genError 错误行')
+  // 弹窗打开期间的失败/阻塞走弹窗内错误行，不再置页面级 notice（被遮罩遮挡感知不到）
+  const fnRemove = src.match(/async confirmRemove\(\)[\s\S]*?\n    \},\n/)
+  assert.ok(fnRemove, '能定位 confirmRemove 方法体')
+  assert.match(fnRemove[0], /this\.removeError = result\.message/, 'confirmRemove 的 blocked 分支走弹窗内错误行')
+  assert.doesNotMatch(fnRemove[0], /this\.notice = e\.message/, 'confirmRemove 的 catch 不再把失败写进被遮罩的页面 notice')
+  const fnGen = src.match(/async confirmGenerate\(\)[\s\S]*?\n    \},\n/)
+  assert.ok(fnGen, '能定位 confirmGenerate 方法体')
+  assert.match(fnGen[0], /this\.genError = /, 'confirmGenerate 的 catch 走 Sheet 内错误行')
+  assert.doesNotMatch(fnGen[0], /this\.notice = e\.message/, 'confirmGenerate 不再把失败写进被遮罩的页面 notice')
+  // Minor：useCandidate 补 catch；comingSoon 不再用原生 alert
+  const fnUse = src.match(/async useCandidate\(candidate\)[\s\S]*?\n    \},\n/)
+  assert.ok(fnUse, '能定位 useCandidate 方法体')
+  assert.match(fnUse[0], /catch/, 'useCandidate 补 catch 提示')
+  assert.doesNotMatch(src, /\balert\(|window\.confirm|window\.prompt/, '本视图原生弹窗清零')
+  assert.match(src.match(/comingSoon\(name\)[\s\S]*?\n    \},\n/)[0], /this\.notice = /, 'comingSoon 改走 notice 提示条')
+})
