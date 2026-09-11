@@ -215,6 +215,19 @@ function createV21Router({ db, cfg, log }) {
   r.get('/assets/:type/:assetId', wrap((req, res) => {
     response.success(res, assets.getDetail(req.params.type, req.params.assetId));
   }));
+  // PATCH 素材资料（name/description 等白名单字段；软删 404、空名 400）
+  r.patch('/assets/:type/:assetId', wrap((req, res) => {
+    response.success(res, assets.updateAsset(req.params.type, req.params.assetId, req.body || {}));
+  }));
+  // 人物状态图设置：只改该状态当前图（仅 character 类型）
+  r.post('/assets/:type/:assetId/states/:stateId/image', wrap((req, res) => {
+    response.success(res, assets.setStateImage({
+      type: req.params.type,
+      assetId: req.params.assetId,
+      stateId: req.params.stateId,
+      imageUrl: (req.body || {}).imageUrl,
+    }));
+  }));
   r.post('/projects/:id/assets/generate-candidate', wrap((req, res) => {
     assets.generateCandidate(req.params.id, req.body || {}).then((result) => {
       response.created(res, result);

@@ -90,6 +90,8 @@ export const v21 = {
   listAssets: (projectId, params) => get(`/projects/${projectId}/assets`, params),
   createAsset: (projectId, body) => post(`/projects/${projectId}/assets`, body),
   getAssetDetail: (type, assetId) => get(`/assets/${type}/${assetId}`),
+  // PATCH 素材资料（name/description 等白名单字段；软删 404、空名 400）
+  updateAsset: (type, assetId, body) => patch(`/assets/${type}/${assetId}`, body),
   generateAssetCandidate: (projectId, body) => post(`/projects/${projectId}/assets/generate-candidate`, body),
   useCandidate: (body) => post('/assets/use-candidate', body),
   deleteAsset: (type, assetId) => del(`/assets/${type}/${assetId}`),

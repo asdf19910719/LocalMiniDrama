@@ -96,6 +96,135 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     throw httpError('VALIDATION_ERROR', 400, `未知素材类型: ${type}`);
   }
 
+  // PATCH 白名单：以各表实际列为准（场景 name=location，道具 type，人物 role）
+  const UPDATE_FIELDS_BY_TYPE = {
+    character: ['name', 'role', 'description'],
+    scene: ['name', 'time', 'description'],
+    prop: ['name', 'type', 'description'],
+  };
+  const NAME_COLUMN_BY_TYPE = { scene: 'location' };
+
+  /** PATCH 素材资料：白名单更新行字段；软删 404；空 name 400 */
+  function updateAsset(type, assetId, body = {}) {
+    const table = TABLE_BY_TYPE[type];
+    if (!table) throw httpError('VALIDATION_ERROR', 400, `未知素材类型: ${type}`);
+    const fields = UPDATE_FIELDS_BY_TYPE[type];
+    if (!fields) throw httpError('VALIDATION_ERROR', 400, `未知素材类型: ${type}`);
+    const row = requireAsset(type, assetId);
+    const updates = [];
+    const params = [];
+    for (const field of fields) {
+      if (!(field in body)) continue;
+      let value = body[field];
+      if (field === 'name') {
+        if (typeof value !== 'string' || !value.trim()) {
+          throw httpError('VALIDATION_ERROR', 400, '名称不能为空');
+        }
+        value = value.trim();
+      } else if (field === 'description') {
+        if (value != null && typeof value !== 'string') {
+          throw httpError('VALIDATION_ERROR', 400, '描述必须是文本');
+        }
+      } else if (value != null && typeof value !== 'string') {
+        throw httpError('VALIDATION_ERROR', 400, `${field} 必须是文本`);
+      }
+      const column = field === 'name' ? NAME_COLUMN_BY_TYPE[type] || 'name' : field;
+      updates.push(`${column} = ?`);
+      params.push(value);
+    }
+    if (updates.length > 0) {
+      updates.push('updated_at = ?');
+      params.push(nowIso(), row.id);
+      db.prepare(`UPDATE ${table} SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+    const fresh = requireAsset(type, assetId);
+    return {
+      assetType: type,
+      assetId: fresh.id,
+      name: fresh.name || fresh.location || '',
+      description: fresh.description || null,
+    };
+  }
+
+  /** 素材在本项目内的引用位置（按集去重；kind=cast/scene/prop/selection） */
+  function usageOf(type, assetId) {
+    const out = [];
+    const seen = new Set();
+    const push = (episodeId, kind) => {
+      if (episodeId == null) return;
+      const key = `${episodeId}:${kind}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ episodeId: Number(episodeId), episodeNumber: null, kind });
+    };
+    if (type === 'character') {
+      for (const r of db.prepare('SELECT episode_id FROM episode_characters WHERE character_id = ?').all(Number(assetId))) {
+        push(r.episode_id, 'cast');
+      }
+    } else if (type === 'scene') {
+      for (const r of db.prepare('SELECT episode_id FROM scenes WHERE id = ? AND episode_id IS NOT NULL').all(Number(assetId))) {
+        push(r.episode_id, 'scene');
+      }
+    } else {
+      for (const r of db
+        .prepare(
+          `SELECT sb.episode_id FROM storyboard_props sp JOIN storyboards sb ON sb.id = sp.storyboard_id
+           WHERE sp.prop_id = ? AND sb.deleted_at IS NULL`
+        )
+        .all(Number(assetId))) {
+        push(r.episode_id, 'prop');
+      }
+    }
+    for (const r of db
+      .prepare('SELECT episode_id FROM episode_asset_selections WHERE asset_type = ? AND asset_id = ?')
+      .all(type, Number(assetId))) {
+      push(r.episode_id, 'selection');
+    }
+    for (const item of out) {
+      const ep = db.prepare('SELECT episode_number FROM episodes WHERE id = ? AND deleted_at IS NULL').get(item.episodeId);
+      if (!ep) {
+        item.episodeNumber = null;
+        continue;
+      }
+      item.episodeNumber = ep.episode_number;
+    }
+    return out.sort((a, b) => a.episodeId - b.episodeId || a.kind.localeCompare(b.kind));
+  }
+
+  /** 素材的生成/上传记录（含失败与上传，倒序限 50） */
+  function recordsOf(type, assetId) {
+    const project = (rows) =>
+      rows.map((g) => ({
+        candidateId: g.id,
+        provider: g.provider || 'mock',
+        createdAt: g.created_at,
+        prompt: g.prompt || '',
+        status: g.status || '',
+      }));
+    if (type === 'prop') {
+      return project(
+        db
+          .prepare(
+            `SELECT g.id, g.provider, g.created_at, g.prompt, g.status FROM image_generations g
+             JOIN image_generation_tasks t ON t.image_generation_id = g.id
+             WHERE t.target_type = 'prop' AND t.target_id = ? AND g.deleted_at IS NULL
+             ORDER BY g.id DESC LIMIT 50`
+          )
+          .all(Number(assetId))
+      );
+    }
+    const column = type === 'character' ? 'character_id' : 'scene_id';
+    return project(
+      db
+        .prepare(
+          `SELECT id, provider, created_at, prompt, status FROM image_generations
+           WHERE ${column} = ? AND deleted_at IS NULL
+           ORDER BY id DESC LIMIT 50`
+        )
+        .all(Number(assetId))
+    );
+  }
+
   function candidateQuery(type, assetId) {
     if (type === 'character') {
       return db
@@ -134,32 +263,75 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       createdAt: g.created_at,
       isCurrent: currentImageOf(type, row) === g.image_url,
     }));
+    const states =
+      type === 'character'
+        ? db
+            .prepare(
+              'SELECT id, name, source_key, is_default, image_url FROM character_variants WHERE character_id = ? AND deleted_at IS NULL ORDER BY is_default DESC, id ASC'
+            )
+            .all(Number(assetId))
+            .map((v) => ({
+              id: v.id,
+              name: v.name,
+              source_key: v.source_key,
+              is_default: v.is_default,
+              imageUrl: v.image_url || null,
+              isDefault: !!v.is_default,
+            }))
+        : [];
     return {
       assetType: type,
       id: row.id,
       name: row.name || row.location || '',
       description: row.description || null,
       currentImage: currentImageOf(type, row),
-      states:
-        type === 'character'
-          ? db
-              .prepare('SELECT id, name, source_key, is_default FROM character_variants WHERE character_id = ? AND deleted_at IS NULL')
-              .all(Number(assetId))
-          : [],
+      states,
       candidates,
+      usage: usageOf(type, assetId),
+      records: recordsOf(type, assetId),
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
       blocked: !currentImageOf(type, row),
     };
   }
 
-  /** 生成候选：mock 通道（无 Key 可运行），产出真实文件 + 候选记录；绝不改当前图 */
-  async function generateCandidate(dramaId, { type, assetId, prompt = '', size = '720x480' } = {}) {
+  /** 状态图设置：仅人物素材；只改该状态的 image_url，不动人物当前图 */
+  function setStateImage({ type, assetId, stateId, imageUrl } = {}) {
+    if (type !== 'character') throw httpError('VALIDATION_ERROR', 400, '仅人物素材支持状态图设置');
+    const row = requireAsset(type, assetId);
+    const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+    if (!url) throw httpError('VALIDATION_ERROR', 400, 'imageUrl 必填');
+    const variant = db
+      .prepare('SELECT * FROM character_variants WHERE id = ? AND character_id = ? AND deleted_at IS NULL')
+      .get(Number(stateId), row.id);
+    if (!variant) throw httpError('NOT_FOUND', 404, '状态不存在');
+    db.prepare('UPDATE character_variants SET image_url = ?, updated_at = ? WHERE id = ?').run(url, nowIso(), variant.id);
+    return {
+      assetType: type,
+      assetId: row.id,
+      stateId: variant.id,
+      state: { id: variant.id, name: variant.name, imageUrl: url },
+    };
+  }
+
+  /** 生成候选：mock 通道（无 Key 可运行），产出真实文件 + 候选记录；绝不改当前图。
+   *  stateId 有值时（人物）提示词前缀注入状态名——仅影响提示词组装，不改任何表。 */
+  async function generateCandidate(dramaId, { type, assetId, prompt = '', size = '720x480', stateId = null } = {}) {
     requireAsset(type, assetId);
     if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
+    let composedPrompt = String(prompt || '');
+    if (stateId != null && stateId !== '' && type === 'character') {
+      const variant = db
+        .prepare('SELECT * FROM character_variants WHERE id = ? AND character_id = ? AND deleted_at IS NULL')
+        .get(Number(stateId), Number(assetId));
+      if (!variant) throw httpError('NOT_FOUND', 404, '状态不存在');
+      composedPrompt = `【${variant.name}】${composedPrompt}`;
+    }
     const submitted = mockProvider.submit({
       kind: 'image',
       ownerType: `project_asset_${type}`,
       ownerId: assetId,
-      input: { prompt, size },
+      input: { prompt: composedPrompt, size },
       idempotencyKey: null,
     });
     const result = await mockProvider.run(submitted.taskId);
@@ -174,7 +346,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
         Number(dramaId),
         type === 'character' ? Number(assetId) : null,
         type === 'scene' ? Number(assetId) : null,
-        prompt,
+        composedPrompt,
         relativeUrl,
         result.artifactPath,
         now,
@@ -186,7 +358,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       db.prepare(
         `INSERT INTO image_generation_tasks (id, drama_id, target_type, target_id, generation_channel, provider, prompt_snapshot, status, image_generation_id, created_at, updated_at)
          VALUES (?, ?, 'prop', ?, 'mock', 'mock', ?, 'succeeded', ?, ?, ?)`
-      ).run(`v21_${genId}`, Number(dramaId), Number(assetId), prompt, genId, now, now);
+      ).run(`v21_${genId}`, Number(dramaId), Number(assetId), composedPrompt, genId, now, now);
     }
     return { candidateId: genId, url: relativeUrl, taskId: submitted.taskId };
   }
@@ -317,10 +489,12 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
   return {
     listAssets,
     createAsset,
+    updateAsset,
     getDetail,
     generateCandidate,
     uploadCandidate,
     useCandidate,
+    setStateImage,
     deleteAsset,
     restoreAsset,
     impactOf,
