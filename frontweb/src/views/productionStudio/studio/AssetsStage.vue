@@ -47,7 +47,7 @@
               <div class="sec-t" style="margin:0 0 7px">状态切换</div>
               <div class="stchips">
                 <span v-for="st in detail?.states || []" :key="st.id" class="stchip" :class="{ on: st.id === selectedStateId }" @click="selectedStateId = st.id">{{ st.name }}</span>
-                <span class="stchip" style="border-style:dashed"><svg style="width:11px;height:11px"><use href="#i-plus"/></svg>新增状态</span>
+                <span class="stchip" style="border-style:dashed" @click="variantModalOpen = true"><svg style="width:11px;height:11px"><use href="#i-plus"/></svg>新增状态</span>
               </div>
             </div>
             <div class="kv" style="border-top:1px solid var(--line); padding-top:10px"><span class="k">本集使用</span><span class="v">固定版本指针</span></div>
@@ -105,30 +105,84 @@
           <span class="xs" style="color:var(--info); line-height:1.6">本集对白将参考人物音色生成配音；未设置时使用模型默认声音，不阻断进入分镜。</span>
         </div>
         <div class="sec-t">预设音色</div>
-        <div v-for="(p, i) in voicePresets" :key="p.id" class="v-row" :class="{ cur: selectedVoice === p.id }" @click="selectedVoice = p.id">
+        <div v-for="(p, i) in voicePresets" :key="p.id" class="v-row" :class="{ cur: voiceChoice?.type === 'preset' && voiceChoice?.presetId === p.id }" @click="pickPreset(p)">
           <span class="vn"><svg style="width:15px;height:15px"><use href="#i-wave"/></svg></span>
           <div><b style="font-size:13px">{{ p.name }}</b><div class="vm">{{ p.desc }}</div></div>
-          <div class="acts"><button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="selectedVoice = p.id">试听</button></div>
+          <div class="acts"><button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="pickPreset(p)">选择</button></div>
         </div>
-        <div class="sec-t">其他来源</div>
-        <div class="row" style="gap:8px; flex-wrap:wrap">
-          <button class="btn sm" @click="comingSoon('素材库音色')">从素材库选择</button>
-          <button class="btn sm" @click="comingSoon('本地上传')">上传音频</button>
-          <button class="btn sm" @click="comingSoon('从音视频提取')">从音视频提取</button>
+        <div class="v-row" v-if="legacyVoiceUrl" :class="{ cur: voiceChoice?.type === 'upload' && voiceChoice?.url === legacyVoiceUrl }" @click="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">
+          <span class="vn"><svg style="width:15px;height:15px"><use href="#i-mic"/></svg></span>
+          <div><b style="font-size:13px">已认证音色</b><div class="vm">来自角色音色资产（seedance2 voice）</div></div>
+          <div class="acts"><button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">选择</button></div>
         </div>
+        <div class="sec-t">上传 / 素材库</div>
+        <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center">
+          <label class="btn sm" style="border:1px solid var(--line)">
+            上传音频<input type="file" accept=".mp3,.wav,.m4a,.ogg,audio/*" style="display:none" @change="uploadVoice">
+          </label>
+          <button class="btn sm" @click="loadLibraryVoices">从素材库选择</button>
+          <button class="btn sm" disabled title="依赖 Provider 音色提取能力（P2）">从音视频提取</button>
+        </div>
+        <p v-if="voiceUploading" class="xs muted" style="margin-top:6px">音频上传中…</p>
+        <div v-if="libraryVoices.length" class="col" style="margin-top:9px; gap:6px">
+          <div v-for="lv in libraryVoices" :key="lv.id" class="v-row" style="margin-bottom:0" :class="{ cur: voiceChoice?.type === 'library' && voiceChoice?.libraryId === lv.id }" @click="voiceChoice = { type: 'library', libraryId: lv.id, name: lv.name }">
+            <span class="vn"><svg style="width:14px;height:15px"><use href="#i-doc"/></svg></span>
+            <div><b style="font-size:12.5px">{{ lv.name }}</b><div class="vm">{{ lv.category || '素材库音色' }}</div></div>
+          </div>
+        </div>
+        <audio v-if="previewVoiceUrl" controls :src="previewVoiceUrl" style="width:100%; margin-top:10px; height:34px"></audio>
+        <p class="xs muted" style="margin-top:6px">{{ voiceChoice?.url ? '试听当前音色' : '选择带音频文件的音色后可试听' }}</p>
         <div class="divider"></div>
-        <button class="btn ghost sm" style="border:1px solid var(--line)" @click="selectedVoice = 'model-default'">改用模型默认声音</button>
+        <button class="btn ghost sm" style="border:1px solid var(--line)" @click="voiceChoice = { type: 'default', name: '模型默认声音' }">改用模型默认声音</button>
       </div>
       <div class="drawer-f">
         <span class="muted xs">音色选择只影响本集配音生成</span>
         <div class="spacer"></div>
-        <button class="btn primary" @click="voiceOpen = false">完成</button>
+        <button class="btn primary" :disabled="voiceSaving" @click="saveVoice">{{ voiceSaving ? '保存中…' : '完成' }}</button>
       </div>
     </aside>
+
+    <!-- 新增人物状态 Modal（B5） -->
+    <div v-if="variantModalOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <h3>新增状态（人物状态）</h3>
+          <button class="icon-btn" @click="variantModalOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <label class="col" style="gap:4px">
+            <span class="xs muted">状态名称</span>
+            <input class="input" style="width:100%" v-model="variantName" placeholder="如：受伤 · 夜晚">
+          </label>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="variantModalOpen = false">取消</button>
+          <button class="btn primary" :disabled="!variantName.trim() || variantSaving" @click="createVariant">{{ variantSaving ? '创建中…' : '创建' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图片 URL 输入 Modal（C1：专用容器） -->
+    <div v-if="imgUrlOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <h3>上传图片 URL</h3>
+          <button class="icon-btn" @click="imgUrlOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <input class="input" style="width:100%" v-model="imgUrlText" placeholder="https:// …">
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="imgUrlOpen = false">取消</button>
+          <button class="btn primary" :disabled="!imgUrlText.trim()" @click="confirmImageUrl">确认</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios'
 import v21 from '@/v21/api.js'
 
 export default {
@@ -146,7 +200,10 @@ export default {
       readiness: { status: 'checking' },
       detailOpen: false, detail: null, generating: false, entering: false,
       selectedStateId: '', techOpen: false,
-      voiceOpen: false, selectedVoice: '',
+      voiceOpen: false, voiceChoice: null, legacyVoiceUrl: '',
+      libraryVoices: [], voiceUploading: false, voiceSaving: false,
+      variantModalOpen: false, variantName: '', variantSaving: false,
+      imgUrlOpen: false, imgUrlText: '', notice: '',
       voicePresets: [
         { id: 'preset-cold', name: '青城夜雨 · 低沉偏冷', desc: '女声 · 冷调叙事 · 适合悬疑氛围' },
         { id: 'preset-warm', name: '晨光 · 清亮温和', desc: '女声 · 日常对话 · 亲和自然' },
@@ -177,9 +234,14 @@ export default {
       return item ? '本集引用' : '未在本集引用'
     },
     voiceLabel() {
-      if (this.selectedVoice === 'model-default') return '模型默认声音'
-      const p = this.voicePresets.find((x) => x.id === this.selectedVoice)
-      return p ? p.name : '未设置 · 点击选择'
+      const c = this.voiceChoice
+      if (!c) return '未设置 · 点击选择'
+      if (c.type === 'default') return '模型默认声音'
+      const preset = this.voicePresets.find((x) => x.id === c.presetId)
+      return preset ? preset.name : (c.name || '已选择')
+    },
+    previewVoiceUrl() {
+      return this.voiceChoice?.url || ''
     },
   },
   mounted() { this.load() },
@@ -198,7 +260,93 @@ export default {
     async openDetail(item) {
       this.detail = await v21.getAssetDetail(item.assetType, item.assetId)
       this.selectedStateId = item.stateId || (this.detail.states?.[0]?.id ?? '')
+      // B4：预选已保存的音色指针
+      this.voiceChoice = item.voice || null
+      this.legacyVoiceUrl = ''
+      if (item.assetType === 'character') {
+        try {
+          const res = await axios.get(`/api/v1/characters/${item.assetId}`)
+          const row = res.data?.data || res.data
+          const asset = row?.seedance2_voice_asset
+          if (asset && String(asset.status || '').toLowerCase() === 'active' && asset.url) {
+            this.legacyVoiceUrl = asset.url
+          }
+        } catch { /* 无音色资产时静默 */ }
+      }
       this.detailOpen = true
+    },
+    pickPreset(p) {
+      this.voiceChoice = { type: 'preset', presetId: p.id, name: p.name }
+    },
+    async uploadVoice(event) {
+      const file = event.target.files && event.target.files[0]
+      if (!file || this.detail?.assetType !== 'character') return
+      this.voiceUploading = true
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await axios.post(`/api/v1/characters/${this.detail.id}/sd2-voice-upload`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        const row = res.data?.data || res.data
+        const url = row?.url || row?.payload?.url || null
+        this.voiceChoice = { type: 'upload', name: file.name, url }
+      } catch (err) {
+        this.notice = err?.response?.data?.error?.message || err.message || '音频上传失败'
+      } finally {
+        this.voiceUploading = false
+        event.target.value = ''
+      }
+    },
+    async loadLibraryVoices() {
+      try {
+        const res = await axios.get('/api/v1/character-library', { params: { limit: 50 } })
+        const rows = res.data?.data?.items || res.data?.items || res.data?.data || []
+        this.libraryVoices = (Array.isArray(rows) ? rows : []).slice(0, 20)
+      } catch {
+        this.libraryVoices = []
+      }
+    },
+    async saveVoice() {
+      if (this.detail?.assetType !== 'character') {
+        this.voiceOpen = false
+        return
+      }
+      this.voiceSaving = true
+      try {
+        await v21.updateSelection(this.episodeId, {
+          assetType: 'character',
+          assetId: this.detail.id,
+          voice: this.voiceChoice,
+        })
+        this.voiceOpen = false
+        this.load()
+      } finally {
+        this.voiceSaving = false
+      }
+    },
+    async createVariant() {
+      this.variantSaving = true
+      try {
+        await axios.post(`/api/v1/characters/${this.detail.id}/variants`, { name: this.variantName.trim() })
+        this.variantModalOpen = false
+        this.variantName = ''
+        this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
+        this.load()
+      } finally {
+        this.variantSaving = false
+      }
+    },
+    openImageUrl() {
+      this.imgUrlText = ''
+      this.imgUrlOpen = true
+    },
+    async confirmImageUrl() {
+      const url = this.imgUrlText.trim()
+      if (!url) return
+      this.imgUrlOpen = false
+      await v21.uploadShotImage(this.detail.id, { imageUrl: url })
+      this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
     },
     async generate() {
       this.generating = true
@@ -221,22 +369,17 @@ export default {
       this.load()
     },
     async uploadImage() {
-      const url = window.prompt('输入图片 URL：')
-      if (!url) return
-      await v21.uploadShotImage(this.detail.id, { imageUrl: url })
-      this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
-    },
-    comingSoon(name) {
-      alert(`${name}将在本迭代内启用`)
+      // C1：图片 URL 输入改走专用 Modal
+      this.openImageUrl()
     },
     async enterStoryboard() {
       this.entering = true
       try {
         const result = await v21.enterStoryboard(this.episodeId)
         if (result.readiness && result.readiness.status === 'script-unapproved') {
-          alert('确认剧本后才能生成本集媒体；仍可进入分镜查看结构')
+          this.notice = '确认剧本后才能生成本集媒体；仍可进入分镜查看结构'
         } else if (result.readiness && result.readiness.status === 'needs-attention') {
-          console.info(`有 ${result.readiness.missing.length} 项可稍后处理，已进入分镜`)
+          this.notice = `有 ${result.readiness.missing.length} 项可稍后处理，已进入分镜`
         }
         this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/storyboard`)
       } finally {

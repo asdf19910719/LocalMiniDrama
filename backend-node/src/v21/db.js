@@ -123,6 +123,19 @@ function ensureCutVersionsV21Columns(db) {
   }
 }
 
+/**
+ * V2.1 本集素材选择表补充音色指针（幂等，B4）：
+ * - voice_json：人物音色来源（{source, url?, name, libraryId?} 快照）
+ */
+function ensureSelectionVoiceColumn(db) {
+  const existing = new Set(
+    db.prepare('PRAGMA table_info(episode_asset_selections)').all().map((r) => r.name)
+  );
+  if (!existing.has('voice_json')) {
+    db.exec('ALTER TABLE episode_asset_selections ADD COLUMN voice_json TEXT');
+  }
+}
+
 module.exports = {
   ensureV21Domain,
   getAppSchemaVersion,
@@ -130,5 +143,6 @@ module.exports = {
   ensureExternalAiTaskV21Columns,
   ensureStoryboardV21Columns,
   ensureCutVersionsV21Columns,
+  ensureSelectionVoiceColumn,
   V21_SCHEMA_VERSION,
 };

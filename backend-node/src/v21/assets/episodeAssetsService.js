@@ -24,6 +24,9 @@ function sha256Text(text) {
  * - 生成守卫：readiness 非 ready 时禁用媒体提交并给唯一"去处理"恢复入口
  */
 function createEpisodeAssetsService(db, { log = console } = {}) {
+  // B4：本集选择表补充音色指针列（幂等）
+  require('../db.js').ensureSelectionVoiceColumn(db);
+
   function requireEpisode(episodeId) {
     const row = db
       .prepare('SELECT * FROM episodes WHERE id = ? AND deleted_at IS NULL')
@@ -40,6 +43,13 @@ function createEpisodeAssetsService(db, { log = console } = {}) {
       .all(episodeId);
     const selectionKey = (type, id) => `${type}:${id}`;
     const selectedKeys = new Set(selections.map((s) => selectionKey(s.asset_type, s.asset_id)));
+    // B4：音色指针（character 选择行上的 voice_json）
+    const voiceByKey = {};
+    for (const s of selections) {
+      if (s.voice_json) {
+        try { voiceByKey[selectionKey(s.asset_type, s.asset_id)] = JSON.parse(s.voice_json); } catch (_) {}
+      }
+    }
 
     const characters = db
       .prepare(
@@ -55,6 +65,7 @@ function createEpisodeAssetsService(db, { log = console } = {}) {
         stateId: defaultVariantId(c.id) || '',
         mediaVersionId: c.image_url || null,
         currentImage: c.image_url || null,
+        voice: voiceByKey[selectionKey('character', c.id)] || null,
         blocked: !c.image_url,
         required: true,
       }));
@@ -317,20 +328,31 @@ function createEpisodeAssetsService(db, { log = console } = {}) {
   }
 
   /** 更新本集选择指针（assetId+stateId+mediaVersionId） */
-  function updateSelection(episodeId, { assetType, assetId, stateId = '', mediaVersionId = null } = {}) {
+  function updateSelection(episodeId, { assetType, assetId, stateId = '', mediaVersionId = null, voice = undefined } = {}) {
     requireEpisode(episodeId);
     const existing = db
       .prepare('SELECT id FROM episode_asset_selections WHERE episode_id = ? AND asset_type = ? AND asset_id = ?')
       .get(episodeId, assetType, assetId);
+    // B4：voice 仅在显式传入时更新（undefined = 保持不变；null = 清除）
+    let voiceJson;
+    if (voice !== undefined) {
+      voiceJson = voice == null ? null : JSON.stringify(voice);
+    }
     if (existing) {
-      db.prepare(
-        'UPDATE episode_asset_selections SET state_id = ?, media_version_id = ?, updated_at = ? WHERE id = ?'
-      ).run(String(stateId), mediaVersionId, nowIso(), existing.id);
+      if (voice === undefined) {
+        db.prepare(
+          'UPDATE episode_asset_selections SET state_id = ?, media_version_id = ?, updated_at = ? WHERE id = ?'
+        ).run(String(stateId), mediaVersionId, nowIso(), existing.id);
+      } else {
+        db.prepare(
+          'UPDATE episode_asset_selections SET state_id = ?, media_version_id = ?, voice_json = ?, updated_at = ? WHERE id = ?'
+        ).run(String(stateId), mediaVersionId, voiceJson, nowIso(), existing.id);
+      }
     } else {
       db.prepare(
-        `INSERT INTO episode_asset_selections (episode_id, asset_type, asset_id, state_id, media_version_id, selected_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(episodeId, assetType, assetId, String(stateId), mediaVersionId, nowIso(), nowIso());
+        `INSERT INTO episode_asset_selections (episode_id, asset_type, asset_id, state_id, media_version_id, voice_json, selected_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(episodeId, assetType, assetId, String(stateId), mediaVersionId, voiceJson ?? null, nowIso(), nowIso());
     }
     return { saved: true };
   }
