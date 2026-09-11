@@ -773,14 +773,19 @@ export default {
       this.historyOpen = true
     },
     async consumeShotQuery() {
-      // T2.5：消费成片页「回分镜处理」带来的 ?shot= 定位参数，选中后清除 query
+      // T2.5：消费成片页「回分镜处理」带来的 ?shot= 定位参数；无论选中成败都清除 query（评审修复）
       const shotId = this.$route.query.shot
       if (!shotId) return
       const target = this.shots.find((s) => String(s.id) === String(shotId))
-      if (target) await this.selectShot(target.id)
-      const query = { ...this.$route.query }
-      delete query.shot
-      this.$router.replace({ query })
+      try {
+        if (target) await this.selectShot(target.id)
+      } catch (e) {
+        this.notice = e.message || '定位镜头失败'
+      } finally {
+        const query = { ...this.$route.query }
+        delete query.shot
+        this.$router.replace({ query })
+      }
     },
     async saveSegment(seg) {
       try {
@@ -984,11 +989,20 @@ export default {
       await this.load()
     },
     async retryCandidate(candidate) {
+      // 评审修复：历史抽屉未开过时 this.history 为空——重试前先拉本镜历史；
+      // 拉取失败或找不到原任务都给可读提示，不再静默按默认输入新建任务兜底
+      try {
+        this.history = await v21.getVideoHistory(this.currentShotId)
+      } catch (e) {
+        this.notice = e.message || '读取生成历史失败，已停止重试'
+        return
+      }
       const task = (this.history.tasks || []).find((t) => `cand_${t.taskId}` === candidate.candidateId)
-      if (task) { await this.retryTask(task.taskId); return }
-      const submitted = await v21.submitVideo(this.currentShotId, { count: 1 })
-      await v21.completeVideoTask(submitted.tasks[0].taskId)
-      await this.selectShot(this.currentShotId)
+      if (!task) {
+        this.notice = '未找到该候选对应的原任务，可在生成历史抽屉中查看后重试'
+        return
+      }
+      await this.retryTask(task.taskId)
     },
     async retryTask(taskId) {
       const created = await v21.retryVideoTask(taskId)

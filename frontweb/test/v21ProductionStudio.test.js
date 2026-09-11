@@ -173,6 +173,9 @@ test('分镜页：?shot= 定位消费 + 生成历史经 openHistory 加载', () 
   assert.match(consumeFn[0], /\$route\.query\.shot/, '应读取 route.query.shot')
   assert.match(consumeFn[0], /selectShot/, '合法 shotId 应复用 selectShot 选中')
   assert.match(consumeFn[0], /\$router\.replace/, '消费后应 replace 清除 query')
+  // 评审修复：selectShot 失败时 query 也必须清理（finally），且失败走页内错误提示
+  assert.match(consumeFn[0], /finally/, '清 query 应在 finally 中（selectShot 失败也清理）')
+  assert.match(consumeFn[0], /catch/, 'selectShot 失败应有 catch 页内提示')
   // 生成历史按钮走 openHistory（清空→拉取→开门），不得直连 historyOpen = true
   assert.match(view, /@click="openHistory\(\)"/, '生成历史按钮应绑定 openHistory')
   assert.doesNotMatch(view, /@click="historyOpen = true"/, '生成历史按钮不得绕过加载直连开门')
@@ -185,6 +188,21 @@ test('分镜页：?shot= 定位消费 + 生成历史经 openHistory 加载', () 
   const selectShot = view.match(/async selectShot\(shotId\) \{[\s\S]*?\n    \},/)
   assert.ok(selectShot, 'selectShot 方法存在')
   assert.match(selectShot[0], /historyOpen[\s\S]*?loadHistory/, '切镜时历史抽屉已开应重拉历史')
+})
+
+test('分镜页评审修复：retryCandidate 先拉本镜历史再查找，不做静默兜底提交', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  const retryFn = view.match(/async retryCandidate\(candidate\) \{[\s\S]*?\n    \},/)
+  assert.ok(retryFn, 'retryCandidate 方法存在')
+  // 历史抽屉未开过时 this.history 为空——重试前必须先拉取本镜历史
+  assert.match(retryFn[0], /v21\.getVideoHistory\(this\.currentShotId\)/, '重试前应先拉取本镜历史')
+  assert.match(retryFn[0], /catch/, '历史拉取失败应有 catch')
+  assert.match(retryFn[0], /this\.notice = /, '历史拉取失败应给可读提示')
+  // 找不到原任务：可读提示，而非静默 submitVideo 按默认输入新建任务
+  assert.match(retryFn[0], /未找到该候选/, '找不到原任务应给可读提示')
+  assert.doesNotMatch(retryFn[0], /v21\.submitVideo/, '不得静默兜底 submitVideo 新建默认任务')
+  // 找到原任务仍走 retryTask 重试
+  assert.match(retryFn[0], /retryTask\(task\.taskId\)/, '找到原任务后走 retryTask 重试')
 })
 
 test('v21-ui.css：notice-strip danger 变体（T2.1 成片页失败条依赖）', () => {
