@@ -1,136 +1,396 @@
 <template>
-  <div class="sb-stage">
-    <div class="readiness-bar">
-      <span class="badge" :class="readinessClass">{{ readinessText }}</span>
-      <el-button v-if="guardRecovery" size="small" type="warning" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/assets`)">去处理</el-button>
-      <span class="spacer"></span>
-      <el-dropdown trigger="click" @command="onMore">
-        <el-button size="small">更多</el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="update-structure">更新分镜结构</el-dropdown-item>
-            <el-dropdown-item command="import">导入分镜文件</el-dropdown-item>
-            <el-dropdown-item command="export">导出分镜资料</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+  <div style="flex:1; display:flex; flex-direction:column; min-height:0">
+    <!-- 状态条 -->
+    <div class="notice-strip" :class="readinessClass" v-if="readiness.status !== 'ready'">
+      <svg style="width:14px;height:14px"><use :href="readiness.status === 'script-unapproved' ? '#i-warn' : '#i-warn'"/></svg>
+      {{ readinessText }}
+      <div class="spacer"></div>
+      <button class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/assets`)">去处理</button>
+    </div>
+    <div class="notice-strip ok" v-else>
+      <svg style="width:14px;height:14px"><use href="#i-check-c"/></svg>素材已准备
+      <span class="xs muted" v-if="snapshotAt"> · 快照 {{ snapshotAt }}</span>
     </div>
 
-    <div v-if="shots.length === 0" class="empty">
-      <p>本集还没有分镜</p>
-      <el-button type="primary" @click="createFromScript">从已确认剧本创建分镜</el-button>
+    <div v-if="shots.length === 0" class="empty-box">
+      <p class="muted">本集还没有分镜</p>
+      <button class="btn primary" @click="createFromScript">从已确认剧本创建分镜</button>
     </div>
 
-    <div v-else class="workbench">
-      <aside class="inspector">
-        <h4>镜头 {{ current.number }} · {{ current.duration }}s</h4>
-        <div class="ref-groups">
-          <h5>出场角色</h5>
-          <div v-for="r in references.characters" :key="r.referenceId" class="ref-row">{{ r.name }} <el-tag size="small" type="info">固定版本</el-tag></div>
-          <h5>分镜场景</h5>
-          <div v-for="r in references.scene?.refs || []" :key="r.assetId" class="ref-row">{{ r.name }} <el-tag size="small">结构性</el-tag></div>
-          <h5>场景道具</h5>
-          <div v-for="r in references.props" :key="r.referenceId" class="ref-row">{{ r.name }}</div>
+    <template v-else>
+      <!-- 一级工具栏 -->
+      <div class="row" style="padding:8px 16px; border-bottom:1px solid var(--line); gap:8px">
+        <div class="select" style="height:32px; cursor:pointer">
+          <select v-model="sceneFilter" class="sort-native" style="max-width:180px">
+            <option value="all">全部场次</option>
+            <option v-for="s in scenes" :key="s.id" :value="s.id">场次 {{ s.scene_number }} · {{ shortHeading(s.heading) }}</option>
+          </select>
+          <svg class="chev"><use href="#i-chev-d"/></svg>
         </div>
-        <div class="frame-chaining">
-          首尾帧衔接：{{ frameChaining.stateLabel }}
-          <el-button v-if="frameChaining.state === 'linkable'" size="small" @click="confirmLink">衔接</el-button>
+        <div class="select" style="height:32px; width:110px; cursor:pointer">
+          <select v-model="currentShotIdProxy" class="sort-native">
+            <option v-for="s in visibleShots" :key="s.id" :value="s.id">镜头 {{ pad(s.number) }}</option>
+          </select>
+          <svg class="chev"><use href="#i-chev-d"/></svg>
         </div>
-        <div class="image-area">
-          <h5>分镜图</h5>
-          <div class="img-row">
-            <div v-for="c in imageCandidates" :key="c.candidateId" class="img-cand" :class="{ current: currentImage && currentImage.url === c.url }" @click="setCurrentImage(c)">
-              <img :src="c.url">
+        <div class="row" style="gap:2px">
+          <button class="icon-btn" title="上一镜" @click="step(-1)"><svg><use href="#i-back"/></svg></button>
+          <button class="icon-btn" title="下一镜" @click="step(1)"><svg><use href="#i-fwd"/></svg></button>
+        </div>
+        <span class="chip">{{ completion.adopted }}/{{ completion.total }} 已采用<span class="v" v-if="completion.missing?.length"> · {{ completion.missing.length }} 待生成</span><span class="v" v-if="completion.staleShots?.length"> · {{ completion.staleShots.length }} 旧图</span></span>
+        <div class="spacer"></div>
+        <button class="btn" @click="batchOpen = true"><svg><use href="#i-layers"/></svg>批量生成</button>
+        <div class="more-wrap">
+          <button class="btn ghost" style="border:1px solid var(--line)" @click="moreOpen = !moreOpen">更新分镜结构 / 导入 / 导出<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
+          <div v-if="moreOpen" class="card more-pop" @click="moreOpen = false">
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="createFromScript">更新分镜结构（从已确认剧本重建）</button>
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportSrt">导出 SRT 字幕</button>
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportShotPackages">导出 Shot Package JSON</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-main">
+        <!-- 左：镜头检查器 + 分镜图（输入） -->
+        <div class="insp">
+          <div class="row"><b style="font-size:13px">分镜 {{ pad(current.number) }}</b><span class="chip" style="height:22px">计划 {{ current.duration }}s</span><div class="spacer"></div><span class="xs ok-t" v-if="!dirty">已自动保存</span><span class="xs warn-t" v-else>有未保存修改</span></div>
+
+          <div class="grp-t">出场角色</div>
+          <div v-for="r in references.characters" :key="'c' + r.referenceId" class="ref-row" @click="previewAsset('character', r.assetId)">
+            <span class="avatar">{{ (r.name || '?').slice(0, 1) }}</span><b>{{ r.name }}</b><span class="v">{{ r.variantId ? 'v' + r.variantId : '' }}</span>
+          </div>
+          <p v-if="!references.characters?.length" class="xs muted" style="padding:2px 6px">无</p>
+
+          <div class="grp-t">分镜场景</div>
+          <div v-for="r in references.scene?.refs || []" :key="'s' + r.assetId" class="ref-row" @click="previewAsset('scene', r.assetId)">
+            <span class="mini ph"></span><b>{{ r.name }}</b>
+          </div>
+          <p v-if="!references.scene?.refs?.length" class="xs muted" style="padding:2px 6px">未绑定场景</p>
+
+          <div class="grp-t">场景道具</div>
+          <div v-for="r in references.props" :key="'p' + r.referenceId" class="ref-row" @click="previewAsset('prop', r.assetId)">
+            <span class="mini ph c"></span><b>{{ r.name }}</b>
+          </div>
+          <p v-if="!references.props?.length" class="xs muted" style="padding:2px 6px">无</p>
+
+          <div class="grp-t">首尾帧衔接</div>
+          <div class="row" style="padding:2px 6px; gap:6px">
+            <span class="badge" :class="frameChaining.state === 'linked' ? 'ok' : frameChaining.state === 'linkable' ? 'warn' : 'neutral'">
+              <svg><use href="#i-link"/></svg>{{ frameChaining.stateLabel }}
+            </span>
+            <button v-if="frameChaining.state === 'linkable'" class="btn sm ghost" style="border:1px solid var(--line)" @click="confirmLink">确认衔接</button>
+          </div>
+
+          <div class="grp-t">分镜图（输入）</div>
+          <div class="row" style="gap:6px; padding:0 4px; flex-wrap:wrap">
+            <div v-for="c in imageCandidates" :key="c.candidateId" class="img-cand" :class="{ cur: currentImage && currentImage.url === c.url }" @click="setCurrentImage(c)" :title="'候选 ' + c.candidateId">
+              <img :src="c.url" style="width:100%;height:100%;object-fit:cover">
             </div>
           </div>
-          <el-button size="small" :loading="generatingImage" @click="generateImage">生成分镜图</el-button>
-        </div>
-      </aside>
+          <div class="row" style="padding:0 4px">
+            <button class="btn sm grow" :loading="generatingImage" :disabled="generatingImage" @click="generateImage">
+              <svg><use href="#i-spark"/></svg>生成分镜图
+            </button>
+            <button class="btn sm ghost" style="border:1px solid var(--line)" title="上传图片" @click="uploadImage"><svg><use href="#i-upload"/></svg></button>
+          </div>
 
-      <section class="prompts">
-        <div class="chips">
-          <el-tag v-for="(r, i) in referenceChips" :key="i" size="small">@图片{{ i + 1 }} {{ r }}</el-tag>
+          <div style="margin-top:auto" class="xs muted">引用变化会即时同步到中栏与 H3 草稿</div>
         </div>
-        <div v-for="seg in segments" :key="seg.id" class="seg-card">
-          <div class="seg-head">
-            <span class="tc">{{ seg.start_seconds.toFixed(1) }}–{{ seg.end_seconds.toFixed(1) }}s</span>
-            <span class="seg-ops">
-              <el-button size="small" text @click="split(seg)">拆分</el-button>
-              <el-button size="small" text @click="merge(seg)">合并</el-button>
+
+        <!-- 中：时段提示词工作台 -->
+        <div class="work">
+          <div class="row" style="gap:6px; flex-wrap:nowrap">
+            <span v-for="(chip, i) in referenceChips" :key="i" class="chip"><span class="at">@图片{{ i + 1 }}</span>{{ chip.name }}<span class="v" v-if="chip.version">{{ chip.version }}</span></span>
+            <div class="spacer"></div>
+            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="refManageOpen = true">管理镜头引用</button>
+          </div>
+
+          <div v-for="(seg, i) in segments" :key="seg.id" class="seg-card">
+            <div class="sc-h">
+              <span class="tc">时段 {{ i + 1 }} · {{ fmtTc(seg.start_seconds) }} – {{ fmtTc(seg.end_seconds) }}</span>
+              <div class="spacer"></div>
+              <span class="card-act" title="拆分" @click="split(seg)"><svg><use href="#i-copy"/></svg></span>
+              <span class="card-act" title="与下一段合并" @click="merge(seg)"><svg><use href="#i-layers"/></svg></span>
+              <span class="card-act" title="上移" @click="move(seg, 'up')"><svg style="transform:rotate(-90deg)"><use href="#i-back"/></svg></span>
+              <span class="card-act" title="下移" @click="move(seg, 'down')"><svg style="transform:rotate(90deg)"><use href="#i-back"/></svg></span>
+            </div>
+            <div class="sc-b">
+              <div><div class="f-label">画面与动作</div>
+                <textarea class="f-ta" style="width:100%" rows="2" v-model="seg.visual" @change="saveSegment(seg)"></textarea>
+              </div>
+              <div><div class="f-label">对白与声音</div>
+                <textarea class="f-ta" style="width:100%" rows="2" v-model="seg.dialogue" @change="saveSegment(seg)"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- 分镜图提示词 -->
+          <div class="row" style="padding:6px 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel); cursor:pointer" @click="imgPromptOpen = !imgPromptOpen">
+            <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-fwd"/></svg>
+            <span class="small t2">分镜图提示词</span>
+            <span v-if="imagePrompt.manual" class="badge warn" style="height:19px">已手工覆盖</span>
+            <span class="xs muted ellipsis grow">{{ imagePrompt.text }}</span>
+            <span v-if="imagePrompt.manual" class="xs accent-t" style="cursor:pointer" @click.stop="resetImagePrompt">恢复自动拼装</span>
+          </div>
+          <div v-if="imgPromptOpen" style="padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel)">
+            <textarea class="f-ta" style="width:100%" rows="3" v-model="imagePrompt.text" @change="saveImagePrompt"></textarea>
+          </div>
+
+          <!-- H3 提示词条 -->
+          <div class="seg-card">
+            <div class="h3bar" style="border-bottom:1px solid var(--line)">
+              <svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-spark"/></svg>
+              <b style="font-size:12.5px">H3 提示词</b>
+              <span class="badge" :class="h3Class" style="height:19px">{{ h3.statusLabel || '未生成' }}</span>
+              <span class="xs muted" v-if="h3.validation">
+                四项校验：<template v-for="(c, i) in h3.validation.checks" :key="c.id">{{ i > 0 ? ' · ' : '' }}{{ c.label }} {{ c.ok ? '✓' : '×' }}</template>
+              </span>
+              <div class="spacer"></div>
+              <button class="btn ghost sm" style="border:1px solid var(--line)" @click="generateH3">
+                <svg><use href="#i-refresh"/></svg>{{ h3.draftId ? '重新生成' : '生成 H3 提示词' }}
+              </button>
+            </div>
+            <div v-if="h3.text" style="padding:7px 10px">
+              <textarea class="f-ta mono" style="width:100%" rows="3" v-model="h3.text" @input="h3Dirty = true"></textarea>
+              <div class="row" style="margin-top:6px">
+                <button class="btn sm primary" :disabled="!h3Dirty" @click="saveH3">保存并校验</button>
+                <span v-if="h3Dirty" class="xs warn-t">已修改未保存 · 保存前阻断视频提交</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 生成条 -->
+          <div class="genbar" style="margin-top:auto">
+            <button class="btn primary" :disabled="!guard.canSubmit || h3Dirty" @click="openVideoSheet">
+              <svg><use href="#i-film"/></svg>用 H3 生成视频
+            </button>
+            <span class="chip" style="height:28px">输出 {{ current.duration }}s</span>
+            <span class="chip" style="height:28px">候选 {{ videoCount }} 个</span>
+            <div class="spacer"></div>
+            <span class="xs" :class="guard.canSubmit ? 'ok-t' : 'warn-t'">
+              生成前联合检查 {{ passedChecks }}/{{ totalChecks }}{{ guard.canSubmit ? ' 通过' : ' · ' + failedCheckLabels }}
             </span>
           </div>
-          <el-input v-model="seg.visual" type="textarea" :rows="2" @change="saveSegment(seg)" />
-          <el-input v-model="seg.dialogue" placeholder="对白/声音（可留空）" @change="saveSegment(seg)" />
         </div>
 
-        <div class="image-prompt">
-          <h5>分镜图提示词 {{ imagePrompt.manual ? '（已手工覆盖）' : '' }}</h5>
-          <el-input v-model="imagePrompt.text" type="textarea" :rows="2" @change="saveImagePrompt" />
-          <el-button v-if="imagePrompt.manual" size="small" text type="primary" @click="resetImagePrompt">恢复自动拼装</el-button>
-        </div>
-
-        <div class="h3-bar">
-          <span class="badge" :class="h3Class">{{ h3.statusLabel || '未生成' }}</span>
-          <el-button size="small" @click="generateH3">{{ h3.statusLabel === '需要更新' ? '重新生成 H3 提示词' : '生成 H3 提示词' }}</el-button>
-          <el-collapse v-if="h3.text" class="h3-editor">
-            <el-collapse-item title="查看 / 编辑 H3 草稿">
-              <el-input v-model="h3.text" type="textarea" :rows="6" @change="markH3Dirty" />
-              <el-button size="small" type="primary" :disabled="!h3Dirty" @click="saveH3">保存并校验</el-button>
-              <div class="h3-checks">
-                <span v-for="c in h3.validation?.checks || []" :key="c.id" class="badge" :class="c.ok ? 'green' : 'red'">{{ c.label }}</span>
+        <!-- 右：视频审核（输出） -->
+        <div class="rev">
+          <div class="row">
+            <b style="font-size:13px">视频审核</b><span class="badge outline" style="height:20px">输出</span>
+            <div class="spacer"></div>
+            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="historyOpen = true"><svg><use href="#i-hist"/></svg>生成历史</button>
+          </div>
+          <div class="player" :class="previewUrl ? '' : 'ph'">
+            <video v-if="previewUrl" :key="previewUrl" :src="previewUrl" controls style="width:100%;height:100%;border-radius:10px;object-fit:contain;background:#000"></video>
+            <div v-else style="display:flex;align-items:center;justify-content:center;height:100%" class="muted xs">点击候选载入播放器</div>
+            <span v-if="previewUrl" class="dur">{{ current.duration }}s</span>
+            <span v-if="previewCandidate && previewCandidate.isAdopted" class="src badge ok" style="height:22px">候选 · 用于本镜</span>
+            <span v-else-if="previewCandidate" class="src badge outline" style="height:22px">候选 · 预览中</span>
+          </div>
+          <div class="grp-t" style="margin:0">候选胶片条</div>
+          <div class="film">
+            <div v-for="c in videoCandidates" :key="c.candidateId" class="fcand" :class="{ cur: c.isAdopted }" @click="preview(c)">
+              <div class="im" :class="c.isAdopted ? '' : 'ph'">
+                <video v-if="previewUrl === c.url && previewCandidate === c" :src="c.url" style="width:100%;height:100%;object-fit:cover"></video>
+                <span v-if="c.isAdopted" style="position:absolute;left:5px;bottom:4px" class="badge ok">采用</span>
               </div>
-            </el-collapse-item>
-          </el-collapse>
+              <div class="cap" :class="c.isAdopted ? 'ok-t' : ''">{{ shortId(c.candidateId) }}{{ c.isAdopted ? ' · 用于本镜' : '' }}</div>
+            </div>
+            <p v-if="videoCandidates.length === 0" class="xs muted">尚无候选</p>
+          </div>
+          <div class="row">
+            <button v-if="previewCandidate && !previewCandidate.isAdopted" class="btn sm primary" @click="adopt">用于本镜</button>
+            <button v-if="previewCandidate && previewCandidate.isAdopted" class="btn sm ghost" style="border:1px solid var(--line)" @click="undoAdopt">撤销采用</button>
+            <button v-if="previewCandidate" class="btn sm ghost" style="border:1px solid var(--line)" @click="retryCandidate(previewCandidate)"><svg><use href="#i-refresh"/></svg>按原输入重试</button>
+          </div>
+          <div class="xs muted" style="margin-top:auto">生成成功只追加候选，不自动采用；改用旧候选会退出完成计数。</div>
         </div>
+      </div>
 
-        <div class="gen-bar">
-          <el-input-number v-model="videoCount" :min="1" :max="3" size="small" />
-          <el-button type="primary" :disabled="!guard.canSubmit" @click="openVideoConfirm">
-            用 H3 生成视频 {{ quote ? `· ${quote.count} 个候选` : '' }}
-          </el-button>
-          <div class="joint-checks">
-            <span v-for="c in guard.checks || []" :key="c.id" class="badge" :class="c.ok ? 'green' : 'red'">{{ c.label }}</span>
+      <!-- 底部镜头轨 -->
+      <div class="track">
+        <span class="xs muted">镜头轨</span>
+        <div class="seg">
+          <span :class="{ on: trackFilter === 'all' }" @click="trackFilter = 'all'">全部 {{ completion.total }}</span>
+          <span :class="{ on: trackFilter === 'missing' }" @click="trackFilter = 'missing'">未完成 {{ (completion.missing || []).length }}</span>
+          <span :class="{ on: trackFilter === 'stale' }" @click="trackFilter = 'stale'">旧图 {{ (completion.staleShots || []).length }}</span>
+        </div>
+        <div class="row" style="gap:6px">
+          <div v-for="s in visibleShots" :key="s.id" class="shot" :class="shotClass(s)" @click="selectShot(s.id)">
+            <div class="im ph"><span class="st-dot" :style="{ background: shotDotColor(s) }"></span></div>
+            <div class="no" :class="shotNoClass(s)">{{ pad(s.number) }}{{ shotSuffix(s) }}</div>
           </div>
         </div>
-      </section>
+        <div class="spacer"></div>
+        <button class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/cut`)">
+          进入成片审核（{{ completion.adopted }}/{{ completion.total }}）
+        </button>
+      </div>
+    </template>
 
-      <aside class="result">
-        <h4>视频</h4>
-        <video v-if="previewUrl" :key="previewUrl" :src="previewUrl" controls class="player"></video>
-        <div v-else class="player empty">尚未选择候选预览</div>
-        <div class="cand-strip">
-          <div v-for="c in videoCandidates" :key="c.candidateId" class="vcand" :class="{ adopted: c.isAdopted }" @click="preview(c)">
-            <span>候选 {{ c.candidateId.slice(-4) }}</span>
-            <span v-if="c.isAdopted" class="badge green">用于本镜</span>
+    <!-- 生成确认 Sheet（16） -->
+    <div v-if="videoSheetOpen" class="scrim" style="z-index:80" @click="videoSheetOpen = false"></div>
+    <div v-if="videoSheetOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:620px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-film"/></svg>
+          <h3>生成视频 · 分镜 {{ pad(current.number) }}</h3>
+          <button class="icon-btn" @click="videoSheetOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b" style="overflow:hidden">
+          <div class="kv"><span class="k">对象</span><span class="v">{{ current.title || '分镜 ' + current.number }} · {{ current.duration }}s</span></div>
+          <div class="kv" style="align-items:center"><span class="k">候选数量</span>
+            <span class="row" style="gap:10px">
+              <span class="seg">
+                <span v-for="n in 3" :key="n" :class="{ on: videoCount === n }" @click="videoCount = n">{{ n }}</span>
+              </span>
+              <span class="muted xs">费用按数量乘算 · 候选并行提交</span>
+            </span>
+          </div>
+          <div class="divider" style="margin:10px 0"></div>
+          <div class="kv"><span class="k">通道 / 模型</span><span class="v">mock 本地通道 · 确定性输出</span></div>
+          <div class="kv"><span class="k">输出时长</span><span class="v">{{ current.duration }}s · {{ segments.length }} 个时段</span></div>
+          <div class="kv"><span class="k">引用素材</span>
+            <span class="row" style="gap:6px; flex-wrap:wrap">
+              <span v-for="(chip, i) in referenceChips" :key="i" class="chip" style="height:24px"><span class="at">@图片{{ i + 1 }}</span>{{ chip.name }}</span>
+              <span v-if="referenceChips.length === 0" class="xs muted">无引用</span>
+            </span>
+          </div>
+          <div class="divider" style="margin:10px 0"></div>
+          <b class="small t2">生成前联合检查</b>
+          <div style="margin-top:4px">
+            <div v-for="c in guard.checks || []" :key="c.id" class="ck-line">
+              <svg :style="{ color: c.ok ? 'var(--ok)' : 'var(--danger)' }"><use :href="c.ok ? '#i-check-c' : '#i-warn'"/></svg>
+              {{ c.label }} · {{ c.detail || (c.ok ? '通过' : '未通过') }}
+            </div>
+          </div>
+          <div class="divider" style="margin:10px 0"></div>
+          <div class="row" style="background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:10px 14px">
+            <div class="grow">
+              <div class="row"><b style="font-size:14px">mock 本地执行 · ¥0</b><span class="badge outline">不产生 API 费用</span></div>
+              <div class="xs muted" style="margin-top:3px">预计耗时 1–2 分钟（非承诺值） · 失败时其余任务继续 · 成功只追加候选，不自动采用</div>
+            </div>
           </div>
         </div>
-        <el-button v-if="previewCandidate && !previewCandidate.isAdopted" type="primary" size="small" @click="adopt">用于本镜</el-button>
-        <el-button v-else-if="previewCandidate && previewCandidate.isAdopted" size="small" @click="undoAdopt">撤销采用</el-button>
-      </aside>
+        <div class="modal-f">
+          <button class="btn ghost" @click="videoSheetOpen = false">取消</button>
+          <button class="btn primary" :disabled="busy" @click="submitVideo"><svg><use href="#i-film"/></svg>创建 {{ videoCount }} 个任务</button>
+        </div>
+      </div>
     </div>
 
-    <footer v-if="shots.length" class="shot-rail">
-      <div v-for="s in shots" :key="s.id" class="rail-shot" :class="{ current: s.id === currentShotId }" @click="selectShot(s.id)">
-        {{ String(s.number).padStart(2, '0') }}
+    <!-- 批量生成预检抽屉（25） -->
+    <div v-if="batchOpen" class="scrim" style="z-index:80" @click="batchOpen = false"></div>
+    <aside v-if="batchOpen" class="drawer narrow" style="z-index:90">
+      <div class="drawer-h">
+        <h3>批量生成 <span class="muted" style="font-weight:400; font-size:12px">· 预检</span></h3>
+        <button class="icon-btn" @click="batchOpen = false"><svg><use href="#i-close"/></svg></button>
       </div>
-      <el-button size="small" type="primary" plain class="cut-entry" @click="$router.push(`/projects/${projectId}/episodes/${episodeId}/cut`)">
-        进入成片审核（{{ completion.adopted }}/{{ completion.total }}）
-      </el-button>
-    </footer>
+      <div class="drawer-b" style="overflow:auto">
+        <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-image"/></svg></span>
+          <div><b style="font-size:13px">生成缺失分镜图</b><div class="vm">{{ batch.missingImages.length }} 个镜头缺当前图</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!batch.missingImages.length || busy" @click="runBatch('missing-images')">执行</button></div>
+        </div>
+        <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-film"/></svg></span>
+          <div><b style="font-size:13px">生成缺失镜头视频</b><div class="vm">{{ batch.missingVideos.length }} 个镜头未生成（H3 就绪才可执行）</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!batch.missingVideos.length || busy" @click="runBatch('missing-videos')">执行</button></div>
+        </div>
+        <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-refresh"/></svg></span>
+          <div><b style="font-size:13px">重试失败任务</b><div class="vm">{{ batch.failed.length }} 个失败/取消任务可按原输入重试</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!batch.failed.length || busy" @click="runBatch('retry-failed')">执行</button></div>
+        </div>
+        <div v-if="batchResult" class="card pad" style="padding:11px 12px">
+          <b style="font-size:12.5px">执行结果 · {{ batchResult.action }}</b>
+          <div v-for="(r, i) in batchResult.results" :key="i" class="xs" style="margin-top:4px" :class="r.ok ? 'ok-t' : 'danger-t'">
+            镜头 {{ r.shotId }} · {{ r.ok ? '成功' : '失败：' + r.error }}
+          </div>
+        </div>
+      </div>
+      <div class="drawer-f"><span class="muted xs">部分失败不影响成功项 · 成功只追加候选</span></div>
+    </aside>
 
-    <el-dialog v-model="videoConfirmOpen" title="确认生成视频" width="440px">
-      <p>生成数量：{{ videoCount }} · 费用按数量乘算</p>
-      <p class="hint">输出时长 {{ current.duration }}s · mock 本地执行，不产生 API 费用 · 预计 1–2 分钟（非承诺值）</p>
-      <template #footer>
-        <el-button @click="videoConfirmOpen = false">取消</el-button>
-        <el-button type="primary" @click="submitVideo">确认提交</el-button>
-      </template>
-    </el-dialog>
+    <!-- 管理镜头引用抽屉（26） -->
+    <div v-if="refManageOpen" class="scrim" style="z-index:80" @click="refManageOpen = false"></div>
+    <aside v-if="refManageOpen" class="drawer narrow" style="z-index:90">
+      <div class="drawer-h">
+        <h3>管理镜头引用 <span class="muted" style="font-weight:400; font-size:12px">· 分镜 {{ pad(current.number) }}</span></h3>
+        <button class="icon-btn" @click="refManageOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div class="grp-t">出场角色</div>
+        <div v-for="r in references.characters" :key="'rc' + r.referenceId" class="ref-row">
+          <span class="avatar">{{ (r.name || '?').slice(0, 1) }}</span><b>{{ r.name }}</b>
+          <span class="v">固定版本</span>
+          <button class="btn sm ghost" style="border:1px solid var(--line)" @click="removeRef(r.referenceId)">移除</button>
+        </div>
+        <div class="grp-t">分镜场景（不可移除）</div>
+        <div v-for="r in references.scene?.refs || []" :key="'sc' + r.assetId" class="ref-row">
+          <span class="mini ph"></span><b>{{ r.name }}</b><span class="v">结构性</span>
+        </div>
+        <div class="grp-t">场景道具</div>
+        <div v-for="r in references.props" :key="'rp' + r.referenceId" class="ref-row">
+          <span class="mini ph c"></span><b>{{ r.name }}</b>
+          <button class="btn sm ghost" style="border:1px solid var(--line); margin-left:auto" @click="removeRef(r.referenceId)">移除</button>
+        </div>
+        <div class="divider"></div>
+        <div class="grp-t">从项目素材添加</div>
+        <div v-for="a in assetPool" :key="a.assetType + a.id" class="ref-row">
+          <span class="mini ph"></span><b>{{ a.name }}</b>
+          <button class="btn sm ghost" style="border:1px solid var(--line); margin-left:auto" @click="addRef(a)">添加</button>
+        </div>
+      </div>
+      <div class="drawer-f"><span class="muted xs">增删即时重排 @槽位并令 H3 标记「引用已变化」</span></div>
+    </aside>
+
+    <!-- 素材预览抽屉（27） -->
+    <div v-if="assetPreviewOpen" class="scrim" style="z-index:80" @click="assetPreviewOpen = false"></div>
+    <aside v-if="assetPreviewOpen" class="drawer" style="z-index:90; width:480px">
+      <div class="drawer-h">
+        <h3>{{ assetPreview?.name || '素材预览' }}</h3>
+        <button class="icon-btn" @click="assetPreviewOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div v-if="assetPreview?.currentImage" style="border-radius:10px; overflow:hidden; margin-bottom:12px">
+          <img :src="assetPreview.currentImage" style="width:100%; display:block">
+        </div>
+        <div class="kv"><span class="k">类型</span><span class="v">{{ typeLabel(assetPreview?.assetType) }}</span></div>
+        <div class="kv"><span class="k">本集状态</span><span class="v">固定版本</span></div>
+        <div class="kv"><span class="k">@槽位</span><span class="v accent-t">{{ assetSlotLabel }}</span></div>
+        <div class="kv"><span class="k">出现时段</span><span class="v">{{ usedInSegmentsText }}</span></div>
+        <div class="kv"><span class="k">最新候选</span><span class="v">{{ assetPreview?.candidates?.length ? '候选 ' + assetPreview.candidates[0].candidateId : '无' }}</span></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn sm" :disabled="!canUpdateToLatest" @click="updateToLatest" :title="canUpdateToLatest ? '' : '已是最新版本'">换绑到最新版</button>
+          <button class="btn sm ghost" style="border:1px solid var(--line)" @click="$router.push(`/projects/${projectId}/assets`)">在素材库中查看</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 生成历史抽屉（28） -->
+    <div v-if="historyOpen" class="scrim" style="z-index:80" @click="historyOpen = false"></div>
+    <aside v-if="historyOpen" class="drawer narrow" style="z-index:90">
+      <div class="drawer-h">
+        <h3>生成历史 <span class="muted" style="font-weight:400; font-size:12px">· 分镜 {{ pad(current.number) }}</span></h3>
+        <button class="icon-btn" @click="historyOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div v-for="t in history.tasks" :key="t.taskId" class="v-row">
+          <span class="vn"><svg style="width:15px;height:15px"><use href="#i-film"/></svg></span>
+          <div>
+            <b style="font-size:13px">{{ taskStatusLabel(t.status) }}</b>
+            <div class="vm">提交 {{ fmtTime(t.createdAt) }}<template v-if="t.completedAt"> · 完成 {{ fmtTime(t.completedAt) }}</template><br>{{ t.cancelRequested ? 'cancel-requested · ' : '' }}{{ t.error || t.message || '' }}</div>
+          </div>
+          <div class="acts">
+            <button v-if="['failed', 'cancelled'].includes(t.status)" class="btn sm" @click="retryTask(t.taskId)">按原输入重试</button>
+          </div>
+        </div>
+        <p v-if="!history.tasks?.length" class="xs muted">本镜暂无生成任务</p>
+      </div>
+      <div class="drawer-f"><span class="muted xs">按原输入重试创建新任务，不覆盖历史记录</span></div>
+    </aside>
   </div>
 </template>
 
 <script>
-import { ElMessage } from 'element-plus'
 import v21 from '@/v21/api.js'
 
 export default {
@@ -138,31 +398,52 @@ export default {
   props: { projectId: String, episodeId: String },
   data() {
     return {
-      shots: [], currentShotId: null, current: null, references: { characters: [], props: [], scene: {} },
+      shots: [], scenes: [], sceneFilter: 'all', currentShotId: null, current: null,
+      references: { characters: [], props: [], scene: {} },
       segments: [], imagePrompt: { text: '', manual: false }, imageCandidates: [],
-      h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0 },
-      videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1, videoConfirmOpen: false,
-      generatingImage: false, readiness: { status: 'checking' }, frameChaining: { state: 'none', stateLabel: '首镜' },
+      h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0, missing: [], staleShots: [] },
+      videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1,
+      generatingImage: false, readiness: { status: 'checking' },
+      frameChaining: { state: 'none', stateLabel: '首镜' },
+      trackFilter: 'all', moreOpen: false, batchOpen: false, batch: {}, batchResult: null, busy: false,
+      refManageOpen: false, assetPool: [],
+      assetPreviewOpen: false, assetPreview: null, assetPreviewRefIndex: -1,
+      historyOpen: false, history: {},
+      imgPromptOpen: false, videoSheetOpen: false, snapshotAt: '',
     }
   },
   computed: {
+    visibleShots() {
+      if (this.sceneFilter === 'all') return this.shots
+      return this.shots.filter((s) => String(s.scene_id) === String(this.sceneFilter))
+    },
     referenceChips() {
-      return [...(this.references.characters || []), ...(this.references.props || [])].map((r) => r.name)
+      const chars = (this.references.characters || []).map((r) => ({ name: r.name, version: r.variantId ? 'v' + r.variantId : '' }))
+      const props = (this.references.props || []).map((r) => ({ name: r.name, version: '' }))
+      return [...chars, ...props]
     },
     readinessText() {
       return {
-        checking: '正在准备素材…', ready: '素材已准备', 'needs-attention': '有待处理项：受影响镜头生成已禁用',
-        'snapshot-failed': '快照失败：生成已禁用', 'script-unapproved': '剧本未确认：生成已禁用',
+        checking: '正在准备素材…',
+        'needs-attention': '有待处理项：受影响镜头的生成已禁用',
+        'snapshot-failed': '素材快照保存失败，媒体生成已暂停',
+        'script-unapproved': '确认剧本后才能生成本集媒体',
       }[this.readiness.status] || '正在准备素材…'
     },
     readinessClass() {
-      return { ready: 'green', 'needs-attention': 'amber', 'snapshot-failed': 'red', 'script-unapproved': 'red', checking: 'gray' }
+      return { ready: 'ok', 'needs-attention': 'warn', 'snapshot-failed': 'warn', 'script-unapproved': 'warn', checking: '' }
     },
     h3Class() {
-      return { 'ai-generated': 'green', valid: 'green', invalid: 'red', stale: 'amber' }[this.h3.status] || 'gray'
+      return { 'ai-generated': 'ok', valid: 'ok', invalid: 'danger', stale: 'warn' }[this.h3.status] || 'neutral'
     },
-    guardRecovery() {
-      return this.readiness.status && this.readiness.status !== 'ready'
+    passedChecks() {
+      return (this.guard.checks || []).filter((c) => c.ok).length
+    },
+    totalChecks() {
+      return (this.guard.checks || []).length
+    },
+    failedCheckLabels() {
+      return (this.guard.checks || []).filter((c) => !c.ok).map((c) => c.label).join('/')
     },
     currentImage() {
       return this.current ? { url: this.current.currentImage } : null
@@ -170,15 +451,54 @@ export default {
     quote() {
       return { count: this.videoCount }
     },
+    assetSlotLabel() {
+      if (this.assetPreviewRefIndex < 0) return '未在本镜引用'
+      return `@图片${this.assetPreviewRefIndex + 1}`
+    },
+    usedInSegmentsText() {
+      const shot = this.current
+      if (!shot) return '—'
+      const segs = this.segments.filter((seg) => {
+        try {
+          const refs = JSON.parse(seg.asset_refs_json || '{}')
+          const names = [...(refs.sceneRefs || []), ...(refs.characterRefs || []), ...(refs.propRefs || [])]
+          return names.some((n) => String(n).includes(String(this.assetPreview?.name || '\u0000')))
+        } catch { return false }
+      })
+      return segs.length ? `时段 ${segs.map((s) => s.seq).join('、')}` : '未直接提及'
+    },
+    canUpdateToLatest() {
+      return (this.assetPreview?.candidates?.length || 0) > 0 &&
+        this.assetPreview.candidates[0].url !== this.assetPreview.currentImage
+    },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.keyHandler = (e) => {
+      const tag = (e.target.tagName || '').toLowerCase()
+      if (['input', 'textarea', 'select'].includes(tag)) return
+      if (e.key === '[') this.step(-1)
+      if (e.key === ']') this.step(1)
+    }
+    window.addEventListener('keydown', this.keyHandler)
+    this.load()
+  },
+  unmounted() {
+    window.removeEventListener('keydown', this.keyHandler)
+  },
   methods: {
     async load() {
       const data = await v21.getStoryboard(this.episodeId)
       this.shots = data.shots || []
       this.completion = data.completion || this.completion
-      const guard = await v21.getMediaGuard(this.episodeId)
-      this.readiness = { status: guard.readiness }
+      try {
+        const guard = await v21.getMediaGuard(this.episodeId)
+        this.readiness = { status: guard.readiness }
+        const assets = await v21.getEpisodeAssets(this.episodeId)
+        if (assets.readiness?.status === 'ready') this.readiness = { status: 'ready' }
+      } catch { /* keep */ }
+      try {
+        this.scenes = (await v21.getScript(this.episodeId)).scenes || []
+      } catch { this.scenes = [] }
       if (this.currentShotId === null && this.shots.length > 0) this.selectShot(this.shots[0].id)
     },
     async createFromScript() {
@@ -194,22 +514,29 @@ export default {
       this.imagePrompt = detail.imagePrompt
       this.imageCandidates = detail.imageCandidates
       this.h3 = detail.h3Draft || {}
+      this.h3Dirty = false
       this.videoCandidates = detail.video.candidates
       this.previewCandidate = null
       this.previewUrl = ''
-      this.frameChaining = { ...detail.frameChaining, stateLabel: { linked: '已衔接', linkable: '可衔接', waiting: '等待上一镜完成', none: '首镜' }[detail.frameChaining.state] }
+      const fc = detail.frameChaining
+      this.frameChaining = { ...fc, stateLabel: { linked: '已衔接', linkable: '可衔接', waiting: '等待上一镜完成', none: '首镜' }[fc.state] }
       this.refreshGuard()
+      this.loadHistory()
     },
     async refreshGuard() {
       this.guard = await v21.getVideoGuard(this.currentShotId)
+    },
+    async loadHistory() {
+      try {
+        this.history = await v21.getVideoHistory(this.currentShotId)
+      } catch { this.history = {} }
     },
     async saveSegment(seg) {
       try {
         const result = await v21.editSegment(this.currentShotId, seg.id, { visual: seg.visual, dialogue: seg.dialogue })
         this.segments = result.segments
-        ElMessage.closeAll()
       } catch (e) {
-        ElMessage.error(e.message)
+        alert(e.message)
       }
     },
     async split(seg) {
@@ -221,9 +548,13 @@ export default {
       const result = await v21.mergeSegment(this.currentShotId, seg.id)
       this.segments = result.segments
     },
+    async move(seg, direction) {
+      const result = await v21.moveSegment(this.currentShotId, seg.id, direction)
+      this.segments = result.segments
+    },
     async saveImagePrompt() {
-      await v21.editImagePrompt(this.currentShotId, this.imagePrompt.text)
-      this.imagePrompt.manual = true
+      const result = await v21.editImagePrompt(this.currentShotId, this.imagePrompt.text)
+      this.imagePrompt = result
     },
     async resetImagePrompt() {
       this.imagePrompt = await v21.resetImagePrompt(this.currentShotId)
@@ -232,44 +563,57 @@ export default {
       this.generatingImage = true
       try {
         await v21.generateShotImage(this.currentShotId, {})
-        this.imageCandidates = await v21.getShot(this.currentShotId).then((d) => d.imageCandidates)
+        const detail = await v21.getShot(this.currentShotId)
+        this.imageCandidates = detail.imageCandidates
       } finally {
         this.generatingImage = false
       }
     },
+    async uploadImage() {
+      const url = window.prompt('输入图片 URL 或本地 /static 路径：')
+      if (!url) return
+      await v21.uploadShotImage(this.currentShotId, { imageUrl: url })
+      const detail = await v21.getShot(this.currentShotId)
+      this.imageCandidates = detail.imageCandidates
+    },
     async setCurrentImage(candidate) {
       const result = await v21.setShotImageCurrent(this.currentShotId, candidate.candidateId)
-      ElMessage.info({ message: '已设为当前分镜图；H3 需要更新', grouping: true })
       this.h3 = result.h3Draft
       await this.selectShot(this.currentShotId)
+      await this.load()
     },
     async generateH3() {
       try {
         this.h3 = await v21.generateH3(this.currentShotId, {})
+        this.h3Dirty = false
         this.refreshGuard()
       } catch (e) {
-        ElMessage.error(e.message)
+        alert(e.message)
       }
     },
-    markH3Dirty() { this.h3Dirty = true },
     async saveH3() {
       this.h3 = await v21.saveH3(this.currentShotId, this.h3.text)
       this.h3Dirty = false
       this.refreshGuard()
     },
-    async openVideoConfirm() {
-      await v21.getVideoQuote(this.currentShotId, this.videoCount)
-      this.videoConfirmOpen = true
+    openVideoSheet() {
+      this.videoSheetOpen = true
     },
     async submitVideo() {
-      this.videoConfirmOpen = false
-      const submitted = await v21.submitVideo(this.currentShotId, { count: this.videoCount })
-      ElMessage.success(`已创建 ${submitted.tasks.length} 个并行任务`)
-      for (const task of submitted.tasks) {
-        await v21.completeVideoTask(task.taskId)
+      this.videoSheetOpen = false
+      this.busy = true
+      try {
+        const submitted = await v21.submitVideo(this.currentShotId, { count: this.videoCount })
+        for (const task of submitted.tasks) {
+          try { await v21.completeVideoTask(task.taskId) } catch { /* 单任务失败不中断 */ }
+        }
+        await this.selectShot(this.currentShotId)
+        await this.load()
+      } catch (e) {
+        alert(e.message)
+      } finally {
+        this.busy = false
       }
-      await this.selectShot(this.currentShotId)
-      ElMessage.success('生成完成，候选已追加（未自动采用）')
     },
     preview(candidate) {
       this.previewCandidate = candidate
@@ -285,53 +629,194 @@ export default {
       await this.selectShot(this.currentShotId)
       await this.load()
     },
+    async retryCandidate(candidate) {
+      const task = (this.history.tasks || []).find((t) => `cand_${t.taskId}` === candidate.candidateId)
+      if (task) { await this.retryTask(task.taskId); return }
+      const submitted = await v21.submitVideo(this.currentShotId, { count: 1 })
+      await v21.completeVideoTask(submitted.tasks[0].taskId)
+      await this.selectShot(this.currentShotId)
+    },
+    async retryTask(taskId) {
+      const created = await v21.retryVideoTask(taskId)
+      await v21.completeVideoTask(created.taskId)
+      await this.selectShot(this.currentShotId)
+      await this.loadHistory()
+    },
     async confirmLink() {
       await v21.confirmFrameLink(this.currentShotId)
       await this.selectShot(this.currentShotId)
     },
-    onMore(cmd) {
-      ElMessage.info(`${cmd}：向导流程在更多菜单内打开（P1）`)
+    step(delta) {
+      const list = this.visibleShots
+      const idx = list.findIndex((s) => s.id === this.currentShotId)
+      const next = idx + delta
+      if (next >= 0 && next < list.length) this.selectShot(list[next].id)
+    },
+    async openBatch() {
+      this.batch = await v21.getBatchPrecheck(this.episodeId)
+      this.batchResult = null
+      this.batchOpen = true
+    },
+    async runBatch(action) {
+      this.busy = true
+      try {
+        this.batchResult = await v21.runBatch(this.episodeId, action)
+        this.batch = await v21.getBatchPrecheck(this.episodeId)
+        await this.load()
+      } catch (e) {
+        alert(e.message)
+      } finally {
+        this.busy = false
+      }
+    },
+    async openRefManage() {
+      const data = await v21.listAssets(this.projectId, { type: 'all' })
+      this.assetPool = (data.items || []).filter((a) => !a.blocked)
+      this.refManageOpen = true
+    },
+    async addRef(a) {
+      try {
+        const result = await v21.addReference(this.currentShotId, { assetType: a.assetType, assetId: a.id })
+        this.references = result
+        await this.selectShot(this.currentShotId)
+      } catch (e) {
+        alert(e.message)
+      }
+    },
+    async removeRef(referenceId) {
+      try {
+        const result = await v21.removeReference(this.currentShotId, referenceId)
+        this.references = result
+        await this.selectShot(this.currentShotId)
+      } catch (e) {
+        alert(e.message)
+      }
+    },
+    previewAsset(type, assetId) {
+      const allRefs = [...(this.references.characters || []), ...(this.references.props || [])]
+      this.assetPreviewRefIndex = allRefs.findIndex((r) => String(r.assetId) === String(assetId))
+      v21.getAssetDetail(type, assetId).then((detail) => {
+        this.assetPreview = detail
+        this.assetPreviewOpen = true
+      })
+    },
+    async updateToLatest() {
+      if (!this.assetPreview?.candidates?.length) return
+      const latest = this.assetPreview.candidates[0]
+      const result = await v21.useCandidate({ type: this.assetPreview.assetType, assetId: this.assetPreview.id, candidateId: latest.candidateId })
+      this.assetPreview.currentImage = result.current.imageUrl
+      await this.selectShot(this.currentShotId)
+    },
+    async exportSrt() {
+      const result = await v21.exportCut(this.episodeId, 'srt')
+      if (result.ok) alert(`SRT 已导出：${result.filePath}`)
+      else alert(result.reason)
+    },
+    async exportShotPackages() {
+      const data = await v21.getStoryboard(this.episodeId)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `episode-${this.episodeId}-shot-packages.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    pad(n) {
+      return String(n).padStart(2, '0')
+    },
+    shortId(id) {
+      return String(id || '').slice(-4)
+    },
+    fmtTc(s) {
+      return `00:${String(Math.floor(s)).padStart(2, '0')}`
+    },
+    fmtTime(t) {
+      return t ? String(t).slice(11, 19) : ''
+    },
+    shortHeading(h) {
+      return String(h || '').replace(/^(内景|外景)[·\s]*/, '')
+    },
+    typeLabel(t) {
+      return { character: '角色', scene: '场景', prop: '道具' }[t] || t
+    },
+    shotClass(s) {
+      const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
+      const isMissing = (this.completion.missing || []).includes(s.id)
+      if (isStale) return 'stale'
+      if (s.id === this.currentShotId) return 'cur'
+      if (isMissing) return ''
+      return 'ok'
+    },
+    shotDotColor(s) {
+      const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
+      if (isStale) return 'var(--warn)'
+      if (s.id === this.currentShotId) return 'var(--accent)'
+      const isMissing = (this.completion.missing || []).includes(s.id)
+      return isMissing ? 'var(--neutral)' : 'var(--ok)'
+    },
+    shotNoClass(s) {
+      const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
+      if (isStale) return 'warn-t'
+      const isMissing = (this.completion.missing || []).includes(s.id)
+      return isMissing ? '' : 'ok-t'
+    },
+    shotSuffix(s) {
+      const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
+      if (isStale) return ' 旧图'
+      const isMissing = (this.completion.missing || []).includes(s.id)
+      return isMissing ? ' —' : ' ✓'
     },
   },
 }
 </script>
 
 <style scoped>
-.sb-stage { padding: 12px 20px; display: flex; flex-direction: column; height: 100%; }
-.readiness-bar { display: flex; gap: 12px; align-items: center; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 14px; }
-.spacer { flex: 1; }
-.badge { font-size: 12px; padding: 2px 10px; border-radius: 999px; }
-.badge.green { background: #ecfdf5; color: #047857; }
-.badge.amber { background: #fffbeb; color: #b45309; }
-.badge.red { background: #fef2f2; color: #b91c1c; }
-.badge.gray { background: #f3f4f6; color: #6b7280; }
-.workbench { display: grid; grid-template-columns: 250px 1fr 420px; gap: 14px; margin-top: 12px; flex: 1; }
-.inspector, .prompts, .result { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; overflow: auto; }
-.ref-row { padding: 4px 0; font-size: 13px; }
-.frame-chaining { margin-top: 12px; font-size: 13px; color: #6b7280; }
-.img-cand { width: 72px; height: 54px; border-radius: 6px; overflow: hidden; cursor: pointer; border: 2px solid transparent; }
-.img-cand.current { border-color: #22c55e; }
-.img-cand img { width: 100%; height: 100%; object-fit: cover; }
-.img-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-.seg-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-.seg-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.tc { font-weight: 600; font-size: 13px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.h3-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
-.h3-editor { width: 100%; }
-.h3-checks { display: flex; gap: 6px; margin-top: 6px; }
-.gen-bar { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
-.joint-checks { display: flex; gap: 4px; }
-.player { width: 100%; min-height: 240px; background: #111; border-radius: 8px; }
-.player.empty { display: flex; align-items: center; justify-content: center; color: #9ca3af; }
-.cand-strip { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
-.vcand { display: flex; justify-content: space-between; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-.vcand.adopted { border-color: #22c55e; background: #f0fdf4; }
-.shot-rail { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
-.rail-shot { padding: 8px 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; }
-.rail-shot.current { border-color: #2563eb; background: #eff6ff; }
-.cut-entry { margin-left: auto; }
-.empty { text-align: center; padding: 80px 0; }
-.hint { color: #9ca3af; font-size: 12px; }
-h4, h5 { margin: 8px 0; }
+.sb-main { flex: 1; display: flex; min-height: 0; }
+.insp { width: 272px; flex: 0 0 272px; border-right: 1px solid var(--line); background: var(--panel); padding: 10px 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.insp .grp-t { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin-top: 2px; }
+.ref-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; cursor: pointer; }
+.ref-row:hover { background: var(--panel2); }
+.ref-row .avatar { width: 26px; height: 26px; font-size: 11px; }
+.ref-row .mini { width: 26px; height: 26px; border-radius: 6px; }
+.ref-row b { font-size: 12.5px; font-weight: 500; }
+.ref-row .v { font-size: 11px; color: var(--muted); margin-left: auto; }
+.work { flex: 1; min-width: 0; padding: 10px 14px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.seg-card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.seg-card .sc-h { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.seg-card .sc-h .tc { font-size: 12px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.seg-card .sc-b { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.f-label { font-size: 10.5px; color: var(--muted); margin-bottom: 3px; }
+.f-ta { border: 1px solid var(--line); border-radius: 7px; background: var(--bg); padding: 7px 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); resize: vertical; font-family: inherit; }
+.f-ta:focus { outline: none; border-color: var(--focus); }
+.card-act { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; border: 1px solid transparent; }
+.card-act:hover { background: var(--panel2); color: var(--text); }
+.card-act svg { width: 13px; height: 13px; }
+.rev { width: 348px; flex: 0 0 348px; border-left: 1px solid var(--line); background: var(--panel); padding: 10px 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.player { position: relative; height: 178px; border-radius: 10px; overflow: hidden; }
+.player .src { position: absolute; left: 8px; bottom: 8px; z-index: 3; }
+.player .dur { position: absolute; right: 8px; top: 8px; z-index: 3; font-size: 11px; background: rgba(10,12,18,.6); border-radius: 5px; padding: 2px 7px; }
+.film { display: flex; gap: 8px; flex-wrap: wrap; }
+.fcand { flex: 1; min-width: 90px; cursor: pointer; }
+.fcand .im { height: 62px; border-radius: 7px; border: 1px solid var(--line); position: relative; overflow: hidden; }
+.fcand.cur .im { border: 2px solid var(--ok); }
+.fcand .cap { font-size: 10.5px; color: var(--muted); margin-top: 4px; text-align: center; }
+.genbar { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid rgba(124,92,255,.4); background: linear-gradient(90deg, rgba(124,92,255,.10), rgba(124,92,255,.03)); border-radius: 10px; }
+.track { flex: 0 0 92px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 10px; padding: 0 14px; overflow-x: auto; }
+.shot { width: 66px; cursor: pointer; flex: 0 0 auto; }
+.shot .im { height: 42px; border-radius: 6px; border: 1px solid var(--line); position: relative; }
+.shot.cur .im { border: 2px solid var(--accent); }
+.shot.ok .im { border-color: rgba(69,211,156,.55); }
+.shot .no { font-size: 10px; color: var(--muted); text-align: center; margin-top: 3px; }
+.shot .st-dot { position: absolute; right: 4px; top: 4px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg); }
+.h3bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
+.mono { font-family: Consolas, monospace; }
+.img-cand { width: 64px; height: 38px; border-radius: 6px; overflow: hidden; cursor: pointer; outline: 2px solid transparent; outline-offset: -2px; }
+.img-cand.cur { outline-color: var(--ok); }
+.more-wrap { position: relative; }
+.more-pop { position: absolute; right: 0; top: 38px; z-index: 30; padding: 6px; min-width: 260px; display: flex; flex-direction: column; gap: 2px; }
+.sort-native { background: transparent; border: none; outline: none; color: var(--text); font-size: 13px; appearance: none; cursor: pointer; }
+.sort-native option { background: var(--panel2); color: var(--text); }
+.empty-box { text-align: center; padding: 90px 0; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.grp-t { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin-top: 2px; }
 </style>

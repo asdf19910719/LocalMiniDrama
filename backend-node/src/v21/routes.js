@@ -354,6 +354,39 @@ function createV21Router({ db, cfg, log }) {
   r.post('/storyboards/:shotId/video/undo-adopt', wrap((req, res) => {
     response.success(res, storyboard.undoAdoptVideo(req.params.shotId));
   }));
+  r.get('/episodes/:episodeId/storyboard/batch-precheck', wrap((req, res) => {
+    response.success(res, storyboard.batchPrecheck(req.params.episodeId));
+  }));
+  r.post('/episodes/:episodeId/storyboard/batch/missing-images', wrap((req, res) => {
+    storyboard.batchGenerateMissingImages(req.params.episodeId).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/episodes/:episodeId/storyboard/batch/missing-videos', wrap((req, res) => {
+    storyboard.batchGenerateMissingVideos(req.params.episodeId, req.body || {}).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/episodes/:episodeId/storyboard/batch/retry-failed', wrap((req, res) => {
+    storyboard.batchRetryFailed(req.params.episodeId).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.get('/storyboards/:shotId/video/history', wrap((req, res) => {
+    response.success(res, storyboard.getVideoHistory(req.params.shotId));
+  }));
+  r.post('/video-tasks/:taskId/retry', wrap((req, res) => {
+    response.created(res, storyboard.retryTask(req.params.taskId));
+  }));
   r.post('/storyboards/:shotId/frame-link/confirm', wrap((req, res) => {
     response.success(res, storyboard.confirmFrameLink(req.params.shotId));
   }));

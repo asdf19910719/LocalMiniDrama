@@ -104,6 +104,11 @@ export const v21 = {
   adoptVideo: (shotId, candidateId, body) => post(`/storyboards/${shotId}/video/adopt`, { candidateId, ...body }),
   undoAdoptVideo: (shotId) => post(`/storyboards/${shotId}/video/undo-adopt`),
   confirmFrameLink: (shotId) => post(`/storyboards/${shotId}/frame-link/confirm`),
+  getBatchPrecheck: (episodeId) => get(`/episodes/${episodeId}/storyboard/batch-precheck`),
+  runBatch: (episodeId, action) => post(`/episodes/${episodeId}/storyboard/batch/${action}`),
+  getVideoHistory: (shotId) => get(`/storyboards/${shotId}/video/history`),
+  retryVideoTask: (taskId) => post(`/video-tasks/${taskId}/retry`),
+  uploadShotImage: (shotId, body) => post(`/storyboards/${shotId}/image/upload`, body),
   // 成片
   getCut: (episodeId) => get(`/episodes/${episodeId}/cut`),
   composeEpisode: (episodeId, settings) => post(`/episodes/${episodeId}/cut/compose`, settings),

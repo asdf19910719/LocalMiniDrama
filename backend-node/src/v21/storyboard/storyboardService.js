@@ -925,6 +925,110 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     return getFrameChaining(shotId);
   }
 
+  /** 批量预检：缺失分镜图 / 缺失视频 / 失败任务（设计稿 25 批量抽屉） */
+  function batchPrecheck(episodeId) {
+    const shots = listShots(episodeId);
+    const missingImages = [];
+    const missingVideos = [];
+    const failed = [];
+    for (const shot of shots) {
+      if (!shot.image_url) missingImages.push(shot.id);
+      const group = db.prepare('SELECT * FROM director_candidate_groups WHERE shot_id = ?').get(String(shot.id));
+      const adopted = group && group.selected_candidate_id;
+      const hasCandidates = db
+        .prepare('SELECT COUNT(*) AS n FROM director_candidates WHERE group_id = ?')
+        .get(group ? group.id : '').n > 0;
+      const busy = activeVideoTasks(shot.id).length > 0;
+      const failedTask = db
+        .prepare(
+          "SELECT id FROM async_tasks WHERE owner_type = 'storyboard_video' AND owner_id = ? AND status IN ('failed','cancelled') ORDER BY updated_at DESC LIMIT 1"
+        )
+        .get(String(shot.id));
+      if (!adopted && !busy && failedTask) failed.push({ shotId: shot.id, taskId: failedTask.id });
+      else if (!adopted && !busy && !hasCandidates) missingVideos.push(shot.id);
+    }
+    return { missingImages, missingVideos, failed };
+  }
+
+  /** 批量生成缺失分镜图 */
+  async function batchGenerateMissingImages(episodeId) {
+    const { missingImages } = batchPrecheck(episodeId);
+    const results = [];
+    for (const shotId of missingImages) {
+      try {
+        const r = await generateImage(shotId, {});
+        results.push({ shotId, ok: true, candidateId: r.candidateId });
+      } catch (err) {
+        results.push({ shotId, ok: false, error: err.message });
+      }
+    }
+    return { action: 'missing-images', total: missingImages.length, results };
+  }
+
+  /** 批量生成缺失视频（仅 H3 就绪且无活动任务的镜头） */
+  async function batchGenerateMissingVideos(episodeId, { count = 1 } = {}) {
+    const { missingVideos } = batchPrecheck(episodeId);
+    const results = [];
+    for (const shotId of missingVideos) {
+      try {
+        const guard = jointGuard(shotId);
+        if (!guard.canSubmit) {
+          results.push({ shotId, ok: false, error: guard.checks.filter((c) => !c.ok).map((c) => c.label).join('、') });
+          continue;
+        }
+        const r = await submitVideo(shotId, { count });
+        results.push({ shotId, ok: true, taskIds: r.tasks.map((t) => t.taskId) });
+      } catch (err) {
+        results.push({ shotId, ok: false, error: err.message });
+      }
+    }
+    return { action: 'missing-videos', total: missingVideos.length, results };
+  }
+
+  /** 批量重试失败任务（按原输入创建新 attempt） */
+  async function batchRetryFailed(episodeId) {
+    const { failed } = batchPrecheck(episodeId);
+    const results = [];
+    for (const item of failed) {
+      try {
+        const r = retryTask(item.taskId);
+        results.push({ shotId: item.shotId, ok: true, newTaskId: r.taskId });
+      } catch (err) {
+        results.push({ shotId: item.shotId, ok: false, error: err.message });
+      }
+    }
+    return { action: 'retry-failed', total: failed.length, results };
+  }
+
+  /** 重试：按原输入快照创建新任务（mock 通道） */
+  function retryTask(taskId) {
+    if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
+    return mockProvider.retry(taskId);
+  }
+
+  /** 生成历史抽屉（28）：任务记录（含失败/取消）+ 候选列表 */
+  function getVideoHistory(shotId) {
+    requireShot(shotId);
+    const tasks = db
+      .prepare(
+        "SELECT id, status, progress, message, created_at, updated_at, completed_at, input_json, error FROM async_tasks WHERE owner_type = 'storyboard_video' AND owner_id = ? ORDER BY created_at DESC"
+      )
+      .all(String(shotId))
+      .map((row) => ({
+        taskId: row.id,
+        status: row.status,
+        progress: row.progress,
+        message: row.message,
+        createdAt: row.created_at,
+        completedAt: row.completed_at,
+        prompt: row.input_json ? (JSON.parse(row.input_json).prompt || '') : '',
+        error: row.error || null,
+        cancelRequested: row.cancel_state === 'cancelled',
+      }));
+    const { candidates, adoptedCandidateId } = videoCandidates(shotId);
+    return { tasks, candidates, adoptedCandidateId };
+  }
+
   return {
     createFromScript,
     listShots,
@@ -958,6 +1062,11 @@ function createStoryboardService(db, { log = console, mockProvider = null } = {}
     getFrameChaining,
     confirmFrameLink,
     unlinkFrameLink,
+    batchPrecheck,
+    batchGenerateMissingImages,
+    batchGenerateMissingVideos,
+    batchRetryFailed,
+    getVideoHistory,
   };
 }
 
