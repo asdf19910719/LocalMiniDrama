@@ -100,8 +100,14 @@ const router = createRouter({
     {
       path: '/ai-config',
       name: 'ai-config',
-      component: () => import('@/views/AiConfig.vue'),
+      component: () => import('@/views/productionStudio/AiConfigV21View.vue'),
       meta: { title: 'AI 配置' },
+    },
+    {
+      path: '/ai-config/advanced',
+      name: 'ai-config-advanced',
+      component: () => import('@/views/AiConfig.vue'),
+      meta: { title: 'AI 配置 · 高级' },
     },
     {
       path: '/media-library',
