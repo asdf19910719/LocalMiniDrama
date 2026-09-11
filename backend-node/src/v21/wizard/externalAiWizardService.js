@@ -485,8 +485,12 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       sourceLabel: 'external-ai-result@2.1',
       reportExtra: frozenUsed ? { frozenSnapshot: true } : null,
     });
-    db.prepare('UPDATE external_ai_package_tasks SET imported_at = ? WHERE package_id = ?').run(
+    // 原子回填：imported_at + target_episode_id（create_new 导入后才有真实集 id，剧集中心「打开剧本」与离页恢复依赖）
+    db.prepare(
+      'UPDATE external_ai_package_tasks SET imported_at = ?, target_episode_id = COALESCE(target_episode_id, ?) WHERE package_id = ?'
+    ).run(
       new Date().toISOString(),
+      imported.episodeId,
       row.package_id
     );
     return {

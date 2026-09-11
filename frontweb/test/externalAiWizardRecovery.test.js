@@ -17,6 +17,13 @@ test('向导 URL 恢复：mounted 消费 route.query.taskId 并调 getWizard（t
   assert.match(view, /restoreFromTask/, '应有独立恢复方法')
   // 恢复 imported 任务时应能落到已导入草稿步
   assert.match(view, /imported-draft/, '应按后端 currentStep 识别已导入草稿步')
+  // M1：已取消任务的 URL 恢复——按 task.status 识别并停留第一步
+  const restoreBody = view.slice(view.indexOf('async restoreFromTask('), view.indexOf('clearTaskQuery() {'))
+  assert.match(restoreBody, /\.status === 'cancelled'/, '恢复时应按 getTask 返回的 status 识别已取消任务')
+  assert.match(restoreBody, /任务不存在或已取消/, '已取消任务应提示并停留第一步')
+  // M4：恢复失败区分网络错误与任务不存在（网络错误保留 URL 供重试）
+  assert.match(restoreBody, /NETWORK_ERROR/, '应识别网络错误（api 封装 NETWORK_ERROR 错误码）')
+  assert.match(restoreBody, /恢复失败，请重试/, '网络错误应提示可重试且不误报任务不存在')
 })
 
 test('向导 URL 恢复：创建任务成功后 router.replace 写入 taskId；取消成功后清除 query', () => {
@@ -56,6 +63,14 @@ test('失败可见性：digest 失配呈现三选面板（.modal），确认导�
   // api 封装透传 options
   const api = read('src/v21/api.js')
   assert.match(api, /confirmImport: \(taskId, resultJson, options = \{\}\)/, 'confirmImport 封装应支持 options 透传')
+  // C1：validateResult 不抛错、digest 失配只是 checks 中 ok:false 一项——validate() 必须在
+  // 「!checks.ok 且 assets_digest 项失败」时主动打开三选面板（否则面板主流程不可达）
+  const validateBody = view.slice(view.indexOf('async validate()'), view.indexOf('async confirmImport('))
+  assert.match(
+    validateBody,
+    /!this\.checks\.ok[\s\S]*?checks\.checks\.some\(\(c\) => c\.id === 'assets_digest' && !c\.ok\)[\s\S]*?digestModal = true/,
+    'validate 校验失败分支应识别 assets_digest 失败项并置 digestModal = true'
+  )
 })
 
 test('剧集中心：外部任务区块调用新列表端点，等待中可打开向导/取消，已导入可打开剧本', () => {

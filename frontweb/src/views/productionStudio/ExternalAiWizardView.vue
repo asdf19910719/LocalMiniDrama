@@ -209,6 +209,12 @@ export default {
           this.clearTaskQuery()
           return
         }
+        // 已取消任务不可继续：提示并停留第一步
+        if (model.task.status === 'cancelled') {
+          this.restoreNotice = '任务不存在或已取消'
+          this.clearTaskQuery()
+          return
+        }
         this.taskId = taskId
         this.task = model.task
         if (model.target) {
@@ -225,6 +231,11 @@ export default {
           this.step = 'waiting'
         }
       } catch (e) {
+        // 区分网络错误与任务不存在：网络错误保留 URL 中的 taskId 供刷新重试
+        if (e && e.code === 'NETWORK_ERROR') {
+          this.restoreNotice = '恢复失败，请重试'
+          return
+        }
         this.restoreNotice = '任务不存在或已取消'
         this.clearTaskQuery()
       }
@@ -283,7 +294,12 @@ export default {
       try {
         this.checks = await v21.validateResult(this.taskId, this.resultText)
         if (!this.checks.ok) {
-          return // 校验失败：结果步就地渲染 checks 清单
+          // validateResult 不抛错：digest 失配只是 checks 中 ok:false 的一项。
+          // 就地渲染清单的同时打开三选面板（否则面板主流程不可达）。
+          if (this.checks.checks.some((c) => c.id === 'assets_digest' && !c.ok)) {
+            this.digestModal = true
+          }
+          return
         }
         this.plan = await v21.previewImport(this.taskId, this.resultText)
         this.step = 'preview'

@@ -247,6 +247,23 @@ test('frozenSnapshot：digest 失配默认仍拒绝；带标志时 preview/confi
   assert.equal(wizard.getTask(created.taskId).status, 'imported');
 });
 
+test('confirmImport：create_new 导入后回填 target_episode_id（剧集中心打开剧本 / 离页恢复依赖）', () => {
+  const { wizard } = setup();
+  const created = wizard.createPackage(1, { mode: 'create_new' });
+  const task = wizard.getTask(created.taskId);
+  assert.equal(task.targetEpisodeId, null, 'create_new 建包时尚无目标剧集');
+
+  const imported = wizard.confirmImport(created.taskId, JSON.stringify(validResult(task)));
+  const after = wizard.getTask(created.taskId);
+  assert.ok(after.targetEpisodeId, '导入后 targetEpisodeId 应回填，不得为空');
+  assert.equal(Number(after.targetEpisodeId), Number(imported.episodeId), '回填值应等于导入创建的剧集 id');
+
+  // 列表端点同步可见（剧集中心 imported 行「打开剧本」依赖 targetEpisodeId）
+  const row = wizard.listProjectTasks(1).find((t) => t.packageId === created.taskId);
+  assert.equal(Number(row.targetEpisodeId), Number(imported.episodeId));
+  assert.equal(row.status, 'imported');
+});
+
 test('frozenSnapshot：digest 匹配时该标志无副作用', () => {
   const { db, wizard } = setup();
   const created = wizard.createPackage(1, { mode: 'create_new' });
