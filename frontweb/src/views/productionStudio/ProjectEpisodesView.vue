@@ -141,7 +141,8 @@
               <button class="btn sm" @click="restoreEp(ep)"><svg><use href="#i-refresh"/></svg>恢复</button>
             </template>
             <template v-else>
-              <button v-if="ep.status !== 'blank' && (isHighlighted(ep) || ep.needsAttention)" class="btn primary sm" @click="open(ep)">继续制作</button>
+              <button v-if="ep.status === 'completed'" class="btn primary sm" @click="openCut(ep)">查看成片</button>
+              <button v-else-if="ep.status !== 'blank' && (isHighlighted(ep) || ep.needsAttention)" class="btn primary sm" @click="open(ep)">继续制作</button>
               <button v-else-if="ep.status === 'blank'" class="btn sm" @click="open(ep)">开始创建</button>
               <div class="more-wrap" style="position:relative">
                 <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
@@ -335,7 +336,7 @@ export default {
       reorderPanelOpen: false, reorderDraft: [],
       importSourceOpen: false, importSourceEp: null, importSource: null, importSourceLoading: false,
       flashId: '', importedId: '',
-      externalTasks: [], cancellingTaskId: '',
+      externalTasks: [], cancellingTaskId: '', searchTimer: null,
     }
   },
   computed: {
@@ -444,9 +445,10 @@ export default {
         },
       })
     },
+    // 搜索防抖 280ms（对齐 ProjectsView）：停止输入后再写 URL 并请求
     onSearchInput() {
-      this.writeFilterUrl()
-      this.load()
+      clearTimeout(this.searchTimer)
+      this.searchTimer = setTimeout(() => { this.writeFilterUrl(); this.load() }, 280)
     },
     applyFilters() {
       let list
@@ -552,6 +554,10 @@ export default {
     open(ep) {
       const stage = ep.stage || 'script'
       this.$router.push(`/projects/${this.projectId}/episodes/${ep.id}/${stage}`)
+    },
+    // completed 剧集的主动作：直接查看该集成片
+    openCut(ep) {
+      this.$router.push(`/projects/${this.projectId}/episodes/${ep.id}/cut`)
     },
     openImportedScript() {
       if (!this.importedId) return

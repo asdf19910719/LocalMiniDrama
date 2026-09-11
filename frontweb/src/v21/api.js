@@ -88,6 +88,8 @@ export const v21 = {
   previewNovelSplit: (projectId, body) => post(`/projects/${projectId}/episodes/import-novel/preview`, body),
   confirmNovelSplit: (projectId, body) => post(`/projects/${projectId}/episodes/import-novel/confirm`, body),
   registerSourceVideo: (projectId, body) => post(`/projects/${projectId}/episodes/source-video`, body),
+  // 归档导入真实校验（收本地 zip 路径；导入本身仍走 /api/v1/dramas/import）
+  validateArchive: (path) => post('/archive/validate', { path }),
   // 自由创作入库（复用 v1 资产库 create 端点：kind = character|scene|prop）
   addToLibrary: async (kind, body) => {
     try { return unwrap(await axios.post(`/api/v1/${kind}-library`, body)) } catch (e) { throw toError(e) }

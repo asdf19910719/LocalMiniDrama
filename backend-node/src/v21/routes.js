@@ -620,6 +620,15 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  // ---- 归档导入校验（Task 5-C）----
+  // 收 JSON { path }（本地 zip 路径）——导入本身仍走 POST /api/v1/dramas/import 的 multipart 上传，
+  // 此端点只做真实校验：404/400 硬错误 + 七项检查矩阵 + 概要指标；V1 导出版本如实标 unsupported。
+  const { createArchiveValidateService } = require('./import/archiveValidateService.js');
+  const archiveValidate = createArchiveValidateService({ db, log });
+  r.post('/archive/validate', wrap((req, res) => {
+    response.success(res, archiveValidate.validate({ path: (req.body || {}).path }));
+  }));
+
   // ---- 任务中心聚合列表（Task 1.6 / P0-2） ----
   const { createTaskCenterService } = require('./tasks/taskCenterService.js');
   const taskCenter = createTaskCenterService(db, { log });

@@ -111,7 +111,7 @@
                 </div>
               </div>
               <span class="badge" :class="migrations.journal ? journalBadgeClass(migrations.journal.status) : ''" style="margin-left:auto">
-                {{ migrations.journal ? journalStatusLabel(migrations.journal.status) : '无记录' }}
+                {{ migrations.journal ? journalStatusLabel(migrations.journal.status) : (migrationsLoading || !migrationsLoaded ? '读取中…' : '无记录') }}
               </span>
             </div>
             <template v-if="migrations.journal && migrations.journal.status === 'FAILED'">

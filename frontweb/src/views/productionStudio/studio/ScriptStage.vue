@@ -415,6 +415,10 @@ export default {
   mounted() {
     this.bindEsc(this.onEsc)
     this.load()
+    // 制作头切集守卫：向 studioSave 通道注册保存方法（StudioShell“保存并切换”调用）
+    if (this.studioSave) {
+      this.studioSave.save = () => this.saveDraft(this.draftText, this.model?.draft?.revision)
+    }
     this.keyHandler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
@@ -425,6 +429,11 @@ export default {
   },
   unmounted() {
     window.removeEventListener('keydown', this.keyHandler)
+    // 卸载时清空通道上的脏标记与保存方法，避免残留状态误触守卫
+    if (this.studioSave) {
+      this.studioSave.dirty = false
+      this.studioSave.save = null
+    }
   },
   methods: {
     // Esc 自上而下关本视图的弹层（版本比较 → AI 候选 → 确认摘要 → 历史抽屉 → AI 浮层 / 菜单）
@@ -447,6 +456,7 @@ export default {
       this.model = await v21.getScript(this.episodeId)
       this.draftText = this.model.draft ? this.model.draft.content : ''
       this.dirty = false
+      if (this.studioSave) this.studioSave.dirty = false
       this.sceneStats = await v21.getSceneStats(this.episodeId)
       this.refreshPreview()
       this.setSave(this.model.draft ? '已保存' : '更改会自动保存')
@@ -465,6 +475,7 @@ export default {
     },
     markDirty() {
       this.dirty = true
+      if (this.studioSave) this.studioSave.dirty = true
       this.setSave('有未保存修改 · Ctrl+S 立即保存')
       clearTimeout(this.timer)
       this.timer = setTimeout(() => this.saveDraft(this.draftText, this.model?.draft?.revision), 800)
@@ -532,6 +543,7 @@ export default {
           expectedRevision: expectedRevision ?? this.model?.draft?.revision ?? null,
         })
         this.dirty = false
+        if (this.studioSave) this.studioSave.dirty = false
         this.saveConflict = false
         const now = new Date()
         this.lastSavedAt = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`

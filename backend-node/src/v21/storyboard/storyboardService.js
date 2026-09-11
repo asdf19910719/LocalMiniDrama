@@ -1297,6 +1297,7 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
     const missingImages = [];
     const missingVideos = [];
     const failed = [];
+    const processing = [];
     for (const shot of shots) {
       if (!shot.image_url) missingImages.push(shot.id);
       const group = db.prepare('SELECT * FROM director_candidate_groups WHERE shot_id = ?').get(String(shot.id));
@@ -1310,10 +1311,15 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
           "SELECT id FROM async_tasks WHERE owner_type = 'storyboard_video' AND owner_id = ? AND status IN ('failed','cancelled') ORDER BY updated_at DESC LIMIT 1"
         )
         .get(String(shot.id));
-      if (!adopted && !busy && failedTask) failed.push({ shotId: shot.id, taskId: failedTask.id });
-      else if (!adopted && !busy && !hasCandidates) missingVideos.push(shot.id);
+      if (busy) {
+        // 处理中镜头（有 pending/running 视频任务）：不进 failed / missingVideos
+        processing.push(shot.id);
+        continue;
+      }
+      if (!adopted && failedTask) failed.push({ shotId: shot.id, taskId: failedTask.id });
+      else if (!adopted && !hasCandidates) missingVideos.push(shot.id);
     }
-    return { missingImages, missingVideos, failed };
+    return { missingImages, missingVideos, failed, processing };
   }
 
   /** 批量生成缺失分镜图 */

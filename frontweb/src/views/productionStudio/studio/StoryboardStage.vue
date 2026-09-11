@@ -23,6 +23,7 @@
     <div v-if="shots.length === 0" class="empty-box">
       <p class="muted">本集还没有分镜</p>
       <button class="btn primary" @click="createFromScript">从已确认剧本创建分镜</button>
+      <p class="xs muted" style="margin-top:8px">从已确认剧本创建镜头，或导入分镜结构</p>
     </div>
 
     <!-- current 未就绪（getShot 飞行期间/非法深链兜底中）不渲染依赖 current.* 的内容，避免渲染抛错 -->
@@ -158,7 +159,7 @@
               </span>
               <div class="spacer"></div>
               <button class="btn ghost sm" style="border:1px solid var(--line)" @click="openH3Sheet">
-                <svg><use href="#i-refresh"/></svg>{{ h3.draftId ? '重新生成' : '生成 H3 提示词' }}
+                <svg><use href="#i-refresh"/></svg>{{ h3.draftId ? '重新生成 H3 提示词' : '生成 H3 提示词' }}
               </button>
             </div>
             <div v-if="h3.text" style="padding:7px 10px">
@@ -203,8 +204,9 @@
             <video v-if="previewUrl" :key="previewUrl" :src="previewUrl" controls style="width:100%;height:100%;border-radius:10px;object-fit:contain;background:#000"></video>
             <div v-else style="display:flex;align-items:center;justify-content:center;height:100%" class="muted xs">点击候选载入播放器</div>
             <span v-if="previewUrl" class="dur">{{ current.duration }}s</span>
-            <span v-if="previewCandidate && previewCandidate.isAdopted" class="src badge ok" style="height:22px">候选 · 用于本镜</span>
+            <span v-if="previewCandidate && previewCandidate.isAdopted && !isCandidateStale(previewCandidate)" class="src badge ok" style="height:22px">候选 · 用于本镜</span>
             <span v-else-if="previewCandidate" class="src badge outline" style="height:22px">候选 · 预览中</span>
+            <span v-if="previewCandidate && isCandidateStale(previewCandidate)" class="src badge warn" style="height:22px">基于旧分镜图</span>
           </div>
           <div class="grp-t" style="margin:0">候选胶片条</div>
           <!-- 进行中任务（C3：异步轮询 + 取消） -->
@@ -223,8 +225,9 @@
               <div class="im" :class="c.isAdopted ? '' : 'ph'">
                 <video v-if="previewUrl === c.url && previewCandidate === c" :src="c.url" style="width:100%;height:100%;object-fit:cover"></video>
                 <span v-if="c.isAdopted" style="position:absolute;left:5px;bottom:4px" class="badge ok">采用</span>
+                <span v-if="isCandidateStale(c)" style="position:absolute;right:4px;top:4px" class="badge warn">旧图</span>
               </div>
-              <div class="cap" :class="c.isAdopted ? 'ok-t' : ''">{{ shortId(c.candidateId) }}{{ c.isAdopted ? ' · 用于本镜' : '' }}</div>
+              <div class="cap" :class="c.isAdopted ? 'ok-t' : ''">{{ shortId(c.candidateId) }}{{ c.isAdopted ? ' · 用于本镜' : '' }}{{ isCandidateStale(c) ? ' · 基于旧分镜图' : '' }}</div>
             </div>
             <p v-if="videoCandidates.length === 0" class="xs muted">尚无候选</p>
           </div>
@@ -244,12 +247,15 @@
           <span :class="{ on: trackFilter === 'all' }" @click="trackFilter = 'all'">全部 {{ completion.total }}</span>
           <span :class="{ on: trackFilter === 'missing' }" @click="trackFilter = 'missing'">未完成 {{ (completion.missing || []).length }}</span>
           <span :class="{ on: trackFilter === 'stale' }" @click="trackFilter = 'stale'">旧图 {{ (completion.staleShots || []).length }}</span>
+          <span :class="{ on: trackFilter === 'failed' }" @click="trackFilter = 'failed'">失败 {{ (trackStats.failed || []).length }}</span>
+          <span :class="{ on: trackFilter === 'processing' }" @click="trackFilter = 'processing'">处理中 {{ (trackStats.processing || []).length }}</span>
         </div>
         <div class="row" style="gap:6px">
-          <div v-for="s in visibleShots" :key="s.id" class="shot" :class="shotClass(s)" @click="selectShot(s.id)">
+          <div v-for="s in filteredShots" :key="s.id" class="shot" :class="shotClass(s)" @click="selectShot(s.id)">
             <div class="im ph"><span class="st-dot" :style="{ background: shotDotColor(s) }"></span></div>
             <div class="no" :class="shotNoClass(s)">{{ pad(s.storyboard_number ?? s.number) }}{{ shotSuffix(s) }}</div>
           </div>
+          <span v-if="filteredShots.length === 0" class="xs muted" style="padding:4px 8px">当前筛选下没有镜头</span>
         </div>
         <div class="spacer"></div>
         <button class="btn sm" @click="openCutSummary">
@@ -599,7 +605,9 @@ export default {
       references: { characters: [], props: [], scene: {} },
       segments: [], imagePrompt: { text: '', manual: false }, imageCandidates: [],
       h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0, missing: [], staleShots: [] },
+      trackStats: { failed: [], processing: [] },
       videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1,
+      staleVideoIds: [],
       activeVideoTasks: [], pollTimer: null, sheetQuote: null, sheetDemoDelay: false, notice: '',
       imgUrlOpen: false, imgUrlText: '',
       generatingImage: false, readiness: { status: 'checking' },
@@ -620,6 +628,24 @@ export default {
     visibleShots() {
       if (this.sceneFilter === 'all') return this.shots
       return this.shots.filter((s) => String(s.scene_id) === String(this.sceneFilter))
+    },
+    // 镜头轨筛选真实生效：场次筛选 ∩ 镜头状态筛选（全部/未完成/旧图/失败/处理中）
+    filteredShots() {
+      let list = this.visibleShots
+      if (this.trackFilter === 'missing') {
+        const ids = new Set((this.completion.missing || []).map(String))
+        list = list.filter((s) => ids.has(String(s.id)))
+      } else if (this.trackFilter === 'stale') {
+        const ids = new Set((this.completion.staleShots || []).map((x) => String(x.shotId)))
+        list = list.filter((s) => ids.has(String(s.id)))
+      } else if (this.trackFilter === 'failed') {
+        const ids = new Set((this.trackStats.failed || []).map((f) => String(f.shotId ?? f)))
+        list = list.filter((s) => ids.has(String(s.id)))
+      } else if (this.trackFilter === 'processing') {
+        const ids = new Set((this.trackStats.processing || []).map(String))
+        list = list.filter((s) => ids.has(String(s.id)))
+      }
+      return list
     },
     referenceChips() {
       const chars = (this.references.characters || []).map((r) => ({ name: r.name, version: r.variantId ? 'v' + r.variantId : '' }))
@@ -753,6 +779,10 @@ export default {
         try {
           this.scenes = (await v21.getScript(this.episodeId)).scenes || []
         } catch { this.scenes = [] }
+        // 镜头轨"失败/处理中"计数来源：批量预检（failed/processing），失败不阻断主列表
+        try {
+          this.trackStats = await v21.getBatchPrecheck(this.episodeId)
+        } catch { this.trackStats = { failed: [], processing: [] } }
         this.loadError = ''
         this.loaded = true
       } catch (e) {
@@ -825,6 +855,7 @@ export default {
       this.videoCandidates = detail.video.candidates
       this.previewCandidate = null
       this.previewUrl = ''
+      this.staleVideoIds = []
       const fc = detail.frameChaining
       this.frameChaining = { ...fc, stateLabel: { linked: '已衔接', linkable: '可衔接', waiting: '等待上一镜完成', none: '首镜' }[fc.state] }
       this.refreshGuard()
@@ -969,8 +1000,18 @@ export default {
     async setCurrentImage(candidate) {
       const result = await v21.setShotImageCurrent(this.currentShotId, candidate.candidateId)
       this.h3 = result.h3Draft
+      // 消费后端返回的 staleVideos：换图后基于旧图的视频候选即时标“基于旧分镜图”
+      this.staleVideoIds = Array.isArray(result.staleVideos) ? result.staleVideos : []
       await this.selectShot(this.currentShotId)
       await this.load()
+    },
+    // 候选级 stale 判定：setImageCurrent 返回的 staleVideos（候选 id）∪ 该镜在 completion.staleShots
+    // 中（getStoryboard 判定当前采用候选基于旧分镜图）
+    isCandidateStale(c) {
+      if (!c) return false
+      if ((this.staleVideoIds || []).map(String).includes(String(c.candidateId))) return true
+      const staleShots = this.completion.staleShots || []
+      return !!c.isAdopted && staleShots.some((x) => String(x.shotId) === String(this.currentShotId))
     },
     openH3Sheet() {
       // T2.5：生成/重新生成 H3 前先经确认抽屉（展示结构输入与人工草稿保护语义）
