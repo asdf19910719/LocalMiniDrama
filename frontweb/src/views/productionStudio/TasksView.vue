@@ -21,6 +21,18 @@
         <span class="tab" :class="{ on: tab === 'attention' }" @click="tab = 'attention'">需要处理<span class="cnt warn">{{ counts.attention }}</span></span>
         <span class="tab" :class="{ on: tab === 'done' }" @click="tab = 'done'">已完成<span class="cnt">{{ counts.done }}</span></span>
       </div>
+      <select v-model="typeFilter" class="input" style="width:118px; height:32px; flex:0 0 auto" aria-label="按类型筛选">
+        <option value="">全部类型</option>
+        <option value="image">图片</option>
+        <option value="video">视频</option>
+        <option value="external">外部协作</option>
+        <option value="compose">整集合成</option>
+        <option value="quick-create">自由创作</option>
+      </select>
+      <select v-model="projectFilter" class="input" style="width:140px; height:32px; flex:0 0 auto" aria-label="按项目筛选">
+        <option value="">全部项目</option>
+        <option v-for="p in projectOptions" :key="p.value" :value="p.value">{{ p.label }}</option>
+      </select>
       <div class="spacer"></div>
       <div class="input" style="width:200px; height:32px">
         <svg><use href="#i-search"/></svg>
@@ -29,7 +41,7 @@
     </div>
 
     <div class="tlist">
-      <div v-for="t in all" :key="t.id" class="card trow" :class="{ sel: selected === t.id }" @click="openDetail(t)">
+      <div v-for="t in displayedTasks" :key="t.id" class="card trow" :class="{ sel: selected === t.id }" @click="openDetail(t)">
         <div class="ic" :style="{ color: typeColor(t) }"><svg><use :href="typeIcon(t)"/></svg></div>
         <div class="tt grow"><b>{{ t.title }}</b><span>{{ taskSource(t) }}</span></div>
         <div class="stat">
@@ -42,19 +54,21 @@
         <router-link v-if="targetRoute(t)" class="btn sm" :to="targetRoute(t)" @click.stop>打开对象</router-link>
         <button class="btn sm" @click.stop="openDetail(t)">查看任务</button>
       </div>
-      <p v-if="!loadError && all.length === 0" class="muted" style="text-align:center; padding:50px 0">{{ q ? '没有匹配的任务' : '此分组暂无任务' }}</p>
-      <div class="row" style="padding:6px 4px">
+      <p v-if="!loadError && displayedTasks.length === 0" class="muted" style="text-align:center; padding:50px 0">{{ q || projectFilter ? '没有匹配的任务' : '此分组暂无任务' }}</p>
+      <div class="row" style="padding:8px 4px; align-items:center; gap:10px">
+        <span class="xs muted">共 {{ total }} 项<template v-if="projectFilter"> · 当前筛选显示 {{ displayedTasks.length }} 项</template></span>
+        <button v-if="hasMore" class="btn sm" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '加载中…' : '加载更多' }}</button>
         <span class="xs muted">百分比仅来自任务可信进度；无法确认时只显示状态与已用时间。</span>
       </div>
     </div>
 
     <!-- 任务详情抽屉 -->
-    <div v-if="detail" class="scrim" style="z-index:80" @click="detail = null"></div>
+    <div v-if="detail" class="scrim" style="z-index:80" @click="closeDetail"></div>
     <aside v-if="detail" class="drawer narrow" style="z-index:90">
       <div class="drawer-h">
         <h3 style="font-size:14px">{{ detail.title }}</h3>
         <span class="badge" :class="statusBadgeClass(detail.status)">{{ statusLabel(detail.status) }}</span>
-        <button class="icon-btn" @click="detail = null"><svg><use href="#i-close"/></svg></button>
+        <button class="icon-btn" @click="closeDetail"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
         <div class="sec-t">生命周期</div>
@@ -68,11 +82,40 @@
           <div v-if="detail.status === 'failed'" class="tl-item" style="color:var(--danger)">失败<span class="t">{{ detail.statusMessage || '' }}</span></div>
           <div v-if="detail.status === 'cancelled'" class="tl-item" style="color:var(--muted)">已取消（记录保留）</div>
         </div>
+
         <div class="divider"></div>
-        <div class="kv"><span class="k">任务类型</span><span class="v">{{ typeLabel(detail.taskType) }}</span></div>
+        <div class="sec-t">输入快照</div>
+        <div class="row" style="flex-wrap:wrap; gap:6px; margin-bottom:6px">
+          <span class="chip">{{ typeShortLabel(detail.taskType) }}</span>
+          <span class="chip">{{ sourceTagLabel(detail.source) }}</span>
+          <span class="chip mono">{{ detail.sourceId }}</span>
+          <span v-if="detail.prompt" class="chip">{{ detail.prompt }}</span>
+        </div>
+        <p class="xs muted" style="margin:0">快照为任务中心聚合记录的输入摘要；完整生成参数在对应阶段页查看。</p>
+
+        <div class="divider"></div>
+        <div class="sec-t">Provider / 规格</div>
+        <div class="kv"><span class="k">类型</span><span class="v">{{ typeShortLabel(detail.taskType) }}</span></div>
+        <div class="kv"><span class="k">执行方式</span><span class="v">{{ sourceTagLabel(detail.source) }}</span></div>
         <div class="kv"><span class="k">对象</span><span class="v">{{ describeTarget(detail.target) || detail.sourceId }}</span></div>
         <div class="kv" v-if="detail.progress != null"><span class="k">进度</span><span class="v">{{ detail.progress }}%</span></div>
-        <div class="kv" v-if="detail.statusMessage"><span class="k">状态信息</span><span class="v" :class="{ 'danger-t': detail.status === 'failed' }">{{ detail.statusMessage }}</span></div>
+
+        <div class="divider"></div>
+        <div class="sec-t">时间与费用</div>
+        <div class="kv"><span class="k">创建时间</span><span class="v">{{ fmtFull(detail.createdAt) }}</span></div>
+        <div class="kv"><span class="k">更新时间</span><span class="v">{{ fmtFull(detail.updatedAt) }}</span></div>
+        <div class="kv" v-if="detail.completedAt"><span class="k">完成时间</span><span class="v">{{ fmtFull(detail.completedAt) }}</span></div>
+        <div class="kv"><span class="k">费用</span><span class="v">{{ costNoteText(detail) }}</span></div>
+
+        <template v-if="detail.statusMessage">
+          <div class="divider"></div>
+          <div class="sec-t">错误与恢复</div>
+          <p class="small" :class="{ 'danger-t': detail.status === 'failed' }" style="margin:0 0 8px; white-space:pre-wrap; word-break:break-word">{{ detail.statusMessage }}</p>
+          <div class="row" style="gap:8px">
+            <button v-if="failedRetryable(detail)" class="btn sm danger" @click="retryTask(detail)">按原输入重试</button>
+            <button v-else-if="detail.status === 'failed' && detail.source === 'external'" class="btn sm primary" @click="openExternalWizard(detail)">打开外部向导</button>
+          </div>
+        </template>
 
         <div class="divider"></div>
         <div class="row" style="margin-top:10px; padding:8px 11px; border:1px solid var(--line); border-radius:8px; cursor:pointer" @click="techOpen = !techOpen">
@@ -97,6 +140,8 @@
 import v21 from '../../v21/api.js'
 
 const SOURCE_LABELS = { async: '平台任务', external: '外部协作', compose: '成片合成' }
+const SOURCE_TAG_LABELS = { async: '本地任务', external: '外部任务', compose: '合成任务' }
+const TYPE_SHORT_LABELS = { image: '图片', video: '视频', external: '外部协作', compose: '合成', 'quick-create': '自由创作' }
 const STAGE_LABELS = { storyboard: '分镜阶段', cut: '成片阶段', episodes: '剧集' }
 
 export default {
@@ -107,7 +152,14 @@ export default {
       counts: { in_progress: 0, attention: 0, done: 0 },
       tab: 'in_progress',
       q: '',
+      typeFilter: '',
+      projectFilter: '',
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      loadingMore: false,
       detail: null,
+      selected: null,
       techOpen: false,
       lastSync: '',
       loadError: '',
@@ -116,15 +168,34 @@ export default {
       qTimer: null,
     }
   },
+  computed: {
+    hasMore() { return this.all.length < this.total },
+    // 项目筛选选项：从当前已加载 items 的 target.projectId 去重生成（客户端过滤，不新增后端）
+    projectOptions() {
+      const seen = new Map()
+      for (const t of this.all) {
+        const pid = t.target?.projectId
+        if (pid == null || seen.has(String(pid))) continue
+        seen.set(String(pid), `项目 #${pid}`)
+      }
+      return Array.from(seen, ([value, label]) => ({ value, label }))
+    },
+    displayedTasks() {
+      if (!this.projectFilter) return this.all
+      return this.all.filter((t) => String(t.target?.projectId) === this.projectFilter)
+    },
+  },
   watch: {
     tab() { this.load() },
+    typeFilter() { this.load() },
     q() {
       clearTimeout(this.qTimer)
       this.qTimer = setTimeout(() => this.load(), 350)
     },
   },
-  mounted() {
-    this.load()
+  async mounted() {
+    await this.load()
+    await this.consumeFocusQuery()
     this.timer = setInterval(() => this.load(), 5000)
   },
   unmounted() {
@@ -132,11 +203,16 @@ export default {
     clearTimeout(this.qTimer)
   },
   methods: {
+    buildListParams(page) {
+      const params = { status: this.tab, page, page_size: this.pageSize }
+      if (this.typeFilter) params.type = this.typeFilter
+      if (this.q.trim()) params.q = this.q.trim()
+      return params
+    },
     async load() {
       this.loading = true
       try {
-        const params = { status: this.tab, page: 1, page_size: 100 }
-        if (this.q.trim()) params.q = this.q.trim()
+        const params = this.buildListParams(1)
         // 当页签数据 + 三个页签的 total（page_size=1 只取计数）
         const [data, inProgress, attention, done] = await Promise.all([
           v21.listV21Tasks(params),
@@ -145,6 +221,8 @@ export default {
           v21.listV21Tasks({ status: 'done', page: 1, page_size: 1 }),
         ])
         this.all = Array.isArray(data?.items) ? data.items : []
+        this.page = 1
+        this.total = Number(data?.total) || 0
         this.counts = {
           in_progress: inProgress?.total ?? 0,
           attention: attention?.total ?? 0,
@@ -162,6 +240,44 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+    async loadMore() {
+      if (this.loadingMore || this.all.length >= this.total) return
+      this.loadingMore = true
+      try {
+        const data = await v21.listV21Tasks(this.buildListParams(this.page + 1))
+        const items = Array.isArray(data?.items) ? data.items : []
+        this.all = this.all.concat(items)
+        this.page += 1
+        this.total = Number(data?.total) || this.total
+      } catch (e) {
+        this.loadError = e?.message || '加载更多失败，请稍后重试'
+      } finally {
+        this.loadingMore = false
+      }
+    },
+    // §24.10 深链：?focus=<任务id> 自动切到所在页签并打开详情，随后清除 query
+    async consumeFocusQuery() {
+      const focusId = this.$route?.query?.focus
+      if (!focusId) return
+      try {
+        const data = await v21.listV21Tasks({ page: 1, page_size: 100 })
+        const items = Array.isArray(data?.items) ? data.items : []
+        const target = items.find((t) => t.id === focusId)
+        if (target) {
+          this.tab = this.statusTab(target.status)
+          this.openDetail(target)
+        }
+      } catch (e) {
+        // 深链定位失败不阻塞任务中心本身，仍清除 query
+      } finally {
+        this.$router.replace({ query: {} })
+      }
+    },
+    statusTab(status) {
+      if (['failed', 'waiting_external'].includes(status)) return 'attention'
+      if (['completed', 'cancelled', 'exported', 'imported'].includes(status)) return 'done'
+      return 'in_progress'
     },
     taskSource(t) {
       const parts = [SOURCE_LABELS[t.source] || t.source]
@@ -187,6 +303,17 @@ export default {
         image: '图片生成', video: '视频生成', 'quick-create': '自由创作',
         external: '外部 AI 制作包', compose: '整集合成',
       }[type] || type
+    },
+    typeShortLabel(type) {
+      return TYPE_SHORT_LABELS[type] || this.typeLabel(type)
+    },
+    sourceTagLabel(source) {
+      return SOURCE_TAG_LABELS[source] || source
+    },
+    costNoteText(task) {
+      if (task.costNote) return task.costNote
+      if (task.source === 'external') return '费用由外部服务结算'
+      return '本地执行 · 不产生 API 费用'
     },
     typeIcon(t) {
       if (t.taskType === 'external') return '#i-spark'
@@ -246,11 +373,29 @@ export default {
     retryable(task) {
       return task.source === 'async' && ['failed', 'cancelled'].includes(task.status)
     },
+    // 错误与恢复区的内联重试：failed 的 async/compose 任务按原输入重试
+    failedRetryable(task) {
+      return task.status === 'failed' && ['async', 'compose'].includes(task.source)
+    },
     fmtTime(t) { return t ? String(t).slice(11, 19) : '' },
     fmtFull(t) { return t ? String(t).replace('T', ' ').slice(5, 19) : '' },
     openDetail(t) {
       this.detail = t
+      this.selected = t.id
       this.techOpen = false
+    },
+    closeDetail() {
+      this.detail = null
+      this.selected = null
+    },
+    openExternalWizard(task) {
+      const pid = task?.target?.projectId
+      if (!pid) {
+        window.alert('缺少项目信息，无法打开外部向导')
+        return
+      }
+      // 带 taskId 让外部 AI 向导直接恢复到该任务
+      this.$router.push(`/projects/${pid}/episodes/external-ai?taskId=${task.sourceId}`)
     },
     async cancelTask(task) {
       // 本期仅外部协作任务支持在任务中心直接取消；其余类型给说明性提示（到对应阶段页操作）
@@ -261,7 +406,7 @@ export default {
       if (!window.confirm('确认取消该外部 AI 任务？取消后记录保留。')) return
       try {
         await v21.cancelExternalTask(task.sourceId)
-        this.detail = null
+        this.closeDetail()
         await this.load()
       } catch (e) {
         window.alert(e?.message || '取消失败，请稍后重试')
@@ -270,7 +415,7 @@ export default {
     async retryTask(task) {
       try {
         await v21.retryVideoTask(task.sourceId)
-        this.detail = null
+        this.closeDetail()
         await this.load()
       } catch (e) {
         window.alert(e?.message || '该任务类型暂不支持自动重试，请在原页面按原输入重新提交')
@@ -306,4 +451,5 @@ export default {
 .tl-item .t { color: var(--muted); font-size: 11px; margin-left: 8px; }
 .mono { font-family: Consolas, monospace; }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
+.tfilter select.input { padding: 0 8px; }
 </style>
