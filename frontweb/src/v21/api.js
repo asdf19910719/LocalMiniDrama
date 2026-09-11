@@ -45,6 +45,8 @@ export const v21 = {
   workspaceMigrate: (dir, confirmText) => post('/datatools/workspace/migrate', { dir, confirmText }),
   // 目录状态只读探测（设置页目录行专用；与 workspaceCheck 分离——不创建目录，返回 exists/writable/freeBytes/error）
   dirStatus: () => get('/datatools/dirs/status'),
+  // 迁移与恢复记录（真实 migration journal + 备份目录扫描，只读）
+  migrations: () => get('/datatools/migrations'),
   // 手动备份（真实执行 backupService.createBackup）与备份目录统计
   runBackup: () => post('/datatools/backup/run'),
   backupStats: () => get('/datatools/backup/stats'),

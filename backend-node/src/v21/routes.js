@@ -707,6 +707,12 @@ function createV21Router({ db, cfg, log }) {
   r.get('/datatools/dirs/status', wrap((req, res) => {
     response.success(res, dirStatus.getDirStatus());
   }));
+  // 迁移与恢复记录（Task 4.4）：真实 migration journal + 备份目录扫描（只读；解析同 backupOpsService）
+  const { createMigrationRecordsService } = require('./datatools/migrationRecordsService.js');
+  const migrationRecords = createMigrationRecordsService({ log, dbPath: cfg?.database?.path || null });
+  r.get('/datatools/migrations', wrap((req, res) => {
+    response.success(res, migrationRecords.list());
+  }));
 
   return r;
 }
