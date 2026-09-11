@@ -43,7 +43,7 @@
         </div>
         <span class="chip">{{ completion.adopted }}/{{ completion.total }} 已采用<span class="v" v-if="completion.missing?.length"> · {{ completion.missing.length }} 待生成</span><span class="v" v-if="completion.staleShots?.length"> · {{ completion.staleShots.length }} 旧图</span></span>
         <div class="spacer"></div>
-        <button class="btn" @click="batchOpen = true"><svg><use href="#i-layers"/></svg>批量生成</button>
+        <button class="btn" @click="openBatch"><svg><use href="#i-layers"/></svg>批量生成</button>
         <div class="more-wrap">
           <button class="btn ghost" style="border:1px solid var(--line)" @click="moreOpen = !moreOpen">更新分镜结构 / 导入 / 导出<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
           <div v-if="moreOpen" class="card more-pop" @click="moreOpen = false">
@@ -106,7 +106,7 @@
           <div class="row" style="gap:6px; flex-wrap:nowrap">
             <span v-for="(chip, i) in referenceChips" :key="i" class="chip"><span class="at">@图片{{ i + 1 }}</span>{{ chip.name }}<span class="v" v-if="chip.version">{{ chip.version }}</span></span>
             <div class="spacer"></div>
-            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="refManageOpen = true">管理镜头引用</button>
+            <button class="btn ghost sm" style="border:1px solid var(--line)" @click="openRefManage">管理镜头引用</button>
           </div>
 
           <div v-for="(seg, i) in segments" :key="seg.id" class="seg-card">
@@ -370,16 +370,16 @@
       </div>
       <div class="drawer-b" style="overflow:auto">
         <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-image"/></svg></span>
-          <div><b style="font-size:13px">生成缺失分镜图</b><div class="vm">{{ batch.missingImages.length }} 个镜头缺当前图</div></div>
-          <div class="acts"><button class="btn sm" :disabled="!batch.missingImages.length || busy" @click="runBatch('missing-images')">执行</button></div>
+          <div><b style="font-size:13px">生成缺失分镜图</b><div class="vm">{{ (batch.missingImages || []).length }} 个镜头缺当前图</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!(batch.missingImages || []).length || busy" @click="runBatch('missing-images')">执行</button></div>
         </div>
         <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-film"/></svg></span>
-          <div><b style="font-size:13px">生成缺失镜头视频</b><div class="vm">{{ batch.missingVideos.length }} 个镜头未生成（H3 就绪才可执行）</div></div>
-          <div class="acts"><button class="btn sm" :disabled="!batch.missingVideos.length || busy" @click="runBatch('missing-videos')">执行</button></div>
+          <div><b style="font-size:13px">生成缺失镜头视频</b><div class="vm">{{ (batch.missingVideos || []).length }} 个镜头未生成（H3 就绪才可执行）</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!(batch.missingVideos || []).length || busy" @click="runBatch('missing-videos')">执行</button></div>
         </div>
         <div class="v-row"><span class="vn"><svg style="width:15px;height:15px"><use href="#i-refresh"/></svg></span>
-          <div><b style="font-size:13px">重试失败任务</b><div class="vm">{{ batch.failed.length }} 个失败/取消任务可按原输入重试</div></div>
-          <div class="acts"><button class="btn sm" :disabled="!batch.failed.length || busy" @click="runBatch('retry-failed')">执行</button></div>
+          <div><b style="font-size:13px">重试失败任务</b><div class="vm">{{ (batch.failed || []).length }} 个失败/取消任务可按原输入重试</div></div>
+          <div class="acts"><button class="btn sm" :disabled="!(batch.failed || []).length || busy" @click="runBatch('retry-failed')">执行</button></div>
         </div>
         <div v-if="batchResult" class="card pad" style="padding:11px 12px">
           <b style="font-size:12.5px">执行结果 · {{ batchResult.action }}</b>
@@ -416,10 +416,11 @@
         </div>
         <div class="divider"></div>
         <div class="grp-t">从项目素材添加</div>
-        <div v-for="a in assetPool" :key="a.assetType + a.id" class="ref-row">
+        <div v-for="a in addableAssets" :key="a.assetType + a.id" class="ref-row">
           <span class="mini ph"></span><b>{{ a.name }}</b>
           <button class="btn sm ghost" style="border:1px solid var(--line); margin-left:auto" @click="addRef(a)">添加</button>
         </div>
+        <p v-if="!addableAssets.length" class="xs muted" style="padding:2px 6px">没有可添加的素材（已在本镜引用或未就绪的素材不显示）</p>
       </div>
       <div class="drawer-f"><span class="muted xs">增删即时重排 @槽位并令 H3 标记「引用已变化」</span></div>
     </aside>
@@ -492,7 +493,8 @@ export default {
       imgUrlOpen: false, imgUrlText: '',
       generatingImage: false, readiness: { status: 'checking' },
       frameChaining: { state: 'none', stateLabel: '首镜' },
-      trackFilter: 'all', moreOpen: false, batchOpen: false, batch: {}, batchResult: null, busy: false,
+      trackFilter: 'all', moreOpen: false, batchOpen: false,
+      batch: { missingImages: [], missingVideos: [], failed: [] }, batchResult: null, busy: false,
       diffOpen: false, diffLoading: false, diffApplying: false, diff: null, diffSkips: {},
       refManageOpen: false, assetPool: [],
       assetPreviewOpen: false, assetPreview: null, assetPreviewRefIndex: -1,
@@ -509,6 +511,17 @@ export default {
       const chars = (this.references.characters || []).map((r) => ({ name: r.name, version: r.variantId ? 'v' + r.variantId : '' }))
       const props = (this.references.props || []).map((r) => ({ name: r.name, version: '' }))
       return [...chars, ...props]
+    },
+    referencedAssetIds() {
+      const chars = (this.references.characters || []).map((r) => String(r.assetId))
+      const props = (this.references.props || []).map((r) => String(r.assetId))
+      return new Set([...chars, ...props])
+    },
+    // 素材池：仅角色/道具（场景为结构性引用不可添加），且过滤已在本镜引用中的素材
+    addableAssets() {
+      return (this.assetPool || []).filter(
+        (a) => (a.assetType === 'character' || a.assetType === 'prop') && !a.blocked && !this.referencedAssetIds.has(String(a.id))
+      )
     },
     readinessText() {
       return {
@@ -687,8 +700,13 @@ export default {
       this.segments = result.segments
     },
     async move(seg, direction) {
-      const result = await v21.moveSegment(this.currentShotId, seg.id, direction)
-      this.segments = result.segments
+      // B3：direction 与后端 storyboardService.moveSegment 语义一致（'up' → seq-1，'down' → seq+1；越界返回 400）
+      try {
+        const result = await v21.moveSegment(this.currentShotId, seg.id, direction)
+        this.segments = result.segments
+      } catch (e) {
+        this.notice = e.message || '移动时段失败'
+      }
     },
     async saveImagePrompt() {
       const result = await v21.editImagePrompt(this.currentShotId, this.imagePrompt.text)
@@ -855,9 +873,15 @@ export default {
       if (next >= 0 && next < list.length) this.selectShot(list[next].id)
     },
     async openBatch() {
-      this.batch = await v21.getBatchPrecheck(this.episodeId)
-      this.batchResult = null
-      this.batchOpen = true
+      // B1：先拉预检数据再开门；失败时 notice 提示且不打开抽屉
+      try {
+        const precheck = await v21.getBatchPrecheck(this.episodeId)
+        this.batch = { missingImages: [], missingVideos: [], failed: [], ...precheck }
+        this.batchResult = null
+        this.batchOpen = true
+      } catch (e) {
+        this.notice = e.message || '批量预检失败'
+      }
     },
     async runBatch(action) {
       this.busy = true
@@ -872,9 +896,14 @@ export default {
       }
     },
     async openRefManage() {
-      const data = await v21.listAssets(this.projectId, { type: 'all' })
-      this.assetPool = (data.items || []).filter((a) => !a.blocked)
-      this.refManageOpen = true
+      // B2：先拉项目素材池再开门；失败时 notice 提示且不打开抽屉
+      try {
+        const data = await v21.listAssets(this.projectId, { type: 'all' })
+        this.assetPool = data.items || []
+        this.refManageOpen = true
+      } catch (e) {
+        this.notice = e.message || '加载素材池失败'
+      }
     },
     async addRef(a) {
       try {

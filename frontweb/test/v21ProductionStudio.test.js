@@ -62,6 +62,41 @@ test('分镜页：五区要素与生成前联合检查', () => {
   }
 })
 
+test('分镜页交互修复：批量/引用按钮走加载函数，时段移动错误呈现（B1/B2/B3）', () => {
+  const view = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  // B1：批量生成按钮必须先走 openBatch 预检（直接置 batchOpen = true 会因 batch 为空渲染崩溃）
+  assert.match(view, /@click="openBatch"/, '批量生成按钮应绑定 openBatch')
+  assert.doesNotMatch(view, /@click="batchOpen = true"/, '批量生成按钮不得绕过 openBatch 直接开门')
+  const openBatch = view.match(/async openBatch\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(openBatch, 'openBatch 方法存在')
+  assert.match(openBatch[0], /getBatchPrecheck/, 'openBatch 应先拉批量预检数据')
+  assert.match(openBatch[0], /batchOpen = true/, 'openBatch 拉到数据后才开门')
+  assert.match(openBatch[0], /catch/, 'openBatch 加载失败应有 catch 兜底')
+  // 抽屉模板对 batch 字段做防御（任何时序下不渲染崩溃），并展示预检计数
+  assert.match(view, /\(batch\.missingImages \|\| \[\]\)\.length/, '缺失分镜图计数应做空值防御')
+  assert.match(view, /\(batch\.missingVideos \|\| \[\]\)\.length/, '缺失视频计数应做空值防御')
+  assert.match(view, /\(batch\.failed \|\| \[\]\)\.length/, '失败任务计数应做空值防御')
+  // B2：管理镜头引用按钮必须先走 openRefManage 拉素材池
+  assert.match(view, /@click="openRefManage"/, '管理镜头引用按钮应绑定 openRefManage')
+  assert.doesNotMatch(view, /@click="refManageOpen = true"/, '引用按钮不得绕过 openRefManage 直接开门')
+  const openRefManage = view.match(/async openRefManage\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(openRefManage, 'openRefManage 方法存在')
+  assert.match(openRefManage[0], /listAssets/, 'openRefManage 应先拉项目素材池')
+  assert.match(openRefManage[0], /catch/, 'openRefManage 加载失败应有 catch 兜底')
+  // 素材池过滤已在本镜引用中的素材（对照 references），添加/移除后随之刷新
+  assert.match(view, /addableAssets/, '素材池应使用过滤后的 addableAssets')
+  const addable = view.match(/addableAssets\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(addable, 'addableAssets 计算属性存在')
+  assert.match(addable[0], /referencedAssetIds/, '素材池应排除已在本镜引用中的素材')
+  assert.match(addable[0], /blocked/, '素材池应排除未就绪（blocked）素材')
+  // B3：时段上移/下移失败（如边界越界 400）须经 catch 呈现到 notice
+  const moveFn = view.match(/async move\(seg, direction\) \{[\s\S]*?\n    \},/)
+  assert.ok(moveFn, 'move 方法存在')
+  assert.match(moveFn[0], /v21\.moveSegment\(this\.currentShotId, seg\.id, direction\)/, 'move 应调用 moveSegment 封装')
+  assert.match(moveFn[0], /catch/, 'moveSegment 失败应有 catch')
+  assert.match(moveFn[0], /this\.notice = /, 'moveSegment 失败应呈现到 notice 条')
+})
+
 test('成片页：审片+合片单屏；门禁禁用可解释；导出 MP4/SRT', () => {
   const view = read('src/views/productionStudio/studio/CutStage.vue')
   for (const keyword of ['生成成片', '连续播放', '回分镜修复', '导出 MP4', '导出 SRT', '成片设置']) {
