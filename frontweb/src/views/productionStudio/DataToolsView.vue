@@ -18,7 +18,7 @@
 
       <div class="grow" style="min-width:0">
         <!-- 完整性检查 -->
-        <div v-else-if="active === 'integrity'" class="card pad">
+        <div v-if="active === 'integrity'" class="card pad">
           <div class="row" style="margin-bottom:12px"><b style="font-size:14px">完整性检查</b><div class="spacer"></div>
             <button class="btn" :disabled="scanning" @click="runCheck">{{ scanning ? '正在检查…' : '开始检查' }}</button>
           </div>
