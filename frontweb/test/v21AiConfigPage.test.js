@@ -20,7 +20,7 @@ test('api 客户端：AI 配置聚合三端点与 V1 复用封装齐备', () => 
   assert.match(api, /getImageGenerationSettings/, 'api：ChatGPT 网页配置真实状态来源')
 })
 
-test('① Provider 卡有编辑/测试连接；编辑抽屉密钥留空=不修改（api_key 仅在输入非空时进入请求体）', () => {
+test('① Provider 卡有编辑/测试连接；编辑抽屉密钥留空=不修改（api_key 仅在输入非空时进入请求体）；hint 经 toError 可达 UI', async () => {
   const view = read('src/views/productionStudio/AiConfigV21View.vue')
   assert.match(view, /测试连接/, '每张 Provider 卡应有测试连接操作')
   assert.match(view, /编辑/, '每张 Provider 卡应有编辑操作')
@@ -30,7 +30,22 @@ test('① Provider 卡有编辑/测试连接；编辑抽屉密钥留空=不修�
   assert.match(view, /testProviderConnection/, '测试连接应调用 V2.1 测试端点（密钥只在服务端参与）')
   assert.match(view, /密钥已写入本机安全存储/, '保存密钥成功后应提示密钥落点')
   assert.match(view, /testResult|testState/, '测试结果应就地呈现（成功/失败原因与建议）')
-  assert.match(view, /hint/, '失败应呈现恢复建议')
+  assert.match(view, /建议：\{\{ testState\[p\.id\]\.hint \}\}/, '失败块应渲染恢复建议')
+
+  // 行为断言：后端错误响应 error.hint（恢复建议）必须经 toError 保留，否则到不了 UI（评审修复）
+  const { toError } = await import('../src/v21/api.js')
+  const withHint = toError({
+    response: {
+      status: 400,
+      data: { error: { code: 'CONNECTION_TEST_FAILED', message: '连接测试失败: API Key 无效 (401)', hint: '请检查 API Key 是否正确、是否已过期' } },
+    },
+  })
+  assert.equal(withHint.code, 'CONNECTION_TEST_FAILED')
+  assert.equal(withHint.status, 400)
+  assert.equal(withHint.message, '连接测试失败: API Key 无效 (401)')
+  assert.equal(withHint.hint, '请检查 API Key 是否正确、是否已过期', 'error.hint 必须透传（否则恢复建议到不了 UI）')
+  assert.equal(toError(new Error('boom')).hint, '', '无 hint 的错误应以空串兜底')
+  assert.equal(toError(new Error('boom')).code, 'NETWORK_ERROR')
 })
 
 test('② 默认生图通道区块：全局默认 + 项目默认，设为默认调 PUT image-default 并刷新', () => {

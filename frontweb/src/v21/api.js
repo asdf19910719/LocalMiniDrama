@@ -7,13 +7,16 @@ function unwrap(res) {
   return res.data && res.data.data !== undefined ? res.data.data : res.data
 }
 
-function toError(err) {
+// 导出供测试做行为断言；hint 为后端错误响应中的恢复建议（§12.3），必须透传到 UI
+export function toError(err) {
   const code = err?.response?.data?.error?.code || 'NETWORK_ERROR'
   const message = err?.response?.data?.error?.message || err?.message || '请求失败'
   const status = err?.response?.status || 0
+  const hint = err?.response?.data?.error?.hint || ''
   const error = new Error(message)
   error.code = code
   error.status = status
+  error.hint = hint
   return error
 }
 
