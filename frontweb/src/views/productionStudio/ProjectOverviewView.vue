@@ -11,14 +11,27 @@
       <div class="spacer"></div>
       <div class="more-wrap">
         <button class="btn ghost" @click="opsOpen = !opsOpen"><svg><use href="#i-more"/></svg>项目操作</button>
-        <div v-if="opsOpen" class="card more-pop" @click="opsOpen = false">
-          <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="$router.push('/projects/import-archive')">从备份恢复（导入归档）</button>
+        <div v-if="opsOpen" class="card more-pop">
+          <button class="btn ghost sm" style="width:100%;justify-content:flex-start" :disabled="exporting" @click="exportBackup">{{ exporting ? '正在导出…' : '导出项目备份' }}</button>
+          <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="opsOpen = false; $router.push('/settings/data-tools')">高级数据工具</button>
+          <div class="more-sep"></div>
+          <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="$router.push('/projects/import-archive')">从归档导入（创建新项目）</button>
+          <div class="xs muted more-note">归档导入不会覆盖现有项目；项目内恢复需在高级数据工具处理</div>
+          <div class="more-sep"></div>
           <button class="btn ghost sm danger" style="width:100%;justify-content:flex-start" @click="deleteProject">移入回收站</button>
+          <div v-if="opsError" class="notice-strip danger xs" style="margin:6px">{{ opsError }}</div>
         </div>
       </div>
       <button class="btn" @click="editOpen = true"><svg><use href="#i-pencil"/></svg>编辑项目</button>
     </header>
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
+
+      <!-- 加载失败（不伪装） -->
+      <div class="card pad" v-if="loadError" style="display:flex; align-items:center; gap:12px">
+        <span style="color:var(--danger)">项目信息加载失败：{{ loadError }}</span>
+        <div class="spacer"></div>
+        <button class="btn" @click="load">重试</button>
+      </div>
 
       <!-- Hero -->
       <div class="card hero" v-if="overview">
@@ -67,15 +80,23 @@
         </div>
       </div>
 
-      <!-- 四阶段项目级汇总 -->
+      <!-- 四阶段项目级汇总（点击进入剧集页并携带阶段筛选） -->
       <div class="grid-4" v-if="overview">
-        <div v-for="(st, key) in overview.stageSummary || {}" :key="key" class="card stage-card">
+        <div v-for="(st, key) in overview.stageSummary || {}" :key="key" class="card stage-card" @click="goStage(key)">
           <div class="head"><svg><use :href="stageIcon(key)"/></svg><b>{{ stageLabel(key) }}</b><span class="muted xs">{{ overview.hero.episodeCount }} 集</span></div>
           <div class="srow"><span class="k"><span class="dot" style="background:var(--ok)"></span>已确认</span><span>{{ st.approved }} 集</span></div>
           <div class="srow"><span class="k"><span class="dot" style="background:var(--info)"></span>制作中</span><span>{{ st.inProgress }} 集</span></div>
           <div class="srow"><span class="k"><span class="dot" style="background:var(--warn)"></span>需处理</span><span>{{ st.needsAttention }} 集</span></div>
           <div class="srow"><span class="k"><span class="dot" style="background:var(--neutral)"></span>未开始</span><span>{{ st.notStarted }} 集</span></div>
         </div>
+      </div>
+
+      <!-- 项目素材摘要（assetsAggregate 聚合） -->
+      <div class="card pad assets-summary" v-if="overview && overview.assetsAggregate">
+        <b style="font-size:13.5px">项目素材</b>
+        <span class="muted small">{{ overview.assetsAggregate.objectCount }} 个对象 · {{ overview.assetsAggregate.missingImageCount }} 个缺少当前图</span>
+        <div class="spacer"></div>
+        <span class="act" @click="$router.push(`/projects/${projectId}/assets`)">打开项目素材</span>
       </div>
 
       <!-- 项目画面风格 -->
@@ -87,6 +108,7 @@
         </div>
         <div class="col" style="gap:8px">
           <button class="btn" @click="openStyleModal">更换风格</button>
+          <button class="btn ghost" @click="openStyleDrawer">查看风格</button>
         </div>
       </div>
     </div>
@@ -119,37 +141,102 @@
       </div>
     </aside>
 
-    <!-- 风格选择 Modal（17） -->
+    <!-- 查看风格抽屉（只读：来源/视觉规则/使用口径/版本记录） -->
+    <div v-if="styleDrawerOpen" class="scrim" style="z-index:80" @click="styleDrawerOpen = false"></div>
+    <aside v-if="styleDrawerOpen" class="drawer narrow" style="z-index:90">
+      <div class="drawer-h">
+        <h3>查看风格</h3>
+        <button class="icon-btn" @click="styleDrawerOpen = false"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div class="col" style="gap:16px">
+          <div class="col" style="gap:4px">
+            <span class="xs muted">当前风格</span>
+            <div class="row" style="gap:8px">
+              <b style="font-size:15px">{{ currentStyle ? currentStyle.labelZh : (overview.style.styleId || '未设置') }}</b>
+              <span class="badge">{{ overview.style.styleId }}</span>
+            </div>
+          </div>
+          <div class="col" style="gap:4px">
+            <span class="xs muted">视觉规则</span>
+            <div v-if="currentStyle" class="small" style="line-height:1.6">{{ currentStyle.descriptionZh }}</div>
+            <div v-else class="small muted">风格目录中暂无该风格的详细描述</div>
+          </div>
+          <div class="col" style="gap:4px">
+            <span class="xs muted">使用与影响范围</span>
+            <div class="small" style="line-height:1.6">项目内未来生成默认使用该风格；更换风格不会自动重新生成已有素材。</div>
+          </div>
+          <div class="col" style="gap:4px">
+            <span class="xs muted">版本记录</span>
+            <div class="small">当前版本 v{{ currentStyle ? currentStyle.version : '?' }}</div>
+            <div class="xs muted">版本历史暂未记录</div>
+          </div>
+        </div>
+      </div>
+      <div class="drawer-f">
+        <div class="spacer"></div>
+        <button class="btn primary" @click="styleDrawerOpen = false">关闭</button>
+      </div>
+    </aside>
+
+    <!-- 更换风格 Modal（17）：选择 → 影响确认 → 应用 -->
     <div v-if="styleOpen" class="scrim" style="z-index:80" @click="styleOpen = false"></div>
     <div v-if="styleOpen" class="modal-wrap" style="z-index:90">
       <div class="modal" style="width:880px">
         <div class="modal-h">
           <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-palette"/></svg>
-          <h3>更换画面风格</h3>
+          <h3>{{ styleStep === 'confirm' ? '确认更换画面风格' : '更换画面风格' }}</h3>
           <button class="icon-btn" @click="styleOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b" style="overflow:hidden">
-          <div class="tabs" style="margin-bottom:14px">
-            <span class="tab on">预设风格</span>
-            <span class="tab">我的风格</span>
-            <span class="tab">自定义风格</span>
-          </div>
-          <div class="input" style="width:280px; margin-bottom:12px">
-            <svg><use href="#i-search"/></svg>
-            <input v-model="styleQuery" placeholder="搜索风格" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13px" @input="loadStyles">
-          </div>
-          <div class="style-grid">
-            <div v-for="s in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
-              <div class="ph" style="height:64px; border-radius:7px"></div>
-              <b style="font-size:12.5px; display:block; margin-top:7px">{{ s.labelZh || s.label_zh || s.id }}</b>
-              <span class="xs muted ellipsis" style="display:block">{{ s.descriptionZh || s.description_zh || '' }}</span>
+          <template v-if="styleStep === 'select'">
+            <div class="tabs" style="margin-bottom:8px">
+              <span class="tab" :class="{ on: styleTab === 'preset' }" @click="switchStyleTab('preset')">预设风格</span>
+              <span class="tab" :class="{ on: styleTab === 'mine' }" @click="switchStyleTab('mine')">我的风格</span>
+              <span class="tab disabled">自定义风格</span>
             </div>
-          </div>
-          <div class="xs muted" style="margin-top:12px">应用风格只影响之后的新生成，不会改动现有素材与成片。</div>
+            <div class="xs muted" style="margin-bottom:10px">「自定义风格」需安装自定义风格目录后开放</div>
+            <div class="input" style="width:280px; margin-bottom:12px">
+              <svg><use href="#i-search"/></svg>
+              <input v-model="styleQuery" placeholder="搜索风格" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13px" @input="loadStyles()">
+            </div>
+            <div class="style-grid">
+              <div v-for="s in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
+                <div class="ph" style="height:64px; border-radius:7px"></div>
+                <b style="font-size:12.5px; display:block; margin-top:7px">{{ s.labelZh || s.label_zh || s.id }}</b>
+                <span class="xs muted ellipsis" style="display:block">{{ s.descriptionZh || s.description_zh || '' }}</span>
+              </div>
+            </div>
+            <p v-if="!styleLoading && !styles.length" class="xs muted" style="margin-top:10px">{{ styleTab === 'mine' ? '还没有自定义风格' : '没有匹配的风格' }}</p>
+            <div class="xs muted" style="margin-top:12px">应用风格只影响之后的新生成，不会改动现有素材与成片。</div>
+          </template>
+          <template v-else>
+            <div class="col" style="gap:14px">
+              <div class="card pad" style="display:flex; align-items:center; gap:10px">
+                <svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-palette"/></svg>
+                <b>{{ selectedStyleName }}</b>
+                <span class="badge">{{ selectedStyleId }}</span>
+              </div>
+              <div class="col" style="gap:8px">
+                <div class="row" style="gap:10px"><span class="badge info">1</span><span class="small">确认后创建新风格版本</span></div>
+                <div class="row" style="gap:10px"><span class="badge info">2</span><span class="small">已引用素材与候选不自动重新生成</span></div>
+                <div class="row" style="gap:10px"><span class="badge info">3</span><span class="small">历史版本保留可回看</span></div>
+              </div>
+              <div v-if="styleError" class="notice-strip danger small">{{ styleError }}</div>
+            </div>
+          </template>
         </div>
         <div class="modal-f">
-          <button class="btn ghost" @click="styleOpen = false">取消</button>
-          <button class="btn primary" :disabled="!selectedStyleId" @click="applyStyle">应用风格</button>
+          <template v-if="styleStep === 'select'">
+            <button class="btn ghost" @click="styleOpen = false">取消</button>
+            <div class="spacer"></div>
+            <button class="btn primary" :disabled="!selectedStyleId" @click="styleStep = 'confirm'">下一步：确认影响</button>
+          </template>
+          <template v-else>
+            <button class="btn ghost" @click="styleStep = 'select'">返回</button>
+            <div class="spacer"></div>
+            <button class="btn primary" :disabled="applying" @click="confirmApplyStyle">{{ applying ? '正在应用…' : '确认更换' }}</button>
+          </template>
         </div>
       </div>
     </div>
@@ -157,15 +244,18 @@
 </template>
 
 <script>
+import axios from 'axios'
 import v21 from '@/v21/api.js'
 
 export default {
   name: 'ProjectOverviewView',
   data() {
     return {
-      overview: null, editOpen: false, editForm: {}, editDirty: false, savedForm: '',
+      overview: null, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
       styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
-      opsOpen: false,
+      styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
+      styleDrawerOpen: false,
+      opsOpen: false, opsError: '', exporting: false,
     }
   },
   computed: {
@@ -180,19 +270,58 @@ export default {
     statusBadgeClass() {
       return this.statusLabel === '需要处理' ? 'warn' : this.statusLabel === '未开始' ? 'neutral' : 'info'
     },
+    currentStyle() {
+      const id = this.overview?.style?.styleId
+      if (!id) return null
+      return (this.styles || []).find((s) => s.id === id) || null
+    },
+    selectedStyleName() {
+      const hit = (this.styles || []).find((s) => s.id === this.selectedStyleId)
+      return hit ? (hit.labelZh || hit.id) : (this.selectedStyleId || '未选择')
+    },
   },
   mounted() { this.load() },
   methods: {
     async load() {
-      this.overview = await v21.getOverview(this.projectId)
-      this.editForm = {
-        title: this.overview.hero.title,
-        genre: this.overview.hero.genre || '',
-        aspectRatio: this.overview.hero.aspectRatio || '16:9',
-        description: this.overview.hero.description || '',
+      this.loadError = ''
+      try {
+        this.overview = await v21.getOverview(this.projectId)
+        this.editForm = {
+          title: this.overview.hero.title,
+          genre: this.overview.hero.genre || '',
+          aspectRatio: this.overview.hero.aspectRatio || '16:9',
+          description: this.overview.hero.description || '',
+        }
+        this.savedForm = JSON.stringify(this.editForm)
+        this.editDirty = false
+      } catch (e) {
+        this.overview = null
+        this.loadError = e.message || '未知错误'
       }
-      this.savedForm = JSON.stringify(this.editForm)
-      this.editDirty = false
+    },
+    async exportBackup() {
+      this.exporting = true
+      this.opsError = ''
+      try {
+        // GET /api/v1/dramas/:id/export 返回 application/zip 归档，按实际字节下载为 .zip
+        const res = await axios.get(`/api/v1/dramas/${this.projectId}/export`, { responseType: 'blob' })
+        const blob = new Blob([res.data], { type: 'application/zip' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${this.overview?.hero?.title || 'project'}-backup.zip`
+        a.click()
+        URL.revokeObjectURL(url)
+        this.opsOpen = false
+      } catch (e) {
+        const status = e?.response?.status
+        this.opsError = `导出项目备份失败：${status ? `HTTP ${status}` : (e.message || '网络错误')}`
+      } finally {
+        this.exporting = false
+      }
+    },
+    goStage(key) {
+      this.$router.push({ path: `/projects/${this.projectId}/episodes`, query: { stage: key } })
     },
     stageLabel(stage) {
       return { script: '剧本', assets: '本集设定', storyboard: '分镜', cut: '成片' }[stage] || '剧本'
@@ -228,18 +357,44 @@ export default {
     },
     async openStyleModal() {
       this.styleOpen = true
+      this.styleStep = 'select'
+      this.styleError = ''
+      this.styleTab = 'preset'
       this.selectedStyleId = this.overview.style.styleId || ''
       await this.loadStyles()
     },
-    async loadStyles() {
-      try {
-        this.styles = await v21.listStyles({ query: this.styleQuery || undefined })
-      } catch { this.styles = [] }
+    switchStyleTab(tab) {
+      if (tab === 'custom') return
+      this.styleTab = tab
+      this.loadStyles()
     },
-    async applyStyle() {
-      await v21.applyStyle(this.projectId, this.selectedStyleId)
-      this.styleOpen = false
-      await this.load()
+    async loadStyles(params = {}) {
+      const query = { ...params }
+      if (this.styleQuery) query.query = this.styleQuery
+      if (!query.type && this.styleTab === 'mine') query.type = 'custom'
+      if (!query.type) query.type = 'system'
+      this.styleLoading = true
+      try {
+        this.styles = await v21.listStyles(query)
+      } catch { this.styles = [] } finally { this.styleLoading = false }
+    },
+    async openStyleDrawer() {
+      this.styleDrawerOpen = true
+      // 目录全量拉取，供 currentStyle 解析名称/描述/版本
+      try { this.styles = await v21.listStyles({}) } catch { this.styles = [] }
+    },
+    async confirmApplyStyle() {
+      this.applying = true
+      this.styleError = ''
+      try {
+        await v21.applyStyle(this.projectId, this.selectedStyleId)
+        this.styleOpen = false
+        await this.load()
+      } catch (e) {
+        this.styleError = e.message || '应用风格失败'
+      } finally {
+        this.applying = false
+      }
     },
     async deleteProject() {
       this.opsOpen = false
@@ -266,17 +421,24 @@ export default {
 .todo-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid var(--line); }
 .todo-item:last-of-type { border-bottom: none; }
 .todo-item .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12px; }
+.stage-card { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+.stage-card:hover { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .stage-card .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .stage-card .head svg { width: 15px; height: 15px; color: var(--muted); }
 .stage-card .srow { display: flex; justify-content: space-between; padding: 5px 14px; font-size: 12.5px; color: var(--text-2); }
 .stage-card .srow .k { display: flex; align-items: center; gap: 7px; color: var(--muted); }
 .stage-card .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.assets-summary { display: flex; align-items: center; gap: 10px; }
+.assets-summary .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12.5px; }
 .look-card { display: flex; gap: 18px; padding: 16px; align-items: center; }
 .ptabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
 .ptab { padding: 6px 16px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 500; }
 .more-wrap { position: relative; }
-.more-pop { position: absolute; right: 0; top: 38px; z-index: 30; padding: 6px; min-width: 210px; display: flex; flex-direction: column; gap: 2px; }
+.more-pop { position: absolute; right: 0; top: 38px; z-index: 30; padding: 6px; min-width: 240px; display: flex; flex-direction: column; gap: 2px; }
+.more-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+.more-note { padding: 2px 6px 4px; white-space: normal; line-height: 1.5; }
+.tab.disabled { opacity: .45; cursor: not-allowed; }
 .style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 380px; overflow: auto; }
 .style-item { padding: 8px; cursor: pointer; }
 .style-item.sel { border-color: var(--accent); background: var(--accent-subtle); }
