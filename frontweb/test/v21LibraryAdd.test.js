@@ -143,6 +143,29 @@ test('④ 两路径确认均最终调用 addToLibrary 且带正确 source_type /
   assert.match(chooseProject[0], /listAssets/, '选择项目后应拉取素材列表')
 })
 
+test('④b 项目路径步3接线：确认摘要 + confirmProjectSave 绑定 + loading 防重复', () => {
+  const src = view()
+  const i = src.indexOf("addPath === 'project' && projStep === 3")
+  assert.ok(i >= 0, '步3分支应存在')
+  const region = src.slice(i, i + 9000)
+  assert.match(region, /来源项目/, '步3 body 应含来源项目摘要')
+  assert.match(region, /projAsset\.name/, '步3 body 应含素材名')
+  assert.match(region, /projAsset\.currentImage/, '步3 body 应含当前图缩略')
+  assert.match(region, /@click="projStep = 2"/, '步3应可返回上一步')
+  const confirm = region.match(/<button[^>]*>确认保存<\/button>/)
+  assert.ok(confirm, '确认保存按钮应存在')
+  assert.match(confirm[0], /@click="confirmProjectSave"/, '确认保存应绑定 confirmProjectSave')
+  assert.match(confirm[0], /:disabled="[^"]*saving/, '确认保存应有 saving loading 防重复')
+})
+
+test('④c 场景类型入库同时写 location（scene-library create 不认 name）', () => {
+  const src = view()
+  const create = src.match(/async createLibraryEntry\(pending\) \{[\s\S]*?\n    \},/)
+  assert.ok(create, 'createLibraryEntry 方法存在')
+  assert.match(create[0], /kind === 'scene'/, '应按类型区分场景')
+  assert.match(create[0], /payload\.location = pending\.name/, '场景名应写入 location 字段')
+})
+
 test('⑤ 冲突呈现双版本并排 + 使用已有不写入 + 仍创建改 source_id 与名称', () => {
   const src = view()
   // 冲突弹层：现有/待保存并排
@@ -171,4 +194,22 @@ test('⑤ 冲突呈现双版本并排 + 使用已有不写入 + 仍创建改 sou
   const success = src.match(/finishAddSuccess\(\) \{[\s\S]*?\n    \},/)
   assert.ok(success, 'finishAddSuccess 方法存在')
   assert.match(success[0], /load\(\)/, '成功后应刷新库列表')
+})
+
+test('⑤b 项目路径冲突披露：副本与原条目共用图片文件的语义提示', () => {
+  const src = view()
+  const i = src.indexOf('v-else-if="conflict"')
+  assert.ok(i >= 0, '冲突块应存在')
+  const region = src.slice(i, i + 5000)
+  assert.match(region, /共用同一图片文件/, '应披露副本与原条目共用图片文件')
+  assert.match(region, /source_type === 'project-asset'/, '披露应仅针对项目素材来源')
+})
+
+test('⑥ chooseProject 失败在弹窗内呈现（不被 scrim 遮挡）', () => {
+  const src = view()
+  const choose = src.match(/async chooseProject\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(choose, 'chooseProject 方法存在')
+  assert.match(choose[0], /projError = /, '失败应写入 projError 就地呈现')
+  assert.doesNotMatch(choose[0], /flashNotice/, '不得依赖会被弹窗遮挡的页面提示条')
+  assert.match(src, /v-if="projError"/, '步1模板应渲染 projError 错误行')
 })

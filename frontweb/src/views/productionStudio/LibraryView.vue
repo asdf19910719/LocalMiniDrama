@@ -125,7 +125,7 @@
             </div>
           </div>
 
-          <!-- 第 3 步：结果 / 同来源冲突处理（两向导共用） -->
+          <!-- 第 3 步：结果 / 同来源冲突处理 / 项目保存确认（两向导共用） -->
           <div v-else-if="(addPath === 'local' && localStep === 3) || (addPath === 'project' && projStep === 3)" class="col" style="gap:12px">
             <div v-if="addDone" class="col" style="gap:6px; text-align:center; padding:20px 0">
               <b>已入库</b>
@@ -151,8 +151,22 @@
                   <span class="xs muted">{{ typeLabel(conflict.pending.kind) }} · 来源 {{ conflict.pending.source_type === 'local-import' ? '本地导入' : '项目素材' }}</span>
                 </div>
               </div>
+              <p v-if="conflict.pending.source_type === 'project-asset'" class="xs muted" style="line-height:1.6">独立副本与原条目共用同一图片文件；后续再次保存同一素材时，仍会提示同来源供你选择处理方式。</p>
               <p v-if="addError" class="xs" style="color:var(--danger)">{{ addError }}</p>
             </div>
+            <div v-else-if="addPath === 'project' && projAsset" class="col" style="gap:10px">
+              <div class="row" style="gap:12px; align-items:flex-start; padding:10px; border:1px solid var(--line); border-radius:8px">
+                <img v-if="projAsset.currentImage" :src="projAsset.currentImage" style="width:72px;height:72px;object-fit:cover;border-radius:8px">
+                <div class="col" style="gap:4px">
+                  <b>{{ projAsset.name }}</b>
+                  <span class="xs muted">类型：{{ projAsset.typeLabel }} · 来源：项目素材</span>
+                  <span class="xs muted">来源项目：{{ projProjectTitle || '—' }}</span>
+                </div>
+              </div>
+              <p v-if="addError" class="xs" style="color:var(--danger)">{{ addError }}</p>
+              <p v-if="saving" class="xs muted">正在保存…</p>
+            </div>
+            <p v-else class="xs muted">正在处理…</p>
           </div>
 
           <!-- 从本地文件添加：步骤 1 / 2 -->
@@ -202,6 +216,7 @@
                   <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.title }}</option>
                 </select>
               </label>
+              <p v-if="projError" class="xs" style="color:var(--danger)">{{ projError }}</p>
               <p v-if="projects.length === 0" class="xs muted">暂无可用项目</p>
             </div>
             <div v-else-if="projStep === 2" class="col" style="gap:8px">
@@ -229,7 +244,11 @@
           <template v-else-if="conflict">
             <button class="btn ghost" @click="backFromConflict">返回修改</button>
             <button class="btn ghost" @click="useExistingItem">使用已有条目</button>
-            <button class="btn primary" :disabled="!conflictName.trim()" @click="stillCreateIndependent">仍创建独立条目</button>
+            <button class="btn primary" :disabled="!conflictName.trim() || saving" @click="stillCreateIndependent">仍创建独立条目</button>
+          </template>
+          <template v-else-if="addPath === 'project'">
+            <button class="btn ghost" @click="projStep = 2">上一步</button>
+            <button class="btn primary" :disabled="saving" @click="confirmProjectSave">确认保存</button>
           </template>
         </div>
         <div class="modal-f" v-else-if="addPath === 'local'">
@@ -239,7 +258,7 @@
           </template>
           <template v-else>
             <button class="btn ghost" @click="localStep = 1">上一步</button>
-            <button class="btn primary" :disabled="!localForm.upload" @click="confirmLocalImport">确认入库</button>
+            <button class="btn primary" :disabled="saving || !localForm.upload" @click="confirmLocalImport">确认入库</button>
           </template>
         </div>
         <div class="modal-f" v-else>
@@ -275,7 +294,8 @@ export default {
       conflict: null, conflictName: '',
       localForm: { name: '', kind: 'character', description: '', upload: null },
       localUploading: false, localUploadError: '',
-      projProjectId: '', projAssets: [], projAssetId: '', projLoading: false,
+      projProjectId: '', projAssets: [], projAssetId: '', projLoading: false, projError: '',
+      saving: false,
       notice: '', noticeType: 'ok', noticeTimer: null,
     }
   },
@@ -303,6 +323,10 @@ export default {
     },
     projAsset() {
       return this.projAssets.find((a) => String(a.id) === String(this.projAssetId)) || null
+    },
+    projProjectTitle() {
+      const p = this.projects.find((x) => String(x.id) === String(this.projProjectId))
+      return p ? p.title : ''
     },
   },
   mounted() { this.load() },
@@ -387,6 +411,8 @@ export default {
       this.projAssets = []
       this.projAssetId = ''
       this.projLoading = false
+      this.projError = ''
+      this.saving = false
     },
     closeAdd() {
       this.addOpen = false
@@ -460,13 +486,15 @@ export default {
     async chooseProject() {
       if (!this.projProjectId) return
       this.projLoading = true
+      this.projError = ''
       try {
         const data = await v21.listAssets(this.projProjectId, { type: 'all' })
         this.projAssets = data.items || []
         this.projAssetId = ''
         this.projStep = 2
       } catch (e) {
-        this.flashNotice('danger', e.message || '素材列表加载失败')
+        // 弹窗开着时页面提示条会被 scrim 遮挡：错误就地呈现在弹窗体内
+        this.projError = e.message || '素材列表加载失败'
       } finally {
         this.projLoading = false
       }
@@ -511,14 +539,18 @@ export default {
     },
     async createLibraryEntry(pending) {
       this.addError = ''
+      this.saving = true
       try {
-        const resp = await v21.addToLibrary(pending.kind, {
+        const payload = {
           name: pending.name,
           description: pending.description,
           image_url: pending.image_url,
           source_type: pending.source_type,
           source_id: pending.source_id,
-        })
+        }
+        // 场景库 create 只认 location（sceneLibraryService.createLibraryItem 不读 name），同步场景名
+        if (pending.kind === 'scene') payload.location = pending.name
+        const resp = await v21.addToLibrary(pending.kind, payload)
         if (resp && resp.duplicated && resp.item) {
           this.openConflict(pending, { ...resp.item })
           return
@@ -527,6 +559,8 @@ export default {
         this.finishAddSuccess()
       } catch (e) {
         this.addError = e.message || '入库失败'
+      } finally {
+        this.saving = false
       }
     },
     finishAddSuccess() {
