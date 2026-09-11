@@ -51,6 +51,9 @@
         </div>
       </div>
 
+      <div class="ep-toolbar" style="margin-top:10px">
+        <span v-if="notice" class="badge warn">{{ notice }}<span style="cursor:pointer; margin-left:6px" @click="notice = ''">×</span></span>
+      </div>
       <div class="ep-list">
         <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
@@ -69,7 +72,14 @@
           <div class="row">
             <button v-if="ep.status !== 'blank'" class="btn primary sm" @click="open(ep)">继续制作</button>
             <button v-else class="btn sm" @click="open(ep)">开始创建</button>
-            <button class="icon-btn" @click="rowMenu(ep)"><svg><use href="#i-more"/></svg></button>
+            <div class="more-wrap" style="position:relative">
+              <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
+              <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:130px" @click="rowMenuId = null">
+                <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startRename(ep)">重命名</button>
+                <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startReorder(ep)">调整集序</button>
+                <button class="btn ghost sm" style="width:100%;justify-content:flex-start; color:var(--danger)" @click="startDelete(ep)">删除（回收站）</button>
+              </div>
+            </div>
           </div>
         </div>
         <p v-if="items.length === 0" class="muted" style="text-align:center; padding:60px 0">还没有剧集，点击「新建剧集」直达空白剧本</p>
@@ -106,6 +116,58 @@
         </div>
       </div>
     </div>
+
+    <!-- 新建剧集 · 集号 Modal（C1） -->
+    <div v-if="newEpOpen" class="scrim" style="z-index:80" @click="newEpOpen = false"></div>
+    <div v-if="newEpOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:400px">
+        <div class="modal-h"><h3>新建剧集</h3><button class="icon-btn" @click="newEpOpen = false"><svg><use href="#i-close"/></svg></button></div>
+        <div class="modal-b">
+          <p class="xs muted" style="margin-bottom:8px">创建空白草稿并直接进入剧本页。</p>
+          <label class="col" style="gap:4px"><span class="xs muted">集号</span>
+            <input class="input" type="number" min="1" v-model.number="newEpNumber">
+          </label>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="newEpOpen = false">取消</button>
+          <button class="btn primary" :disabled="!newEpNumber || newEpNumber < 1" @click="confirmNewEpisode">创建并进入剧本</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 重命名 Modal（C1） -->
+    <div v-if="renameTarget" class="scrim" style="z-index:80" @click="renameTarget = null"></div>
+    <div v-if="renameTarget" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:400px">
+        <div class="modal-h"><h3>重命名剧集</h3><button class="icon-btn" @click="renameTarget = null"><svg><use href="#i-close"/></svg></button></div>
+        <div class="modal-b">
+          <label class="col" style="gap:4px"><span class="xs muted">新标题（E{{ String(renameTarget.episodeNumber).padStart(2, '0') }}）</span>
+            <input class="input" v-model="renameTitle" @keyup.enter="confirmRename">
+          </label>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="renameTarget = null">取消</button>
+          <button class="btn primary" :disabled="!renameTitle.trim()" @click="confirmRename">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 调整集序 Modal（C1） -->
+    <div v-if="reorderTarget" class="scrim" style="z-index:80" @click="reorderTarget = null"></div>
+    <div v-if="reorderTarget" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:400px">
+        <div class="modal-h"><h3>调整集序</h3><button class="icon-btn" @click="reorderTarget = null"><svg><use href="#i-close"/></svg></button></div>
+        <div class="modal-b">
+          <label class="col" style="gap:4px"><span class="xs muted">「{{ reorderTarget.title || '未命名' }}」移动到第几集</span>
+            <input class="input" type="number" min="1" v-model.number="reorderNumber">
+          </label>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="reorderTarget = null">取消</button>
+          <button class="btn primary" :disabled="!reorderNumber || reorderNumber < 1" @click="confirmReorder">确认调整</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -118,6 +180,8 @@ export default {
     return {
       items: [], q: '', status: 'all', importOpen: false,
       projectTitle: '', deleteTarget: null, deleteImpact: {},
+      rowMenuId: null, newEpOpen: false, newEpNumber: 1,
+      renameTarget: null, renameTitle: '', reorderTarget: null, reorderNumber: 1, notice: '',
     }
   },
   computed: {
@@ -203,40 +267,63 @@ export default {
       const stage = ep.stage || 'script'
       this.$router.push(`/projects/${this.projectId}/episodes/${ep.id}/${stage}`)
     },
-    async newEpisode() {
-      const next = (this.allItems.length || 0) + 1
-      const value = window.prompt(`创建空白草稿并直接进入剧本页。集号：`, String(next))
-      if (!value) return
+    newEpisode() {
+      this.newEpNumber = (this.allItems.length || 0) + 1
+      this.newEpOpen = true
+    },
+    async confirmNewEpisode() {
       try {
-        const created = await v21.createEpisode(this.projectId, { episodeNumber: Number(value) || undefined })
+        const created = await v21.createEpisode(this.projectId, { episodeNumber: Number(this.newEpNumber) || undefined })
+        this.newEpOpen = false
         this.$router.push(`/projects/${this.projectId}/episodes/${created.id}/script`)
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '创建失败'
+        this.newEpOpen = false
       }
     },
-    async rowMenu(ep) {
-      const action = window.prompt(`剧集 E${String(ep.episodeNumber).padStart(2, '0')} 操作，输入序号：\n1 重命名\n2 调整集序\n3 删除（回收站）`, '1')
-      if (!action) return
-      if (action === '1') {
-        const title = window.prompt('新标题', ep.title || '')
-        if (title === null) return
-        await v21.renameEpisode(ep.id, { title })
+    startRename(ep) {
+      this.rowMenuId = null
+      this.renameTarget = ep
+      this.renameTitle = ep.title || ''
+    },
+    async confirmRename() {
+      if (!this.renameTarget) return
+      try {
+        await v21.renameEpisode(this.renameTarget.id, { title: this.renameTitle })
+        this.renameTarget = null
         this.load()
-      } else if (action === '2') {
-        const order = window.prompt('新的集号', String(ep.episodeNumber))
-        if (!order) return
-        const ids = this.allItems.map((i) => i.id)
-        const from = ids.indexOf(ep.id)
-        ids.splice(from, 1)
-        ids.splice(Math.max(0, Number(order) - 1), 0, ep.id)
-        try {
-          await v21.reorderEpisodes(this.projectId, ids)
-          this.load()
-        } catch (e) { alert(e.message) }
-      } else if (action === '3') {
-        this.deleteTarget = ep
-        this.deleteImpact = await v21.getDeleteImpact(ep.id)
+      } catch (e) {
+        this.notice = e.message || '重命名失败'
+        this.renameTarget = null
       }
+    },
+    startReorder(ep) {
+      this.rowMenuId = null
+      this.reorderTarget = ep
+      this.reorderNumber = ep.episodeNumber
+    },
+    async confirmReorder() {
+      const ep = this.reorderTarget
+      if (!ep) return
+      const ids = this.allItems.map((i) => i.id)
+      const from = ids.indexOf(ep.id)
+      ids.splice(from, 1)
+      ids.splice(Math.max(0, Number(this.reorderNumber) - 1), 0, ep.id)
+      try {
+        await v21.reorderEpisodes(this.projectId, ids)
+        this.reorderTarget = null
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '调整失败'
+        this.reorderTarget = null
+      }
+    },
+    startDelete(ep) {
+      this.rowMenuId = null
+      v21.getDeleteImpact(ep.id).then((impact) => {
+        this.deleteImpact = impact
+        this.deleteTarget = ep
+      })
     },
     async doDelete() {
       if (!this.deleteTarget) return
@@ -244,15 +331,7 @@ export default {
       this.deleteTarget = null
       this.load()
     },
-    comingSoon(name) {
-      importOpenClose(this)
-      alert(`${name}向导将在本迭代内启用`)
-    },
   },
-}
-
-function importOpenClose(ctx) {
-  ctx.importOpen = false
 }
 </script>
 

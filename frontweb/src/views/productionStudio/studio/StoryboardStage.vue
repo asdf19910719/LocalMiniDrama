@@ -95,7 +95,7 @@
             <button class="btn sm grow" :loading="generatingImage" :disabled="generatingImage" @click="generateImage">
               <svg><use href="#i-spark"/></svg>生成分镜图
             </button>
-            <button class="btn sm ghost" style="border:1px solid var(--line)" title="上传图片" @click="uploadImage"><svg><use href="#i-upload"/></svg></button>
+            <button class="btn sm ghost" style="border:1px solid var(--line)" title="上传图片" @click="openImageUrl"><svg><use href="#i-upload"/></svg></button>
           </div>
 
           <div style="margin-top:auto" class="xs muted">引用变化会即时同步到中栏与 H3 草稿</div>
@@ -300,6 +300,23 @@
       </div>
     </div>
 
+    <!-- 图片 URL 输入 Modal（C1：分镜上传图片 URL） -->
+    <div v-if="imgUrlOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <h3>上传分镜图</h3>
+          <button class="icon-btn" @click="imgUrlOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <input class="input" style="width:100%" v-model="imgUrlText" placeholder="图片 URL 或本地 /static 路径">
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="imgUrlOpen = false">取消</button>
+          <button class="btn primary" :disabled="!imgUrlText.trim()" @click="confirmImageUrl">确认</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 更新分镜结构 diff 向导（B1 / 设计稿 10 更多菜单 / STORYBOARD-016） -->
     <div v-if="diffOpen" class="modal-wrap" style="z-index:90">
       <div class="modal" style="width:640px">
@@ -472,6 +489,7 @@ export default {
       h3: {}, h3Dirty: false, guard: {}, completion: { adopted: 0, total: 0, missing: [], staleShots: [] },
       videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1,
       activeVideoTasks: [], pollTimer: null, sheetQuote: null, sheetDemoDelay: false, notice: '',
+      imgUrlOpen: false, imgUrlText: '',
       generatingImage: false, readiness: { status: 'checking' },
       frameChaining: { state: 'none', stateLabel: '首镜' },
       trackFilter: 'all', moreOpen: false, batchOpen: false, batch: {}, batchResult: null, busy: false,
@@ -656,7 +674,7 @@ export default {
         const result = await v21.editSegment(this.currentShotId, seg.id, { visual: seg.visual, dialogue: seg.dialogue })
         this.segments = result.segments
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '保存失败'
       }
     },
     async split(seg) {
@@ -689,9 +707,15 @@ export default {
         this.generatingImage = false
       }
     },
-    async uploadImage() {
-      const url = window.prompt('输入图片 URL 或本地 /static 路径：')
+    openImageUrl() {
+      // C1：分镜图 URL 输入走专用 Modal
+      this.imgUrlText = ''
+      this.imgUrlOpen = true
+    },
+    async confirmImageUrl() {
+      const url = this.imgUrlText.trim()
       if (!url) return
+      this.imgUrlOpen = false
       await v21.uploadShotImage(this.currentShotId, { imageUrl: url })
       const detail = await v21.getShot(this.currentShotId)
       this.imageCandidates = detail.imageCandidates
@@ -708,7 +732,7 @@ export default {
         this.h3Dirty = false
         this.refreshGuard()
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '生成失败'
       }
     },
     async saveH3() {
@@ -842,7 +866,7 @@ export default {
         this.batch = await v21.getBatchPrecheck(this.episodeId)
         await this.load()
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '批量操作失败'
       } finally {
         this.busy = false
       }
@@ -858,7 +882,7 @@ export default {
         this.references = result
         await this.selectShot(this.currentShotId)
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '添加引用失败'
       }
     },
     async removeRef(referenceId) {
@@ -867,7 +891,7 @@ export default {
         this.references = result
         await this.selectShot(this.currentShotId)
       } catch (e) {
-        alert(e.message)
+        this.notice = e.message || '移除引用失败'
       }
     },
     previewAsset(type, assetId) {
@@ -887,8 +911,7 @@ export default {
     },
     async exportSrt() {
       const result = await v21.exportCut(this.episodeId, 'srt')
-      if (result.ok) alert(`SRT 已导出：${result.filePath}`)
-      else alert(result.reason)
+      this.notice = result.ok ? `SRT 已导出：${result.filePath}` : (result.reason || '导出失败')
     },
     async exportShotPackages() {
       // C4：schema 化 Shot Package 文档（shot-package-v2.1）
