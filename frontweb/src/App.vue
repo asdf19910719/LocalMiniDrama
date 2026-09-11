@@ -74,6 +74,24 @@
                      style="text-decoration:none">
           <svg><use href="#i-gear"/></svg>
         </router-link>
+        <!-- 更多工具（规格 §24.7：自由创作/媒体素材库/高级页不进 Rail 一级导航，经此入口） -->
+        <div class="rail-more">
+          <button class="rail-btn rail-more-btn" :class="{ open: moreToolsOpen }" title="更多工具"
+                  aria-label="更多工具" @click.stop="moreToolsOpen = !moreToolsOpen">
+            <svg><use href="#i-more"/></svg>
+          </button>
+          <div v-if="moreToolsOpen" class="card rail-more-pop" @click.stop>
+            <router-link to="/quick-create" class="rail-more-item" @click="closeMoreTools">
+              <svg><use href="#i-clap"/></svg><span>自由创作</span>
+            </router-link>
+            <router-link to="/media-library" class="rail-more-item" @click="closeMoreTools">
+              <svg><use href="#i-film"/></svg><span>媒体素材库</span>
+            </router-link>
+            <router-link to="/ai-config/advanced" class="rail-more-item" @click="closeMoreTools">
+              <svg><use href="#i-gear"/></svg><span>AI 配置 · 高级</span>
+            </router-link>
+          </div>
+        </div>
       </aside>
       <div class="main">
         <router-view />
@@ -85,17 +103,34 @@
 <script>
 export default {
   name: 'AppV21',
+  data() {
+    return { moreToolsOpen: false }
+  },
   mounted() {
     document.documentElement.classList.add('v21-active')
     document.body.classList.add('v21-active')
+    document.addEventListener('click', this.onDocClick)
+    document.addEventListener('keydown', this.onKeydown)
   },
   unmounted() {
     document.documentElement.classList.remove('v21-active')
     document.body.classList.remove('v21-active')
+    document.removeEventListener('click', this.onDocClick)
+    document.removeEventListener('keydown', this.onKeydown)
   },
   methods: {
     isActive(prefix) {
       return this.$route.path === prefix || this.$route.path.startsWith(prefix + '/')
+    },
+    onDocClick() {
+      // 菜单内部点击经 @click.stop 拦截，到达 document 的即视为外点
+      this.moreToolsOpen = false
+    },
+    onKeydown(e) {
+      if (e.key === 'Escape') this.moreToolsOpen = false
+    },
+    closeMoreTools() {
+      this.moreToolsOpen = false
     },
   },
 }

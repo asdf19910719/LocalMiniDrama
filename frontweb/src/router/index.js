@@ -125,7 +125,8 @@ const router = createRouter({
     {
       path: '/media-library',
       name: 'media-library',
-      component: () => import('@/views/MediaLibrary.vue'),
+      // T4.6：指向 V2.1 版（业务名称优先/使用位置）；旧 Element Plus 页 src/views/MediaLibrary.vue 保留但不再被路由引用
+      component: () => import('@/views/productionStudio/MediaLibraryView.vue'),
       meta: { title: '媒体素材库' },
     },
     // 旧四阶段前制作页与旧画布已整体删除：不注册旧路由、不提供回退跳转

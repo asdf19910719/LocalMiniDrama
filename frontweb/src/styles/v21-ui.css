@@ -93,6 +93,21 @@
 }
 .v21-root .rail-btn svg { width: 21px; height: 21px; }
 .v21-root .rail-spacer { flex: 1; }
+.v21-root .rail-more { position: relative; }
+.v21-root .rail-more .rail-more-btn { border: none; background: transparent; padding: 0; }
+.v21-root .rail-more .rail-more-btn:hover,
+.v21-root .rail-more .rail-more-btn.open { background: var(--panel2); color: var(--text-2); }
+.v21-root .rail-more-pop {
+  position: absolute; left: 52px; bottom: 0; z-index: 60;
+  padding: 6px; min-width: 180px; display: flex; flex-direction: column; gap: 2px;
+}
+.v21-root .rail-more-item {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border-radius: 8px; color: var(--text-2); font-size: 13px; text-decoration: none;
+  white-space: nowrap;
+}
+.v21-root .rail-more-item:hover { background: var(--panel2); color: var(--text); }
+.v21-root .rail-more-item svg { width: 16px; height: 16px; flex: 0 0 auto; }
 
 .v21-root .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 

@@ -50,6 +50,7 @@
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openStructureDiff">更新分镜结构（从已确认剧本重建）</button>
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportSrt">导出 SRT 字幕</button>
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportShotPackages">导出 Shot Package JSON</button>
+            <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openAdvancedCanvas">高级画布</button>
           </div>
         </div>
       </div>
@@ -1123,6 +1124,10 @@ export default {
       a.download = `episode-${this.episodeId}-shot-packages.json`
       a.click()
       URL.revokeObjectURL(url)
+    },
+    // 规格 §24.7：高级画布只从当前阶段（分镜）的高级画布入口进入
+    openAdvancedCanvas() {
+      this.$router.push(`/projects/${this.projectId}/episodes/${this.episodeId}/canvas`)
     },
     pad(n) {
       return String(n).padStart(2, '0')
