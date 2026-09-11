@@ -54,6 +54,28 @@
       <div class="ep-toolbar" style="margin-top:10px">
         <span v-if="notice" class="badge warn">{{ notice }}<span style="cursor:pointer; margin-left:6px" @click="notice = ''">×</span></span>
       </div>
+
+      <!-- 外部 AI 任务卡（离页恢复入口；空状态不显示） -->
+      <div v-if="externalTasks.length" class="card ext-tasks" style="margin-bottom:14px">
+        <div class="ext-tasks-h">
+          <svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-spark"/></svg>
+          <b class="xs" style="font-size:13px">外部 AI 任务</b>
+          <span class="xs muted">任务已持久化，可离页；完成后回流为草稿</span>
+        </div>
+        <div v-for="t in externalTasks" :key="t.packageId" class="ext-task-row">
+          <span class="badge" :class="extStatusBadge(t.status)">{{ extStatusLabel(t.status) }}</span>
+          <b class="xs" style="font-size:13px">第 {{ t.targetEpisodeNumber }} 集</b>
+          <span class="xs muted mono">{{ String(t.packageId).slice(0, 8) }}</span>
+          <span class="xs muted">创建于 {{ relTime(t.createdAt) }}</span>
+          <div class="spacer"></div>
+          <template v-if="t.status === 'waiting_external'">
+            <button class="btn primary sm" @click="$router.push(`/projects/${projectId}/episodes/external-ai?taskId=${t.packageId}`)">打开向导</button>
+            <button class="btn ghost sm" :disabled="cancellingTaskId === t.packageId" @click="cancelExternal(t)">取消</button>
+          </template>
+          <button v-else-if="t.status === 'imported' && t.targetEpisodeId" class="btn sm" @click="$router.push(`/projects/${projectId}/episodes/${t.targetEpisodeId}/script`)">打开剧本</button>
+        </div>
+      </div>
+
       <div class="ep-list">
         <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention || (highlightId && String(ep.id) === highlightId) }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
@@ -182,6 +204,7 @@ export default {
       projectTitle: '', deleteTarget: null, deleteImpact: {},
       rowMenuId: null, newEpOpen: false, newEpNumber: 1,
       renameTarget: null, renameTitle: '', reorderTarget: null, reorderNumber: 1, notice: '',
+      externalTasks: [], cancellingTaskId: '',
     }
   },
   computed: {
@@ -208,9 +231,30 @@ export default {
       this._allItems = data.items || []
       this.items = this.status === 'all' ? this._allItems : this._allItems.filter((i) => i.status === this.status)
       try {
+        this.externalTasks = (await v21.listExternalTasks(this.projectId)) || []
+      } catch { this.externalTasks = [] }
+      try {
         const overview = await v21.getOverview(this.projectId)
         this.projectTitle = overview.hero.title
       } catch { /* ignore */ }
+    },
+    extStatusLabel(s) {
+      return { waiting_external: '等待外部结果', imported: '已导入', cancelled: '已取消' }[s] || s
+    },
+    extStatusBadge(s) {
+      return { waiting_external: 'warn', imported: 'accent', cancelled: 'outline' }[s] || 'outline'
+    },
+    async cancelExternal(t) {
+      this.cancellingTaskId = t.packageId
+      try {
+        await v21.cancelExternalTask(t.packageId)
+        this.notice = ''
+        await this.load()
+      } catch (e) {
+        this.notice = e.message || '取消失败'
+      } finally {
+        this.cancellingTaskId = ''
+      }
     },
     setStatus(s) { this.status = s; this.load() },
     stageLabel(stage) {
@@ -342,6 +386,9 @@ export default {
 
 <style scoped>
 .ep-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ext-tasks-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; }
+.ext-task-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .4px; }
 .ep-list { display: flex; flex-direction: column; gap: 8px; }
 .ep-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
 .ep-row.current { border-color: var(--accent); }

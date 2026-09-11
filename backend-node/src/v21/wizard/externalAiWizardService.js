@@ -88,6 +88,30 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     };
   }
 
+  /**
+   * 项目外部任务列表（离页恢复入口）：
+   * 按 created_at DESC 返回本项目全部外部 AI 任务及其状态判定（与 getWizardModel 一致）。
+   */
+  function listProjectTasks(projectId) {
+    const rows = db
+      .prepare('SELECT * FROM external_ai_package_tasks WHERE drama_id = ? ORDER BY created_at DESC, id DESC')
+      .all(Number(projectId));
+    return rows.map((row) => {
+      const status = taskStatusOf(row);
+      return {
+        packageId: row.package_id,
+        targetEpisodeId: row.target_episode_id,
+        targetEpisodeNumber: row.target_episode_number,
+        status: status === 'waiting' ? 'waiting_external' : status,
+        taskNote: row.task_note || '',
+        contextVersion: row.context_version || null,
+        createdAt: row.created_at,
+        importedAt: row.imported_at,
+        cancelledAt: row.cancelled_at,
+      };
+    });
+  }
+
   function getWizardModel(projectId, { taskId = '' } = {}) {
     const model = {
       projectId: Number(projectId),
@@ -312,8 +336,9 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     return { ok: checks.every((c) => c.ok), checks, errors: checks.filter((c) => !c.ok).map((c) => c.detail || c.label) };
   }
 
-  /** 确定性适配：external-ai-result@2.1 → 规范 episode-package@2.1（不写库） */
-  function adaptResult(packageId, result) {
+  /** 确定性适配：external-ai-result@2.1 → 规范 episode-package@2.1（不写库）
+   *  options.frozenSnapshot：仅当素材快照摘要（assets_digest）失配时跳过该单项校验，其余校验照常。 */
+  function adaptResult(packageId, result, options = {}) {
     const row = requireTaskRow(packageId);
     if (result.schema !== RESULT_SCHEMA_NAME || result.version !== '2.1') {
       throw httpError('PACKAGE_SCHEMA_UNSUPPORTED', 400, '外部 AI 结果必须是 external-ai-result@2.1');
@@ -321,7 +346,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     if (result.package_id !== row.package_id) {
       throw httpError('PACKAGE_TASK_MISMATCH', 409, '结果中的 package_id 与任务不匹配');
     }
-    if (result.assets_digest !== row.assets_digest) {
+    if (result.assets_digest !== row.assets_digest && !options.frozenSnapshot) {
       throw httpError('ASSETS_DIGEST_MISMATCH', 409, '素材快照摘要与任务包不一致（上下文已变化）');
     }
     if (Number(result.episode.episode_number) !== Number(row.target_episode_number)) {
@@ -419,25 +444,29 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     return canonical;
   }
 
-  function previewImport(packageId, resultJson) {
+  function previewImport(packageId, resultJson, options = {}) {
     const row = requireTaskRow(packageId);
     const result = parseResultJson(resultJson);
-    const canonical = adaptResult(packageId, result);
+    const digestMatched = result.assets_digest === row.assets_digest;
+    const canonical = adaptResult(packageId, result, options);
     const plan = importer.buildImportPlan(db, canonical, {
       dramaId: row.drama_id,
       targetEpisodeId: row.target_episode_id,
       sourceFilename: 'external-ai-result.json',
       sourceSha256: sha256Text(resultJson),
     });
+    if (options.frozenSnapshot && !digestMatched) return { ...plan, frozenSnapshot: true };
     return plan;
   }
 
-  function confirmImport(packageId, resultJson) {
+  function confirmImport(packageId, resultJson, options = {}) {
     const row = requireTaskRow(packageId);
     if (row.imported_at) throw httpError('PACKAGE_ALREADY_IMPORTED', 409, '该任务已成功导入，不能重复使用');
     if (row.cancelled_at) throw httpError('TASK_CANCELLED', 409, '任务已取消，不能导入');
     const result = parseResultJson(resultJson);
-    const canonical = adaptResult(packageId, result);
+    const digestMatched = result.assets_digest === row.assets_digest;
+    const canonical = adaptResult(packageId, result, options);
+    const frozenUsed = Boolean(options.frozenSnapshot) && !digestMatched;
     if (!row.target_episode_id) {
       const occupied = db
         .prepare('SELECT id FROM episodes WHERE drama_id = ? AND episode_number = ? AND deleted_at IS NULL')
@@ -454,6 +483,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       sourceSha256: sha256Text(resultJson),
       taskPackageId: row.package_id,
       sourceLabel: 'external-ai-result@2.1',
+      reportExtra: frozenUsed ? { frozenSnapshot: true } : null,
     });
     db.prepare('UPDATE external_ai_package_tasks SET imported_at = ? WHERE package_id = ?').run(
       new Date().toISOString(),
@@ -462,12 +492,14 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     return {
       ...imported,
       targetEpisodeNumber: row.target_episode_number,
+      ...(frozenUsed ? { frozenSnapshot: true } : {}),
       opensRoute: { routeId: 'studio-script', params: { projectId: row.drama_id, episodeId: imported.episodeId } },
     };
   }
 
   return {
     getWizardModel,
+    listProjectTasks,
     selectTarget,
     createPackage,
     getTask,

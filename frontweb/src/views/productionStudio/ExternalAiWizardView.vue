@@ -7,6 +7,14 @@
     </el-steps>
 
     <section class="step-body">
+      <!-- 离页恢复提示（任务不存在/已取消时） -->
+      <div v-if="restoreNotice" class="card restore-notice" style="margin-bottom: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-color: rgba(255,182,92,.45)">
+        <svg style="width:14px;height:14px;color:var(--warn);flex:0 0 auto"><use href="#i-warn"/></svg>
+        <span class="xs" style="color:var(--warn)">{{ restoreNotice }}</span>
+        <span style="flex:1"></span>
+        <button class="icon-btn" style="width:24px;height:24px" @click="restoreNotice = ''"><svg><use href="#i-close"/></svg></button>
+      </div>
+
       <!-- 1 选择目标 -->
       <template v-if="step === 'target'">
         <h3>选择目标</h3>
@@ -64,7 +72,7 @@
       <!-- 5 等待外部结果 -->
       <template v-else-if="step === 'waiting'">
         <h3>等待外部结果</h3>
-        <p>任务包 <code>{{ taskId }}</code> 已创建；任务已持久化到剧集行与任务中心，可离页。</p>
+        <p>任务包 <code>{{ taskId }}</code> 已创建；任务已持久化，刷新或离页后可经剧集中心「外部 AI 任务」或本页 URL（?taskId=）恢复。</p>
         <div class="actions">
           <el-button @click="download('zip')">下载任务包</el-button>
           <el-button @click="download('json')">下载单文件任务 JSON</el-button>
@@ -80,6 +88,14 @@
       <!-- 6 选择结果 JSON -->
       <template v-else-if="step === 'result'">
         <h3>选择结果 JSON</h3>
+        <div v-if="checks && !checks.ok" class="check-fail">
+          <p class="check-fail-hint">校验未通过，请修正结果 JSON 或返回上一步</p>
+          <div v-for="c in checks.checks" :key="c.id" class="check-row" :class="{ fail: !c.ok }">
+            <span class="check-mark">{{ c.ok ? '✓' : '✗' }}</span>
+            <span class="check-label">{{ c.label }}</span>
+            <span v-if="c.detail" class="check-detail">{{ c.detail }}</span>
+          </div>
+        </div>
         <el-input v-model="resultText" type="textarea" :rows="10" placeholder='粘贴外部 AI 返回的 JSON（external-ai-result@2.1）' />
         <div class="step-actions">
           <el-button @click="step = 'waiting'">上一步</el-button>
@@ -100,7 +116,7 @@
         </div>
         <div class="step-actions">
           <el-button @click="step = 'result'">上一步</el-button>
-          <el-button type="primary" :disabled="!plan || !plan.ok" :loading="importing" @click="confirmImport">确认写入草稿</el-button>
+          <el-button type="primary" :disabled="!plan || !plan.ok" :loading="importing" @click="confirmImport()">确认写入草稿</el-button>
         </div>
       </template>
 
@@ -114,6 +130,29 @@
         </el-result>
       </template>
     </section>
+
+    <!-- 素材快照摘要不一致 · 三选面板（digest 失配） -->
+    <div v-if="digestModal" class="scrim" style="z-index:80" @click="digestModal = false"></div>
+    <div v-if="digestModal" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:560px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>素材快照摘要不一致</h3>
+          <button class="icon-btn" @click="digestModal = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="xs" style="line-height:1.8; color:var(--text-2)">
+            结果 JSON 的 <code>assets_digest</code> 与任务包冻结值不一致（建包后项目素材已变化，或结果来自旧版本任务包）。
+            请选择下一步：按冻结快照继续导入、放弃本任务，或返回修改结果 JSON。
+          </p>
+        </div>
+        <div class="modal-f" style="flex-wrap:wrap; justify-content:flex-start; gap:8px">
+          <button class="btn primary" :disabled="importing" @click="importFrozenSnapshot()">按冻结快照导入（素材快照与建包时不一致，确认后继续）</button>
+          <button class="btn ghost" :disabled="abandoning" @click="abandonAndRecreate">放弃并创建新任务</button>
+          <button class="btn ghost" @click="digestModal = false">返回修改结果 JSON</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -141,6 +180,7 @@ export default {
       plan: null,
       imported: null,
       creating: false, validating: false, importing: false,
+      restoreNotice: '', digestModal: false, abandoning: false,
     }
   },
   computed: {
@@ -156,8 +196,42 @@ export default {
   },
   async mounted() {
     this.blankEpisodes = (await v21.listBlankEpisodes(this.projectId)).items || []
+    const taskId = this.$route.query.taskId
+    if (taskId) await this.restoreFromTask(String(taskId))
   },
   methods: {
+    /** 离页恢复：按 URL 中的 taskId 取回任务与其当前步（waiting-result / imported-draft） */
+    async restoreFromTask(taskId) {
+      try {
+        const model = await v21.getWizard(this.projectId, taskId)
+        if (!model || !model.task) {
+          this.restoreNotice = '任务不存在或已取消'
+          this.clearTaskQuery()
+          return
+        }
+        this.taskId = taskId
+        this.task = model.task
+        if (model.target) {
+          this.targetMode = model.target.selectedMode || 'create_new'
+          this.targetEpisodeId = model.target.selectedEpisodeId || ''
+        }
+        if (model.currentStep === 'imported-draft') {
+          this.imported = {
+            episodeId: this.task.targetEpisodeId,
+            episodeNumber: this.task.targetEpisodeNumber,
+          }
+          this.step = 'done'
+        } else {
+          this.step = 'waiting'
+        }
+      } catch (e) {
+        this.restoreNotice = '任务不存在或已取消'
+        this.clearTaskQuery()
+      }
+    },
+    clearTaskQuery() {
+      if (this.$route.query.taskId) this.$router.replace({ query: {} })
+    },
     async createPackage() {
       this.creating = true
       try {
@@ -169,6 +243,7 @@ export default {
         this.taskId = created.packageId
         this.task = await v21.getExternalTask(this.taskId)
         this.step = 'waiting'
+        this.$router.replace({ query: { taskId: this.taskId } })
       } catch (e) {
         ElMessage.error(e.message)
       } finally {
@@ -198,6 +273,7 @@ export default {
         .then(async () => {
           await v21.cancelExternalTask(this.taskId)
           ElMessage.info('任务已取消')
+          this.clearTaskQuery()
           this.$router.push(`/projects/${this.projectId}/episodes`)
         })
         .catch(() => {})
@@ -207,26 +283,57 @@ export default {
       try {
         this.checks = await v21.validateResult(this.taskId, this.resultText)
         if (!this.checks.ok) {
-          ElMessage.error('校验未通过，请检查各项')
-          return
+          return // 校验失败：结果步就地渲染 checks 清单
         }
         this.plan = await v21.previewImport(this.taskId, this.resultText)
         this.step = 'preview'
       } catch (e) {
+        if (e.code === 'ASSETS_DIGEST_MISMATCH') {
+          this.digestModal = true
+          return
+        }
         ElMessage.error(e.message)
       } finally {
         this.validating = false
       }
     },
-    async confirmImport() {
+    async confirmImport(options = {}) {
       this.importing = true
       try {
-        this.imported = await v21.confirmImport(this.taskId, this.resultText)
+        this.imported = await v21.confirmImport(this.taskId, this.resultText, options)
+        this.digestModal = false
         this.step = 'done'
       } catch (e) {
+        if (e.code === 'ASSETS_DIGEST_MISMATCH') {
+          this.digestModal = true
+          return
+        }
         ElMessage.error(e.message)
       } finally {
         this.importing = false
+      }
+    },
+    async importFrozenSnapshot() {
+      await this.confirmImport({ frozenSnapshot: true })
+    },
+    /** 放弃当前任务：取消后回第一步，可重新创建新任务包 */
+    async abandonAndRecreate() {
+      this.abandoning = true
+      try {
+        await v21.cancelExternalTask(this.taskId)
+        this.digestModal = false
+        this.taskId = ''
+        this.task = null
+        this.checks = null
+        this.plan = null
+        this.resultText = ''
+        this.imported = null
+        this.step = 'target'
+        this.clearTaskQuery()
+      } catch (e) {
+        ElMessage.error(e.message)
+      } finally {
+        this.abandoning = false
       }
     },
   },
@@ -241,4 +348,11 @@ export default {
 .context-box, .pkg-info { background: #f9fafb; border-radius: 8px; padding: 14px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+.check-fail { border: 1px solid rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .06); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.check-fail-hint { color: var(--danger, #ef4444); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.check-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--text-2, #374151); }
+.check-row .check-mark { flex: 0 0 auto; width: 16px; text-align: center; }
+.check-row.fail { color: var(--danger, #ef4444); }
+.check-row.fail .check-mark { font-weight: 700; }
+.check-detail { color: inherit; opacity: .8; font-size: 12px; word-break: break-all; }
 </style>

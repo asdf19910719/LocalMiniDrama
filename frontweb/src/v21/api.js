@@ -154,6 +154,7 @@ export const v21 = {
   confirmImportPackage: (projectId, body) => post(`/projects/${projectId}/episodes/import-v21/confirm`, body),
   // 外部 AI 向导
   getWizard: (projectId, taskId) => get(`/projects/${projectId}/external-ai/wizard`, { taskId }),
+  listExternalTasks: (projectId) => get(`/projects/${projectId}/external-ai/tasks`),
   createPackage: (projectId, body) => post(`/projects/${projectId}/external-ai/package`, body),
   getExternalTask: (taskId) => get(`/external-ai/tasks/${taskId}`),
   downloadTask: async (taskId, format) => {
@@ -161,8 +162,8 @@ export const v21 = {
     return { data: res.data, disposition: res.headers['content-disposition'] || '' }
   },
   validateResult: (taskId, resultJson) => post(`/external-ai/tasks/${taskId}/result/validate`, { resultJson }),
-  previewImport: (taskId, resultJson) => post(`/external-ai/tasks/${taskId}/import/preview`, { resultJson }),
-  confirmImport: (taskId, resultJson) => post(`/external-ai/tasks/${taskId}/import/confirm`, { resultJson }),
+  previewImport: (taskId, resultJson, options = {}) => post(`/external-ai/tasks/${taskId}/import/preview`, { resultJson, ...options }),
+  confirmImport: (taskId, resultJson, options = {}) => post(`/external-ai/tasks/${taskId}/import/confirm`, { resultJson, ...options }),
   cancelExternalTask: (taskId) => post(`/external-ai/tasks/${taskId}/cancel`),
 }
 

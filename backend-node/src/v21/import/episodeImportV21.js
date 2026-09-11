@@ -421,7 +421,7 @@ function createEpisodeImportV21(db, { log = console } = {}) {
     }
   }
 
-  function confirmImport(db2, { pkg, dramaId, targetEpisodeId, sourceFilename = '', sourceSha256 = '', decisions = null, taskPackageId = null, sourceLabel = 'episode-package@2.1' } = {}) {
+  function confirmImport(db2, { pkg, dramaId, targetEpisodeId, sourceFilename = '', sourceSha256 = '', decisions = null, taskPackageId = null, sourceLabel = 'episode-package@2.1', reportExtra = null } = {}) {
     void db2;
     const validation = validateFullV21(pkg);
     if (!validation.ok) {
@@ -475,6 +475,7 @@ function createEpisodeImportV21(db, { log = console } = {}) {
         shots: (pkg.shot_packages || []).length,
         segments: (pkg.shot_packages || []).reduce((s, x) => s + (x.timed_segments || []).length, 0),
         mediaTasks: 0,
+        ...(reportExtra && typeof reportExtra === 'object' ? reportExtra : {}),
       };
       db.prepare(
         `INSERT INTO episode_imports (episode_id, schema_name, schema_version, source_filename, source_sha256, raw_json, normalized_json, match_decisions, imported_at, import_report, task_package_id)

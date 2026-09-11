@@ -476,6 +476,9 @@ function createV21Router({ db, cfg, log }) {
   r.get('/projects/:id/external-ai/wizard', wrap((req, res) => {
     response.success(res, wizard.getWizardModel(req.params.id, req.query || {}));
   }));
+  r.get('/projects/:id/external-ai/tasks', wrap((req, res) => {
+    response.success(res, wizard.listProjectTasks(req.params.id));
+  }));
   r.post('/projects/:id/external-ai/target', wrap((req, res) => {
     response.created(res, wizard.selectTarget(req.params.id, req.body || {}));
   }));
@@ -501,10 +504,10 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, wizard.validateResult(req.params.taskId, req.body?.resultJson || ""));
   }));
   r.post('/external-ai/tasks/:taskId/import/preview', wrap((req, res) => {
-    response.success(res, wizard.previewImport(req.params.taskId, req.body?.resultJson || ""));
+    response.success(res, wizard.previewImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
   }));
   r.post('/external-ai/tasks/:taskId/import/confirm', wrap((req, res) => {
-    response.created(res, wizard.confirmImport(req.params.taskId, req.body?.resultJson || ""));
+    response.created(res, wizard.confirmImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
   }));
 
   // ---- 成片阶段（Task 5.x） ----
