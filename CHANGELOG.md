@@ -14,6 +14,7 @@
 
 ### 新增
 
+- **V2.1 Shot Package schema 化导出（C4）**：新增 `GET /api/v2/episodes/:id/storyboard/shot-package`——按 `shot-package-v2.1.schema.json` 为每个镜头组装结构化包（镜头身份与修订、场次关联、视觉规格含景别/机位/运镜/构图/光线、时码闭合的时段数组含台词事件与资产版本引用、连续性、风格指纹、引用清单 scene_view/character_state/prop、音频对话/旁白/音乐意图），前端「导出 Shot Package JSON」由原始列表替换为该 schema 文档
 - **V2.1 视频生成异步轮询与生成 Sheet 真实报价（C3/C6）**：镜头视频提交后不再阻塞等待立即完成——任务进入进行中列表，胶片条上方以进度条（信息蓝）实时轮询展示进度，支持逐任务「取消」（cancel-requested 语义，记录保留）；mock 通道支持可选 `delayMs` 延迟参数（生成 Sheet 内「演示运行态」开关，用于 GUI 演示异步运行态）；生成 Sheet 的通道/模型与费用行由真实报价接口驱动——真实通道显示 Provider/模型与费用口径（未返回价格时如实标注「Provider 未返回价格」），mock 通道保持 ¥0 说明
 - **V2.1 自由创作「加入个人资产库」（B6）**：生成产物的「加入个人资产库」按钮由占位替换为真实入库——可选角色/场景/道具三类个人库（复用既有 v1 资产库 create 端点），入库记录携带产物 URL/本地路径、提示词摘要与来源（quick-create + 任务 id）可追溯；放弃确认改走专用 Modal，原生弹窗全部清除
 - **V2.1 人物音色真实来源与本集新增状态（B4/B5）**：音色抽屉由占位替换为真实来源——上传音频接既有角色音色上传端点（mp3/wav/m4a/ogg）、自动读出角色已认证音色资产（seedance2 voice）、素材库音色接人物库列表、带音频文件的音色可直接试听（audio 播放）、「从音视频提取」标注 P2 依赖 Provider；选中音色经 `updateSelection` 以 voice_json 持久化为本集音色指针（不更新/清除语义分明）。本集设定人物详情「新增状态」接 `POST /api/v1/characters/:id/variants` 创建人物状态并即时刷新详情；同视图的图片 URL 输入与进入分镜提示改走专用容器

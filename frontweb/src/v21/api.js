@@ -103,6 +103,7 @@ export const v21 = {
   previewStructureDiff: (episodeId) => get(`/episodes/${episodeId}/storyboard/structure-diff`),
   applyStructureDiff: (episodeId, diff) => post(`/episodes/${episodeId}/storyboard/apply-structure-diff`, { diff }),
   getStoryboard: (episodeId) => get(`/episodes/${episodeId}/storyboard`),
+  getShotPackage: (episodeId) => get(`/episodes/${episodeId}/storyboard/shot-package`),
   getShot: (shotId) => get(`/storyboards/${shotId}`),
   editSegment: (shotId, segmentId, body) => patch(`/storyboards/${shotId}/segments/${segmentId}`, body),
   splitSegment: (shotId, segmentId, atSeconds) => post(`/storyboards/${shotId}/segments/${segmentId}/split`, { atSeconds }),

@@ -891,7 +891,8 @@ export default {
       else alert(result.reason)
     },
     async exportShotPackages() {
-      const data = await v21.getStoryboard(this.episodeId)
+      // C4：schema 化 Shot Package 文档（shot-package-v2.1）
+      const data = await v21.getShotPackage(this.episodeId)
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')

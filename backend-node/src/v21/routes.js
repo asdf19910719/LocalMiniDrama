@@ -402,6 +402,12 @@ function createV21Router({ db, cfg, log }) {
   r.get('/episodes/:episodeId/storyboard/batch-precheck', wrap((req, res) => {
     response.success(res, storyboard.batchPrecheck(req.params.episodeId));
   }));
+  // C4 schema 化 Shot Package 导出
+  const { createShotPackageService } = require('./storyboard/shotPackageService.js');
+  const shotPackages = createShotPackageService({ db, log });
+  r.get('/episodes/:episodeId/storyboard/shot-package', wrap((req, res) => {
+    response.success(res, shotPackages.buildEpisodePackage(req.params.episodeId));
+  }));
   r.post('/episodes/:episodeId/storyboard/batch/missing-images', wrap((req, res) => {
     storyboard.batchGenerateMissingImages(req.params.episodeId).then((result) => {
       response.success(res, result);
