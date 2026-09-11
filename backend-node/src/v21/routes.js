@@ -561,6 +561,13 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  // ---- 任务中心聚合列表（Task 1.6 / P0-2） ----
+  const { createTaskCenterService } = require('./tasks/taskCenterService.js');
+  const taskCenter = createTaskCenterService(db, { log });
+  r.get('/tasks', wrap((req, res) => {
+    response.success(res, taskCenter.listTasks(req.query || {}));
+  }));
+
   // ---- 数据工具（A2/A3/A5） ----
   const { createIntegrityService } = require('./datatools/integrityService.js');
   const integrity = createIntegrityService({ db, log, storageRoot: assetStorage });
