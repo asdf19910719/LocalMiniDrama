@@ -265,7 +265,7 @@ export default {
       backupRunning: false, backupResult: '', backupError: '',
       leaveConfirmOpen: false, pendingNav: null,
       dirs: [
-        { key: 'media', label: '媒体目录', path: 'backend-node/data/storage', checking: false, result: null },
+        { key: 'storage', label: '媒体目录', path: 'backend-node/data/storage', checking: false, result: null },
         { key: 'export', label: '成片导出目录', path: 'backend-node/data/storage/v21-exports', checking: false, result: null },
         { key: 'tmp', label: '临时目录', path: '系统临时目录', checking: false, result: null },
       ],

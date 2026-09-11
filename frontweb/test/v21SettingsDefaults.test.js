@@ -56,6 +56,21 @@ test('③ 目录行：重新检测调专用只读端点 dirStatus（不再把展
   assert.match(view, /\/settings\/data-tools/, '前往清理应路由到数据工具页')
 })
 
+test('③-2 目录行 key 与后端 dirStatusService 返回的 key 一一对应（防匹配失败恒"未返回状态"）', () => {
+  const view = read('src/views/productionStudio/SettingsView.vue')
+  const backend = fs.readFileSync(
+    path.resolve(root, '..', 'backend-node', 'src', 'v21', 'datatools', 'dirStatusService.js'),
+    'utf8',
+  )
+  const frontendKeys = [...view.matchAll(/key: '([a-z]+)', label: '/g)].map((m) => m[1])
+  const backendKeys = [...backend.matchAll(/statusOf\('([a-z]+)',/g)].map((m) => m[1])
+  assert.ok(backendKeys.length > 0, '后端应能解析出 statusOf key 列表')
+  assert.deepEqual(frontendKeys, backendKeys, `目录行 key 应与后端一致，前端=${JSON.stringify(frontendKeys)} 后端=${JSON.stringify(backendKeys)}`)
+  assert.ok(frontendKeys.includes('storage'), '媒体行 key 应为 storage（与后端对齐）')
+  assert.ok(!frontendKeys.includes('media'), '不得再使用旧 media key')
+  assert.match(view, /r\.key === row\.key/, 'checkDir 应按 key 匹配后端返回行')
+})
+
 test('④ dirty 守卫：beforeRouteLeave 离开确认（自建弹窗，不用 window.confirm）', () => {
   const view = read('src/views/productionStudio/SettingsView.vue')
   assert.match(view, /beforeRouteLeave/, '应注册组件内离开守卫')
