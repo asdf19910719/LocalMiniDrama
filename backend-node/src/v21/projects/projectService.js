@@ -114,11 +114,86 @@ function createProjectService(db, { log = console } = {}) {
     return { generating, pending: 0, needsUpdate: stale };
   }
 
+  /** 剧集阶段进度副文本（设计稿 01 卡片 resume 行的 xs 文案） */
+  function stageMetaOf(episodeId, stage) {
+    if (!episodeId) return '';
+    if (stage === 'script') {
+      const approved = db
+        .prepare(
+          "SELECT revision FROM episode_script_revisions WHERE episode_id = ? AND status = 'approved' ORDER BY revision DESC LIMIT 1"
+        )
+        .get(episodeId);
+      if (approved) return `已确认 v${approved.revision}`;
+      const draft = db
+        .prepare("SELECT id FROM episode_script_revisions WHERE episode_id = ? AND status = 'draft' LIMIT 1")
+        .get(episodeId);
+      return draft ? '草稿待确认' : '';
+    }
+    if (stage === 'assets') {
+      const snapshot = db
+        .prepare("SELECT id FROM episode_asset_set_snapshots WHERE episode_id = ? AND status = 'active' LIMIT 1")
+        .get(episodeId);
+      return snapshot ? '素材已准备' : '';
+    }
+    if (stage === 'storyboard') {
+      const total = db
+        .prepare('SELECT COUNT(*) AS n FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL')
+        .get(episodeId).n;
+      const adopted = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM director_candidate_groups g
+           JOIN storyboards sb ON CAST(g.shot_id AS INTEGER) = sb.id
+           WHERE sb.episode_id = ? AND sb.deleted_at IS NULL AND g.selected_candidate_id IS NOT NULL`
+        )
+        .get(episodeId).n;
+      return total > 0 ? `${adopted}/${total} 已采用` : '';
+    }
+    if (stage === 'cut') {
+      const latest = db
+        .prepare(
+          "SELECT version, status FROM episode_cut_versions WHERE episode_id = ? ORDER BY version DESC LIMIT 1"
+        )
+        .get(episodeId);
+      if (!latest) return '';
+      return latest.status === 'exported' ? `成片 v${latest.version} 已导出` : `成片 v${latest.version} 可导出`;
+    }
+    return '';
+  }
+
+  /** 项目状态徽标（设计稿 01 卡片 meta-chips） */
+  function projectStatusOf(projectId, episodeCount) {
+    if (episodeCount === 0) return { key: 'blank', label: '未开始' };
+    const stale = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM production_stage_states s
+         JOIN episodes e ON e.id = s.episode_id
+         WHERE e.drama_id = ? AND e.deleted_at IS NULL AND s.status IN ('stale','ready_for_review')`
+      )
+      .get(projectId).n;
+    if (stale > 0) return { key: 'needs-attention', label: '需要处理' };
+    const allDone = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM episodes WHERE drama_id = ? AND deleted_at IS NULL
+         AND id IN (SELECT episode_id FROM production_stage_states WHERE stage = 'cut' AND status = 'approved')`
+      )
+      .get(projectId).n;
+    if (allDone >= episodeCount && episodeCount > 0) return { key: 'completed', label: '已完成' };
+    return { key: 'making', label: '制作中' };
+  }
+
   function cardOf(row) {
     const meta = parseMeta(row);
     const episodeCount = db
       .prepare('SELECT COUNT(*) AS n FROM episodes WHERE drama_id = ? AND deleted_at IS NULL')
       .get(row.id).n;
+    const status = projectStatusOf(row.id, episodeCount);
+    let lastWork = deriveLastWork(row.id);
+    let lastEpisodeTitle = null;
+    if (lastWork) {
+      const ep = db.prepare('SELECT title FROM episodes WHERE id = ?').get(lastWork.episodeId);
+      lastEpisodeTitle = ep ? ep.title || null : null;
+      lastWork = { ...lastWork, stageMeta: stageMetaOf(lastWork.episodeId, lastWork.stage) };
+    }
     return {
       id: row.id,
       title: row.title,
@@ -127,7 +202,9 @@ function createProjectService(db, { log = console } = {}) {
       aspectRatio: meta.aspect_ratio || null,
       episodeCount,
       updatedAt: row.updated_at,
-      lastWork: deriveLastWork(row.id),
+      status,
+      lastWork,
+      lastEpisodeTitle,
       health: healthOf(row.id),
     };
   }

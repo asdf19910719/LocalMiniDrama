@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { title: '导入制作包' },
     },
     {
+      path: '/projects/import-archive',
+      name: 'project-import-archive',
+      component: () => import('@/views/productionStudio/ArchiveImportView.vue'),
+      meta: { title: '导入项目归档' },
+    },
+    {
       path: '/projects/:projectId/assets',
       name: 'project-assets',
       component: () => import('@/views/productionStudio/ProjectAssetsView.vue'),

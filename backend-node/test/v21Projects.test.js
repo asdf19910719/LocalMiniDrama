@@ -69,7 +69,8 @@ test('listProjects：卡片携带上次工作（剧集+阶段）、健康摘要�
   const card = all.items.find((c) => c.id === 1);
   assert.equal(card.title, '午夜回廊');
   assert.equal(card.episodeCount, 1);
-  assert.deepEqual(card.lastWork, { episodeId: 11, episodeNumber: 1, stage: 'script' });
+  assert.deepEqual(card.lastWork, { episodeId: 11, episodeNumber: 1, stage: 'script', stageMeta: '草稿待确认' });
+  assert.equal(card.status.key, 'making');
 
   const filtered = svc.listProjects({ q: '午夜' });
   assert.equal(filtered.items.length, 1);
