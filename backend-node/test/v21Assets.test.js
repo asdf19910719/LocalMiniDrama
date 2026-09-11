@@ -294,3 +294,22 @@ test('评审修复：useCandidate 后本集选择行 media_version_id 跟随新�
   sel = db.prepare("SELECT * FROM episode_asset_selections WHERE asset_type = 'character' AND asset_id = 1").get();
   assert.equal(sel.media_version_id, 'http://x/v0.png', '选择行跟随最新当前图，重开抽屉合并不再拿到旧值');
 });
+
+test('QA-006：已确认剧本按名引用的项目人物动态并入本集引用投影', async () => {
+  const { db, episodeAssets, script } = setup();
+  // 项目人物：林夏（剧本提及）、路人甲（未提及）
+  insertCharacter(db, { id: 1, name: '林夏' });
+  insertCharacter(db, { id: 2, name: '路人甲' });
+  // 保存并确认一份提及林夏的剧本
+  await script.saveDraft(1, { content: '第一场 内景·巡逻站·夜\n林夏把对讲机放在桌上。\n林夏：出发。', expectedRevision: null });
+  script.confirmScript(1, {});
+  const projection = episodeAssets.getReferencedAssets(1);
+  const names = projection.characters.map((c) => c.name).sort();
+  assert.deepEqual(names, ['林夏'], '仅投影剧本按名引用的人物');
+  assert.equal(projection.characters[0].blocked, true, '无当前图人物应为需要处理');
+  // 已通过 episode_characters 显式挂接的人物不重复出现
+  db.prepare('INSERT INTO episode_characters (episode_id, character_id) VALUES (1, 2)').run();
+  const again = episodeAssets.getReferencedAssets(1);
+  assert.equal(again.characters.filter((c) => c.name === '林夏').length, 1, '不重复投影');
+  assert.equal(again.characters.some((c) => c.name === '路人甲'), true, '显式挂接仍投影');
+});

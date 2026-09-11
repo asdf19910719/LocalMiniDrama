@@ -340,7 +340,7 @@ function createScriptService(db, { log = console } = {}) {
       draft: draft
         ? { revisionId: draft.id, revision: draft.revision, content: draft.content, title: draft.title, savedAt: draft.updated_at }
         : null,
-      approved: approved ? { revision: approved.revision, approvedAt: approved.approved_at } : null,
+      approved: approved ? { revision: approved.revision, approvedAt: approved.approved_at, content: approved.content } : null,
       scenes: listScenes(episodeId),
       canConfirm: Boolean(draft && String(draft.content || '').trim()),
       hasUnconfirmedChanges: Boolean(approved && draft && draft.content !== approved.content),

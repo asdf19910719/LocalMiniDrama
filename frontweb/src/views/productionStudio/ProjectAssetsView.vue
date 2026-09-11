@@ -400,7 +400,7 @@ export default {
   components: { StateBlock },
   data() {
     return {
-      items: [], type: 'all', q: '',
+      items: [], _all: [], type: 'all', q: '',
       loading: false, loaded: false, loadError: '',
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
       detailOpen: false, detail: null, generating: false, projectTitle: '',

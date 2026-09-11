@@ -77,7 +77,7 @@
           ref="editor"
           v-model="draftText"
           class="ed-text"
-          :disabled="!model || !model.draft"
+          :disabled="!model"
           placeholder="第一场 内景·地点·时间 …"
           @input="markDirty"
           @mouseup="onSelect"
@@ -138,8 +138,13 @@
       </div>
     </div>
 
-    <!-- 空态：三起点 -->
-    <div v-if="model && !model.draft" class="blank-wrap">
+    <!-- QA-002：已确认但无草稿 → 展示已确认内容（可直接编辑，保存自动创建新草稿） -->
+    <div v-if="model && !model.draft && model.approved" class="notice-strip ok" style="margin:10px 24px 0; z-index:5">
+      <span style="flex:1">正在查看已确认版本 v{{ model.approved.revision }} 的内容。直接修改并保存会创建新的草稿版本；已确认版本保留可回看。</span>
+      <router-link class="btn primary sm" :to="`/projects/${projectId}/episodes/${episodeId}/assets`" style="text-decoration:none">进入设定</router-link>
+    </div>
+    <!-- 空态：三起点（仅在既无草稿也无已确认版本时展示；QA-002） -->
+    <div v-if="model && !model.draft && !model.approved" class="blank-wrap">
       <h2 style="margin:0 0 6px">空白剧本</h2>
       <p class="muted" style="font-size:13px">选择一种开始方式，三者写入同一份草稿</p>
       <div class="starts">
@@ -193,7 +198,7 @@
       <div class="modal" style="width:540px">
         <div class="modal-h">
           <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-book"/></svg>
-          <h3>确认{{ confirmLabel }} · 影响摘要</h3>
+          <h3>{{ confirmLabel }} · 影响摘要</h3>
           <button class="icon-btn" @click="confirmOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b" style="overflow:hidden">
@@ -459,7 +464,8 @@ export default {
     },
     async load() {
       this.model = await v21.getScript(this.episodeId)
-      this.draftText = this.model.draft ? this.model.draft.content : ''
+      // QA-002：无草稿但有已确认版本时，展示已确认正文（可直接编辑，保存即创建新草稿）
+      this.draftText = this.model.draft ? this.model.draft.content : (this.model.approved ? String(this.model.approved.content || '') : '')
       this.dirty = false
       if (this.studioSave) this.studioSave.dirty = false
       this.sceneStats = await v21.getSceneStats(this.episodeId)

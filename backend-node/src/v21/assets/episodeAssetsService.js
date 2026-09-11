@@ -69,6 +69,40 @@ function createEpisodeAssetsService(db, { log = console } = {}) {
         blocked: !c.image_url,
         required: true,
       }));
+    // QA-006：剧本按名引用的项目人物动态并入投影——V2.1 原生流程不写 episode_characters，
+    // 以"已确认剧本正文/场次摘要中出现人物名"作为本集引用依据（与 EP-ASSET"只投影本集剧本实际引用的对象"一致）
+    const matchedByName = db
+      .prepare(
+        `SELECT DISTINCT c.* FROM characters c
+         WHERE c.drama_id = ? AND c.deleted_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM episode_script_revisions r
+             WHERE r.episode_id = ? AND r.status = 'approved'
+               AND (r.content LIKE '%' || c.name || '%')
+           )
+           AND c.name != ''
+           AND NOT EXISTS (
+             SELECT 1 FROM episode_characters ec
+             WHERE ec.episode_id = ? AND ec.character_id = c.id
+           )
+         ORDER BY c.id`
+      )
+      .all(episode.drama_id, episodeId, episodeId)
+      .map((c) => ({
+        assetType: 'character',
+        assetId: c.id,
+        name: c.name,
+        description: c.description || '',
+        stateId: defaultVariantId(c.id) || '',
+        mediaVersionId: c.image_url || null,
+        currentImage: c.image_url || null,
+        voice: voiceByKey[selectionKey('character', c.id)] || null,
+        blocked: !c.image_url,
+        required: true,
+      }));
+    for (const m of matchedByName) {
+      if (!characters.some((c) => c.assetId === m.assetId)) characters.push(m);
+    }
     const scenes = db
       .prepare('SELECT * FROM scenes WHERE episode_id = ? AND deleted_at IS NULL ORDER BY id')
       .all(episodeId)

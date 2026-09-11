@@ -326,7 +326,7 @@ export default {
   components: { StateBlock },
   data() {
     return {
-      items: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
+      items: [], _allItems: [], _archivedItems: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
       loading: false, loaded: false, loadError: '',
       projectTitle: '', deleteTarget: null, deleteImpact: {},
       rowMenuId: null,
