@@ -113,6 +113,7 @@
           <p class="small" :class="{ 'danger-t': detail.status === 'failed' }" style="margin:0 0 8px; white-space:pre-wrap; word-break:break-word">{{ detail.statusMessage }}</p>
           <div class="row" style="gap:8px">
             <button v-if="failedRetryable(detail)" class="btn sm danger" @click="retryTask(detail)">按原输入重试</button>
+            <button v-else-if="composeFailed(detail)" class="btn sm primary" @click="openCutStage(detail)">打开成片页重试</button>
             <button v-else-if="detail.status === 'failed' && detail.source === 'external'" class="btn sm primary" @click="openExternalWizard(detail)">打开外部向导</button>
           </div>
         </template>
@@ -164,6 +165,7 @@ export default {
       lastSync: '',
       loadError: '',
       loading: false,
+      listSeq: 0,
       timer: null,
       qTimer: null,
     }
@@ -210,6 +212,7 @@ export default {
       return params
     },
     async load() {
+      const seq = ++this.listSeq
       this.loading = true
       try {
         const params = this.buildListParams(1)
@@ -220,6 +223,7 @@ export default {
           v21.listV21Tasks({ status: 'attention', page: 1, page_size: 1 }),
           v21.listV21Tasks({ status: 'done', page: 1, page_size: 1 }),
         ])
+        if (seq !== this.listSeq) return // 已有更新的请求代际（筛选/页签/轮询），丢弃迟到响应
         this.all = Array.isArray(data?.items) ? data.items : []
         this.page = 1
         this.total = Number(data?.total) || 0
@@ -236,23 +240,28 @@ export default {
           if (fresh) this.detail = fresh
         }
       } catch (e) {
+        if (seq !== this.listSeq) return
         this.loadError = e?.message || '加载任务失败，请稍后重试'
       } finally {
-        this.loading = false
+        if (seq === this.listSeq) this.loading = false
       }
     },
     async loadMore() {
       if (this.loadingMore || this.all.length >= this.total) return
+      const seq = this.listSeq // 追加属当前代：不递增，仅记录
       this.loadingMore = true
       try {
         const data = await v21.listV21Tasks(this.buildListParams(this.page + 1))
+        if (seq !== this.listSeq) return // 筛选/页签已切换，迟到的追加响应不得 concat 进新结果
         const items = Array.isArray(data?.items) ? data.items : []
         this.all = this.all.concat(items)
         this.page += 1
         this.total = Number(data?.total) || this.total
       } catch (e) {
+        if (seq !== this.listSeq) return
         this.loadError = e?.message || '加载更多失败，请稍后重试'
       } finally {
+        // loadingMore 仅由 loadMore 单飞持有，迟到响应也要复位，避免按钮永久禁用
         this.loadingMore = false
       }
     },
@@ -373,9 +382,12 @@ export default {
     retryable(task) {
       return task.source === 'async' && ['failed', 'cancelled'].includes(task.status)
     },
-    // 错误与恢复区的内联重试：failed 的 async/compose 任务按原输入重试
+    // 错误与恢复区的内联重试：仅 failed 的 async 任务（compose/external 的恢复入口在对应页面）
     failedRetryable(task) {
-      return task.status === 'failed' && ['async', 'compose'].includes(task.source)
+      return task.status === 'failed' && task.source === 'async'
+    },
+    composeFailed(task) {
+      return task.status === 'failed' && task.source === 'compose'
     },
     fmtTime(t) { return t ? String(t).slice(11, 19) : '' },
     fmtFull(t) { return t ? String(t).replace('T', ' ').slice(5, 19) : '' },
@@ -396,6 +408,15 @@ export default {
       }
       // 带 taskId 让外部 AI 向导直接恢复到该任务
       this.$router.push(`/projects/${pid}/episodes/external-ai?taskId=${task.sourceId}`)
+    },
+    openCutStage(task) {
+      const tg = task?.target
+      if (!tg || !tg.projectId || !tg.episodeId) {
+        window.alert('缺少剧集信息，无法打开成片页')
+        return
+      }
+      // 合成任务的重试入口在成片阶段页（聚合 sourceId 是剪辑版本 id，不适用 /video-tasks/:id/retry）
+      this.$router.push(`/projects/${tg.projectId}/episodes/${tg.episodeId}/cut`)
     },
     async cancelTask(task) {
       // 本期仅外部协作任务支持在任务中心直接取消；其余类型给说明性提示（到对应阶段页操作）

@@ -97,8 +97,14 @@ test('T4.1 详情抽屉：Provider/规格、时间与费用、错误与恢复、
   assert.match(view, /if \(task\.source === 'external'\) return '费用由外部服务结算'/, 'external 无 costNote 时应显示外部结算说明')
   assert.match(view, /return '本地执行 · 不产生 API 费用'/, 'async/compose 无 costNote 时应显示本地执行说明')
   assert.match(drawer, /错误与恢复/, '抽屉应有「错误与恢复」区')
-  assert.match(view, /failedRetryable\(task\)[\s\S]{0,120}\['async', 'compose'\]\.includes\(task\.source\)/, 'failedRetryable 应覆盖 async/compose 失败任务')
-  assert.match(drawer, /v-if="failedRetryable\(detail\)"/, '错误区应为 async/compose 失败任务提供内联恢复按钮')
+  assert.match(view, /failedRetryable\(task\)[\s\S]{0,120}task\.source === 'async'/, 'failedRetryable 应仅覆盖 async 失败任务（compose 的 sourceId 是剪辑版本 id，不适用视频任务重试端点）')
+  assert.match(drawer, /v-if="failedRetryable\(detail\)"/, '错误区应为 async 失败任务提供内联恢复按钮')
+  // compose 失败：按钮换为「打开成片页重试」（POST /video-tasks/:id/retry 只查 async_tasks，compose 必然任务不存在）
+  const composeBtn = view.match(/v-else-if="composeFailed\(detail\)"[\s\S]{0,200}打开成片页重试/)
+  assert.ok(composeBtn, 'compose 失败任务应呈现「打开成片页重试」按钮')
+  assert.doesNotMatch(composeBtn[0], /retryTask/, 'compose 分支不得调用 retryTask')
+  assert.match(view, /composeFailed\(task\)[\s\S]{0,120}task\.source === 'compose'/, 'composeFailed 判据应基于 source=compose')
+  assert.match(view, /openCutStage\(task\)[\s\S]{0,400}\/cut/, 'openCutStage 应跳转 target 剧集的 cut 阶段页')
   assert.match(drawer, /打开外部向导/, 'external 失败场景应换为「打开外部向导」按钮')
   assert.match(view, /external-ai\?taskId=/, '打开外部向导应带 taskId 以便向导恢复')
   assert.match(drawer, /输入快照/, '抽屉应有「输入快照」区')
@@ -112,4 +118,20 @@ test('T4.1 深链：消费 ?focus=<id> 自动切页签、打开详情抽屉并�
   assert.match(fn[0], /openDetail\(target\)/, '应打开该任务的详情抽屉')
   assert.match(fn[0], /\$router\.replace\(\{ query: \{\} \}\)/, '消费后应以 replace 清除 query')
   assert.match(view, /statusTab\(status\) \{[\s\S]{0,200}'attention'/, '应有 status→页签映射（failed/waiting_external → attention）')
+})
+
+test('T4.1 修复：load/loadMore 携带请求代际守卫，筛选切换后迟到响应不串列表', () => {
+  assert.match(view, /listSeq: 0/, '应有请求代际序号 listSeq')
+  const loadFn = view.match(/async load\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(loadFn, '应能定位 load 方法')
+  assert.match(loadFn[0], /const seq = \+\+this\.listSeq/, 'load 应先递增代际序号')
+  assert.match(loadFn[0], /if \(seq !== this\.listSeq\) return/, 'load 应在校验代际后才写列表状态（丢弃迟到响应）')
+  const moreFn = view.match(/async loadMore\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(moreFn, '应能定位 loadMore 方法')
+  assert.match(moreFn[0], /const seq = this\.listSeq/, 'loadMore 应记录发起时的代际（不递增，属当前代）')
+  assert.match(
+    moreFn[0],
+    /if \(seq !== this\.listSeq\) return[\s\S]*?this\.all = this\.all\.concat\(items\)/,
+    'loadMore 必须在校验代际一致后才 concat（防止迟到响应串进新筛选结果）'
+  )
 })
