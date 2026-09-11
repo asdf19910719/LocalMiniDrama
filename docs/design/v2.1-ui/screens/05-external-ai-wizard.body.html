@@ -1,0 +1,110 @@
+<style>
+  .wiz-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .wiz-steps { display: flex; align-items: center; gap: 4px; padding: 13px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .wstep { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .wstep .n { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .wstep.done { color: var(--text-2); }
+  .wstep.done .n { background: var(--ok-subtle); border-color: transparent; color: var(--ok); }
+  .wstep.done .n svg { width: 11px; height: 11px; }
+  .wstep.cur { color: #fff; font-weight: 600; }
+  .wstep.cur .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .wsep { width: 18px; height: 1px; background: var(--line-strong); margin: 0 3px; }
+  .wiz-body { flex: 1; display: flex; gap: 16px; padding: 20px 24px; overflow: hidden; }
+  .wiz-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .file-row:last-child { border-bottom: none; }
+  .file-row svg { width: 16px; height: 16px; color: var(--muted); }
+  .ta {
+    width: 100%; min-height: 150px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel2); color: var(--text); padding: 12px; font-size: 13px; line-height: 1.7;
+    resize: none; outline: none;
+  }
+  .ta:focus { border-color: var(--focus); }
+  .safe-box { display: flex; gap: 10px; padding: 11px 12px; border-radius: 8px; background: var(--ok-subtle); border: 1px solid rgba(69,211,156,.28); font-size: 12px; color: var(--ok); line-height: 1.6; }
+  .safe-box svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="wiz-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <h1 style="font-size:18px">外部 AI 制作</h1>
+      <span class="badge accent">独立向导 · 可离页恢复</span>
+      <div class="spacer"></div>
+      <span class="muted small">目标：青城夜巡人 · 创建第 4 集</span>
+    </header>
+
+    <div class="wiz-steps">
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>选择目标</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>自动汇总上下文</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>补充本次要求</span><span class="wsep"></span>
+      <span class="wstep cur"><span class="n">4</span>预览并创建任务包</span><span class="wsep"></span>
+      <span class="wstep"><span class="n">5</span>等待外部结果</span><span class="wsep"></span>
+      <span class="wstep"><span class="n">6</span>导入结果 JSON</span><span class="wsep"></span>
+      <span class="wstep"><span class="n">7</span>五步导入预览</span>
+    </div>
+
+    <div class="wiz-body">
+      <!-- 左：任务包内容 -->
+      <div class="wiz-col" style="flex:11">
+        <div class="card" style="flex:1; display:flex; flex-direction:column">
+          <div class="card-h"><h3>任务包内容</h3><span class="badge outline">青城夜巡人_第4集_task.zip</span></div>
+          <div class="card-b" style="flex:1; overflow:hidden">
+            <div class="file-row"><svg><use href="#i-doc"/></svg><span class="grow">context.md <span class="muted xs">创作上下文 · 项目资料 + 画面风格 + 连续性</span></span><span class="muted xs">12.4 KB</span></div>
+            <div class="file-row"><svg><use href="#i-doc"/></svg><span class="grow">episode-task.json <span class="muted xs">任务说明与产出要求</span></span><span class="muted xs">3.1 KB</span></div>
+            <div class="file-row"><svg><use href="#i-image"/></svg><span class="grow">references/ <span class="muted xs">素材参考清单 · 8 项（人物 3 · 场景 3 · 道具 2）</span></span><span class="muted xs">8 项</span></div>
+            <div class="divider"></div>
+            <div class="kv"><span class="k">目标剧集</span><span class="v">创建第 4 集《长街无灯》</span></div>
+            <div class="kv"><span class="k">项目画面风格</span><span class="v">青城夜雨 · 冷蓝 <span class="badge ok">v3</span></span></div>
+            <div class="kv"><span class="k">素材快照</span><span class="v">2026-09-10 14:32 · 8 个对象已冻结</span></div>
+            <div class="kv"><span class="k">上下文版本</span><span class="v">ctx-41 · 与剧集页一致</span></div>
+            <div class="divider"></div>
+            <div class="safe-box">
+              <svg><use href="#i-shield"/></svg>
+              <span>任务包不包含本地路径、API 密钥与候选媒体。外部结果只写入草稿：不确认剧本、不改动项目素材、不生成任何媒体。</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右：补充本次要求 -->
+      <div class="wiz-col" style="flex:9">
+        <div class="card" style="flex:1; display:flex; flex-direction:column">
+          <div class="card-h"><h3>给外部 AI 的补充说明</h3><button class="btn ghost sm">编辑</button></div>
+          <div class="card-b col" style="flex:1; overflow:hidden">
+            <textarea class="ta grow">本集聚焦「长街无灯」的悬疑铺垫：
+1. 延续 v2 剧本的节奏，前 3 个场次不出现铜铃实体；
+2. 沈默的对白保持克制，单句不超过 15 字；
+3. 结尾停留在巷口路灯熄灭的瞬间，留钩子不揭示。</textarea>
+            <div class="row" style="gap:6px">
+              <span class="chip">只影响本集</span>
+              <span class="chip">可留空</span>
+              <span class="chip">不会写入项目长期设定</span>
+            </div>
+          </div>
+        </div>
+        <div class="card pad">
+          <div class="kv"><span class="k">创建后</span><span class="v">可下载任务包 · 复制任务说明 · 随时离页</span></div>
+          <div class="kv"><span class="k">等待期</span><span class="v">剧集行与任务中心持久显示，可取消</span></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="drawer-f" style="position:relative">
+      <button class="btn ghost"><svg><use href="#i-back"/></svg>上一步</button>
+      <span class="muted xs">第 4 步 · 共 7 步</span>
+      <div class="spacer"></div>
+      <button class="btn ghost"><svg><use href="#i-copy"/></svg>复制任务说明</button>
+      <button class="btn"><svg><use href="#i-download"/></svg>下载任务包 (.zip)</button>
+      <button class="btn primary">创建任务包</button>
+    </footer>
+  </div>
+</div>

@@ -1,0 +1,102 @@
+<style>
+  .ltoolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .lgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .lcard { overflow: hidden; cursor: pointer; }
+  .lcard:hover { border-color: var(--line-strong); }
+  .lcard .thumb { position: relative; }
+  .lcard .thumb .st { position: absolute; left: 8px; top: 8px; z-index: 2; }
+  .lcard .info { padding: 10px 12px 12px; }
+  .lcard .info b { font-size: 13.5px; display: block; }
+  .lcard .info p { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .voice-body { height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--panel2); }
+  .wavebars { display: flex; align-items: center; gap: 3px; height: 40px; }
+  .wavebars i { width: 3px; border-radius: 2px; background: var(--accent); opacity: .75; display: block; }
+  .lcard.offline .thumb { filter: grayscale(.7) brightness(.55); }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn active" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>资产库</h1>
+      <span class="sub">跨项目复用 · 18 项</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" style="border:1px solid var(--line)">从现有项目保存</button>
+      <button class="btn primary" style="height:36px"><svg><use href="#i-plus"/></svg>添加到资产库</button>
+    </header>
+    <div class="page-body">
+
+      <div class="ltoolbar">
+        <div class="seg"><span class="on">全部 18</span><span>人物 6</span><span>场景 5</span><span>道具 4</span><span>音色 3</span></div>
+        <div class="input" style="width:210px"><svg><use href="#i-search"/></svg>搜索资产</div>
+        <div class="select">在线状态 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+        <div class="select">来源 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+        <div class="spacer"></div>
+        <span class="muted xs">默认引用固定版本 · 库更新不会自动漂移</span>
+        <div class="select">最近使用<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      </div>
+
+      <div class="lgrid">
+        <div class="card lcard">
+          <div class="thumb ph" style="height:168px"><span class="st badge ok">3 个版本</span></div>
+          <div class="info"><b>林夏 · 夜巡人</b><p>人物 · 来自 青城夜巡人 · 用于 2 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="thumb ph f" style="height:168px"><span class="st badge">2 个版本</span></div>
+          <div class="info"><b>青石巷 · 夜</b><p>场景 · 来自 青城夜巡人 · 用于 1 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="thumb ph c" style="height:168px"><span class="st badge ok">2 个版本</span></div>
+          <div class="info"><b>铜铃</b><p>道具 · 来自 青城夜巡人 · 用于 2 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="voice-body">
+            <div class="wavebars">
+              <i style="height:12px"></i><i style="height:22px"></i><i style="height:34px"></i><i style="height:18px"></i><i style="height:28px"></i><i style="height:40px"></i><i style="height:24px"></i><i style="height:14px"></i><i style="height:30px"></i><i style="height:20px"></i><i style="height:36px"></i><i style="height:16px"></i><i style="height:26px"></i><i style="height:10px"></i><i style="height:32px"></i><i style="height:22px"></i>
+            </div>
+            <button class="btn sm"><svg><use href="#i-play"/></svg>试听 · 0:12</button>
+          </div>
+          <div class="info"><b>青城夜雨 · 低沉偏冷</b><p>音色 · 自录 · 许可可用 · 用于 1 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="thumb ph d" style="height:168px"><span class="st badge">2 个版本</span></div>
+          <div class="info"><b>沈默 · 便装</b><p>人物 · 来自 青城夜巡人 · 用于 1 个项目</p></div>
+        </div>
+
+        <div class="card lcard">
+          <div class="thumb ph b" style="height:168px"><span class="st badge">1 个版本</span></div>
+          <div class="info"><b>山海市集 · 晨</b><p>场景 · 来自 山海食单 · 用于 1 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="thumb ph e" style="height:168px"><span class="st badge">1 个版本</span></div>
+          <div class="info"><b>巡夜灯</b><p>道具 · 项目沉淀 · 用于 2 个项目</p></div>
+        </div>
+        <div class="card lcard offline">
+          <div class="thumb ph" style="height:168px"><span class="st badge danger">文件不可访问</span></div>
+          <div class="info"><b>老周 · 巷口</b><p>人物 · 禁止用于新项目 · 重新定位后恢复</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="voice-body">
+            <div class="wavebars">
+              <i style="height:18px"></i><i style="height:30px"></i><i style="height:14px"></i><i style="height:36px"></i><i style="height:24px"></i><i style="height:12px"></i><i style="height:32px"></i><i style="height:40px"></i><i style="height:20px"></i><i style="height:28px"></i><i style="height:14px"></i><i style="height:34px"></i><i style="height:18px"></i><i style="height:26px"></i><i style="height:38px"></i><i style="height:16px"></i>
+            </div>
+            <button class="btn sm"><svg><use href="#i-play"/></svg>试听 · 0:09</button>
+          </div>
+          <div class="info"><b>少女 · 清亮</b><p>音色 · Provider · 用于 0 个项目</p></div>
+        </div>
+        <div class="card lcard">
+          <div class="thumb ph d" style="height:168px"><span class="st badge">1 个版本</span></div>
+          <div class="info"><b>霓虹街口 · 雨</b><p>场景 · 来自 霓虹医馆 · 用于 1 个项目</p></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

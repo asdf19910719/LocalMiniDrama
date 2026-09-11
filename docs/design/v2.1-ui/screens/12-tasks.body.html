@@ -1,0 +1,138 @@
+<style>
+  .tfilter { display: flex; align-items: center; gap: 8px; padding: 12px 24px 0; }
+  .tlist { padding: 14px 24px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .trow { display: flex; align-items: center; gap: 14px; padding: 13px 16px; cursor: pointer; }
+  .trow:hover, .trow.sel { border-color: var(--line-strong); }
+  .trow.sel { border-color: var(--accent); }
+  .trow .ic { width: 36px; height: 36px; border-radius: 9px; background: var(--panel2); display: flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
+  .trow .ic svg { width: 17px; height: 17px; }
+  .trow .tt b { font-size: 13.5px; display: block; }
+  .trow .tt span { font-size: 11.5px; color: var(--muted); }
+  .trow .stat { width: 190px; }
+  .trow .stat .lbl { font-size: 11.5px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .trow .meta { width: 150px; font-size: 12px; color: var(--muted); text-align: right; }
+  /* 详情抽屉 */
+  .tl { position: relative; padding-left: 18px; }
+  .tl::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 1px; background: var(--line); }
+  .tl-item { position: relative; padding: 5px 0 5px 8px; font-size: 12.5px; }
+  .tl-item::before { content: ""; position: absolute; left: -17px; top: 11px; width: 9px; height: 9px; border-radius: 50%; background: var(--neutral); border: 2px solid var(--panel); }
+  .tl-item.done::before { background: var(--ok); }
+  .tl-item.cur::before { background: var(--info); box-shadow: 0 0 0 3px rgba(88,166,255,.2); }
+  .tl-item .t { color: var(--muted); font-size: 11px; margin-left: 8px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn active" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>任务中心</h1>
+      <span class="sub">跨项目恢复 · 上次同步 14:35</span>
+      <div class="spacer"></div>
+      <span class="badge info">运行中 2</span><span class="badge warn">需要处理 1</span>
+      <button class="btn ghost" style="border:1px solid var(--line)">成本台账</button>
+    </header>
+
+    <div class="tfilter">
+      <div class="tabs" style="border:none; margin-right:8px">
+        <span class="tab on">进行中<span class="cnt">3</span></span>
+        <span class="tab">需要处理<span class="cnt warn">1</span></span>
+        <span class="tab">历史<span class="cnt">26</span></span>
+      </div>
+      <div class="spacer"></div>
+      <div class="select" style="height:32px">项目 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">类型 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">通道 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="input" style="width:200px; height:32px"><svg><use href="#i-search"/></svg>搜索对象</div>
+    </div>
+
+    <div class="tlist">
+      <div class="card trow sel">
+        <div class="ic" style="color:var(--info)"><svg><use href="#i-film"/></svg></div>
+        <div class="tt grow"><b>镜头 05 · 视频生成</b><span>青城夜巡人 · 第 3 集 · 分镜</span></div>
+        <div class="stat">
+          <div class="lbl info-t"><svg style="width:12px;height:12px"><use href="#i-refresh"/></svg>运行中 · 可信进度 62%</div>
+          <div class="progress info"><i style="width:62%"></i></div>
+        </div>
+        <div class="meta">MiniMax H3 · 7s<br>已用 2:41 · 预计 ¥0.48</div>
+        <button class="btn sm">查看任务</button>
+      </div>
+
+      <div class="card trow">
+        <div class="ic" style="color:var(--accent)"><svg><use href="#i-spark"/></svg></div>
+        <div class="tt grow"><b>外部 AI 制作 · 第 4 集任务包</b><span>青城夜巡人 · 监控外部结果</span></div>
+        <div class="stat">
+          <div class="lbl"><svg style="width:12px;height:12px"><use href="#i-clock"/></svg>等待回流 · 已创建 26 分钟</div>
+          <div class="progress"><i style="width:8%"></i></div>
+        </div>
+        <div class="meta">任务包 epk-0910-04<br>费用 ¥0.00</div>
+        <button class="btn sm">查看任务</button>
+      </div>
+
+      <div class="card trow" style="opacity:.82">
+        <div class="ic"><svg><use href="#i-monitor"/></svg></div>
+        <div class="tt grow"><b>成片合成 v2 · 第 5 集《过期牛奶》</b><span>午夜便利店 · 短片</span></div>
+        <div class="stat">
+          <div class="lbl"><svg style="width:12px;height:12px"><use href="#i-clock"/></svg>排队中 · 前面 1 个任务</div>
+          <div class="progress"><i style="width:0%"></i></div>
+        </div>
+        <div class="meta">本地执行 · 不产生 API 费用<br>预计 4–6 分钟</div>
+        <button class="btn sm ghost" style="border:1px solid var(--line)">查看任务</button>
+      </div>
+
+      <div class="row" style="padding:6px 4px">
+        <span class="xs muted">百分比仅来自 Provider 可信进度；无法确认时只显示已用时间与历史区间。</span>
+      </div>
+    </div>
+
+    <!-- 遮罩 + 任务详情抽屉 -->
+    <div class="scrim"></div>
+    <aside class="drawer narrow" style="top:0">
+      <div class="drawer-h">
+        <h3>镜头 05 · 视频生成</h3>
+        <span class="badge info">运行中</span>
+        <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:hidden">
+        <div class="sec-t" style="font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:8px">生命周期</div>
+        <div class="tl">
+          <div class="tl-item done">提交成功<span class="t">14:02:11</span></div>
+          <div class="tl-item done">开始执行<span class="t">14:03:02 · 排队 51s</span></div>
+          <div class="tl-item cur">生成中 · 已运行 2:41<span class="t">预计剩余 1–2 分钟</span></div>
+          <div class="tl-item" style="color:var(--muted)">输出候选 → 待采用<span class="t">预计 ~14:39</span></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="kv"><span class="k">项目 / 剧集</span><span class="v">青城夜巡人 · 第 3 集</span></div>
+        <div class="kv"><span class="k">对象</span><span class="v">分镜 05 · S3-2 青石巷</span></div>
+        <div class="kv"><span class="k">通道 / 模型</span><span class="v">API 中转站 · MiniMax H3</span></div>
+        <div class="kv"><span class="k">规格</span><span class="v">7s · 1080×1920 · 1 个候选</span></div>
+        <div class="kv"><span class="k">费用</span><span class="v">预计 ¥0.48 · 实际待回填</span></div>
+
+        <div class="divider"></div>
+        <div class="sec-t" style="font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:6px">输入快照摘要</div>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <span class="chip"><span class="at">@图片1</span>林夏 v3</span>
+          <span class="chip"><span class="at">@图片2</span>青石巷 v2</span>
+          <span class="chip"><span class="at">@图片3</span>巡夜灯 v1</span>
+          <span class="chip">H3 草稿 · 校验通过</span>
+        </div>
+        <div class="row" style="margin-top:10px; padding:8px 11px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
+          <span class="small t2">技术详情</span><span class="xs muted">任务 ID · 快照 hash · 原始状态</span>
+        </div>
+      </div>
+      <div class="drawer-f">
+        <button class="btn"><svg><use href="#i-doc"/></svg>查看日志</button>
+        <div class="spacer"></div>
+        <button class="btn danger">取消任务</button>
+        <button class="btn primary" disabled>打开结果</button>
+      </div>
+    </aside>
+  </div>
+</div>

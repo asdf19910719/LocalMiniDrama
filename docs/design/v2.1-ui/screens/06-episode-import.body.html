@@ -1,0 +1,100 @@
+<style>
+  .wiz-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .wiz-steps { display: flex; align-items: center; gap: 4px; padding: 13px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .wstep { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .wstep .n { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .wstep.done { color: var(--text-2); }
+  .wstep.done .n { background: var(--ok-subtle); border-color: transparent; color: var(--ok); }
+  .wstep.done .n svg { width: 11px; height: 11px; }
+  .wstep.cur { color: #fff; font-weight: 600; }
+  .wstep.cur .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .wsep { width: 18px; height: 1px; background: var(--line-strong); margin: 0 3px; }
+  .sum-wrap { flex: 1; display: flex; justify-content: center; padding: 22px 24px; overflow: hidden; }
+  .sum-col { width: 860px; display: flex; flex-direction: column; gap: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 12px 14px; }
+  .tile .k { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .tile .v { font-size: 15px; font-weight: 600; }
+  .tile .v small { font-size: 11.5px; color: var(--muted); font-weight: 400; margin-left: 5px; }
+  .file-strip { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+  .file-strip svg { width: 15px; height: 15px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="wiz-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <h1 style="font-size:18px">导入制作包</h1>
+      <span class="badge outline">episode-package@2.1</span>
+    </header>
+
+    <div class="wiz-steps">
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>目标与文件</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>剧本与场次</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>资产匹配</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>分镜与时段</span><span class="wsep"></span>
+      <span class="wstep cur"><span class="n">5</span>确认写入</span>
+    </div>
+
+    <div class="sum-wrap">
+      <div class="sum-col">
+
+        <div class="card pad">
+          <div class="row" style="margin-bottom:12px">
+            <b style="font-size:14px">写入目标</b>
+            <span class="badge ok">空白剧集 · 可写入</span>
+          </div>
+          <div class="tiles">
+            <div class="tile"><div class="k">目标剧集</div><div class="v">E04 长街无灯<small>填充空白</small></div></div>
+            <div class="tile"><div class="k">剧本</div><div class="v">1 部 · 8 场次<small>约 2,760 字</small></div></div>
+            <div class="tile"><div class="k">分镜</div><div class="v">10 个 · 14 时段<small>总时长 01:41</small></div></div>
+            <div class="tile"><div class="k">远端费用</div><div class="v">¥0.00<small>仅写入草稿</small></div></div>
+          </div>
+        </div>
+
+        <div class="card pad">
+          <b style="font-size:14px">素材与对象</b>
+          <div class="tiles" style="margin-top:12px">
+            <div class="tile"><div class="k">人物</div><div class="v">新建 1<small>+ 复用 2 · 跳过 0</small></div></div>
+            <div class="tile"><div class="k">场景资产</div><div class="v">新建 1<small>+ 复用 2 · 跳过 0</small></div></div>
+            <div class="tile"><div class="k">道具</div><div class="v">复用 2<small>无新建</small></div></div>
+            <div class="tile"><div class="k">外部媒体</div><div class="v">0 个<small>包内不携带媒体</small></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="row" style="gap:14px; font-size:12.5px" class="t2">
+            <span class="t2">复用均已固定具体版本（人物 2 · 场景 2 · 道具 2），不会覆盖项目画面风格与当前使用项。</span>
+          </div>
+        </div>
+
+        <div class="card pad" style="display:flex; align-items:center; gap:10px; border-color:rgba(69,211,156,.28)">
+          <svg style="width:18px;height:18px;color:var(--ok);flex:0 0 auto"><use href="#i-shield"/></svg>
+          <span class="small" style="color:var(--ok)">导入只创建结构化草稿：不确认剧本、不设置当前使用项、不触发任何图片 / 视频 / 音频任务。</span>
+        </div>
+
+        <div class="file-strip">
+          <svg><use href="#i-box"/></svg>
+          qingcheng_ep04_package.zip · episode-package@2.1 · package_id epk-20260910-04 · 2.7 MB
+          <div class="spacer"></div>
+          <span style="text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer">技术检查详情</span>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="drawer-f">
+      <button class="btn ghost"><svg><use href="#i-back"/></svg>上一步</button>
+      <span class="muted xs">第 5 步 · 共 5 步</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">取消</button>
+      <button class="btn primary lg">确认写入并创建草稿</button>
+    </footer>
+  </div>
+</div>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LocalMiniDrama V2.1 · UI 设计稿图库</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0d12; color: #f4f6fb; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; padding: 32px 40px 60px; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: #8d95a8; font-size: 13px; margin-bottom: 26px; }
+  .sub a { color: #7c5cff; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  figure { background: #12151d; border: 1px solid #2a3040; border-radius: 12px; overflow: hidden; }
+  figure:hover { border-color: #3a4256; }
+  img { width: 100%; display: block; aspect-ratio: 1440/900; object-fit: cover; }
+  figcaption { padding: 11px 14px 13px; }
+  figcaption b { font-size: 14px; display: block; }
+  figcaption span { font-size: 12px; color: #8d95a8; display: block; margin-top: 3px; }
+  figcaption code { font-size: 11px; color: #6b7386; font-family: Consolas, monospace; }
+  h2 { font-size: 15px; color: #c3c9d6; margin: 30px 0 14px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>LocalMiniDrama · Production Studio V2.1 — UI 设计稿</h1>
+  <div class="sub">35 张 · 1440×900（2x 输出）· 深色专业工作台风格 · 设计规范见 <a href="README.md">README.md</a> · 源码 <code>screens/</code> · 构建 <code>node build.mjs</code></div>
+
+  <h2>全局：项目与剧集层</h2>
+  <div class="grid">
+    <figure><img src="out/png/01-projects.png" alt=""><figcaption><b>01 · 项目中心</b><span>项目卡：最近工作可恢复 + 任务摘要</span><code>/projects</code></figcaption></figure>
+    <figure><img src="out/png/02-project-new.png" alt=""><figcaption><b>02 · 新建项目</b><span>一次提交：资料 / 保存位置 / 开始方式</span><code>/projects/new</code></figcaption></figure>
+    <figure><img src="out/png/03-project-overview.png" alt=""><figcaption><b>03 · 项目概览</b><span>下一步 + 待处理 + 四阶段汇总 + 画面风格</span><code>/projects/:id</code></figcaption></figure>
+    <figure><img src="out/png/04-project-episodes.png" alt=""><figcaption><b>04 · 剧集</b><span>四阶段单元格 + 导入/协作弹层</span><code>/projects/:id/episodes</code></figcaption></figure>
+    <figure><img src="out/png/05-external-ai-wizard.png" alt=""><figcaption><b>05 · 外部 AI 制作向导</b><span>7 步 · 任务包预览与安全边界</span><code>…/episodes/external-ai</code></figcaption></figure>
+    <figure><img src="out/png/06-episode-import.png" alt=""><figcaption><b>06 · 导入制作包</b><span>5 步 · 确认写入汇总</span><code>…/episodes/import-package</code></figcaption></figure>
+  </div>
+
+  <h2>素材与 Studio 四阶段</h2>
+  <div class="grid">
+    <figure><img src="out/png/07-project-assets.png" alt=""><figcaption><b>07 · 项目素材</b><span>3:4 / 16:9 / 1:1 缩略体系 + 异常徽标</span><code>/projects/:id/assets</code></figcaption></figure>
+    <figure><img src="out/png/08-studio-script.png" alt=""><figcaption><b>08 · 剧本阶段</b><span>场次导航｜正文编辑 + AI 选段｜确认上下文</span><code>…/script</code></figcaption></figure>
+    <figure><img src="out/png/09-studio-episode-assets.png" alt=""><figcaption><b>09 · 本集设定</b><span>本集引用投影 + 素材详情抽屉</span><code>…/assets</code></figcaption></figure>
+    <figure><img src="out/png/10-studio-storyboard.png" alt=""><figcaption><b>10 · 分镜阶段</b><span>五区：检查器｜时段工作台｜视频审核｜镜头轨</span><code>…/storyboard</code></figcaption></figure>
+    <figure><img src="out/png/11-studio-cut.png" alt=""><figcaption><b>11 · 成片阶段</b><span>审片大播放器 + 成片设置 + 硬门禁</span><code>…/cut</code></figcaption></figure>
+    <figure><img src="out/png/12-tasks.png" alt=""><figcaption><b>12 · 任务中心</b><span>进行中/需要处理/历史 + 详情抽屉</span><code>/tasks</code></figcaption></figure>
+  </div>
+
+  <h2>全局工具与旁路</h2>
+  <div class="grid">
+    <figure><img src="out/png/13-library.png" alt=""><figcaption><b>13 · 资产库</b><span>跨项目复用 + 音色试听卡</span><code>/library</code></figcaption></figure>
+    <figure><img src="out/png/23-media-library.png" alt=""><figcaption><b>23 · 媒体素材库</b><span>组合筛选 + 业务名称卡片 + 详情抽屉</span><code>/media-library</code></figcaption></figure>
+    <figure><img src="out/png/21-quick-create.png" alt=""><figcaption><b>21 · 自由创作</b><span>快速图片/视频 + 配置抽屉 + 未归档去向</span><code>更多工具</code></figcaption></figure>
+    <figure><img src="out/png/22-advanced-canvas.png" alt=""><figcaption><b>22 · 高级画布</b><span>只读关系视图 + 影响路径 + 小地图</span><code>?mode=advanced</code></figcaption></figure>
+  </div>
+
+  <h2>设置 · AI 配置 · 数据深工具</h2>
+  <div class="grid">
+    <figure><img src="out/png/14-settings.png" alt=""><figcaption><b>14 · 设置</b><span>工作区 / 目录 / 备份 / 高级数据工具入口</span><code>/settings</code></figcaption></figure>
+    <figure><img src="out/png/15-ai-config.png" alt=""><figcaption><b>15 · AI 配置</b><span>解析顺序 + 三通道 + 业务映射</span><code>/ai-config</code></figcaption></figure>
+    <figure><img src="out/png/19-archive-import.png" alt=""><figcaption><b>19 · 导入项目归档</b><span>三阶段向导 · 校验并确认（含警告导入）</span><code>独立 Page</code></figcaption></figure>
+    <figure><img src="out/png/20-data-tools.png" alt=""><figcaption><b>20 · 高级数据工具</b><span>完整性检查结果 + 逐项恢复落点</span><code>独立 Page</code></figcaption></figure>
+    <figure><img src="out/png/24-workspace-migration.png" alt=""><figcaption><b>24 · 更改工作区向导</b><span>迁移范围预览 · 运行中任务阻断</span><code>六步向导</code></figcaption></figure>
+    <figure><img src="out/png/35-cleanup-dry-run.png" alt=""><figcaption><b>35 · 物理清理 dry-run</b><span>清单 + 阻断原因 + 「永久清理」二次确认</span><code>独立 Page</code></figcaption></figure>
+  </div>
+
+  <h2>关键弹窗与抽屉</h2>
+  <div class="grid">
+    <figure><img src="out/png/16-modal-generation.png" alt=""><figcaption><b>16 · 生成确认 Sheet</b><span>候选数量 / 联合检查 / 费用确认</span><code>Modal 620px</code></figcaption></figure>
+    <figure><img src="out/png/17-modal-look.png" alt=""><figcaption><b>17 · 画面风格选择</b><span>预设 / 我的 / 自定义</span><code>Modal 880px</code></figcaption></figure>
+    <figure><img src="out/png/18-modal-script-confirm.png" alt=""><figcaption><b>18 · 确认剧本影响摘要</b><span>修订链 + 下游影响 + 承诺</span><code>Modal 540px</code></figcaption></figure>
+    <figure><img src="out/png/29-modal-version-diff.png" alt=""><figcaption><b>29 · 剧本版本比较</b><span>场次级 diff 导航 + 双栏增删高亮</span><code>Modal 940px</code></figcaption></figure>
+    <figure><img src="out/png/32-modal-episode-delete.png" alt=""><figcaption><b>32 · 删除剧集确认</b><span>影响清单 + 回收站保护</span><code>Modal 540px</code></figcaption></figure>
+    <figure><img src="out/png/25-drawer-batch-precheck.png" alt=""><figcaption><b>25 · 批量生成预检</b><span>命中/跳过/阻塞 + 费用 + 创建 N 个任务</span><code>Drawer 460px</code></figcaption></figure>
+    <figure><img src="out/png/26-drawer-reference-manage.png" alt=""><figcaption><b>26 · 管理镜头引用</b><span>三组引用 + 槽位重排 + H3 标脏</span><code>Drawer 440px</code></figcaption></figure>
+    <figure><img src="out/png/27-drawer-asset-preview.png" alt=""><figcaption><b>27 · 素材预览（分镜）</b><span>槽位 / 出现时段 / 版本换绑</span><code>Drawer 520px</code></figcaption></figure>
+    <figure><img src="out/png/28-drawer-generation-history.png" alt=""><figcaption><b>28 · 生成历史</b><span>任务倒序 + 按原输入重试</span><code>Drawer 470px</code></figcaption></figure>
+    <figure><img src="out/png/30-drawer-script-history.png" alt=""><figcaption><b>30 · 剧本历史版本</b><span>版本链 + 从此派生</span><code>Drawer 440px</code></figcaption></figure>
+    <figure><img src="out/png/31-drawer-project-edit.png" alt=""><figcaption><b>31 · 编辑项目</b><span>封面 / 名称 / 题材 / 画幅 / 简介</span><code>Drawer 460px</code></figcaption></figure>
+    <figure><img src="out/png/33-drawer-library-detail.png" alt=""><figcaption><b>33 · 资产库详情</b><span>六区段 + 用于项目 / 归档</span><code>Drawer 540px</code></figcaption></figure>
+    <figure><img src="out/png/34-drawer-voice.png" alt=""><figcaption><b>34 · 人物音色</b><span>预设试听 + 素材库/上传/提取</span><code>Drawer 520px</code></figcaption></figure>
+  </div>
+</body>
+</html>

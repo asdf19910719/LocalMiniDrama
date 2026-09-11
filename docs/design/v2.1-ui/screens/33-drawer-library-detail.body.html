@@ -1,0 +1,71 @@
+<style>
+  .lib-bg-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:14px; }
+  .lb-bg-card { height:200px; border-radius:10px; }
+  .sec-t { font-size: 12px; font-weight: 600; color: var(--muted); margin: 13px 0 6px; letter-spacing: .3px; }
+</style>
+<!-- 背景：资产库（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn active"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>资产库</h1>
+      <div class="spacer"></div>
+    </header>
+    <div class="page-body">
+      <div class="lib-bg-grid">
+        <div class="ph lb-bg-card"></div><div class="ph b lb-bg-card"></div><div class="ph c lb-bg-card"></div><div class="ph d lb-bg-card"></div><div class="ph e lb-bg-card"></div>
+        <div class="ph f lb-bg-card"></div><div class="ph d lb-bg-card"></div><div class="ph lb-bg-card"></div><div class="ph b lb-bg-card"></div><div class="ph c lb-bg-card"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 资产详情抽屉 -->
+<div class="scrim" style="z-index:80"></div>
+<aside class="drawer" style="z-index:90; width:540px">
+  <div class="drawer-h">
+    <h3>林夏 · 夜巡人</h3>
+    <span class="badge outline">人物</span>
+    <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div class="drawer-b" style="overflow:hidden">
+    <div class="row" style="gap:14px">
+      <div class="ph" style="width:120px; height:160px; border-radius:10px; flex:0 0 auto"></div>
+      <div class="grow">
+        <div class="sec-t" style="margin:0 0 6px">基本资料</div>
+        <div class="kv"><span class="k">类型</span><span class="v">人物 · 3 个版本</span></div>
+        <div class="kv"><span class="k">使用数量</span><span class="v">2 个项目 · 4 处引用</span></div>
+        <div class="kv"><span class="k">最近使用</span><span class="v">今天 · 青城夜巡人 E03</span></div>
+      </div>
+    </div>
+
+    <div class="sec-t">版本历史</div>
+    <div class="row" style="gap:8px">
+      <span class="chip">v3 · 当前</span><span class="chip">v2</span><span class="chip">v1</span>
+    </div>
+
+    <div class="sec-t">来源与许可</div>
+    <div class="kv"><span class="k">来源</span><span class="v">项目沉淀 · 青城夜巡人</span></div>
+    <div class="kv"><span class="k">许可</span><span class="v ok-t">可用 · 自有素材，无第三方限制</span></div>
+
+    <div class="sec-t">使用位置</div>
+    <div class="kv"><span class="k">青城夜巡人</span><span class="v">E01–E03 人物当前图 · 引用固定版本</span></div>
+    <div class="kv"><span class="k">霓虹医馆</span><span class="v">客串 E07 · 复制副本</span></div>
+
+    <div class="sec-t">文件状态</div>
+    <div class="kv"><span class="k">本地文件</span><span class="v ok-t">可访问 · 4.1 MB · hash 已核对</span></div>
+  </div>
+  <div class="drawer-f">
+    <button class="btn ghost" style="border:1px solid var(--line)">归档</button>
+    <div class="spacer"></div>
+    <button class="btn primary"><svg><use href="#i-link"/></svg>用于项目…</button>
+  </div>
+</aside>

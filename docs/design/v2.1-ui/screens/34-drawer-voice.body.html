@@ -1,0 +1,93 @@
+<style>
+  .ea-bg-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:14px; }
+  .v-opt { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 8px; cursor: pointer; background: var(--panel2); }
+  .v-opt.on { border-color: var(--accent); background: var(--accent-subtle); }
+  .v-opt .rad { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: 0 0 auto; }
+  .v-opt.on .rad { border-color: var(--accent); background: radial-gradient(circle, #fff 0 4px, transparent 5px); }
+  .v-opt b { font-size: 12.5px; display: block; }
+  .v-opt p { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .v-wave { display: flex; align-items: center; gap: 2.5px; height: 22px; margin-left: auto; }
+  .v-wave i { width: 2.5px; border-radius: 1.5px; background: var(--accent); opacity: .7; display: block; }
+</style>
+<!-- 背景：本集设定（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><button class="icon-btn"><svg><use href="#i-back"/></svg></button><span class="proj">青城夜巡人</span><span class="muted">/</span><span class="ep">第 3 集 · 雨夜铜铃</span></div>
+      <div class="spacer"></div>
+    </header>
+    <nav class="stagenav">
+      <div class="stage-item"><span class="stage-idx">1</span><span class="stage-name">剧本</span></div>
+      <div class="stage-item active"><span class="stage-idx">2</span><span class="stage-name">设定</span></div>
+      <div class="stage-item"><span class="stage-idx">3</span><span class="stage-name">分镜</span></div>
+      <div class="stage-item"><span class="stage-idx">4</span><span class="stage-name">成片</span></div>
+    </nav>
+    <div class="page-body">
+      <div class="ea-bg-grid">
+        <div class="ph" style="height:220px; border-radius:10px"></div>
+        <div class="ph d" style="height:220px; border-radius:10px"></div>
+        <div class="ph c" style="height:220px; border-radius:10px; outline:1.5px solid var(--warn); outline-offset:-1.5px"></div>
+        <div class="ph b" style="height:220px; border-radius:10px; opacity:.6"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 人物音色 Drawer（老周 · 音色未设置） -->
+<div class="scrim" style="z-index:80"></div>
+<aside class="drawer" style="z-index:90; width:520px">
+  <div class="drawer-h">
+    <h3>老周 · 人物音色</h3>
+    <span class="badge warn">未设置</span>
+    <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div class="drawer-b" style="overflow:hidden">
+    <div class="card pad" style="display:flex; gap:9px; padding:11px 12px; border-color:rgba(255,182,92,.3)">
+      <svg style="width:14px;height:14px;color:var(--warn);flex:0 0 auto;margin-top:2px"><use href="#i-warn"/></svg>
+      <span class="xs" style="color:var(--warn); line-height:1.6">本集音频策略使用「人物参考音色」，老周有 4 段对白；未设置音色时受影响镜头的视频提交会被要求先处理。</span>
+    </div>
+
+    <div style="margin-top:13px" class="sec-t">预设音色</div>
+    <div class="v-opt on">
+      <span class="rad"></span>
+      <div><b>巷口老陈 · 沙哑温厚</b><p>预设 · 中年男声 · 江淮口音</p></div>
+      <div class="v-wave"><i style="height:8px"></i><i style="height:14px"></i><i style="height:20px"></i><i style="height:11px"></i><i style="height:17px"></i><i style="height:9px"></i><i style="height:15px"></i></div>
+      <button class="btn sm ghost" style="border:1px solid var(--line)"><svg><use href="#i-play"/></svg>试听</button>
+    </div>
+    <div class="v-opt">
+      <span class="rad"></span>
+      <div><b>守夜人 · 低沉缓慢</b><p>预设 · 老年男声 · 通用</p></div>
+      <div class="v-wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:11px"></i></div>
+      <button class="btn sm ghost" style="border:1px solid var(--line)"><svg><use href="#i-play"/></svg>试听</button>
+    </div>
+
+    <div class="sec-t">更多来源</div>
+    <div class="row" style="gap:8px; flex-wrap:wrap">
+      <button class="btn sm"><svg><use href="#i-box"/></svg>从素材库选择</button>
+      <button class="btn sm"><svg><use href="#i-upload"/></svg>上传音频文件</button>
+      <button class="btn sm"><svg><use href="#i-mic"/></svg>从音视频提取…</button>
+    </div>
+    <div class="xs muted" style="margin-top:7px">从音视频提取前需确认来源、许可范围和用途；愤怒、耳语等表演要求不固化为音色属性。</div>
+
+    <div class="row" style="padding:9px 12px; border:1px solid var(--line); border-radius:8px; margin-top:12px; cursor:pointer">
+      <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-fwd"/></svg>
+      <span class="small t2">改用模型默认声音</span>
+      <span class="xs muted">本集声音策略改为「默认」 · 条件立即解除</span>
+    </div>
+  </div>
+  <div class="drawer-f">
+    <span class="muted xs">选择后自动重新检查</span>
+    <div class="spacer"></div>
+    <button class="btn ghost" style="border:1px solid var(--line)">取消</button>
+    <button class="btn primary">用于本集</button>
+  </div>
+</aside>

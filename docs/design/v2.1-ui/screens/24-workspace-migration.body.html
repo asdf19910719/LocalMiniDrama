@@ -1,0 +1,85 @@
+<style>
+  .wiz-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .wiz-steps { display: flex; align-items: center; gap: 4px; padding: 13px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .wstep { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .wstep .n { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .wstep.done { color: var(--text-2); }
+  .wstep.done .n { background: var(--ok-subtle); border-color: transparent; color: var(--ok); }
+  .wstep.done .n svg { width: 11px; height: 11px; }
+  .wstep.cur { color: #fff; font-weight: 600; }
+  .wstep.cur .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .wsep { width: 18px; height: 1px; background: var(--line-strong); margin: 0 3px; }
+  .mg-wrap { flex: 1; display: flex; justify-content: center; padding: 20px 24px; overflow: hidden; }
+  .mg-col { width: 820px; display: flex; flex-direction: column; gap: 14px; }
+  .mg-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 13px 15px; display: flex; justify-content: space-between; align-items: center; }
+  .tile .k { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+  .tile .v { font-size: 14.5px; font-weight: 600; }
+  .chk-row { display: flex; align-items: center; gap: 9px; font-size: 12.5px; padding: 6px 0; }
+  .chk-row svg { width: 14px; height: 14px; flex: 0 0 auto; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn active" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="wiz-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <h1 style="font-size:18px">更改工作区</h1>
+      <span class="badge outline">独立向导 · 可回滚</span>
+    </header>
+    <div class="wiz-steps">
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>选择目录</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>数据库与项目结构</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>权限与空间</span><span class="wsep"></span>
+      <span class="wstep done"><span class="n"><svg><use href="#i-check"/></svg></span>活动任务检查</span><span class="wsep"></span>
+      <span class="wstep cur"><span class="n">5</span>迁移范围预览</span><span class="wsep"></span>
+      <span class="wstep"><span class="n">6</span>确认迁移并重新打开</span>
+    </div>
+
+    <div class="mg-wrap">
+      <div class="mg-col">
+
+        <div class="card pad">
+          <b style="font-size:13.5px">迁移范围</b>
+          <div class="mg-tiles" style="margin-top:12px">
+            <div class="tile"><div><div class="k">数据库</div><div class="v">214 MB · 复制</div></div><span class="badge ok">通过</span></div>
+            <div class="tile"><div><div class="k">媒体</div><div class="v">42.6 GB · 复制</div></div><span class="badge ok">通过</span></div>
+            <div class="tile"><div><div class="k">任务</div><div class="v">2 个运行中</div></div><span class="badge danger">阻断迁移</span></div>
+            <div class="tile"><div><div class="k">备份</div><div class="v">3.8 GB · 保留原目录</div></div><span class="badge outline">不受影响</span></div>
+          </div>
+        </div>
+
+        <div class="card pad">
+          <b style="font-size:13.5px">目标与安全</b>
+          <div style="margin-top:8px">
+            <div class="chk-row"><svg style="color:var(--ok)"><use href="#i-check-c"/></svg>目标 E:\MiniDramaWorks2 · 可用空间 512 GB · 权限可写</div>
+            <div class="chk-row"><svg style="color:var(--ok)"><use href="#i-check-c"/></svg>迁移前自动创建备份与回滚点</div>
+            <div class="chk-row"><svg style="color:var(--ok)"><use href="#i-check-c"/></svg>原目录保留只读副本 · 迁移 journal 记录每一步</div>
+            <div class="chk-row"><svg style="color:var(--danger)"><use href="#i-warn"/></svg>存在 2 个运行中任务（镜头 06 视频 / 成片合成）——危险迁移被禁止</div>
+          </div>
+        </div>
+
+        <div class="card pad" style="display:flex; gap:10px; align-items:center; border-color:rgba(255,107,120,.3)">
+          <svg style="width:16px;height:16px;color:var(--danger);flex:0 0 auto"><use href="#i-shield"/></svg>
+          <span class="small danger-t">请在任务中心等待运行中任务完成或取消后，再回到此步骤确认迁移。</span>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="drawer-f">
+      <button class="btn ghost"><svg><use href="#i-back"/></svg>上一步</button>
+      <span class="muted xs">第 5 步 · 共 6 步</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">取消迁移</button>
+      <button class="btn primary" disabled>确认迁移并重新打开<svg class="price">任务运行中</svg></button>
+    </footer>
+  </div>
+</div>

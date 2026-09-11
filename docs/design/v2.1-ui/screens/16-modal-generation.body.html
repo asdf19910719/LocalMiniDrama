@@ -1,0 +1,98 @@
+<style>
+  .bg-block { border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+  .ck-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 0; }
+  .ck-line svg { width: 14px; height: 14px; color: var(--ok); flex: 0 0 auto; }
+  .qty-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .qty-seg span { padding: 6px 16px; font-size: 13px; color: var(--muted); cursor: pointer; border-right: 1px solid var(--line); }
+  .qty-seg span:last-child { border-right: none; }
+  .qty-seg span.on { background: var(--accent-subtle); color: #fff; font-weight: 600; }
+</style>
+<!-- 背景：分镜页（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><button class="icon-btn"><svg><use href="#i-back"/></svg></button><span class="proj">青城夜巡人</span><span class="muted">/</span><span class="ep">第 3 集 · 雨夜铜铃</span></div>
+      <div class="spacer"></div>
+    </header>
+    <nav class="stagenav">
+      <div class="stage-item"><span class="stage-idx">1</span><span class="stage-name">剧本</span></div>
+      <div class="stage-item"><span class="stage-idx">2</span><span class="stage-name">设定</span></div>
+      <div class="stage-item active"><span class="stage-idx">3</span><span class="stage-name">分镜</span></div>
+      <div class="stage-item"><span class="stage-idx">4</span><span class="stage-name">成片</span></div>
+    </nav>
+    <div style="flex:1; display:flex; gap:12px; padding:14px 16px">
+      <div class="bg-block" style="width:260px"></div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:12px">
+        <div class="bg-block" style="height:110px"></div>
+        <div class="bg-block" style="height:110px"></div>
+        <div class="bg-block" style="height:110px"></div>
+      </div>
+      <div class="bg-block" style="width:330px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 生成确认 Sheet -->
+<div class="scrim" style="z-index:80"></div>
+<div class="modal-wrap" style="z-index:90">
+  <div class="modal" style="width:620px">
+    <div class="modal-h">
+      <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-film"/></svg>
+      <h3>生成视频 · 分镜 05</h3>
+      <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-b" style="overflow:hidden">
+
+      <div class="kv"><span class="k">对象</span><span class="v">S3-2 青石巷 · 镜头 05 · 巷口灯灭</span></div>
+      <div class="kv" style="align-items:center"><span class="k">候选数量</span>
+        <span class="row" style="gap:10px">
+          <span class="qty-seg"><span class="on">1</span><span>2</span><span>3</span></span>
+          <span class="muted xs">费用按数量乘算 · 候选并行提交</span>
+        </span>
+      </div>
+
+      <div class="divider" style="margin:10px 0"></div>
+
+      <div class="kv"><span class="k">通道 / 模型</span><span class="v">API 中转站 · MiniMax H3 · 1080×1920</span></div>
+      <div class="kv"><span class="k">输出时长</span><span class="v">7s · 2 个时段</span></div>
+      <div class="kv"><span class="k">引用素材</span>
+        <span class="row" style="gap:6px">
+          <span class="chip" style="height:24px"><span class="at">@图片1</span>林夏 v3</span>
+          <span class="chip" style="height:24px"><span class="at">@图片2</span>青石巷 v2</span>
+          <span class="chip" style="height:24px"><span class="at">@图片3</span>巡夜灯 v1</span>
+        </span>
+      </div>
+
+      <div class="divider" style="margin:10px 0"></div>
+      <b class="small t2">生成前联合检查</b>
+      <div style="margin-top:4px">
+        <div class="ck-line"><svg><use href="#i-check-c"/></svg>引用素材 · 3/3 可用且在本集快照内</div>
+        <div class="ck-line"><svg><use href="#i-check-c"/></svg>模型能力 · 多时段 / 多引用 / 首尾帧均支持</div>
+        <div class="ck-line"><svg><use href="#i-check-c"/></svg>生成描述 · H3 提示词校验通过</div>
+        <div class="ck-line"><svg><use href="#i-check-c"/></svg>重复任务 · 当前镜头无运行中的同类任务</div>
+      </div>
+
+      <div class="divider" style="margin:10px 0"></div>
+      <div class="row" style="background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:10px 14px">
+        <div class="grow">
+          <div class="row"><b style="font-size:14px">预计费用 ¥0.48</b><span class="badge outline">Provider 返回价</span></div>
+          <div class="xs muted" style="margin-top:3px">预计耗时 2–4 分钟 · 失败时其余任务继续 · 成功只追加候选，不自动采用</div>
+        </div>
+        <button class="btn ghost sm" style="border:1px solid var(--line)">高级参数<span class="badge outline" style="height:18px">项目覆盖</span></button>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn ghost">取消</button>
+      <button class="btn primary"><svg><use href="#i-film"/></svg>创建 1 个远端任务</button>
+    </div>
+  </div>
+</div>

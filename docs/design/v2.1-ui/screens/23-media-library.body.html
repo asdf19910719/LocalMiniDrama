@@ -1,0 +1,111 @@
+<style>
+  .ml-filter { display: flex; align-items: center; gap: 8px; padding: 12px 24px 0; flex-wrap: nowrap; }
+  .mgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 14px 24px; align-content: start; }
+  .mcard { overflow: hidden; cursor: pointer; }
+  .mcard:hover, .mcard.sel { border-color: var(--line-strong); }
+  .mcard.sel { border-color: var(--accent); }
+  .mcard .im { height: 128px; position: relative; border-radius: 0; }
+  .mcard .im .ty { position: absolute; left: 8px; top: 8px; z-index: 2; }
+  .mcard .im .use { position: absolute; right: 8px; top: 8px; z-index: 2; }
+  .mcard .info { padding: 9px 12px 11px; }
+  .mcard .info b { font-size: 13px; display: block; }
+  .mcard .info p { font-size: 11px; color: var(--muted); margin-top: 3px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>媒体素材库</h1>
+      <span class="sub">全部生成媒体 · 342 项 · 卡片按业务名称展示</span>
+      <div class="spacer"></div>
+      <div class="input" style="width:220px"><svg><use href="#i-search"/></svg>搜索名称或文件</div>
+    </header>
+
+    <div class="ml-filter">
+      <div class="select" style="height:32px">项目 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">剧集 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">媒体类型 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">通道 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="select" style="height:32px">时间 · 全部<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      <div class="seg"><span class="on">全部</span><span>被使用</span><span>未使用</span></div>
+      <div class="spacer"></div>
+      <span class="muted xs">342 项 · 已启用 1 个条件 · <span style="text-decoration:underline dotted;cursor:pointer">清除</span></span>
+    </div>
+
+    <div class="mgrid" style="height:100%">
+      <div class="card mcard sel">
+        <div class="im ph"><span class="ty badge info">视频</span><span class="use badge ok">已采用</span></div>
+        <div class="info"><b>镜头 05 · 视频候选 A</b><p>青城夜巡人 · E03 · MP4 · 00:07 · 14:22</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph d"><span class="ty badge accent">分镜图</span><span class="use badge ok">当前图</span></div>
+        <div class="info"><b>分镜 05 · 分镜图 v2</b><p>青城夜巡人 · E03 · PNG · 1024×1792</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph"><span class="ty badge ok">素材图</span></div>
+        <div class="info"><b>林夏 · 夜巡制服 v3</b><p>项目素材 · PNG · 3 个候选引用</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph c"><span class="ty badge info">视频</span><span class="use badge warn">未使用</span></div>
+        <div class="info"><b>镜头 06 · 视频候选 B</b><p>青城夜巡人 · E03 · 生成中 62%</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph b"><span class="ty badge ok">素材图</span></div>
+        <div class="info"><b>青石巷 · 夜 v2</b><p>项目素材 · 场景 · PNG · 12 镜引用</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph e"><span class="ty badge outline">成片</span></div>
+        <div class="info"><b>E02《巷中低语》 · 成片 v1</b><p>青城夜巡人 · MP4 · 01:28 · 09-08</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph f"><span class="ty badge accent">分镜图</span><span class="use badge warn">旧版</span></div>
+        <div class="info"><b>分镜 03 · 分镜图 v1</b><p>青城夜巡人 · E03 · 基于风格 v2 已过期</p></div>
+      </div>
+      <div class="card mcard">
+        <div class="im ph c"><span class="ty badge info">音频</span></div>
+        <div class="info"><b>E03 · 旁白 TTS 第 2 段</b><p>青城夜巡人 · WAV · 00:12 · 音久 TTS</p></div>
+      </div>
+    </div>
+
+    <!-- 详情抽屉 -->
+    <div class="scrim"></div>
+    <aside class="drawer narrow">
+      <div class="drawer-h">
+        <h3>镜头 05 · 视频候选 A</h3>
+        <span class="badge ok">已采用</span>
+        <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:hidden">
+        <div class="ph" style="height:158px; border-radius:9px; position:relative">
+          <span class="badge info" style="position:absolute; left:8px; bottom:8px; z-index:2">MP4 · 00:07 · 1080×1920</span>
+        </div>
+        <div class="divider"></div>
+        <div class="kv"><span class="k">来源</span><span class="v">API 中转站 · MiniMax H3</span></div>
+        <div class="kv"><span class="k">使用位置</span><span class="v">E03 分镜 05 · 用于本镜</span></div>
+        <div class="kv"><span class="k">版本关系</span><span class="v">候选 A（共 3 个）</span></div>
+        <div class="kv"><span class="k">文件属性</span><span class="v">14.2 MB · H.264 · 30fps</span></div>
+        <div class="kv"><span class="k">本地路径</span><span class="v" style="font-family:Consolas,monospace; font-size:10.5px">E:\…\media\e03\shot05\cand_a.mp4</span></div>
+        <div class="divider"></div>
+        <b class="small t2">输入快照摘要</b>
+        <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:7px">
+          <span class="chip"><span class="at">@图片1</span>林夏 v3</span>
+          <span class="chip"><span class="at">@图片2</span>青石巷 v2</span>
+          <span class="chip">H3 草稿 · 校验通过</span>
+        </div>
+      </div>
+      <div class="drawer-f">
+        <button class="btn"><svg><use href="#i-folder"/></svg>打开所在目录</button>
+        <div class="spacer"></div>
+        <button class="btn primary"><svg><use href="#i-eye"/></svg>在分镜中查看</button>
+      </div>
+    </aside>
+  </div>
+</div>

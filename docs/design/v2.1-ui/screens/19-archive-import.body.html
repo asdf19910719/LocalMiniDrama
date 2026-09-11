@@ -1,0 +1,85 @@
+<style>
+  .wiz-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .arc-wrap { flex: 1; display: flex; justify-content: center; padding: 20px 24px; overflow: hidden; }
+  .arc-col { width: 880px; display: flex; flex-direction: column; gap: 14px; }
+  .file-drop { border: 1.5px dashed var(--line-strong); border-radius: 12px; padding: 18px; display: flex; align-items: center; gap: 14px; background: var(--panel); }
+  .file-drop svg { width: 26px; height: 26px; color: var(--muted); }
+  .checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .check { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; background: var(--panel2); }
+  .check .t { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+  .check .t svg { width: 14px; height: 14px; }
+  .check p { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .meta-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 12px 14px; }
+  .tile .k { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .tile .v { font-size: 15px; font-weight: 600; }
+  .tile .v small { font-size: 11.5px; color: var(--muted); font-weight: 400; margin-left: 5px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="wiz-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <h1 style="font-size:18px">导入项目归档</h1>
+      <span class="badge outline">local-mini-drama.project-archive@2.1</span>
+      <div class="spacer"></div>
+      <span class="muted small">第 2 步 · 校验并确认（共 3 步）</span>
+    </header>
+    <div class="arc-wrap">
+      <div class="arc-col">
+
+        <div class="file-drop">
+          <svg><use href="#i-box"/></svg>
+          <div class="grow">
+            <b style="font-size:13.5px">qingcheng_archive_20260901.zip</b>
+            <div class="muted xs" style="margin-top:3px">6.9 GB · SHA-256 3a91…f7 · 校验完成 · 1 条警告</div>
+          </div>
+          <button class="btn sm">重新选择</button>
+        </div>
+
+        <div class="checks">
+          <div class="check"><div class="t ok-t"><svg><use href="#i-check-c"/></svg>格式与版本</div><p>archive@2.1 · Manifest 完整</p></div>
+          <div class="check"><div class="t ok-t"><svg><use href="#i-check-c"/></svg>结构完整性</div><p>12 剧集 · 19 素材 · 26 任务历史</p></div>
+          <div class="check"><div class="t warn-t"><svg><use href="#i-warn"/></svg>媒体文件</div><p>缺 2 个媒体文件，可导入后重新定位</p></div>
+          <div class="check"><div class="t ok-t"><svg><use href="#i-check-c"/></svg>磁盘空间</div><p>需 8.2 GB（含临时解压）· 可用 326 GB</p></div>
+          <div class="check"><div class="t ok-t"><svg><use href="#i-check-c"/></svg>项目名称</div><p>无重名冲突</p></div>
+          <div class="check"><div class="t ok-t"><svg><use href="#i-check-c"/></svg>数据库</div><p>schema 2.1.0 · 外键完整</p></div>
+        </div>
+
+        <div class="card pad">
+          <b style="font-size:13.5px">归档内容</b>
+          <div class="meta-tiles" style="margin-top:12px">
+            <div class="tile"><div class="k">项目名</div><div class="v">青城夜巡人<small>09-01 备份</small></div></div>
+            <div class="tile"><div class="k">剧集</div><div class="v">12 集<small>5 个已完成</small></div></div>
+            <div class="tile"><div class="k">媒体</div><div class="v">148 个<small>6.4 GB · 缺 2</small></div></div>
+            <div class="tile"><div class="k">任务历史</div><div class="v">26 条<small>只读恢复</small></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="kv"><span class="k">最终项目名</span><span class="v"><span class="input" style="height:30px; width:220px">青城夜巡人（恢复）</span></span></div>
+          <div class="kv"><span class="k">工作区位置</span><span class="v">E:\LocalMiniDramaWorks · 媒体复制入项目 · <span class="xs" style="text-decoration:underline dotted;cursor:pointer">技术检查详情</span></span></div>
+        </div>
+
+        <div class="card pad" style="display:flex; gap:10px; align-items:center; border-color:rgba(255,182,92,.3)">
+          <svg style="width:16px;height:16px;color:var(--warn);flex:0 0 auto"><use href="#i-warn"/></svg>
+          <span class="small" style="color:var(--warn)">缺失的 2 个媒体文件将以离线状态导入，可在「高级数据工具 · 媒体重定位」中恢复；导入提交前会先备份当前工作区状态。</span>
+        </div>
+
+      </div>
+    </div>
+    <footer class="drawer-f">
+      <button class="btn ghost"><svg><use href="#i-back"/></svg>上一步</button>
+      <span class="muted xs">含警告导入 · 不覆盖任何已有项目</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">取消</button>
+      <button class="btn primary">仍然导入为新项目</button>
+    </footer>
+  </div>
+</div>

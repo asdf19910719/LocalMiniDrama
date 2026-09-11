@@ -1,0 +1,170 @@
+<style>
+  .studio-body { flex: 1; display: flex; min-height: 0; }
+  .sn { width: 240px; flex: 0 0 240px; border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
+  .sn-h { padding: 12px 14px 8px; }
+  .sn-list { flex: 1; overflow: hidden; padding: 4px 8px; }
+  .sn-item { border: 1px solid transparent; border-radius: 8px; padding: 9px 10px; cursor: pointer; margin-bottom: 2px; }
+  .sn-item:hover { background: var(--panel2); }
+  .sn-item.on { border-color: var(--accent); background: var(--accent-subtle); }
+  .sn-item .t { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .sn-item .t .no { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .sn-item .d { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .ed { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .ed-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+  .ed-head .ttl { font-weight: 600; font-size: 14px; }
+  .ed-body { flex: 1; overflow: hidden; padding: 20px 56px 20px 28px; position: relative; font-size: 14.5px; line-height: 1.9; color: var(--text-2); }
+  .sc-head { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .sc-head .chip { background: var(--bg); }
+  .dlg { margin: 6px 0 6px 26px; }
+  .dlg b { color: #fff; font-weight: 600; margin-right: 10px; }
+  .act-line { color: var(--text-2); }
+  .sel-hl { background: rgba(124, 92, 255, .30); border-radius: 3px; padding: 1px 2px; }
+  .ai-pop { position: absolute; right: 120px; top: 172px; z-index: 20; display: flex; align-items: center; gap: 2px; background: var(--panel2); border: 1px solid var(--line-strong); border-radius: 9px; padding: 4px; box-shadow: var(--shadow); }
+  .ai-pop span { font-size: 12px; padding: 5px 9px; border-radius: 6px; cursor: pointer; color: var(--text-2); display: flex; align-items: center; gap: 5px; }
+  .ai-pop span:hover { background: var(--accent-subtle); color: #fff; }
+  .ai-pop span svg { width: 13px; height: 13px; color: var(--accent); }
+  .ctx { width: 320px; flex: 0 0 320px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .ck-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 0; }
+  .ck-row svg { width: 14px; height: 14px; flex: 0 0 auto; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb">
+        <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+        <span class="proj">青城夜巡人</span><span class="muted">/</span><span class="ep">第 3 集 · 雨夜铜铃</span>
+      </div>
+      <div class="save-state"><span class="dot"></span>已保存 · 14:32</div>
+      <div class="spacer"></div>
+      <div class="topbar-right">
+        <button class="icon-btn" title="撤销"><svg><use href="#i-back"/></svg></button>
+        <button class="icon-btn" title="重做"><svg><use href="#i-fwd"/></svg></button>
+        <span style="width:1px;height:20px;background:var(--line)"></span>
+        <button class="btn sm"><svg><use href="#i-tasks"/></svg>任务<span class="badge info">2</span></button>
+        <button class="btn sm ghost">¥0.42</button>
+        <button class="icon-btn" title="更多"><svg><use href="#i-more"/></svg></button>
+      </div>
+    </header>
+
+    <nav class="stagenav">
+      <div class="stage-item active"><span class="stage-idx">1</span><span class="stage-name">剧本</span><span class="stage-meta">草稿 v3 · 已确认 v2</span></div>
+      <span class="stage-arrow"><svg style="width:14px;height:14px"><use href="#i-fwd"/></svg></span>
+      <div class="stage-item"><span class="stage-idx">2</span><span class="stage-name">设定</span><span class="stage-meta">3/4 已确认</span></div>
+      <span class="stage-arrow"><svg style="width:14px;height:14px"><use href="#i-fwd"/></svg></span>
+      <div class="stage-item"><span class="stage-idx">3</span><span class="stage-name">分镜</span><span class="stage-meta">4/9 已采用</span><span class="badge warn" style="height:18px;padding:0 6px">1</span></div>
+      <span class="stage-arrow"><svg style="width:14px;height:14px"><use href="#i-fwd"/></svg></span>
+      <div class="stage-item"><span class="stage-idx">4</span><span class="stage-name">成片</span><span class="stage-meta">未开始</span></div>
+      <div style="position:absolute; right:16px" class="muted small">本集完成度 42% · 基于已确认剧本 v2</div>
+    </nav>
+
+    <div class="studio-body">
+      <!-- 左：场次导航 -->
+      <div class="sn">
+        <div class="sn-h">
+          <div class="input" style="width:100%; height:30px; font-size:12.5px"><svg><use href="#i-search"/></svg>搜索场次</div>
+          <div class="row muted xs" style="margin-top:8px"><span>4 场次 · 2,340 字</span><div class="spacer"></div><span>预计 96s</span></div>
+        </div>
+        <div class="sn-list">
+          <div class="sn-item">
+            <div class="t"><span class="no">S3-1</span>便利店 · 夜</div>
+            <div class="d">内景 · 412 字</div>
+          </div>
+          <div class="sn-item on">
+            <div class="t"><span class="no">S3-2</span>青石巷 · 夜<span class="badge accent" style="height:18px;padding:0 6px">编辑中</span></div>
+            <div class="d">外景 · 雨夜 · 586 字</div>
+          </div>
+          <div class="sn-item">
+            <div class="t"><span class="no">S3-3</span>天台 · 黄昏</div>
+            <div class="d">外景 · 631 字</div>
+          </div>
+          <div class="sn-item">
+            <div class="t"><span class="no">S3-4</span>巷口 · 雨夜</div>
+            <div class="d">外景 · 711 字</div>
+          </div>
+        </div>
+        <div style="padding:10px"><button class="btn ghost sm" style="width:100%; border:1px dashed var(--line-strong)"><svg><use href="#i-plus"/></svg>新建场次</button></div>
+      </div>
+
+      <!-- 中：正文编辑器 -->
+      <div class="ed">
+        <div class="ed-head">
+          <span class="ttl">S3-2 · 青石巷 · 夜</span>
+          <div class="seg"><span class="on">外景</span><span>内景</span></div>
+          <div class="chip">时间 · 雨夜</div>
+          <div class="spacer"></div>
+          <button class="btn sm"><svg style="color:var(--accent)"><use href="#i-spark"/></svg>AI 辅助<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
+          <span class="muted xs">586 字</span>
+        </div>
+        <div class="ed-body">
+          <div class="sc-head">
+            <span class="chip bold">场次标题 · 青石巷·夜</span>
+            <span class="chip">地点 · 青石巷</span>
+            <span class="chip">氛围 · 雨夜 / 压抑</span>
+          </div>
+          <p class="act-line">雨丝斜织，青石路面浮着碎灯的倒影。林夏提着巡夜灯走进巷子，<span class="sel-hl">灯焰在风里压得很低，像被人捂住了嘴</span>。</p>
+          <p class="dlg"><b>林夏</b>（低声）老周说，铜铃昨晚又响了……</p>
+          <p class="act-line">巷子深处，沈默半边身子隐在阴影里，只有袖口的银线偶尔一亮。</p>
+          <p class="dlg"><b>沈默</b>你迟到了。</p>
+          <p class="dlg"><b>林夏</b>雨太大，桥那边绕了路。</p>
+          <p class="act-line">远处传来一声极轻的铃响，两人同时回头——巷口的路灯，熄了。</p>
+
+          <!-- 选段 AI 浮层（渐进出现，锚定选中文本末尾） -->
+          <div class="ai-pop" style="top:96px; right:150px">
+            <span><svg><use href="#i-spark"/></svg>改写</span>
+            <span><svg><use href="#i-spark"/></svg>扩写</span>
+            <span><svg><use href="#i-spark"/></svg>缩写</span>
+            <span style="color:var(--muted)">取消</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右：当前上下文 -->
+      <div class="ctx">
+        <div class="card pad" style="padding:13px 14px">
+          <div class="row" style="margin-bottom:8px"><b style="font-size:13px">修订状态</b><div class="spacer"></div><button class="btn ghost sm">历史版本</button></div>
+          <div class="row" style="gap:6px; flex-wrap:wrap">
+            <span class="badge accent">当前 草稿 v3</span>
+            <svg class="muted" style="width:13px;height:13px"><use href="#i-fwd"/></svg>
+            <span class="badge ok">已确认 v2</span>
+          </div>
+          <div class="muted xs" style="margin-top:8px">再次确认将创建新版本 v4，已确认的 v2 保留可回看。</div>
+        </div>
+
+        <div class="card pad" style="padding:13px 14px">
+          <b style="font-size:13px">确认前检查</b>
+          <div class="ck-row"><svg style="color:var(--ok)"><use href="#i-check-c"/></svg>场次 4 · 字数 2,340 · 预计时长 96s</div>
+          <div class="ck-row"><svg style="color:var(--ok)"><use href="#i-check-c"/></svg>阻塞项 0 · 可以确认</div>
+          <div class="ck-row"><svg style="color:var(--warn)"><use href="#i-warn"/></svg>建议 2 · 场次 S3-2 偏长 / 对白过密</div>
+        </div>
+
+        <div class="card pad" style="padding:13px 14px">
+          <b style="font-size:13px">预计素材变化</b>
+          <div class="ck-row"><svg style="color:var(--warn)"><use href="#i-plus"/></svg>新增 1 · 沈默「雨夜外衣」状态</div>
+          <div class="ck-row"><svg style="color:var(--warn)"><use href="#i-refresh"/></svg>变化 2 · 林夏服装 / 青石巷氛围</div>
+          <div class="ck-row"><svg style="color:var(--muted)"><use href="#i-check"/></svg>删除候选 0</div>
+        </div>
+
+        <div class="card pad" style="padding:13px 14px">
+          <b style="font-size:13px">下游影响</b>
+          <div class="ck-row"><svg style="color:var(--warn)"><use href="#i-warn"/></svg>6 个镜头的分镜包将过期</div>
+          <div class="ck-row"><svg style="color:var(--muted)"><use href="#i-image"/></svg>4 张已确认镜头图可保留，建议复核</div>
+        </div>
+
+        <div style="margin-top:auto; display:flex; flex-direction:column; gap:8px">
+          <button class="btn primary" style="width:100%">确认新版本</button>
+          <button class="btn ghost" style="width:100%; border:1px solid var(--line)">查看影响明细</button>
+          <div class="muted xs" style="text-align:center">确认只创建新版本并标记过期，不会自动重新生成媒体。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

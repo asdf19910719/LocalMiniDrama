@@ -1,0 +1,95 @@
+<style>
+  .look-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .look-card { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--panel2); }
+  .look-card:hover { border-color: var(--line-strong); }
+  .look-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .look-card .im { height: 96px; border-radius: 0; }
+  .look-card .im .cur { position: absolute; left: 7px; top: 7px; z-index: 2; }
+  .look-card .cap { padding: 9px 11px; }
+  .look-card .cap b { font-size: 12.5px; display: block; }
+  .look-card .cap span { font-size: 10.5px; color: var(--muted); display: block; margin-top: 2px; }
+</style>
+<!-- 背景：项目概览（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">青城夜巡人</span>
+      <div class="spacer"></div>
+    </header>
+    <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
+      <div class="card" style="height:150px"></div>
+      <div style="display:flex; gap:14px"><div class="card" style="flex:1; height:180px"></div><div class="card" style="flex:1.4; height:180px"></div></div>
+      <div style="display:flex; gap:14px"><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 风格选择 Modal -->
+<div class="scrim" style="z-index:80"></div>
+<div class="modal-wrap" style="z-index:90">
+  <div class="modal" style="width:880px">
+    <div class="modal-h">
+      <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-palette"/></svg>
+      <h3>项目画面风格</h3>
+      <span class="badge ok">当前 · 青城夜雨 · 冷蓝 v3</span>
+      <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-b" style="overflow:hidden">
+      <div class="tabs" style="margin-bottom:14px">
+        <span class="tab on">预设风格</span>
+        <span class="tab">我的风格<span class="cnt">2</span></span>
+        <span class="tab">自定义风格</span>
+      </div>
+      <div class="look-grid">
+        <div class="look-card sel">
+          <div class="im ph"><span class="cur badge accent">当前使用</span></div>
+          <div class="cap"><b>青城夜雨 · 冷蓝</b><span>冷蓝夜色 · 湿润反光 · 胶片颗粒</span></div>
+        </div>
+        <div class="look-card">
+          <div class="im ph c"></div>
+          <div class="cap"><b>高对比惊悚</b><span>强明暗对比 · 冷暖冲突 · 手持感</span></div>
+        </div>
+        <div class="look-card">
+          <div class="im ph d"></div>
+          <div class="cap"><b>赛博夜城</b><span>霓虹溢色 · 雨夜高光 · 金属质感</span></div>
+        </div>
+        <div class="look-card">
+          <div class="im ph b"></div>
+          <div class="cap"><b>国风水墨</b><span>留白构图 · 淡彩 · 宣纸肌理</span></div>
+        </div>
+        <div class="look-card">
+          <div class="im ph e"></div>
+          <div class="cap"><b>暖阳治愈</b><span>低饱和暖调 · 柔光 · 生活流</span></div>
+        </div>
+        <div class="look-card">
+          <div class="im ph f"></div>
+          <div class="cap"><b>胶片日常</b><span>柯达调 · 轻颗粒 · 自然光</span></div>
+        </div>
+        <div class="look-card" style="border-style:dashed; display:flex; align-items:center; justify-content:center; min-height:150px">
+          <div style="text-align:center; color:var(--muted)">
+            <svg style="width:20px;height:20px"><use href="#i-plus"/></svg>
+            <div class="small" style="margin-top:6px">自定义风格</div>
+            <div class="xs" style="margin-top:3px">名称 · 描述 · 参考图 · 约束</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-f" style="justify-content:space-between">
+      <span class="xs muted">应用将创建风格 v4：只影响之后的新生成，不会改写现有素材、分镜与成片。</span>
+      <span class="row">
+        <button class="btn ghost">取消</button>
+        <button class="btn primary">应用此风格</button>
+      </span>
+    </div>
+  </div>
+</div>

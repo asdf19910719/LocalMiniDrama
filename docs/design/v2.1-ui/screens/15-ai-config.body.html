@@ -1,0 +1,125 @@
+<style>
+  .ai-wrap { display: flex; gap: 16px; height: 100%; overflow: hidden; }
+  .ai-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; overflow: hidden; }
+  .chain { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+  .chain .c { border: 1px solid var(--line); background: var(--panel2); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .chain .c:first-child { border-color: var(--accent); background: var(--accent-subtle); color: #fff; font-weight: 500; }
+  .chain svg { width: 12px; height: 12px; color: var(--muted); flex: 0 0 auto; }
+  .chan { display: flex; gap: 12px; padding: 14px; align-items: flex-start; }
+  .chan .ic { width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; background: var(--accent-subtle); color: var(--accent); }
+  .chan .ic svg { width: 19px; height: 19px; }
+  .chan .ic.green { background: var(--ok-subtle); color: var(--ok); }
+  .chan .ic.blue { background: var(--info-subtle); color: var(--info); }
+  .map-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .map-row:last-child { border-bottom: none; }
+  .map-row .lbl { width: 150px; flex: 0 0 150px; color: var(--text-2); }
+  .map-row .mdl { flex: 1; color: var(--muted); font-size: 12px; }
+  .map-g { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin: 12px 0 2px; }
+  .map-g:first-child { margin-top: 0; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn active" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>AI 配置</h1>
+      <span class="sub">通道 · 模型 · 业务映射</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" style="border:1px solid var(--line)"><svg><use href="#i-upload"/></svg>导入配置</button>
+      <button class="btn ghost" style="border:1px solid var(--line)"><svg><use href="#i-download"/></svg>导出配置（不含密钥）</button>
+    </header>
+    <div class="page-body">
+      <div class="ai-wrap">
+
+        <!-- 左列：解析顺序 + 通道 -->
+        <div class="ai-col" style="flex:11">
+          <div class="card pad" style="padding:13px 16px">
+            <b style="font-size:13px">配置解析顺序</b>
+            <div class="chain" style="margin-top:10px">
+              <span class="c">本次任务覆盖</span><svg><use href="#i-fwd"/></svg>
+              <span class="c">项目默认</span><svg><use href="#i-fwd"/></svg>
+              <span class="c">全局默认</span><svg><use href="#i-fwd"/></svg>
+              <span class="c">安装默认</span>
+            </div>
+            <div class="muted xs" style="margin-top:9px">任务创建后冻结 Provider、模型、能力与费用快照；单次覆盖不会写回全局配置。</div>
+          </div>
+
+          <div class="card chan">
+            <div class="ic"><svg><use href="#i-spark"/></svg></div>
+            <div class="grow">
+              <div class="row"><b style="font-size:13.5px">API 中转站</b><span class="badge accent">生图 · 生视频 默认通道</span></div>
+              <div class="muted xs" style="margin:5px 0 8px">https://api.example-relay.cn/v1 · 12 个模型可用 · 上次检测 14:02 通过</div>
+              <div class="row" style="gap:6px">
+                <span class="badge ok">认证有效</span><span class="badge ok">模型列表正常</span><span class="badge ok">能力已同步</span>
+              </div>
+            </div>
+            <div class="col" style="gap:6px">
+              <button class="btn sm">编辑</button>
+              <button class="btn sm ghost" style="border:1px solid var(--line)">零费用测试</button>
+            </div>
+          </div>
+
+          <div class="card chan">
+            <div class="ic green"><svg><use href="#i-monitor"/></svg></div>
+            <div class="grow">
+              <div class="row"><b style="font-size:13.5px">ChatGPT 网页</b><span class="badge ok">零费用</span><span class="badge outline">可设为生图默认</span></div>
+              <div class="muted xs" style="margin:5px 0 8px">环境检查 14:32 · 不提交生成、不产生费用</div>
+              <div class="row" style="gap:6px">
+                <span class="badge ok">浏览器</span><span class="badge ok">桥接</span><span class="badge ok">登录</span><span class="badge ok">结果捕获</span>
+              </div>
+            </div>
+            <div class="col" style="gap:6px">
+              <button class="btn sm">重新检查</button>
+              <button class="btn sm ghost" style="border:1px solid var(--line)">修复 / 重新绑定</button>
+            </div>
+          </div>
+
+          <div class="card chan">
+            <div class="ic blue"><svg><use href="#i-layers"/></svg></div>
+            <div class="grow">
+              <div class="row"><b style="font-size:13.5px">ComfyUI 本地</b><span class="badge info">本地执行 · 不产生 API 费用</span></div>
+              <div class="muted xs" style="margin:5px 0 8px">http://127.0.0.1:8188 · 在线 · 6 个工作流已注册</div>
+              <div class="row" style="gap:6px">
+                <span class="badge info">GPU 可用</span><span class="badge ok">工作流校验通过</span>
+              </div>
+            </div>
+            <div class="col" style="gap:6px">
+              <button class="btn sm">编辑</button>
+              <button class="btn sm ghost" style="border:1px solid var(--line)">打开工作流</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右列：业务映射 -->
+        <div class="ai-col" style="flex:9">
+          <div class="card pad" style="flex:1; padding:14px 18px; overflow:hidden">
+            <b style="font-size:13px">业务映射</b>
+            <div class="map-g">创作与协作</div>
+            <div class="map-row"><span class="lbl">剧本生成 / 续写</span><span class="chip" style="height:24px">API 中转站</span><span class="mdl">gpt-4o · 候选流程</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-row"><span class="lbl">外部 AI 上下文</span><span class="chip" style="height:24px">本地编译</span><span class="mdl">不调用外部模型 · 零费用</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-g">图片 · 视频 · 声音</div>
+            <div class="map-row"><span class="lbl">素材 / 分镜图</span><span class="chip" style="height:24px">API 中转站</span><span class="mdl">flux.1-schnell · 4 候选</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-row"><span class="lbl">镜头视频</span><span class="chip" style="height:24px">API 中转站</span><span class="mdl">MiniMax H3 · 7s · 1080P</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-row"><span class="lbl">人物音色 TTS</span><span class="chip" style="height:24px">API 中转站</span><span class="mdl">yujIU TTS-1</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-g">后期处理</div>
+            <div class="map-row"><span class="lbl">基础合片</span><span class="chip" style="height:24px">本地 FFmpeg</span><span class="mdl">¥0 · 保留原声 + 混音</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-row"><span class="lbl">超分增强</span><span class="chip" style="height:24px">本地</span><span class="mdl">Real-ESRGAN · 可跳过</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+            <div class="map-row"><span class="lbl">音频响度 / 编码</span><span class="chip" style="height:24px">本地 FFmpeg</span><span class="mdl">内部执行 · 不暴露步骤</span><svg class="muted" style="width:14px;height:14px"><use href="#i-fwd"/></svg></div>
+          </div>
+          <div class="card pad" style="padding:11px 14px; display:flex; gap:9px; align-items:flex-start; border-color:rgba(88,166,255,.3)">
+            <svg style="width:14px;height:14px;color:var(--info);flex:0 0 auto;margin-top:2px"><use href="#i-shield"/></svg>
+            <span class="xs" style="color:var(--info); line-height:1.6">密钥仅保存在本机安全存储，不进入项目、导出文件与任务快照；保存前将依次检查地址、认证、模型列表与能力。</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,120 @@
+<style>
+  .set-col { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; height: 100%; overflow: hidden; }
+  .path-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .path-row:last-child { border-bottom: none; }
+  .path-row .lbl { width: 88px; flex: 0 0 88px; font-size: 13px; font-weight: 500; }
+  .path-row .p { flex: 1; min-width: 0; }
+  .path-row .p code { font-family: Consolas, monospace; font-size: 12px; color: var(--text-2); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .path-row .p .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .tools-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tool { border: 1px solid var(--line); border-radius: 9px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+  .tool:hover { border-color: var(--line-strong); background: var(--panel2); }
+  .tool svg { width: 16px; height: 16px; color: var(--muted); }
+  .tool b { font-size: 12.5px; }
+  .tool span { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .foot { display: flex; align-items: center; gap: 10px; padding: 10px 0 16px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn active" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <h1>设置</h1>
+      <span class="sub">全局默认 · 只影响新建项目 / 剧集 / 任务</span>
+    </header>
+    <div class="page-body" style="padding:14px 24px 0">
+      <div class="set-col">
+
+        <div class="card pad" style="padding:12px 18px">
+          <div class="row" style="margin-bottom:2px"><b style="font-size:13.5px">工作区</b><span class="badge ok">正常</span></div>
+          <div class="path-row">
+            <div class="lbl">当前目录</div>
+            <div class="p"><code>E:\LocalMiniDramaWorks</code><div class="sub">可用空间 326 GB · 8 个项目 · 数据库 214 MB</div></div>
+            <button class="btn sm">更改工作区</button>
+          </div>
+          <div class="muted xs" style="margin-top:8px">更改工作区将进入独立向导：检查数据库与媒体 → 迁移预览 → 备份与回滚点 → 迁移。</div>
+        </div>
+
+        <div class="card pad" style="padding:12px 18px">
+          <b style="font-size:13.5px">媒体目录</b>
+          <div class="path-row">
+            <div class="lbl">媒体</div>
+            <div class="p"><code>E:\LocalMiniDramaWorks\media</code><div class="sub">正常 · 占用 42.6 GB · 最近检查 14:20</div></div>
+            <button class="btn sm ghost" style="border:1px solid var(--line)">选择目录</button>
+          </div>
+          <div class="path-row">
+            <div class="lbl">成片</div>
+            <div class="p"><code>E:\LocalMiniDramaWorks\exports</code><div class="sub">正常 · 占用 6.2 GB · 最近检查 14:20</div></div>
+            <button class="btn sm ghost" style="border:1px solid var(--line)">选择目录</button>
+          </div>
+          <div class="path-row">
+            <div class="lbl">临时</div>
+            <div class="p"><code>E:\LocalMiniDramaWorks\tmp</code><div class="sub">正常 · 可安全清理 2.1 GB</div></div>
+            <button class="btn sm ghost" style="border:1px solid var(--line)">选择目录</button>
+            <button class="btn sm ghost" style="border:1px solid var(--line); color:var(--accent)">前往清理</button>
+          </div>
+        </div>
+
+        <div class="card pad" style="padding:12px 18px">
+          <div class="row" style="gap:24px">
+            <div class="row">
+              <span class="t2" style="width:88px">默认画幅</span>
+              <div class="seg"><span class="on">9:16</span><span>16:9</span><span>1:1</span></div>
+            </div>
+            <div class="row">
+              <span class="t2" style="width:110px">默认单集时长</span>
+              <div class="input" style="width:80px; height:32px">90</div>
+              <div class="seg"><span>60</span><span class="on">90</span><span>120</span></div>
+            </div>
+            <div class="row">
+              <span class="t2" style="width:60px">语言</span>
+              <div class="select" style="height:32px">简体中文<svg class="chev"><use href="#i-chev-d"/></svg></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card pad" style="padding:12px 18px">
+          <div class="row">
+            <div class="grow">
+              <b style="font-size:13.5px">备份</b>
+              <div class="muted xs" style="margin-top:4px">保留最近 5 份项目备份 · 备份目录 E:\LocalMiniDramaWorks\backups · 预计占用 3.8 GB</div>
+            </div>
+            <div class="input" style="width:70px; height:32px; width:64px">5</div>
+            <button class="btn sm">立即创建备份</button>
+          </div>
+        </div>
+
+        <div class="card pad" style="padding:12px 18px">
+          <div class="row" style="margin-bottom:12px">
+            <b style="font-size:13.5px">高级数据工具</b>
+            <span class="badge outline">只读检查 · 受控清理</span>
+            <div class="spacer"></div>
+            <span class="muted xs">项目备份 / 恢复 / 回收站从「项目操作」进入</span>
+          </div>
+          <div class="tools-grid">
+            <div class="tool"><svg><use href="#i-shield"/></svg><b>完整性检查</b><span>SQLite 结构 · 媒体存在性 · 引用关系</span></div>
+            <div class="tool"><svg><use href="#i-folder"/></svg><b>媒体重定位</b><span>扫描匹配 → 预览确认 → 更新索引</span></div>
+            <div class="tool"><svg><use href="#i-hist"/></svg><b>迁移与恢复记录</b><span>journal · 备份 · 回滚入口</span></div>
+            <div class="tool"><svg><use href="#i-trash"/></svg><b>物理清理</b><span>仅从 dry-run 清单进入 · 二次确认</span></div>
+          </div>
+        </div>
+
+        <div class="foot">
+          <span class="badge warn">有未保存修改</span>
+          <span class="muted xs">保存后应用于新建项目；已有项目使用各自设置。</span>
+          <div class="spacer"></div>
+          <button class="btn ghost">放弃更改</button>
+          <button class="btn primary" style="height:36px">保存设置</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

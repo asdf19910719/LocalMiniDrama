@@ -1,0 +1,120 @@
+<style>
+  .ptabs { display: flex; gap: 2px; margin-left: 18px; }
+  .ptab { padding: 6px 14px; border-radius: 8px; font-size: 13.5px; color: var(--muted); cursor: pointer; }
+  .ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px; }
+  .stat { padding: 11px 16px; display: flex; align-items: center; gap: 12px; }
+  .stat .ic { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: var(--accent-subtle); color: var(--accent); flex: 0 0 auto; }
+  .stat .ic svg { width: 16px; height: 16px; }
+  .stat.warn .ic { background: var(--warn-subtle); color: var(--warn); }
+  .stat b { font-size: 18px; display: block; line-height: 1.2; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .sec-label { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .4px; }
+  .sec-label .hint { font-weight: 400; letter-spacing: 0; }
+  .agrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 12px; }
+  .acard { overflow: hidden; cursor: pointer; }
+  .acard:hover { border-color: var(--line-strong); }
+  .acard .thumb { position: relative; border-radius: 0; }
+  .acard .thumb .st { position: absolute; left: 8px; top: 8px; z-index: 2; }
+  /* 缩略比例：人物 3:4（256×341）· 场景 16:9（256×144）· 道具 1:1（144×144 内嵌） */
+  .acard.char .thumb { height: 341px; }
+  .acard.scene .thumb { height: 144px; }
+  .acard.prop .thumb { height: 144px; display: flex; align-items: center; justify-content: center; background: #10131b; }
+  .acard.prop .thumb .sq { width: 144px; height: 144px; border-radius: 0; position: relative; flex: 0 0 auto; }
+  .acard.prop .thumb .sq .st { left: 6px; top: 6px; }
+  .acard .info { padding: 8px 12px 10px; }
+  .acard .info b { font-size: 13.5px; display: block; }
+  .acard .info p { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acard.offline .thumb { filter: grayscale(.7) brightness(.6); }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">青城夜巡人</span>
+      <nav class="ptabs">
+        <span class="ptab">概览</span><span class="ptab">剧集</span><span class="ptab on">项目素材</span>
+      </nav>
+      <div class="spacer"></div>
+      <div class="btn ghost" style="border:1px solid var(--line)"><svg><use href="#i-box"/></svg>从个人资产库添加</div>
+      <button class="btn primary" style="height:36px"><svg><use href="#i-plus"/></svg>新增素材</button>
+    </header>
+    <div class="page-body" style="padding:16px 24px 14px">
+
+      <div class="stats">
+        <div class="card stat"><div class="ic"><svg><use href="#i-user"/></svg></div><div><b>5</b><span>人物</span></div></div>
+        <div class="card stat"><div class="ic"><svg><use href="#i-scene"/></svg></div><div><b>3</b><span>场景资产</span></div></div>
+        <div class="card stat"><div class="ic"><svg><use href="#i-cube"/></svg></div><div><b>2</b><span>道具</span></div></div>
+        <div class="card stat warn"><div class="ic"><svg><use href="#i-warn"/></svg></div><div><b>3</b><span>需要处理</span></div></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="seg"><span class="on">全部 10</span><span>人物 5</span><span>场景 3</span><span>道具 2</span></div>
+        <div class="input" style="width:210px"><svg><use href="#i-search"/></svg>搜索素材名称</div>
+        <div class="select">按名称排序<svg class="chev"><use href="#i-chev-d"/></svg></div>
+        <button class="btn ghost" style="border:1px solid var(--line)"><svg><use href="#i-filter"/></svg>更多筛选</button>
+        <div class="spacer"></div>
+        <span class="muted xs">缩略比例：人物 3:4 · 场景 16:9 · 道具 1:1</span>
+      </div>
+
+      <div class="sec-label">人物 <span class="hint muted">· 5 位 · 点击卡片打开详情抽屉</span></div>
+      <div class="agrid">
+        <div class="card acard char">
+          <div class="thumb ph"><span class="st badge ok">已确认 v3</span></div>
+          <div class="info"><b>林夏</b><p>主角 · 6 个状态 · 音色已设置</p></div>
+        </div>
+        <div class="card acard char">
+          <div class="thumb ph d"><span class="st badge ok">已确认 v2</span></div>
+          <div class="info"><b>沈默</b><p>男主 · 4 个状态</p></div>
+        </div>
+        <div class="card acard char">
+          <div class="thumb ph c"><span class="st badge warn">音色未设置</span></div>
+          <div class="info"><b>老周</b><p>配角 · 本集需要音色</p></div>
+        </div>
+        <div class="card acard char offline">
+          <div class="thumb ph b"><span class="st badge danger">媒体离线</span></div>
+          <div class="info"><b>周婆婆</b><p>配角 · 当前图文件不可访问</p></div>
+        </div>
+        <div class="card acard char">
+          <div class="thumb ph e"><span class="st badge ok">已确认 v1</span></div>
+          <div class="info"><b>阿蝉</b><p>配角 · 巷口报童</p></div>
+        </div>
+      </div>
+
+      <div class="sec-label">场景资产与道具 <span class="hint muted">· 跨集复用</span></div>
+      <div class="agrid" style="margin-bottom:0">
+        <div class="card acard scene">
+          <div class="thumb ph f"><span class="st badge ok">已确认 v2</span></div>
+          <div class="info"><b>青石巷 · 夜</b><p>场景 · 雨夜主场景 · 12 镜引用</p></div>
+        </div>
+        <div class="card acard scene">
+          <div class="thumb ph c"><span class="st badge warn">缺少当前图</span></div>
+          <div class="info"><b>天台 · 黄昏</b><p>场景 · 镜头 07 引用</p></div>
+        </div>
+        <div class="card acard scene">
+          <div class="thumb ph d"><span class="st badge ok">已确认 v1</span></div>
+          <div class="info"><b>便利店 · 夜</b><p>场景 · 内景</p></div>
+        </div>
+        <div class="card acard prop">
+          <div class="thumb"><div class="sq ph"><span class="st badge ok">已确认 v1</span></div></div>
+          <div class="info"><b>巡夜灯</b><p>道具 · 核心道具 · 9 镜引用</p></div>
+        </div>
+        <div class="card acard prop">
+          <div class="thumb"><div class="sq ph b"><span class="st badge">草稿</span></div></div>
+          <div class="info"><b>铜铃</b><p>道具 · 本集关键物</p></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

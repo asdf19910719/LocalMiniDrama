@@ -1,0 +1,78 @@
+<style>
+  .ov-bg { display:flex; flex-direction:column; gap:14px; }
+  .pe-label { font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; display: block; }
+  .cover-pick { width: 108px; height: 150px; border: 1.5px dashed var(--line-strong); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 11px; cursor: pointer; overflow: hidden; position: relative; }
+  .cover-pick svg { width: 20px; height: 20px; }
+</style>
+<!-- 背景：项目概览（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">青城夜巡人</span>
+      <div class="spacer"></div>
+    </header>
+    <div class="page-body">
+      <div class="ov-bg">
+        <div class="card" style="height:150px"></div>
+        <div style="display:flex; gap:14px"><div class="card" style="flex:1; height:180px"></div><div class="card" style="flex:1.4; height:180px"></div></div>
+        <div style="display:flex; gap:14px"><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div><div class="card" style="flex:1; height:150px"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 编辑项目 Drawer -->
+<div class="scrim" style="z-index:80"></div>
+<aside class="drawer narrow" style="z-index:90; width:460px">
+  <div class="drawer-h">
+    <h3>编辑项目</h3>
+    <span class="badge warn">有未保存修改</span>
+    <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div class="drawer-b" style="overflow:hidden">
+    <div class="row" style="gap:16px; align-items:flex-start">
+      <div>
+        <span class="pe-label">项目封面</span>
+        <div class="cover-pick ph" style="border-style:solid">
+          <span style="position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,12,18,.62); text-align:center; padding:5px 0">更换封面</span>
+        </div>
+      </div>
+      <div class="grow">
+        <span class="pe-label">项目名称</span>
+        <div class="input" style="width:100%; margin-bottom:12px">青城夜巡人</div>
+        <span class="pe-label">题材</span>
+        <div class="select" style="width:100%">都市奇幻<svg class="chev"><use href="#i-chev-d"/></svg></div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px">
+      <span class="pe-label">画幅 <span class="muted xs">· 影响之后的图片与视频生成</span></span>
+      <div class="seg"><span class="on">9:16 竖屏</span><span>16:9 横屏</span><span>1:1 方形</span></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <span class="pe-label">项目简介</span>
+      <div class="input" style="width:100%; height:96px; align-items:flex-start; padding:10px 12px; line-height:1.7; display:block; overflow:hidden">每逢雨夜，夜巡人提灯走过青石巷，为迷路的魂灵引路回家。</div>
+    </div>
+
+    <div class="card pad" style="display:flex; gap:9px; padding:10px 12px; margin-top:14px; border-color:rgba(88,166,255,.3)">
+      <svg style="width:14px;height:14px;color:var(--info);flex:0 0 auto;margin-top:1px"><use href="#i-shield"/></svg>
+      <span class="xs" style="color:var(--info); line-height:1.6">修改资料只会使「外部 AI 创作上下文」标记需要更新；不会使任何素材、分镜或成片过期。本地路径与项目操作不在此处修改。</span>
+    </div>
+  </div>
+  <div class="drawer-f">
+    <button class="btn ghost">放弃更改</button>
+    <div class="spacer"></div>
+    <button class="btn primary">保存修改</button>
+  </div>
+</aside>

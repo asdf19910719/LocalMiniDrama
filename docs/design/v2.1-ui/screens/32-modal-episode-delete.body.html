@@ -1,0 +1,68 @@
+<style>
+  .ep-bg { display:flex; flex-direction:column; gap:8px; padding:16px 24px; }
+  .ep-row-bg { display:flex; align-items:center; gap:14px; padding:11px 14px; }
+  .impact-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .impact-row:last-of-type { border-bottom: none; }
+  .impact-row svg { width: 15px; height: 15px; color: var(--muted); flex: 0 0 auto; }
+  .impact-row .n { margin-left: auto; color: var(--text-2); font-weight: 600; }
+</style>
+<!-- 背景：剧集页（简化示意） -->
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">青城夜巡人</span>
+      <div class="spacer"></div>
+    </header>
+    <div class="ep-bg">
+      <div class="card ep-row-bg"><span class="bold t2" style="width:44px">E01</span><div style="height:10px; flex:1; background:var(--panel2); border-radius:5px"></div></div>
+      <div class="card ep-row-bg" style="border-color:var(--danger)"><span class="bold danger-t" style="width:44px">E03</span><div style="height:10px; flex:1; background:var(--panel2); border-radius:5px"></div><svg class="danger-t" style="width:15px;height:15px"><use href="#i-trash"/></svg></div>
+      <div class="card ep-row-bg"><span class="bold t2" style="width:44px">E04</span><div style="height:10px; flex:1; background:var(--panel2); border-radius:5px"></div></div>
+      <div class="card ep-row-bg"><span class="bold t2" style="width:44px">E05</span><div style="height:10px; flex:1; background:var(--panel2); border-radius:5px"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 遮罩 + 删除确认 Modal -->
+<div class="scrim" style="z-index:80"></div>
+<div class="modal-wrap" style="z-index:90">
+  <div class="modal" style="width:540px">
+    <div class="modal-h">
+      <svg style="width:18px;height:18px;color:var(--danger)"><use href="#i-trash"/></svg>
+      <h3>删除剧集 · E03《雨夜铜铃》</h3>
+      <button class="icon-btn"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-b" style="overflow:hidden">
+      <b class="small t2">删除将影响以下内容</b>
+      <div style="margin-top:8px">
+        <div class="impact-row"><svg><use href="#i-book"/></svg>剧本（含已确认 v2 与历史版本）<span class="n">1 部</span></div>
+        <div class="impact-row"><svg><use href="#i-clap"/></svg>分镜与时段<span class="n">9 镜 · 12 时段</span></div>
+        <div class="impact-row"><svg><use href="#i-film"/></svg>已生成候选（分镜图 / 视频）<span class="n">23 个 · 约 1.2 GB</span></div>
+        <div class="impact-row"><svg><use href="#i-shield"/></svg>本集素材快照<span class="n">1 份</span></div>
+        <div class="impact-row"><svg><use href="#i-tasks"/></svg>关联任务记录<span class="n">8 条 · 转为只读</span></div>
+      </div>
+
+      <div class="card pad" style="display:flex; gap:9px; padding:11px 12px; margin-top:12px; border-color:rgba(69,211,156,.28)">
+        <svg style="width:14px;height:14px;color:var(--ok);flex:0 0 auto;margin-top:2px"><use href="#i-shield"/></svg>
+        <span class="xs" style="color:var(--ok); line-height:1.6">删除进入回收站，30 天内可恢复；项目素材（人物 / 场景 / 道具）不会被删除，仅解除本集引用。</span>
+      </div>
+      <div class="card pad" style="display:flex; gap:9px; padding:11px 12px; margin-top:8px; border-color:rgba(255,182,92,.3)">
+        <svg style="width:14px;height:14px;color:var(--warn);flex:0 0 auto;margin-top:2px"><use href="#i-warn"/></svg>
+        <span class="xs" style="color:var(--warn); line-height:1.6">该集有 2 个运行中任务，删除会先请求取消并保留任务记录。</span>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn ghost grow">取消</button>
+      <button class="btn danger grow"><svg><use href="#i-trash"/></svg>删除（进入回收站）</button>
+    </div>
+  </div>
+</div>

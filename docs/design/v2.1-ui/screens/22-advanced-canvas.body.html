@@ -1,0 +1,143 @@
+<style>
+  .cv-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .cv-row { flex: 1; display: flex; min-height: 0; }
+  .cv-canvas {
+    flex: 1; position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 1px 1px, #1c2230 1px, transparent 0) 0 0/26px 26px,
+      var(--bg);
+  }
+  .node { position: absolute; width: 172px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; cursor: pointer; z-index: 3; }
+  .node .t { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+  .node .t svg { width: 13px; height: 13px; color: var(--muted); }
+  .node .d { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+  .node.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(124,92,255,.25); }
+  .node.dim { opacity: .6; }
+  /* 连线：正交线段 */
+  .eh { position: absolute; height: 0; border-top: 1.6px solid #3a4256; z-index: 1; }
+  .eh.gen { border-top-color: #4f8cff; }
+  .eh.stale { border-top-style: dashed; border-top-color: #ffb65c; }
+  .ev { position: absolute; width: 0; border-left: 1.6px solid #3a4256; z-index: 1; }
+  .ev.gen { border-left-color: #4f8cff; }
+  .ev.stale { border-left-style: dashed; border-left-color: #ffb65c; }
+  .arr-r { position: absolute; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid #3a4256; z-index: 2; }
+  .arr-r.gen { border-left-color: #4f8cff; }
+  .arr-d { position: absolute; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #4f8cff; z-index: 2; }
+  .arr-u { position: absolute; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 6px solid #ffb65c; z-index: 2; }
+  .edge-lbl { position: absolute; font-size: 10.5px; color: var(--warn); background: var(--bg); padding: 0 6px; z-index: 2; }
+  .cv-tools { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; z-index: 5; }
+  .legend { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 16px; font-size: 11px; color: var(--muted); background: rgba(11,13,18,.85); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; z-index: 5; }
+  .legend i { display: inline-block; width: 22px; height: 0; border-top: 2px solid #3a4256; vertical-align: middle; margin-right: 6px; }
+  .legend i.gen { border-top-color: #4f8cff; }
+  .legend i.stale { border-top-style: dashed; border-top-color: #ffb65c; }
+  .minimap { position: absolute; right: 14px; bottom: 14px; width: 150px; height: 94px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); z-index: 5; }
+  .minimap i { position: absolute; width: 5px; height: 5px; border-radius: 2px; background: #3a4256; }
+  .minimap i.sel { background: var(--accent); }
+  .minimap .vp { position: absolute; left: 30px; top: 18px; width: 84px; height: 52px; border: 1.2px solid var(--accent); border-radius: 3px; background: rgba(124,92,255,.08); }
+  .cv-insp { width: 264px; flex: 0 0 264px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="cv-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">青城夜巡人</span><span class="muted">/</span><span class="t2 bold">第 3 集</span><span class="muted">/</span>
+      <span class="badge accent">分镜 · 高级画布（只读关系视图）</span>
+      <span class="muted small">焦点 · 镜头 05</span>
+      <div class="spacer"></div>
+      <span class="badge warn">1 条已过期关系</span>
+    </header>
+
+    <div class="cv-row">
+      <div class="cv-canvas">
+        <div class="cv-tools">
+          <button class="btn sm ghost" style="border:1px solid var(--line)">适应选择</button>
+          <button class="btn sm ghost" style="border:1px solid var(--line)">过滤：仅分镜链路</button>
+        </div>
+
+        <!-- 行 A：主链路 y=80 -->
+        <div class="node" style="left:50px; top:80px">
+          <div class="t"><svg><use href="#i-book"/></svg>剧本 v2</div><div class="d">已确认 · 09-09</div>
+        </div>
+        <div class="node" style="left:260px; top:80px">
+          <div class="t"><svg><use href="#i-doc"/></svg>场次 S3-2</div><div class="d">青石巷 · 夜</div>
+        </div>
+        <div class="node sel" style="left:470px; top:80px">
+          <div class="t"><svg><use href="#i-clap"/></svg>分镜 05 · Shot 包</div><div class="d">计划 7s · 2 时段</div>
+        </div>
+        <div class="node" style="left:680px; top:80px">
+          <div class="t"><svg><use href="#i-spark"/></svg>H3 草稿</div><div class="d ok-t">校验通过</div>
+        </div>
+        <div class="node dim" style="left:890px; top:80px">
+          <div class="t"><svg><use href="#i-image"/></svg>分镜图 v1</div><div class="d warn-t">已过期 · 基于风格 v2</div>
+        </div>
+        <div class="node" style="left:680px; top:200px">
+          <div class="t"><svg><use href="#i-film"/></svg>任务 #481</div><div class="d info-t">运行中 62%</div>
+        </div>
+
+        <!-- 行 B：引用素材 y=300 -->
+        <div class="node" style="left:260px; top:300px">
+          <div class="t"><svg><use href="#i-scene"/></svg>青石巷 · 夜 v2</div><div class="d">场景资产 · @图片2</div>
+        </div>
+        <div class="node" style="left:470px; top:300px">
+          <div class="t"><svg><use href="#i-user"/></svg>林夏 · v3</div><div class="d">夜巡制服 · @图片1</div>
+        </div>
+        <div class="node" style="left:680px; top:300px">
+          <div class="t"><svg><use href="#i-cube"/></svg>巡夜灯 v1</div><div class="d">道具 · @图片3</div>
+        </div>
+
+        <!-- 连线 -->
+        <div class="eh" style="left:222px; top:105px; width:38px"></div><div class="arr-r" style="left:253px; top:100px"></div>
+        <div class="eh" style="left:432px; top:105px; width:38px"></div><div class="arr-r" style="left:463px; top:100px"></div>
+        <div class="eh gen" style="left:642px; top:105px; width:38px"></div><div class="arr-r gen" style="left:673px; top:100px"></div>
+        <div class="ev gen" style="left:765px; top:132px; height:62px"></div><div class="arr-d" style="left:760px; top:192px"></div>
+
+        <!-- 过期关系：分镜05 →（下方绕行）→ 分镜图 v1 -->
+        <div class="ev stale" style="left:556px; top:132px; height:30px"></div>
+        <div class="eh stale" style="left:556px; top:162px; width:420px"></div>
+        <span class="edge-lbl" style="left:640px; top:152px">基于旧分镜图 · 已过期</span>
+        <div class="ev stale" style="left:975px; top:132px; height:30px"></div>
+        <div class="arr-u" style="left:970px; top:131px"></div>
+
+        <!-- 引用总线：场次 → 三个素材 -->
+        <div class="ev" style="left:345px; top:132px; height:168px"></div>
+        <div class="eh" style="left:432px; top:325px; width:38px"></div><div class="arr-r" style="left:463px; top:320px"></div>
+        <div class="eh" style="left:642px; top:325px; width:38px"></div><div class="arr-r" style="left:673px; top:320px"></div>
+
+        <div class="legend"><span><i></i>引用</span><span><i class="gen"></i>生成</span><span><i class="stale"></i>已过期（虚线）</span></div>
+        <div class="minimap">
+          <i style="left:12px; top:20px"></i><i style="left:38px; top:20px"></i><i class="sel" style="left:64px; top:20px"></i><i style="left:90px; top:14px"></i><i style="left:116px; top:20px"></i>
+          <i style="left:38px; top:52px"></i><i style="left:64px; top:52px"></i><i style="left:90px; top:52px"></i>
+          <div class="vp"></div>
+        </div>
+      </div>
+
+      <!-- 右侧检查器 -->
+      <div class="cv-insp">
+        <b style="font-size:13.5px">选中节点</b>
+        <div class="card pad" style="padding:12px">
+          <div class="row"><b style="font-size:13px">分镜 05</b><span class="badge accent">Shot 包</span></div>
+          <div class="kv"><span class="k">场次</span><span class="v">S3-2 青石巷</span></div>
+          <div class="kv"><span class="k">计划时长</span><span class="v">7s · 2 时段</span></div>
+          <div class="kv"><span class="k">引用</span><span class="v">林夏 v3 · 场景 v2 · 灯 v1</span></div>
+        </div>
+        <b class="small t2">影响路径（只读）</b>
+        <div class="card pad" style="padding:11px 12px; font-size:12px; line-height:1.7">
+          <div><span class="badge danger" style="height:18px">直接影响</span> 候选 A · H3 草稿</div>
+          <div style="margin-top:5px"><span class="badge warn" style="height:18px">间接影响</span> 成片 v1 · 镜头轨完成度</div>
+          <div style="margin-top:5px"><span class="badge outline" style="height:18px">不会影响</span> 镜头 01–04 已采用候选</div>
+        </div>
+        <div style="margin-top:auto" class="xs muted">画布只做关系视图与批量编排入口；对象修改仍回标准页面，共享同一命令 API。</div>
+        <button class="btn"><svg><use href="#i-layers"/></svg>批量重编译…</button>
+      </div>
+    </div>
+  </div>
+</div>

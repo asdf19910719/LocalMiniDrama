@@ -1,0 +1,88 @@
+<style>
+  .dt-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .dt-body { flex: 1; display: flex; min-height: 0; }
+  .dt-nav { width: 240px; flex: 0 0 240px; border-right: 1px solid var(--line); background: var(--panel); padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .dt-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 9px; cursor: pointer; }
+  .dt-item:hover { background: var(--panel2); }
+  .dt-item.on { background: var(--accent-subtle); }
+  .dt-item svg { width: 16px; height: 16px; color: var(--muted); }
+  .dt-item b { font-size: 13px; font-weight: 500; }
+  .dt-item p { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .dt-main { flex: 1; min-width: 0; padding: 18px 22px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+  .sum-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .sum { padding: 14px 16px; }
+  .sum b { font-size: 21px; display: block; }
+  .sum span { font-size: 12px; color: var(--muted); }
+  .issue-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .issue-row:last-child { border-bottom: none; }
+  .issue-row .act { margin-left: auto; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn active" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="dt-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <span class="muted small">返回项目列表</span>
+      <span class="muted">/</span>
+      <h1 style="font-size:18px">高级数据工具</h1>
+      <span class="badge outline">只读检查 · 受控清理</span>
+    </header>
+    <div class="dt-body">
+      <nav class="dt-nav">
+        <div class="dt-item on"><svg><use href="#i-shield"/></svg><div><b>完整性检查</b><p>刚完成 · 3 警告 1 错误</p></div></div>
+        <div class="dt-item"><svg><use href="#i-folder"/></svg><div><b>媒体重定位</b><p>扫描匹配 → 预览确认</p></div></div>
+        <div class="dt-item"><svg><use href="#i-hist"/></svg><div><b>迁移与恢复记录</b><p>2 条 · 1 条含 journal</p></div></div>
+        <div class="dt-item"><svg><use href="#i-trash"/></svg><div><b>物理清理</b><p>仅从 dry-run 清单进入</p></div></div>
+        <div class="dt-item"><svg><use href="#i-doc"/></svg><div><b>查看迁移 journal</b><p>只读</p></div></div>
+      </nav>
+      <div class="dt-main">
+        <div class="row">
+          <b style="font-size:15px">完整性检查</b>
+          <span class="badge warn">有警告</span>
+          <div class="spacer"></div>
+          <span class="muted xs">今天 14:20 · 耗时 47s · 范围：SQLite / 媒体 / 引用 / 任务索引 / 目录边界</span>
+          <button class="btn sm"><svg><use href="#i-refresh"/></svg>重新检查</button>
+        </div>
+
+        <div class="sum-tiles">
+          <div class="card sum"><b class="ok-t">216</b><span>正常项 · 结构 / 外键 / 引用关系</span></div>
+          <div class="card sum"><b class="warn-t">3</b><span>警告 · 可继续使用，建议处理</span></div>
+          <div class="card sum"><b class="danger-t">1</b><span>错误 · 已阻断相关危险写入</span></div>
+        </div>
+
+        <div class="card" style="flex:1; overflow:hidden">
+          <div class="issue-row">
+            <span class="badge danger">错误</span>
+            <div class="grow"><b>任务索引异常</b><div class="muted xs">2 条任务记录缺少 attempt 映射（青城夜巡人）</div></div>
+            <button class="btn sm">重建任务索引</button>
+          </div>
+          <div class="issue-row">
+            <span class="badge warn">警告</span>
+            <div class="grow"><b>媒体离线 ×2</b><div class="muted xs">周婆婆 · 当前图 / 天台 · 黄昏 全景图（文件被移动）</div></div>
+            <button class="btn sm">媒体重定位</button>
+          </div>
+          <div class="issue-row">
+            <span class="badge warn">警告</span>
+            <div class="grow"><b>孤儿文件 ×2</b><div class="muted xs">tmp/ 下 2 个临时文件无引用 · 合计 84 MB</div></div>
+            <button class="btn sm">物理清理</button>
+          </div>
+          <div class="issue-row">
+            <span class="badge warn">警告</span>
+            <div class="grow"><b>重复文件 ×1</b><div class="muted xs">巡夜灯 v1 存在两份相同 hash 副本（未引用）</div></div>
+            <button class="btn sm ghost" style="border:1px solid var(--line)">查看清单</button>
+          </div>
+        </div>
+
+        <div class="xs muted">错误项会阻断「物理清理 / 迁移 / 删除」等危险写入；处理完可重新检查以解除。检查为只读，不会修改任何数据。</div>
+      </div>
+    </div>
+  </div>
+</div>

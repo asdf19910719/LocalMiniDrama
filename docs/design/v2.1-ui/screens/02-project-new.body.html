@@ -1,0 +1,111 @@
+<style>
+  .new-wrap { height: 100%; display: flex; justify-content: center; padding: 22px 0 0; overflow: hidden; }
+  .new-col { width: 780px; display: flex; flex-direction: column; gap: 14px; }
+  .sec-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 12px; }
+  .sec-title .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent); font-size: 11px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .frow { display: flex; gap: 12px; align-items: flex-start; }
+  .flabel { width: 96px; flex: 0 0 96px; font-size: 13px; color: var(--text-2); padding-top: 8px; }
+  .fhint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .src-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .src-card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
+  .src-card .ic { width: 34px; height: 34px; border-radius: 8px; background: var(--neutral-subtle); color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .src-card .ic svg { width: 18px; height: 18px; }
+  .src-card b { font-size: 13.5px; }
+  .src-card p { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .src-card.sel { border-color: var(--accent); background: var(--accent-subtle); }
+  .src-card.sel .ic { background: var(--accent); color: #fff; }
+  .more-src { font-size: 12px; color: var(--muted); }
+  .more-src a { color: var(--text-2); margin: 0 4px; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .num-input { width: 88px; }
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="logo">剧</div>
+    <div class="rail-btn active" title="项目"><svg><use href="#i-grid"/></svg></div>
+    <div class="rail-btn" title="资产库"><svg><use href="#i-box"/></svg></div>
+    <div class="rail-btn" title="任务中心"><svg><use href="#i-tasks"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-btn" title="AI 配置"><svg><use href="#i-spark"/></svg></div>
+    <div class="rail-btn" title="设置"><svg><use href="#i-gear"/></svg></div>
+  </aside>
+  <div class="main">
+    <header class="page-head">
+      <button class="icon-btn"><svg><use href="#i-back"/></svg></button>
+      <h1>新建项目</h1>
+      <span class="sub">一次填写 · 一次创建</span>
+    </header>
+    <div class="page-body" style="padding:0">
+      <div class="new-wrap">
+        <div class="new-col">
+
+          <div class="card pad">
+            <div class="sec-title"><span class="n">1</span>项目资料</div>
+            <div class="frow">
+              <div class="flabel">项目名称</div>
+              <div class="grow">
+                <div class="input grow" style="width:100%">给项目起个名字，如：青城夜巡人</div>
+                <div class="fhint">创建后可随时在项目概览修改。</div>
+              </div>
+            </div>
+            <div class="divider" style="margin:12px 0"></div>
+            <div class="frow">
+              <div class="flabel">画幅</div>
+              <div class="seg"><span class="on">9:16 竖屏</span><span>16:9 横屏</span><span>1:1 方形</span></div>
+            </div>
+            <div style="height:12px"></div>
+            <div class="frow">
+              <div class="flabel">单集目标时长</div>
+              <div class="row">
+                <div class="input num-input">90</div>
+                <div class="seg"><span>60 秒</span><span class="on">90 秒</span><span>120 秒</span></div>
+                <span class="fhint" style="margin-top:9px">仅用于统计口径，不限制创作。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card pad">
+            <div class="sec-title"><span class="n">2</span>保存位置</div>
+            <div class="frow" style="align-items:center">
+              <div class="flabel">工作区目录</div>
+              <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
+                <svg><use href="#i-folder"/></svg>E:\LocalMiniDramaWorks
+              </div>
+              <button class="btn">更改</button>
+            </div>
+            <div class="frow"><div class="flabel"></div><div class="fhint">可用空间 326 GB · 项目媒体将保存在该目录下，可随时在工作区设置中迁移。</div></div>
+          </div>
+
+          <div class="card pad">
+            <div class="sec-title"><span class="n">3</span>开始方式</div>
+            <div class="src-grid">
+              <div class="src-card sel">
+                <div class="ic"><svg><use href="#i-doc"/></svg></div>
+                <b>我有剧本</b>
+                <p>粘贴或导入已写好的剧本，自动拆分场次后进入编辑器。</p>
+              </div>
+              <div class="src-card">
+                <div class="ic"><svg><use href="#i-spark"/></svg></div>
+                <b>让 AI 帮我写</b>
+                <p>输入梗概与要求，AI 生成首集草稿，确认前可反复重写。</p>
+              </div>
+              <div class="src-card">
+                <div class="ic"><svg><use href="#i-box"/></svg></div>
+                <b>我有制作包</b>
+                <p>导入 episode-package 制作包，剧本、分镜与素材一次进入。</p>
+              </div>
+            </div>
+            <div class="more-src" style="margin-top:12px">更多开始方式：<a>空白创建</a>·<a>小说 / 长文本拆集</a>·<a>从已有视频开始剪辑</a>·<a>外部 AI 协作</a></div>
+          </div>
+
+          <div class="row" style="padding: 2px 4px 18px">
+            <span class="muted xs">创建前不会写入任何数据；取消可随时离开。</span>
+            <div class="spacer"></div>
+            <button class="btn ghost">取消</button>
+            <button class="btn primary lg">创建项目并导入剧本</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
