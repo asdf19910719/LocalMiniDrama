@@ -19,7 +19,7 @@
       <div class="tabs" style="border:none; margin-right:8px">
         <span class="tab" :class="{ on: tab === 'in_progress' }" @click="tab = 'in_progress'">进行中<span class="cnt">{{ counts.in_progress }}</span></span>
         <span class="tab" :class="{ on: tab === 'attention' }" @click="tab = 'attention'">需要处理<span class="cnt warn">{{ counts.attention }}</span></span>
-        <span class="tab" :class="{ on: tab === 'done' }" @click="tab = 'done'">已完成<span class="cnt">{{ counts.done }}</span></span>
+        <span class="tab" :class="{ on: tab === 'done' }" @click="tab = 'done'">历史<span class="cnt">{{ counts.done }}</span></span>
       </div>
       <select v-model="typeFilter" class="input" style="width:118px; height:32px; flex:0 0 auto" aria-label="按类型筛选">
         <option value="">全部类型</option>
@@ -51,7 +51,7 @@
           <div class="progress" :class="statusProgressClass(t.status)"><i :style="{ width: (t.progress || 0) + '%' }"></i></div>
         </div>
         <div class="meta">{{ typeLabel(t.taskType) }}<br>{{ fmtTime(t.createdAt) }}</div>
-        <router-link v-if="targetRoute(t)" class="btn sm" :to="targetRoute(t)" @click.stop>打开对象</router-link>
+        <router-link v-if="targetRoute(t)" class="btn sm route" :to="targetRoute(t)" @click.stop>打开对象</router-link>
         <button class="btn sm" @click.stop="openDetail(t)">查看任务</button>
       </div>
       <p v-if="!loadError && displayedTasks.length === 0" class="muted" style="text-align:center; padding:50px 0">{{ q || projectFilter ? '没有匹配的任务' : '此分组暂无任务' }}</p>
@@ -66,7 +66,7 @@
     <div v-if="detail" class="scrim" style="z-index:80" @click="closeDetail"></div>
     <aside v-if="detail" class="drawer narrow" style="z-index:90">
       <div class="drawer-h">
-        <h3 style="font-size:14px">{{ detail.title }}</h3>
+        <h3>{{ detail.title }}</h3>
         <span class="badge" :class="statusBadgeClass(detail.status)">{{ statusLabel(detail.status) }}</span>
         <button class="icon-btn" @click="closeDetail"><svg><use href="#i-close"/></svg></button>
       </div>
@@ -127,11 +127,11 @@
         </div>
       </div>
       <div class="drawer-f">
-        <button v-if="cancellable(detail)" class="btn danger" @click="cancelTask(detail)">取消任务</button>
-        <button v-if="retryable(detail)" class="btn primary" @click="retryTask(detail)">按原输入重试</button>
         <router-link v-if="targetRoute(detail)" class="btn" :to="targetRoute(detail)">打开对象</router-link>
         <div class="spacer"></div>
         <span class="xs muted">重试创建新 attempt · 不覆盖记录</span>
+        <button v-if="cancellable(detail)" class="btn danger" @click="cancelTask(detail)">取消任务</button>
+        <button v-if="retryable(detail)" class="btn primary" @click="retryTask(detail)">按原输入重试</button>
       </div>
     </aside>
   </div>
@@ -447,7 +447,7 @@ export default {
 </script>
 
 <style scoped>
-.tfilter { display: flex; align-items: center; gap: 10px; padding: 10px 24px; border-bottom: 1px solid var(--line); }
+.tfilter { display: flex; align-items: center; gap: 10px; padding: 12px 24px 0; }
 .tlist { flex: 1; overflow: auto; padding: 14px 24px; display: flex; flex-direction: column; gap: 9px; }
 .trow { display: flex; align-items: center; gap: 14px; padding: 13px 16px; cursor: pointer; }
 .trow.sel { border-color: var(--accent); }
@@ -456,19 +456,18 @@ export default {
 .trow .tt { min-width: 0; }
 .trow .tt b { font-size: 13.5px; display: block; }
 .trow .tt span { font-size: 11.5px; color: var(--muted); }
-.trow .stat { width: 220px; flex: 0 0 220px; }
+.trow .stat { width: 190px; flex: 0 0 190px; }
 .trow .lbl { font-size: 11.5px; display: flex; align-items: center; gap: 5px; margin-bottom: 5px; }
 .trow .lbl svg { width: 12px; height: 12px; }
-.trow .meta { font-size: 11px; color: var(--muted); line-height: 1.55; width: 160px; flex: 0 0 160px; }
-.banner.danger { display: flex; align-items: center; gap: 10px; margin: 10px 24px 0; padding: 10px 14px; border: 1px solid var(--danger); border-radius: 9px; color: var(--danger); background: rgba(248, 81, 73, .08); font-size: 12.5px; }
+.trow .meta { font-size: 11px; color: var(--muted); line-height: 1.55; width: 150px; flex: 0 0 150px; text-align: right; }
+.trow .route { opacity: 0; transition: opacity .15s ease; }
+.trow:hover .route, .trow.sel .route, .trow .route:focus-visible { opacity: 1; }
+.banner.danger { display: flex; align-items: center; gap: 10px; margin: 10px 24px 0; padding: 10px 14px; border: 1px solid rgba(255, 107, 120, .35); border-radius: 9px; color: var(--danger); background: var(--danger-subtle); font-size: 12.5px; }
 .banner.danger svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .banner.danger span { flex: 1; }
 .sec-t { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 8px; letter-spacing: .3px; }
-.tl { display: flex; flex-direction: column; gap: 0; }
-.tl-item { position: relative; padding: 5px 0 5px 18px; font-size: 12.5px; color: var(--text-2); }
-.tl-item::before { content: ""; position: absolute; left: 3px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--neutral); }
+.tl-item { font-size: 12.5px; color: var(--text-2); padding: 5px 0; }
 .tl-item.done::before { background: var(--ok); }
-.tl-item.cur::before { background: var(--info); box-shadow: 0 0 0 3px rgba(88,166,255,.2); }
 .tl-item .t { color: var(--muted); font-size: 11px; margin-left: 8px; }
 .mono { font-family: Consolas, monospace; }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }

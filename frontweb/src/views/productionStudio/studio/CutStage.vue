@@ -7,16 +7,10 @@
       <button class="btn ghost sm" @click="notice = ''">关闭</button>
     </div>
 
-    <!-- 门禁阻塞：逐条镜头 -->
+    <!-- 门禁阻塞：顶部聚合一条，逐项清单收进右侧设置面板的门禁卡 -->
     <div v-if="blockedShots.length" class="notice-strip warn">
-      <span>尚未全部完成：可提前审片，生成成片前需处理 {{ blockedShots.length }} 项</span>
-    </div>
-    <div v-for="b in blockedShots" :key="b.shotId" class="notice-strip warn blocker-strip">
-      <span class="chip">镜头 {{ pad(b.number) }}</span>
-      <span class="t2">{{ blockerReason(b) }}</span>
-      <div class="spacer"></div>
-      <button class="btn ghost sm" @click="goShot(b)">回分镜处理</button>
-      <button v-if="canWaive(b)" class="btn sm" @click="openWaiver(b)">豁免并继续</button>
+      <svg style="width:14px;height:14px"><use href="#i-warn"/></svg>
+      <span>生成成片前需完成 {{ blockedShots.length }} 项 · 可提前审片，逐项处理见右侧门禁清单</span>
     </div>
 
     <!-- 合成进行中：不确定进度 + 请求取消 -->
@@ -42,36 +36,47 @@
       <span class="chip">{{ review.completed || 0 }}/{{ review.total || 0 }} 已完成</span>
       <button class="btn sm" @click="playAll">{{ playAllText }}</button>
       <div class="spacer"></div>
-      <button class="btn primary" :disabled="!canComposeNow" @click="openComposeConfirm">生成成片</button>
+      <button class="btn primary" :disabled="!canComposeNow" @click="openComposeConfirm">
+        生成成片<span v-if="!canComposeNow && blockedShots.length" class="price">{{ blockedShots.length }} 镜未完成</span>
+      </button>
     </div>
 
     <div class="workbench">
       <section class="player-area">
-        <video v-if="currentUrl" :key="currentUrl" :src="currentUrl" controls class="player"></video>
-        <div v-else class="player empty">该镜头尚未生成视频 · 可回分镜修复</div>
+        <div class="player-zone">
+          <video v-if="currentUrl" :key="currentUrl" :src="currentUrl" controls class="player"></video>
+          <div v-else class="player empty ph">该镜头尚未生成视频 · 可回分镜修复</div>
+          <span v-if="currentShot" class="badge accent p-badge">{{ currentShot.title || ('镜头 ' + pad(currentShot.number)) }}</span>
+          <span v-if="currentUrl" class="badge ok p-ok">{{ currentShot?.waived ? '已豁免 · 用于审片' : '当前镜 · 用于成片' }}</span>
+          <span v-if="currentUrl" class="p-dur">{{ currentShot?.durationSeconds ? Math.round(currentShot.durationSeconds) + 's' : '' }}</span>
+        </div>
         <div class="player-nav">
-          <button class="btn sm" @click="step(-1)">上一镜</button>
-          <span class="source-label">{{ currentShot?.sourceLabel }}</span>
-          <button class="btn sm" @click="step(1)">下一镜</button>
-          <button class="btn ghost sm accent-t" @click="repair">回分镜修复此镜</button>
+          <button class="icon-btn" title="上一镜" @click="step(-1)"><svg><use href="#i-back"/></svg></button>
+          <span class="source-label">{{ currentShot?.sourceLabel || ('镜头 ' + pad(currentShot?.number)) }}</span>
+          <button class="icon-btn" title="下一镜" @click="step(1)"><svg><use href="#i-fwd"/></svg></button>
+          <span class="nav-sep"></span>
+          <button class="btn ghost sm accent-t" style="border:1px solid var(--line)" @click="repair"><svg><use href="#i-clap"/></svg>回分镜修复此镜</button>
         </div>
       </section>
 
       <aside class="settings">
         <h4>成片设置</h4>
-        <div class="setting"><span>整集 BGM</span><button type="button" class="toggle" :class="{ on: settings.bgmOn }" @click="settings.bgmOn = !settings.bgmOn"></button></div>
-        <div class="setting"><span>旁白 TTS</span><button type="button" class="toggle" :class="{ on: settings.narrationTts }" @click="settings.narrationTts = !settings.narrationTts"></button></div>
-        <div class="setting"><span>字幕烧录</span><button type="button" class="toggle" :class="{ on: settings.subtitleBurn }" @click="settings.subtitleBurn = !settings.subtitleBurn"></button></div>
-        <div class="setting"><span>超分增强</span><button type="button" class="toggle" :class="{ on: settings.upscale }" @click="settings.upscale = !settings.upscale"></button></div>
-        <p class="hint">保留镜头原声；旁白 TTS 与 BGM 混音，不会覆盖原声</p>
-        <template v-if="currentVersion && currentVersion.status !== 'composing'">
-          <h4>成片 v{{ currentVersion.version }}</h4>
-          <p class="hint">{{ currentVersion.fileName }} · {{ Math.round(currentVersion.durationSeconds || 0) }}s</p>
-          <div class="row" style="gap:8px">
-            <button class="btn sm primary" @click="exportCut('mp4')">导出 MP4</button>
-            <button class="btn sm" @click="exportCut('srt')">导出 SRT</button>
+        <div class="setting"><div class="s-main"><span>整集 BGM</span><small>沿用项目主题曲 · 关闭则仅镜头原声</small></div><button type="button" class="toggle" :class="{ on: settings.bgmOn }" @click="settings.bgmOn = !settings.bgmOn"></button></div>
+        <div class="setting"><div class="s-main"><span>旁白 TTS</span><small>混入旁白配音 · 保留镜头原声</small></div><button type="button" class="toggle" :class="{ on: settings.narrationTts }" @click="settings.narrationTts = !settings.narrationTts"></button></div>
+        <div class="setting"><div class="s-main"><span>字幕烧录</span><small>关闭时仅导出 SRT 字幕文件</small></div><button type="button" class="toggle" :class="{ on: settings.subtitleBurn }" @click="settings.subtitleBurn = !settings.subtitleBurn"></button></div>
+        <div class="setting"><div class="s-main"><span>超分增强</span><small>画质更清晰 · 合成耗时更长</small></div><button type="button" class="toggle" :class="{ on: settings.upscale }" @click="settings.upscale = !settings.upscale"></button></div>
+
+        <!-- 门禁清单卡：逐条列出未完成镜头与唯一恢复落点 -->
+        <div v-if="blockedShots.length" class="gate">
+          <b>生成成片前需完成（{{ blockedShots.length }}）</b>
+          <div v-for="b in blockedShots" :key="b.shotId" class="g-row">
+            <span class="chip" style="height:20px; font-size:11px">镜头 {{ pad(b.number) }}</span>
+            <span class="grow" style="font-size:11.5px; line-height:1.5">{{ blockerReason(b) }}</span>
+            <span class="g-act" @click="goShot(b)">去处理</span>
+            <span v-if="canWaive(b)" class="g-act" @click="openWaiver(b)">豁免</span>
           </div>
-        </template>
+        </div>
+
         <div v-if="versions.items?.length" class="history">
           <h5>历史版本</h5>
           <div v-for="v in versions.items" :key="v.versionId" class="hist">
@@ -82,11 +87,33 @@
       </aside>
     </div>
 
-    <footer class="timeline">
-      <div v-for="s in review.shots || []" :key="s.shotId" class="tl-shot" :class="s.status" @click="selectShot(s)">
-        {{ pad(s.number) }}
-        <i v-if="s.waived" class="wv">已豁免</i>
+    <!-- 成片结果条（设计稿 11：缩略 + 版本 + 建议 + 导出横排） -->
+    <div v-if="currentVersion && currentVersion.status !== 'composing' && !composeInFlight" class="resultbar">
+      <div class="rb-thumb ph"></div>
+      <div class="grow" style="min-width:0">
+        <div class="row" style="gap:8px">
+          <b style="font-size:13.5px">成片 v{{ currentVersion.version }}</b>
+          <span v-if="blockedShots.length" class="badge warn" style="height:20px">{{ blockedShots.length }} 镜已更新 · 建议重新合成</span>
+        </div>
+        <div class="xs muted" style="margin-top:2px">{{ currentVersion.fileName || '—' }} · 约 {{ Math.round(currentVersion.durationSeconds || 0) }}s · {{ statusLabel(currentVersion) }}</div>
       </div>
+      <button class="btn sm" @click="exportCut('srt')">导出 SRT</button>
+      <button class="btn sm primary" @click="exportCut('mp4')">导出 MP4</button>
+    </div>
+
+    <footer class="timeline">
+      <span class="xs muted" style="flex:0 0 auto">镜头时间线</span>
+      <div class="tl-row">
+        <div v-for="(s, i) in review.shots || []" :key="s.shotId" class="tl-shot" :class="[s.status, { cur: i === currentIndex }]" @click="selectShot(s)">
+          <div class="im">
+            <video v-if="s.url" :src="s.url + '#t=0.1'" preload="metadata" muted></video>
+            <span v-else class="im ph" style="display:block"></span>
+            <i class="dot" :style="{ background: shotDotColor(s) }"></i>
+          </div>
+          <div class="no">{{ pad(s.number) }}<span v-if="s.waived" class="wv">已豁免</span></div>
+        </div>
+      </div>
+      <button v-if="blockedShots.length" class="btn sm" style="flex:0 0 auto" @click="repair">回分镜处理（{{ blockedShots.length }}）</button>
     </footer>
 
     <!-- 生成成片确认抽屉 -->
@@ -209,6 +236,12 @@ export default {
     },
     blockerReason(shot) {
       return shot ? BLOCKER_REASONS[shot.status] || '' : ''
+    },
+    shotDotColor(shot) {
+      return {
+        completed: 'var(--ok)', stale: 'var(--warn)', failed: 'var(--danger)',
+        missing: 'var(--neutral)', generating: 'var(--info)',
+      }[shot?.status] || 'var(--neutral)'
     },
     canWaive(shot) {
       // 后端门禁仅对"尚未生成"的镜头认可豁免，其余状态豁免不会解除门禁
@@ -360,29 +393,61 @@ export default {
 .cut-stage { padding: 12px 20px; display: flex; flex-direction: column; height: 100%; overflow: auto; }
 .toolbar { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
 .spacer { flex: 1; }
-.blocker-strip { padding: 9px 12px; }
 .progress.indeterminate > i { width: 34%; animation: cut-indeterminate 1.2s ease-in-out infinite; }
 @keyframes cut-indeterminate {
   0% { margin-left: -34%; }
   100% { margin-left: 100%; }
 }
 .workbench { display: grid; grid-template-columns: 1fr 300px; gap: 14px; margin-top: 12px; flex: 1; min-height: 0; }
-.player-area, .settings { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow: auto; }
-.player { width: 100%; min-height: 320px; background: #000; border-radius: 8px; }
+.player-area { background: transparent; border: none; padding: 0; overflow: auto; }
+.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow: auto; }
+.player-zone { position: relative; }
+.player { width: 100%; aspect-ratio: 16 / 9; max-height: 56vh; background: #000; border-radius: 12px; }
 .player.empty { display: flex; align-items: center; justify-content: center; color: var(--muted); }
-.player-nav { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
-.source-label { color: var(--muted); font-size: 13px; flex: 1; text-align: center; }
-.setting { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--line); }
-button.toggle { border: none; }
+.p-badge { position: absolute; left: 10px; top: 10px; z-index: 3; height: 24px; }
+.p-ok { position: absolute; left: 10px; top: 40px; z-index: 3; height: 20px; }
+.p-dur {
+  position: absolute; right: 10px; top: 10px; z-index: 3;
+  font-size: 11px; background: rgba(10, 12, 18, .6); border-radius: 5px; padding: 2px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.player-nav { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.nav-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+.source-label { color: var(--muted); font-size: 13px; flex: 1; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.s-main small { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.setting { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.gate {
+  background: var(--warn-subtle); border: 1px solid rgba(255, 182, 92, .3); border-radius: 10px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; margin-top: 12px;
+  font-size: 12.5px; color: var(--warn);
+}
+.g-row { display: flex; align-items: flex-start; gap: 7px; }
+.g-act {
+  font-size: 11.5px; color: var(--warn); cursor: pointer; white-space: nowrap;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
 .hint { color: var(--muted); font-size: 12px; }
+.resultbar {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 11px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+}
+.rb-thumb { width: 82px; height: 46px; border-radius: 8px; flex: 0 0 auto; }
 .history { margin-top: 12px; }
-.hist { font-size: 12px; color: var(--text-2); padding: 4px 0; border-bottom: 1px dashed var(--line); }
-.timeline { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; }
-.tl-shot { flex: none; width: 64px; text-align: center; padding: 10px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; color: var(--text-2); }
-.tl-shot.completed { border-color: rgba(69, 211, 156, .5); background: var(--ok-subtle); color: var(--ok); }
-.tl-shot.stale { border-color: rgba(255, 182, 92, .5); background: var(--warn-subtle); color: var(--warn); }
-.tl-shot.failed, .tl-shot.missing { border-color: rgba(255, 107, 120, .5); background: var(--danger-subtle); color: var(--danger); }
-.tl-shot .wv { display: block; font-style: normal; font-size: 10px; margin-top: 2px; color: var(--warn); }
+.hist { font-size: 12px; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.timeline { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex: 0 0 92px; overflow: hidden; }
+.tl-row { display: flex; gap: 8px; overflow-x: auto; flex: 1; min-width: 0; padding: 4px 0; }
+.tl-shot { flex: none; width: 66px; cursor: pointer; }
+.tl-shot .im { position: relative; height: 42px; border-radius: 6px; border: 1px solid var(--line); overflow: hidden; }
+.tl-shot .im video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tl-shot .dot { position: absolute; right: 4px; top: 4px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg); }
+.tl-shot .no { font-size: 10px; color: var(--muted); text-align: center; margin-top: 3px; }
+.tl-shot.cur .im { border: 2px solid var(--accent); }
+.tl-shot.cur .no { color: #fff; font-weight: 600; }
+.tl-shot.completed .im { border-color: rgba(69, 211, 156, .5); }
+.tl-shot.stale .im { border-color: rgba(255, 182, 92, .5); }
+.tl-shot.failed .im, .tl-shot.missing .im { opacity: .55; }
+.tl-shot .wv { font-style: normal; color: var(--warn); }
 .compose-modal { width: 420px; }
 .waiver-modal { width: 460px; }
 .waiver-reason {

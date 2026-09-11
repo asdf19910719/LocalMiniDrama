@@ -142,5 +142,8 @@ test('P0-4 ⑤ ProjectEpisodesView 读取 route.query.highlight 并复用既有�
   const src = episodesView()
   assert.match(src, /\$route\.query\.highlight/, '应读取 route.query.highlight')
   assert.match(src, /ep-row/, '剧集行容器仍在')
-  assert.match(src, /current:\s*ep\.needsAttention\s*\|\|/, '高亮应复用 current（needsAttention 同款）样式分支')
+  // 高亮语义拆分（2026-09-11 UI 美化）：当前集 = current（accent），需处理 = attention（warn）
+  // 两种"需要被看见"的行都必须有独立样式分支，needsAttention 不再复用 current
+  assert.match(src, /current:\s*isHighlighted\(ep\)/, '当前集应走 current 样式分支')
+  assert.match(src, /attention:\s*ep\.needsAttention/, '需处理行应有独立 attention 样式分支（warn 语义）')
 })

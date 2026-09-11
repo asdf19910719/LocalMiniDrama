@@ -100,6 +100,7 @@
 .v21-root .rail-more-pop {
   position: absolute; left: 52px; bottom: 0; z-index: 60;
   padding: 6px; min-width: 180px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow);
 }
 .v21-root .rail-more-item {
   display: flex; align-items: center; gap: 9px; padding: 8px 10px;
@@ -401,4 +402,228 @@ html.v21-active .pcard .resume { background: var(--panel2) !important; border-co
 
 .v21-root .page-head h1, .v21-root .topbar .crumb .proj, .v21-root .topbar .crumb .ep {
   white-space: nowrap; flex: 0 0 auto;
+}
+
+/* ============================================================
+   全局补充层（V2.1 美化）：焦点可见性 / 原生控件主题化 /
+   跨组件复用类 / 向导骨架 / 抽屉宽度档位 / 浮层动效
+   ============================================================ */
+
+/* --- 焦点可见性：复合输入框用 focus-within，全组件键盘焦点环 --- */
+.v21-root .input:focus-within, .v21-root .select:focus-within {
+  border-color: var(--focus); box-shadow: 0 0 0 2px rgba(124, 92, 255, .25);
+}
+.v21-root :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.v21-root .input:focus-within, .v21-root .select:focus-within { outline: none; }
+.v21-root .input input::placeholder, .v21-root .input textarea::placeholder { color: #5c6478; }
+
+/* --- textarea 复用 .input 类时不再塌陷为 36px（修复向导长文本输入） --- */
+.v21-root textarea.input, .v21-root textarea.select {
+  height: auto; min-height: 120px; display: block; padding: 10px 12px; line-height: 1.7;
+}
+
+/* --- 原生控件主题化（深色语言内的 radio/checkbox/number/select） --- */
+.v21-root input[type="radio"], .v21-root input[type="checkbox"] { accent-color: var(--accent); }
+.v21-root input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.v21-root input[type="number"]::-webkit-inner-spin-button,
+.v21-root input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.v21-root select { -webkit-appearance: none; appearance: none; }
+.v21-root {
+  --v21-chev: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d95a8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M6.5 9.5l5.5 5.5 5.5-5.5'/></svg>");
+}
+.v21-root select.input {
+  padding-right: 30px; background-image: var(--v21-chev);
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 14px;
+}
+
+/* --- 常见交互件的 hover 过渡统一（克制的微动效） --- */
+.v21-root .btn, .v21-root .icon-btn, .v21-root .card, .v21-root .rail-btn,
+.v21-root .chip, .v21-root .seg > * {
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+/* --- 浮层统一悬浮阴影（popover 类由各视图 scoped 命名，此处按类名兜底） --- */
+.v21-root .pcard-pop, .v21-root .more-pop, .v21-root .popover, .v21-root .ep-pop {
+  box-shadow: var(--shadow);
+}
+
+/* --- 抽屉宽度档位（设计稿：素材 560 / 通用 420 / 档位 440–520） --- */
+.v21-root .drawer.w440 { width: 440px; }
+.v21-root .drawer.w460 { width: 460px; }
+.v21-root .drawer.w470 { width: 470px; }
+.v21-root .drawer.w520 { width: 520px; }
+
+/* --- 实心危险按钮（删除类终态专用；描边 .btn.danger 仍是默认） --- */
+.v21-root .btn.danger.solid {
+  background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600;
+}
+.v21-root .btn.danger.solid:hover { background: var(--danger); filter: brightness(1.08); }
+
+/* --- 行卡（提升自 AssetsStage scoped，供跨组件复用；修复分镜页引用失配） --- */
+.v21-root .v-row {
+  display: flex; align-items: flex-start; gap: 12px; padding: 13px 12px;
+  border: 1px solid var(--line); border-radius: 10px; margin-bottom: 9px;
+  background: var(--panel2); cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.v21-root .v-row:hover { border-color: var(--line-strong); }
+.v21-root .v-row.cur { border-color: var(--accent); background: var(--accent-subtle); }
+.v21-root .v-row.cur:hover { border-color: var(--accent); }
+.v21-root .v-row .vn {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px;
+  background: var(--accent-subtle); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.v21-root .v-row .vn svg { width: 15px; height: 15px; }
+.v21-root .v-row .vm { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+.v21-root .v-row .acts { margin-left: auto; display: flex; flex-direction: column; gap: 5px; }
+
+/* --- 音色预设单选行（设计稿 34：radio 圆点 + 波形 + 逐行动作） --- */
+.v21-root .v-opt {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px;
+  border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px;
+  background: var(--panel2); cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.v21-root .v-opt:hover { border-color: var(--line-strong); }
+.v21-root .v-opt.on { border-color: var(--accent); background: rgba(124, 92, 255, .07); }
+.v21-root .v-opt .rad {
+  width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: 0 0 auto;
+}
+.v21-root .v-opt.on .rad {
+  border-color: var(--accent);
+  background: radial-gradient(circle, #fff 0 3.5px, transparent 4.5px);
+}
+.v21-root .v-opt .v-wave { display: flex; align-items: center; gap: 2.5px; margin-left: auto; }
+.v21-root .v-opt .v-wave i { width: 2.5px; border-radius: 2px; background: var(--accent); opacity: .7; display: block; }
+.v21-root .v-opt .v-wave i:nth-child(1) { height: 8px; }
+.v21-root .v-opt .v-wave i:nth-child(2) { height: 14px; }
+.v21-root .v-opt .v-wave i:nth-child(3) { height: 20px; }
+.v21-root .v-opt .v-wave i:nth-child(4) { height: 12px; }
+.v21-root .v-opt .v-wave i:nth-child(5) { height: 22px; }
+.v21-root .v-opt .v-wave i:nth-child(6) { height: 10px; }
+.v21-root .v-opt .v-wave i:nth-child(7) { height: 16px; }
+
+/* --- 素材卡通用行为（hover 加深边框 / 异常缩略降饱和；比例由各视图定） --- */
+.v21-root .acard:hover { border-color: var(--line-strong); }
+.v21-root .acard.miss .thumb { filter: grayscale(.7) brightness(.6); }
+
+/* --- 承诺/警告提示卡（图标 + 状态色文字 + subtle 底，全局统一形态） --- */
+.v21-root .notice-card {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
+  border-radius: 10px; font-size: 12.5px; line-height: 1.6; border: 1px solid;
+}
+.v21-root .notice-card svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 2px; }
+.v21-root .notice-card.ok { border-color: rgba(69, 211, 156, .28); background: var(--ok-subtle); color: var(--ok); }
+.v21-root .notice-card.warn { border-color: rgba(255, 182, 92, .28); background: var(--warn-subtle); color: var(--warn); }
+.v21-root .notice-card.info { border-color: rgba(88, 166, 255, .3); background: var(--info-subtle); color: var(--info); }
+.v21-root .notice-card.danger { border-color: rgba(255, 107, 120, .35); background: var(--danger-subtle); color: var(--danger); }
+
+/* --- 向导骨架（独立向导页：三态步骤条 + 底部固定动作栏，五屏共用） --- */
+.v21-root .wiz-steps {
+  display: flex; align-items: center; gap: 10px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.v21-root .wstep { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.v21-root .wstep .wn {
+  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-strong); color: var(--muted); flex: 0 0 auto;
+}
+.v21-root .wstep.done { color: var(--text-2); }
+.v21-root .wstep.done .wn { border-color: transparent; background: var(--ok-subtle); color: var(--ok); }
+.v21-root .wstep.done .wn svg { width: 11px; height: 11px; }
+.v21-root .wstep.cur { color: #fff; }
+.v21-root .wstep.cur .wn { background: var(--accent); border-color: var(--accent); color: #fff; }
+.v21-root .wsep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; flex: 0 0 auto; }
+.v21-root .wiz-footer {
+  display: flex; align-items: center; gap: 10px; padding: 12px 24px;
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+.v21-root .wiz-footer .price { font-weight: 400; opacity: .85; font-size: 12.5px; }
+
+/* --- 确认页汇总 tile（panel2 井 + 15px/600 数值 + 副文本 + 右置状态徽标） --- */
+.v21-root .tile {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.v21-root .tile b { font-size: 15px; font-weight: 600; }
+.v21-root .tile small { font-size: 11.5px; color: var(--muted); }
+
+/* --- 生命周期时间线（任务详情/生成历史等抽屉的竖线 + 节点形态） --- */
+.v21-root .tl { position: relative; padding-left: 24px; display: flex; flex-direction: column; gap: 14px; }
+.v21-root .tl::before {
+  content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px;
+  width: 1px; background: var(--line);
+}
+.v21-root .tl-item { position: relative; }
+.v21-root .tl-item::before {
+  content: ""; position: absolute; left: -23px; top: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--muted); border: 2px solid var(--panel);
+}
+.v21-root .tl-item.cur::before {
+  background: var(--info); box-shadow: 0 0 0 3px rgba(88, 166, 255, .2);
+}
+
+/* --- 缩略比例变体（人物 3:4 · 场景/镜头 16:9 · 道具 1:1） --- */
+.v21-root .r34 { aspect-ratio: 3 / 4; }
+.v21-root .r169 { aspect-ratio: 16 / 9; }
+.v21-root .r11 { aspect-ratio: 1 / 1; }
+.v21-root .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* --- 占位渐变数字别名（视图内 ph-0..5 命名统一映射到设计系统六相） --- */
+.v21-root .ph-0 {
+  background:
+    radial-gradient(120% 100% at 75% 15%, rgba(124, 92, 255, .30), transparent 55%),
+    radial-gradient(90% 80% at 20% 90%, rgba(79, 140, 255, .18), transparent 60%),
+    linear-gradient(155deg, #1c2440 0%, #0e1424 60%, #141b2e 100%);
+}
+.v21-root .ph-1 {
+  background:
+    radial-gradient(130% 100% at 70% 80%, rgba(255, 182, 92, .25), transparent 55%),
+    radial-gradient(90% 80% at 20% 15%, rgba(255, 107, 120, .14), transparent 55%),
+    linear-gradient(160deg, #2a1d33 0%, #10131f 60%, #191225 100%);
+}
+.v21-root .ph-2 {
+  background:
+    radial-gradient(120% 100% at 25% 20%, rgba(69, 211, 156, .22), transparent 55%),
+    radial-gradient(80% 70% at 80% 85%, rgba(88, 166, 255, .18), transparent 60%),
+    linear-gradient(150deg, #10281f 0%, #0c1622 65%, #122032 100%);
+}
+.v21-root .ph-3 {
+  background:
+    radial-gradient(120% 100% at 50% 10%, rgba(88, 166, 255, .30), transparent 55%),
+    linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%);
+}
+.v21-root .ph-4 {
+  background:
+    radial-gradient(110% 90% at 30% 75%, rgba(179, 160, 255, .22), transparent 55%),
+    linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%);
+}
+.v21-root .ph-5 {
+  background:
+    radial-gradient(120% 90% at 75% 60%, rgba(69, 211, 156, .18), transparent 55%),
+    radial-gradient(90% 80% at 15% 20%, rgba(124, 92, 255, .22), transparent 60%),
+    linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%);
+}
+
+/* --- 浮层入场动效（尊重系统减弱动态设置） --- */
+@keyframes v21-slide-in-right {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes v21-pop-in {
+  from { transform: scale(.97) translateY(6px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes v21-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .v21-root .drawer { animation: v21-slide-in-right .2s cubic-bezier(.2, .7, .3, 1); }
+  .v21-root .modal { animation: v21-pop-in .18s cubic-bezier(.2, .7, .3, 1); }
+  .v21-root .scrim { animation: v21-fade .16s ease; }
 }

@@ -78,6 +78,7 @@
 
           <div class="row" style="padding: 2px 4px 18px">
             <span v-if="createError" class="small" style="color:var(--danger)">{{ createError }}</span>
+            <span v-else-if="!title.trim()" class="muted xs">填写项目名称后可创建 · 创建前不会写入任何数据</span>
             <span v-else class="muted xs">创建前不会写入任何数据；取消可随时离开。</span>
             <div class="spacer"></div>
             <button class="btn ghost" @click="$router.push('/projects')">取消</button>
@@ -173,7 +174,7 @@ export default {
 </script>
 
 <style scoped>
-.new-wrap { max-width: 780px; margin: 0 auto; padding: 24px; }
+.new-wrap { max-width: 828px; margin: 0 auto; padding: 22px 24px 0; }
 .new-col { display: flex; flex-direction: column; gap: 14px; }
 .sec-title { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; margin-bottom: 14px; }
 .sec-title .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
@@ -184,10 +185,12 @@ export default {
 .src-card { border: 1px solid var(--line); border-radius: 10px; padding: 16px 14px; cursor: pointer; background: var(--panel2); }
 .src-card:hover { border-color: var(--line-strong); }
 .src-card.sel { border-color: var(--accent); background: var(--accent-subtle); }
-.src-card .ic { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-subtle); color: var(--accent); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.src-card .ic { width: 34px; height: 34px; border-radius: 9px; background: var(--neutral-subtle); color: var(--muted); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.src-card.sel .ic { background: var(--accent); color: #fff; }
 .src-card .ic svg { width: 17px; height: 17px; }
 .src-card b { font-size: 13.5px; display: block; margin-bottom: 5px; }
 .src-card p { font-size: 11.5px; color: var(--muted); line-height: 1.55; margin: 0; }
 .more-src { font-size: 12.5px; color: var(--muted); }
-.more-src a { color: var(--accent); cursor: pointer; }
+.more-src a { color: var(--text-2); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.more-src a:hover { color: var(--text); }
 </style>

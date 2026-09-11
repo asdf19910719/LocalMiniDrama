@@ -26,31 +26,33 @@
           <span :class="{ on: status === 'archived' }" @click="setStatus('archived')">已归档 {{ counts.archived }}</span>
         </div>
         <div class="spacer"></div>
-        <button class="btn" @click="importOpen = !importOpen">
-          <svg><use href="#i-download"/></svg>导入 / 协作<svg class="chev" style="width:14px;height:14px"><use href="#i-chev-d"/></svg>
-        </button>
+        <div class="more-wrap" style="position:relative">
+          <button class="btn" @click="importOpen = !importOpen">
+            <svg><use href="#i-download"/></svg>导入 / 协作<svg class="chev" style="width:14px;height:14px"><use href="#i-chev-d"/></svg>
+          </button>
+          <div v-if="importOpen" class="card popover" @click="importOpen = false">
+            <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-package`)">
+              <div class="ic"><svg><use href="#i-box"/></svg></div>
+              <div><b>导入制作包</b><p>episode-package@2.1 · 五步预览导入</p></div>
+            </div>
+            <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/external-ai`)">
+              <div class="ic"><svg><use href="#i-spark"/></svg></div>
+              <div><b>外部 AI 制作</b><p>创建任务包，外部会话结果 JSON 回流为草稿</p></div>
+            </div>
+            <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-novel`)">
+              <div class="ic"><svg><use href="#i-doc"/></svg></div>
+              <div><b>小说 / 长文本拆集</b><p>按章节预览拆集与编号，逐集生成草稿</p></div>
+            </div>
+            <div class="pop-sep"></div>
+            <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-video`)">
+              <div class="ic" style="background:var(--neutral-subtle); color:var(--muted)"><svg><use href="#i-film"/></svg></div>
+              <div><b>从已有视频开始剪辑</b><p>登记原片后进入短片页，只读保护原文件</p></div>
+            </div>
+          </div>
+        </div>
         <button class="btn primary" style="height:36px" @click="newEpisode">
           <svg><use href="#i-plus"/></svg>新建剧集
         </button>
-        <div v-if="importOpen" class="card popover" @click="importOpen = false">
-          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-package`)">
-            <div class="ic"><svg><use href="#i-box"/></svg></div>
-            <div><b>导入制作包</b><p>episode-package@2.1 · 五步预览导入</p></div>
-          </div>
-          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/external-ai`)">
-            <div class="ic"><svg><use href="#i-spark"/></svg></div>
-            <div><b>外部 AI 制作</b><p>创建任务包，外部会话结果 JSON 回流为草稿</p></div>
-          </div>
-          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-novel`)">
-            <div class="ic"><svg><use href="#i-doc"/></svg></div>
-            <div><b>小说 / 长文本拆集</b><p>按章节预览拆集与编号，逐集生成草稿</p></div>
-          </div>
-          <div class="pop-sep"></div>
-          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-video`)">
-            <div class="ic" style="background:var(--neutral-subtle); color:var(--muted)"><svg><use href="#i-film"/></svg></div>
-            <div><b>从已有视频开始剪辑</b><p>登记原片后进入短片页，只读保护原文件</p></div>
-          </div>
-        </div>
       </div>
 
       <!-- 第二层：阶段筛选 + 排序 + 集序管理 -->
@@ -75,16 +77,19 @@
         </button>
       </div>
 
-      <div class="ep-toolbar" style="margin-top:10px">
-        <span v-if="notice" class="badge warn">{{ notice }}<span style="cursor:pointer; margin-left:6px" @click="notice = ''">×</span></span>
+      <div v-if="notice" class="notice-strip warn" style="margin:0 0 14px">
+        <svg style="width:14px;height:14px"><use href="#i-warn"/></svg>
+        {{ notice }}
+        <div class="spacer"></div>
+        <span style="cursor:pointer" @click="notice = ''">关闭</span>
       </div>
 
       <!-- 导入成功回写横幅（?imported=<episodeId>） -->
-      <div v-if="importedBanner" class="card row" style="padding:10px 14px; margin-bottom:14px; border-color:var(--accent); gap:10px; align-items:center">
-        <svg style="width:14px;height:14px;color:var(--accent)"><use href="#i-check-c"/></svg>
-        <b class="xs" style="font-size:13px">{{ importedBanner }}</b>
+      <div v-if="importedBanner" class="notice-strip ok" style="margin-bottom:14px">
+        <svg style="width:14px;height:14px"><use href="#i-check-c"/></svg>
+        <span>{{ importedBanner }}</span>
         <div class="spacer"></div>
-        <button class="btn primary sm" @click="openImportedScript">打开剧本</button>
+        <button class="btn sm" @click="openImportedScript">打开剧本</button>
         <button class="icon-btn" title="关闭" @click="importedId = ''"><svg><use href="#i-close"/></svg></button>
       </div>
 
@@ -110,7 +115,7 @@
       </div>
 
       <div class="ep-list">
-        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention || isHighlighted(ep) }">
+        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: isHighlighted(ep), attention: ep.needsAttention && !isHighlighted(ep) }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
           <div class="ep-title">
             <b>{{ ep.title || '未命名' }}</b>
@@ -133,8 +138,8 @@
               <button class="btn sm" @click="restoreEp(ep)"><svg><use href="#i-refresh"/></svg>恢复</button>
             </template>
             <template v-else>
-              <button v-if="ep.status !== 'blank'" class="btn primary sm" @click="open(ep)">继续制作</button>
-              <button v-else class="btn sm" @click="open(ep)">开始创建</button>
+              <button v-if="ep.status !== 'blank' && (isHighlighted(ep) || ep.needsAttention)" class="btn primary sm" @click="open(ep)">继续制作</button>
+              <button v-else-if="ep.status === 'blank'" class="btn sm" @click="open(ep)">开始创建</button>
               <div class="more-wrap" style="position:relative">
                 <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
                 <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:170px" @click="rowMenuId = null">
@@ -668,25 +673,31 @@ export default {
 .ext-task-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .4px; }
 .ep-list { display: flex; flex-direction: column; gap: 8px; }
-.ep-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
-.ep-row.current { border-color: var(--accent); }
-.ep-no { font-weight: 700; font-size: 14px; color: var(--text-2); width: 36px; flex: 0 0 auto; }
-.ep-title { min-width: 120px; }
-.ep-title b { font-size: 13.5px; display: block; }
+.ep-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; cursor: pointer; }
+.ep-row:hover { border-color: var(--line-strong); }
+.ep-row.current {
+  border-color: var(--accent);
+  background: linear-gradient(90deg, rgba(124, 92, 255, .08), transparent 40%);
+}
+.ep-row.attention { border-color: rgba(255, 182, 92, .45); }
+.ep-no { font-weight: 700; font-size: 14px; color: var(--text-2); width: 44px; flex: 0 0 44px; }
+.ep-title { width: 190px; flex: 0 0 190px; min-width: 0; }
+.ep-title b { font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-title span { font-size: 11px; color: var(--muted); }
-.ep-src { flex: 0 0 auto; }
-.stage-cells { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+.ep-src { width: 108px; flex: 0 0 108px; }
+.stage-cells { display: flex; gap: 8px; flex: 1; min-width: 0; }
 .s-cell {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
   border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; color: var(--text-2);
+  flex: 1; max-width: 150px; min-width: 0; overflow: hidden; white-space: nowrap;
 }
-.s-cell svg { width: 12px; height: 12px; }
-.s-cell.ok { border-color: rgba(69,211,156,.4); color: var(--ok); }
-.s-cell.info { border-color: rgba(88,166,255,.4); color: var(--info); }
-.s-cell.warn { border-color: rgba(255,182,92,.4); color: var(--warn); }
-.s-cell.empty { color: var(--muted); opacity: .75; }
-.ep-last { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.55; flex: 0 0 auto; }
-.popover { position: absolute; right: 210px; top: 118px; z-index: 40; padding: 8px; min-width: 300px; }
+.s-cell svg { width: 12px; height: 12px; flex: 0 0 auto; }
+.s-cell.ok { border-color: rgba(69,211,156,.28); background: var(--ok-subtle); color: var(--ok); }
+.s-cell.info { border-color: rgba(88,166,255,.28); background: var(--info-subtle); color: var(--info); }
+.s-cell.warn { border-color: rgba(255,182,92,.28); background: var(--warn-subtle); color: var(--warn); }
+.s-cell.empty { color: var(--muted); opacity: .75; border-style: dashed; background: transparent; }
+.ep-last { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.55; width: 150px; flex: 0 0 150px; }
+.popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; padding: 8px; min-width: 300px; }
 .pop-item { display: flex; gap: 11px; padding: 10px; border-radius: 8px; cursor: pointer; }
 .pop-item:hover { background: var(--panel2); }
 .pop-item .ic { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-subtle); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
@@ -694,9 +705,9 @@ export default {
 .pop-item b { font-size: 13px; display: block; }
 .pop-item p { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
 .pop-sep { height: 1px; background: var(--line); margin: 6px 0; }
-.ptabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
-.ptab { padding: 6px 16px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 500; }
+.ptabs { display: flex; gap: 2px; }
+.ptab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 600; }
 .imp-rows .kv { border-bottom: 1px solid var(--line); padding: 7px 0; }
 .imp-rows .kv:last-of-type { border-bottom: none; }
 </style>

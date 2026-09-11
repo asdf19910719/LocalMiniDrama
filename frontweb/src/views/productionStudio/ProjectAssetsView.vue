@@ -48,13 +48,21 @@
             <span v-if="selectMode" class="pick-box" :class="{ on: isSelected(item) }" @click.stop="toggleSelect(item)"><svg><use href="#i-check"/></svg></span>
             <div class="thumb" :class="item.currentImage ? 'has-img' : 'ph ph-' + ((i + grp.key.length) % 6)">
               <img v-if="item.currentImage" :src="item.currentImage">
-              <span class="st badge" :class="item.blocked ? 'danger' : 'ok'">{{ item.blocked ? '缺少当前图' : '已确认' }}</span>
+              <span class="st badge" :class="item.offline ? 'danger' : (item.blocked ? 'warn' : 'ok')">{{ item.offline ? '媒体离线' : (item.blocked ? '缺少当前图' : '已确认') }}</span>
             </div>
             <div class="info"><b>{{ item.name }}</b><p>{{ typeLabel(item.assetType) }} · {{ item.description || '—' }}</p></div>
           </div>
         </div>
       </template>
-      <p v-if="grouped.length === 0" class="muted" style="text-align:center; padding:60px 0">暂无素材</p>
+      <div v-if="grouped.length === 0" class="empty-box">
+        <svg style="width:38px;height:38px;color:var(--muted)"><use :href="q ? '#i-search' : '#i-cube'"/></svg>
+        <div style="text-align:center">
+          <p style="font-size:13.5px">{{ q ? '没有匹配的素材' : '还没有项目素材' }}</p>
+          <p class="xs muted" style="margin-top:4px">{{ q ? '换个关键词，或清除搜索后重试' : '人物、场景、道具会在这里建档，供剧本与分镜引用' }}</p>
+        </div>
+        <button v-if="q" class="btn" @click="q = ''; load()">清除搜索</button>
+        <button v-else class="btn primary" @click="createOpen = true">新增第一个素材</button>
+      </div>
     </div>
 
     <!-- 批量操作栏（Task 3.3 / P0-10）：多选态且有选中时固定在页面底部 -->
@@ -791,16 +799,16 @@ export default {
 .stat b { font-size: 18px; display: block; }
 .stat span { font-size: 12px; color: var(--muted); }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.sec-label { font-size: 13px; font-weight: 600; margin: 4px 0 10px; }
-.sec-label .hint { font-weight: 400; font-size: 11.5px; }
-.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 13px; margin-bottom: 20px; }
+.sec-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin: 4px 0 10px; }
+.sec-label .hint { font-weight: 400; font-size: 11.5px; letter-spacing: 0; }
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
 .acard { cursor: pointer; overflow: hidden; position: relative; }
 .acard .thumb { position: relative; overflow: hidden; }
-.acard.character .thumb { height: 200px; }
-.acard.scene .thumb { height: 144px; }
-.acard.prop .thumb { height: 144px; display: flex; align-items: center; justify-content: center; background: #10131b; }
+.acard.character .thumb { aspect-ratio: 3 / 4; height: auto; }
+.acard.scene .thumb { aspect-ratio: 16 / 9; height: auto; }
+.acard.prop .thumb { aspect-ratio: 1 / 1; height: auto; display: flex; align-items: center; justify-content: center; background: #10131b; }
 .acard .thumb img { width: 100%; height: 100%; object-fit: cover; }
-.acard .st { position: absolute; left: 8px; bottom: 8px; z-index: 2; }
+.acard .st { position: absolute; left: 8px; top: 8px; z-index: 2; }
 .acard .info { padding: 8px 12px 10px; }
 .acard .info b { font-size: 13.5px; display: block; }
 .acard .info p { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -833,7 +841,7 @@ export default {
 .voice-audio { width: 100%; height: 32px; }
 .voice-acts { display: flex; gap: 8px; }
 .upload-pick { display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--line-strong); border-radius: 8px; padding: 14px 12px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
-.upload-pick:hover { color: var(--text-2); border-color: var(--accent); }
+.upload-pick:hover { color: var(--text-2); border-color: var(--line-strong); }
 .upload-pick svg { width: 14px; height: 14px; }
 .extract-row { display: flex; align-items: center; gap: 8px; }
 .usage-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; color: var(--text); text-decoration: none; font-size: 13px; }
@@ -846,22 +854,17 @@ export default {
 .empty-tip { text-align: center; padding: 32px 0; font-size: 12.5px; }
 .ph-big { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 40px 16px; text-align: center; font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
 .danger-zone { border: 1px solid rgba(255, 107, 120, .35); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.ph-0 { background: radial-gradient(120% 100% at 75% 15%, rgba(124,92,255,.30), transparent 55%), linear-gradient(155deg, #1c2440 0%, #0e1424 60%, #141b2e 100%); }
-.ph-1 { background: radial-gradient(130% 100% at 70% 80%, rgba(255,182,92,.25), transparent 55%), linear-gradient(160deg, #2a1d33 0%, #10131f 60%, #191225 100%); }
-.ph-2 { background: radial-gradient(120% 100% at 25% 20%, rgba(69,211,156,.22), transparent 55%), linear-gradient(150deg, #10281f 0%, #0c1622 65%, #122032 100%); }
-.ph-3 { background: radial-gradient(120% 100% at 50% 10%, rgba(88,166,255,.30), transparent 55%), linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%); }
-.ph-4 { background: radial-gradient(110% 90% at 30% 75%, rgba(179,160,255,.22), transparent 55%), linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%); }
-.ph-5 { background: radial-gradient(120% 90% at 75% 60%, rgba(69,211,156,.18), transparent 55%), linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%); }
 /* 批量选择与批量生成（Task 3.3 / P0-10） */
-.pick-box { position: absolute; top: 8px; left: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.8); background: rgba(8,10,16,.55); display: flex; align-items: center; justify-content: center; color: transparent; cursor: pointer; }
+.pick-box { position: absolute; top: 8px; left: 8px; z-index: 3; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.8); background: rgba(5,7,12,.55); display: flex; align-items: center; justify-content: center; color: transparent; cursor: pointer; }
 .pick-box svg { width: 14px; height: 14px; }
 .pick-box.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .acard.picked { border-color: var(--accent); }
-.batch-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 70; display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 14px; box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.batch-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 70; display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow); }
 .batch-bar .count { font-size: 13px; font-weight: 600; margin-right: 2px; }
 .batch-list { display: flex; flex-direction: column; gap: 6px; }
 .batch-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; }
 .batch-row .idx { width: 20px; height: 20px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; flex: 0 0 auto; }
 .batch-row .nm { font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .batch-prog { background: var(--accent-subtle); color: var(--accent); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+.empty-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 72px 0; }
 </style>

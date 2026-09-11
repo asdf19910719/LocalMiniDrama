@@ -101,14 +101,14 @@
 
       <!-- 项目画面风格 -->
       <div class="card look-card" v-if="overview">
-        <div class="ph" style="width:132px; height:88px; border-radius:8px"></div>
+        <div class="ph" style="width:108px; height:150px; border-radius:10px; flex:0 0 auto"></div>
         <div class="grow col" style="gap:6px">
-          <div class="row"><b style="font-size:13.5px">项目画面风格</b><span class="badge ok">{{ overview.style.styleId }}</span></div>
+          <div class="row"><b style="font-size:13.5px">项目画面风格</b><span class="badge ok">当前 · {{ styleName }}</span></div>
           <div class="muted xs">应用只影响之后的新生成，不会改动现有素材与成片</div>
         </div>
         <div class="col" style="gap:8px">
           <button class="btn" @click="openStyleModal">更换风格</button>
-          <button class="btn ghost" @click="openStyleDrawer">查看风格</button>
+          <button class="btn ghost sm" style="border:1px solid var(--line)" @click="openStyleDrawer">查看风格</button>
         </div>
       </div>
     </div>
@@ -118,7 +118,7 @@
     <aside v-if="editOpen" class="drawer narrow" style="z-index:90">
       <div class="drawer-h">
         <h3>编辑项目</h3>
-        <span v-if="editDirty" class="badge warn" style="height:19px">有未保存修改</span>
+        <span v-if="editDirty" class="badge warn">有未保存修改</span>
         <button class="icon-btn" @click="closeEdit"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
@@ -202,9 +202,14 @@
             </div>
             <div class="style-grid">
               <div v-for="s in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
-                <div class="ph" style="height:64px; border-radius:7px"></div>
-                <b style="font-size:12.5px; display:block; margin-top:7px">{{ s.labelZh || s.label_zh || s.id }}</b>
-                <span class="xs muted ellipsis" style="display:block">{{ s.descriptionZh || s.description_zh || '' }}</span>
+                <div style="position:relative">
+                  <div class="ph" style="height:96px; border-radius:0"></div>
+                  <span v-if="s.id === overview?.style?.styleId" class="badge accent" style="position:absolute; left:7px; top:7px; height:20px">当前使用</span>
+                </div>
+                <div style="padding:8px 10px 10px">
+                  <b style="font-size:12.5px; display:block">{{ s.labelZh || s.label_zh || s.id }}</b>
+                  <span class="xs muted ellipsis" style="display:block; margin-top:2px">{{ s.descriptionZh || s.description_zh || '' }}</span>
+                </div>
               </div>
             </div>
             <p v-if="!styleLoading && !styles.length" class="xs muted" style="margin-top:10px">{{ styleTab === 'mine' ? '还没有自定义风格' : '没有匹配的风格' }}</p>
@@ -274,6 +279,9 @@ export default {
       const id = this.overview?.style?.styleId
       if (!id) return null
       return (this.styles || []).find((s) => s.id === id) || null
+    },
+    styleName() {
+      return this.currentStyle?.labelZh || this.overview?.style?.styleId || '未设置'
     },
     selectedStyleName() {
       const hit = (this.styles || []).find((s) => s.id === this.selectedStyleId)
@@ -413,34 +421,35 @@ export default {
 </script>
 
 <style scoped>
-.hero { display: flex; gap: 20px; padding: 20px; }
-.hero .cover { width: 140px; height: 92px; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+.hero { display: flex; gap: 18px; padding: 18px; }
+.hero .cover { width: 108px; height: 150px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
 .hero .cover img { width: 100%; height: 100%; object-fit: cover; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: 5fr 7fr; gap: 14px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .todo-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid var(--line); }
 .todo-item:last-of-type { border-bottom: none; }
 .todo-item .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12px; }
-.stage-card { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
-.stage-card:hover { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.stage-card .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.stage-card { cursor: pointer; padding: 14px 16px; transition: border-color .15s ease; }
+.stage-card:hover { border-color: var(--line-strong); }
+.stage-card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .stage-card .head svg { width: 15px; height: 15px; color: var(--muted); }
-.stage-card .srow { display: flex; justify-content: space-between; padding: 5px 14px; font-size: 12.5px; color: var(--text-2); }
+.stage-card .srow { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12.5px; color: var(--text-2); }
 .stage-card .srow .k { display: flex; align-items: center; gap: 7px; color: var(--muted); }
 .stage-card .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 .assets-summary { display: flex; align-items: center; gap: 10px; }
 .assets-summary .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12.5px; }
 .look-card { display: flex; gap: 18px; padding: 16px; align-items: center; }
-.ptabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
-.ptab { padding: 6px 16px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 500; }
+.ptabs { display: flex; gap: 2px; }
+.ptab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 600; }
 .more-wrap { position: relative; }
 .more-pop { position: absolute; right: 0; top: 38px; z-index: 30; padding: 6px; min-width: 240px; display: flex; flex-direction: column; gap: 2px; }
 .more-sep { height: 1px; background: var(--line); margin: 4px 2px; }
 .more-note { padding: 2px 6px 4px; white-space: normal; line-height: 1.5; }
 .tab.disabled { opacity: .45; cursor: not-allowed; }
 .style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 380px; overflow: auto; }
-.style-item { padding: 8px; cursor: pointer; }
-.style-item.sel { border-color: var(--accent); background: var(--accent-subtle); }
+.style-item { padding: 0; overflow: hidden; cursor: pointer; }
+.style-item .ph { height: 96px; border-radius: 0; }
+.style-item.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--panel2); }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 </style>

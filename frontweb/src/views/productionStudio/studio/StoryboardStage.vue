@@ -33,7 +33,7 @@
         </div>
         <div class="select" style="height:32px; width:110px; cursor:pointer">
           <select v-model="currentShotIdProxy" class="sort-native">
-            <option v-for="s in visibleShots" :key="s.id" :value="s.id">镜头 {{ pad(s.number) }}</option>
+            <option v-for="s in visibleShots" :key="s.id" :value="s.id">镜头 {{ pad(s.storyboard_number ?? s.number) }}</option>
           </select>
           <svg class="chev"><use href="#i-chev-d"/></svg>
         </div>
@@ -113,11 +113,12 @@
           <div v-for="(seg, i) in segments" :key="seg.id" class="seg-card">
             <div class="sc-h">
               <span class="tc">时段 {{ i + 1 }} · {{ fmtTc(seg.start_seconds) }} – {{ fmtTc(seg.end_seconds) }}</span>
+              <span v-if="segRefBadge(seg)" class="badge outline" style="height:19px">{{ segRefBadge(seg) }}</span>
               <div class="spacer"></div>
               <span class="card-act" title="拆分" @click="split(seg)"><svg><use href="#i-copy"/></svg></span>
-              <span class="card-act" title="与下一段合并" @click="merge(seg)"><svg><use href="#i-layers"/></svg></span>
-              <span class="card-act" title="上移" @click="move(seg, 'up')"><svg style="transform:rotate(-90deg)"><use href="#i-back"/></svg></span>
-              <span class="card-act" title="下移" @click="move(seg, 'down')"><svg style="transform:rotate(90deg)"><use href="#i-back"/></svg></span>
+              <span v-if="i < segments.length - 1" class="card-act" title="与下一段合并" @click="merge(seg)"><svg><use href="#i-layers"/></svg></span>
+              <span v-if="i > 0" class="card-act" title="上移" @click="move(seg, 'up')"><svg style="transform:rotate(-90deg)"><use href="#i-back"/></svg></span>
+              <span v-if="i < segments.length - 1" class="card-act" title="下移" @click="move(seg, 'down')"><svg style="transform:rotate(90deg)"><use href="#i-back"/></svg></span>
             </div>
             <div class="sc-b">
               <div><div class="f-label">画面与动作</div>
@@ -156,11 +157,19 @@
               </button>
             </div>
             <div v-if="h3.text" style="padding:7px 10px">
-              <textarea class="f-ta mono" style="width:100%" rows="3" v-model="h3.text" @input="h3Dirty = true"></textarea>
-              <div class="row" style="margin-top:6px">
-                <button class="btn sm primary" :disabled="!h3Dirty" @click="saveH3">保存并校验</button>
-                <span v-if="h3Dirty" class="xs warn-t">已修改未保存 · 保存前阻断视频提交</span>
+              <div v-if="!h3Open" class="row" style="cursor:pointer" @click="h3Open = true">
+                <span class="xs muted mono ellipsis grow">{{ h3SummaryLine(h3.text) }}</span>
+                <span class="xs accent-t" style="flex:0 0 auto">展开编辑</span>
               </div>
+              <template v-else>
+                <textarea class="f-ta mono" style="width:100%" rows="3" v-model="h3.text" @input="h3Dirty = true"></textarea>
+                <div class="row" style="margin-top:6px">
+                  <button class="btn sm primary" :disabled="!h3Dirty" @click="saveH3">保存并校验</button>
+                  <span v-if="h3Dirty" class="xs warn-t">已修改未保存 · 保存前阻断视频提交</span>
+                  <div class="spacer"></div>
+                  <button class="btn sm ghost" @click="h3Open = false">收起</button>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -234,7 +243,7 @@
         <div class="row" style="gap:6px">
           <div v-for="s in visibleShots" :key="s.id" class="shot" :class="shotClass(s)" @click="selectShot(s.id)">
             <div class="im ph"><span class="st-dot" :style="{ background: shotDotColor(s) }"></span></div>
-            <div class="no" :class="shotNoClass(s)">{{ pad(s.number) }}{{ shotSuffix(s) }}</div>
+            <div class="no" :class="shotNoClass(s)">{{ pad(s.storyboard_number ?? s.number) }}{{ shotSuffix(s) }}</div>
           </div>
         </div>
         <div class="spacer"></div>
@@ -292,11 +301,11 @@
           </div>
         </div>
         <div class="modal-f">
-          <label class="xs muted" style="display:flex; align-items:center; gap:5px; margin-right:auto">
+          <label v-if="isDev" class="xs muted" style="display:flex; align-items:center; gap:5px; margin-right:auto">
             <input type="checkbox" v-model="sheetDemoDelay"> 演示运行态（mock 延迟 6s）
           </label>
           <button class="btn ghost" @click="videoSheetOpen = false">取消</button>
-          <button class="btn primary" :disabled="busy" @click="submitVideo"><svg><use href="#i-film"/></svg>创建 {{ videoCount }} 个任务</button>
+          <button class="btn primary" :disabled="busy" @click="submitVideo"><svg><use href="#i-film"/></svg>创建 {{ videoCount }} 个远端任务</button>
         </div>
       </div>
     </div>
@@ -457,11 +466,14 @@
         <button class="icon-btn" @click="historyOpen = false"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
-        <div v-for="t in history.tasks" :key="t.taskId" class="v-row">
+        <div v-for="t in history.tasks" :key="t.taskId" class="v-row" style="cursor:default">
           <span class="vn"><svg style="width:15px;height:15px"><use href="#i-film"/></svg></span>
           <div>
-            <b style="font-size:13px">{{ taskStatusLabel(t.status) }}</b>
-            <div class="vm">提交 {{ fmtTime(t.createdAt) }}<template v-if="t.completedAt"> · 完成 {{ fmtTime(t.completedAt) }}</template><br>{{ t.cancelRequested ? 'cancel-requested · ' : '' }}{{ t.error || t.message || '' }}</div>
+            <div class="row" style="gap:6px">
+              <b style="font-size:13px">{{ taskStatusLabel(t.status) }}</b>
+              <span class="badge" :class="taskStatusBadge(t.status)" style="height:18px">{{ t.cancelRequested && t.status !== 'failed' ? '取消中' : taskStatusLabel(t.status) }}</span>
+            </div>
+            <div class="vm">提交 {{ fmtTime(t.createdAt) || '—' }}<template v-if="t.completedAt"> · 完成 {{ fmtTime(t.completedAt) }}</template><template v-if="t.error || t.message"><br>{{ t.error || t.message }}</template></div>
           </div>
           <div class="acts">
             <button v-if="['failed', 'cancelled'].includes(t.status)" class="btn sm" @click="retryTask(t.taskId)">按原输入重试</button>
@@ -469,7 +481,11 @@
         </div>
         <p v-if="!history.tasks?.length" class="xs muted">本镜暂无生成任务</p>
       </div>
-      <div class="drawer-f"><span class="muted xs">按原输入重试创建新任务，不覆盖历史记录</span></div>
+      <div class="drawer-f">
+        <span class="muted xs">共 {{ (history.tasks || []).length }} 条 · 按时间倒序</span>
+        <div class="spacer"></div>
+        <span class="muted xs">按原输入重试创建新任务，不覆盖历史记录</span>
+      </div>
     </aside>
 
     <!-- H3 生成确认抽屉（T2.5：生成前置确认 + 人工草稿保护） -->
@@ -1150,8 +1166,8 @@ export default {
     shotClass(s) {
       const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
       const isMissing = (this.completion.missing || []).includes(s.id)
+      if (s.id === this.currentShotId) return isStale ? 'cur stale' : 'cur'
       if (isStale) return 'stale'
-      if (s.id === this.currentShotId) return 'cur'
       if (isMissing) return ''
       return 'ok'
     },
@@ -1163,6 +1179,7 @@ export default {
       return isMissing ? 'var(--neutral)' : 'var(--ok)'
     },
     shotNoClass(s) {
+      if (s.id === this.currentShotId) return ''
       const isStale = (this.completion.staleShots || []).some((x) => x.shotId === s.id)
       if (isStale) return 'warn-t'
       const isMissing = (this.completion.missing || []).includes(s.id)
@@ -1173,6 +1190,37 @@ export default {
       if (isStale) return ' 旧图'
       const isMissing = (this.completion.missing || []).includes(s.id)
       return isMissing ? ' —' : ' ✓'
+    },
+    taskStatusLabel(status) {
+      return {
+        pending: '排队中', running: '生成中', succeeded: '生成成功',
+        failed: '生成失败', cancelled: '已取消',
+      }[status] || status || '未知状态'
+    },
+    taskStatusBadge(status) {
+      return {
+        pending: 'info', running: 'info', succeeded: 'ok',
+        failed: 'danger', cancelled: 'outline',
+      }[status] || 'outline'
+    },
+    segRefBadge(seg) {
+      // 时段卡头部的「@图片N 生效」徽标：把时段引用映射到本镜引用槽位序号
+      try {
+        const refs = JSON.parse(seg.asset_refs_json || '{}')
+        const names = [...(refs.characterRefs || []), ...(refs.propRefs || []), ...(refs.sceneRefs || [])]
+        if (!names.length) return ''
+        const slots = []
+        for (const n of names) {
+          const i = this.referenceChips.findIndex((c) =>
+            String(c.name).includes(String(n)) || String(n).includes(String(c.name)))
+          if (i >= 0) slots.push(`@图片${i + 1}`)
+        }
+        return [...new Set(slots)].length ? [...new Set(slots)].join(' · ') + ' 生效' : ''
+      } catch { return '' }
+    },
+    h3SummaryLine(text) {
+      const line = String(text || '').split('\n').find((l) => l.trim())
+      return line ? line.slice(0, 96) : ''
     },
   },
 }

@@ -103,23 +103,25 @@
     <aside v-if="voiceOpen" class="drawer narrow" style="z-index:90">
       <div class="drawer-h">
         <h3>人物音色 <span class="muted" style="font-weight:400; font-size:12px">· {{ detail?.name }}</span></h3>
+        <span class="badge" :class="voiceChoice && voiceChoice.type !== 'default' ? 'ok' : 'warn'">{{ voiceChoice && voiceChoice.type !== 'default' ? '已设置' : '未设置' }}</span>
         <button class="icon-btn" @click="voiceOpen = false"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
-        <div class="card pad" style="display:flex; gap:9px; padding:11px 12px; border-color:rgba(88,166,255,.3)">
-          <svg style="width:14px;height:14px;color:var(--info);flex:0 0 auto;margin-top:2px"><use href="#i-mic"/></svg>
-          <span class="xs" style="color:var(--info); line-height:1.6">本集对白将参考人物音色生成配音；未设置时使用模型默认声音，不阻断进入分镜。</span>
+        <div class="notice-card warn" style="margin-bottom:4px">
+          <svg><use href="#i-warn"/></svg>
+          <span>本集有对白将参考人物音色生成配音；未设置时使用模型默认声音，不阻断进入分镜。</span>
         </div>
         <div class="sec-t">预设音色</div>
-        <div v-for="(p, i) in voicePresets" :key="p.id" class="v-row" :class="{ cur: voiceChoice?.type === 'preset' && voiceChoice?.presetId === p.id }" @click="pickPreset(p)">
-          <span class="vn"><svg style="width:15px;height:15px"><use href="#i-wave"/></svg></span>
-          <div><b style="font-size:13px">{{ p.name }}</b><div class="vm">{{ p.desc }}</div></div>
-          <div class="acts"><button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="pickPreset(p)">选择</button></div>
+        <div v-for="p in voicePresets" :key="p.id" class="v-opt" :class="{ on: voiceChoice?.type === 'preset' && voiceChoice?.presetId === p.id }" @click="pickPreset(p)">
+          <span class="rad"></span>
+          <div class="grow"><b style="font-size:13px">{{ p.name }}</b><div class="vm">{{ p.desc }}</div></div>
+          <span class="v-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
         </div>
-        <div class="v-row" v-if="legacyVoiceUrl" :class="{ cur: voiceChoice?.type === 'upload' && voiceChoice?.url === legacyVoiceUrl }" @click="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">
-          <span class="vn"><svg style="width:15px;height:15px"><use href="#i-mic"/></svg></span>
-          <div><b style="font-size:13px">已认证音色</b><div class="vm">来自角色音色资产（seedance2 voice）</div></div>
-          <div class="acts"><button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">选择</button></div>
+        <div class="v-opt" v-if="legacyVoiceUrl" :class="{ on: voiceChoice?.type === 'upload' && voiceChoice?.url === legacyVoiceUrl }" @click="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">
+          <span class="rad"></span>
+          <div class="grow"><b style="font-size:13px">已认证音色</b><div class="vm">来自角色音色资产（seedance2 voice）</div></div>
+          <span class="v-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <button class="btn sm ghost" style="border:1px solid var(--line)" @click.stop="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">试听</button>
         </div>
         <div class="sec-t">上传 / 素材库</div>
         <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center">
@@ -139,12 +141,19 @@
         <audio v-if="previewVoiceUrl" controls :src="previewVoiceUrl" style="width:100%; margin-top:10px; height:34px"></audio>
         <p class="xs muted" style="margin-top:6px">{{ voiceChoice?.url ? '试听当前音色' : '选择带音频文件的音色后可试听' }}</p>
         <div class="divider"></div>
-        <button class="btn ghost sm" style="border:1px solid var(--line)" @click="voiceChoice = { type: 'default', name: '模型默认声音' }">改用模型默认声音</button>
+        <div class="row" style="padding:9px 12px; border:1px solid var(--line); border-radius:8px; cursor:pointer" @click="voiceChoice = { type: 'default', name: '模型默认声音' }">
+          <svg style="width:14px;height:14px;color:var(--muted);flex:0 0 auto"><use href="#i-fwd"/></svg>
+          <div class="grow">
+            <b style="font-size:12.5px">改用模型默认声音</b>
+            <div class="xs muted" style="margin-top:2px">本集声音策略改为「默认」 · 音色条件立即解除</div>
+          </div>
+          <span v-if="voiceChoice?.type === 'default'" class="badge ok" style="height:20px">当前</span>
+        </div>
       </div>
       <div class="drawer-f">
-        <span class="muted xs">音色选择只影响本集配音生成</span>
+        <span class="muted xs">选择保存后自动重新检查 · 只影响本集配音生成</span>
         <div class="spacer"></div>
-        <button class="btn primary" :disabled="voiceSaving" @click="saveVoice">{{ voiceSaving ? '保存中…' : '完成' }}</button>
+        <button class="btn primary" :disabled="voiceSaving" @click="saveVoice">{{ voiceSaving ? '保存中…' : '用于本集' }}</button>
       </div>
     </aside>
 
@@ -459,23 +468,23 @@ export default {
 </script>
 
 <style scoped>
-.atoolbar { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-top: 14px; }
+.atoolbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; padding: 16px; }
 .acard { cursor: pointer; overflow: hidden; }
-.acard.miss { border-color: rgba(255,107,120,.4); }
-.acard .thumb { position: relative; height: 150px; }
+.acard .thumb { position: relative; aspect-ratio: 16 / 9; height: auto; }
 .acard .thumb img { width: 100%; height: 100%; object-fit: cover; }
-.acard .st { position: absolute; left: 8px; bottom: 8px; z-index: 2; }
+.acard .st { position: absolute; left: 8px; top: 8px; z-index: 2; }
 .acard .info { padding: 10px 12px 12px; }
 .acard .info b { font-size: 13.5px; }
 .acard .info p { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); }
 .ed-thumb { display: flex; gap: 14px; }
-.ed-thumb .main { width: 170px; height: 200px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
+.ed-thumb .main { width: 168px; height: 224px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
 .sec-t { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; letter-spacing: .3px; }
 .stchips { display: flex; gap: 6px; flex-wrap: wrap; }
 .stchip {
   height: 26px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line);
-  font-size: 12px; color: var(--text-2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  background: var(--panel2); color: var(--muted);
+  font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
 }
 .stchip.on { border-color: var(--accent); background: var(--accent-subtle); color: #fff; }
 .cand-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -483,15 +492,5 @@ export default {
 .cand .im { height: 114px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; overflow: hidden; }
 .cand.cur .im { border: 2px solid var(--ok); }
 .cand .cap { font-size: 10.5px; color: var(--muted); text-align: center; margin-top: 4px; }
-.v-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 9px; background: var(--panel2); cursor: pointer; }
-.v-row.cur { border-color: var(--accent); background: var(--accent-subtle); }
 .v-row .vn { font-size: 14px; }
-.v-row .vm { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
-.v-row .acts { margin-left: auto; display: flex; flex-direction: column; gap: 5px; }
-.ph-0 { background: radial-gradient(120% 100% at 75% 15%, rgba(124,92,255,.30), transparent 55%), linear-gradient(155deg, #1c2440 0%, #0e1424 60%, #141b2e 100%); }
-.ph-1 { background: radial-gradient(130% 100% at 70% 80%, rgba(255,182,92,.25), transparent 55%), linear-gradient(160deg, #2a1d33 0%, #10131f 60%, #191225 100%); }
-.ph-2 { background: radial-gradient(120% 100% at 25% 20%, rgba(69,211,156,.22), transparent 55%), linear-gradient(150deg, #10281f 0%, #0c1622 65%, #122032 100%); }
-.ph-3 { background: radial-gradient(120% 100% at 50% 10%, rgba(88,166,255,.30), transparent 55%), linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%); }
-.ph-4 { background: radial-gradient(110% 90% at 30% 75%, rgba(179,160,255,.22), transparent 55%), linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%); }
-.ph-5 { background: radial-gradient(120% 90% at 75% 60%, rgba(69,211,156,.18), transparent 55%), linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%); }
 </style>

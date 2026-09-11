@@ -357,18 +357,54 @@ export default {
 </script>
 
 <style scoped>
-.wizard { padding: 24px 48px; max-width: 900px; margin: 0 auto; }
-.step-body { margin-top: 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; min-height: 320px; }
+/* 独立向导页：接入 V2.1 深色设计系统，Element Plus 组件经 :deep 主题化 */
+.wizard { padding: 20px 48px 24px; max-width: 900px; margin: 0 auto; height: 100%; overflow: auto; }
+.wizard h1 { font-size: 20px; font-weight: 600; margin: 10px 0 14px; }
+.step-body { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; min-height: 320px; color: var(--text); }
 .step-actions { margin-top: 20px; display: flex; gap: 10px; }
-.hint { color: #9ca3af; font-size: 12px; }
-.context-box, .pkg-info { background: #f9fafb; border-radius: 8px; padding: 14px; }
+.hint { color: var(--muted); font-size: 12px; }
+.context-box, .pkg-info { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 14px; color: var(--text-2); font-size: 12.5px; line-height: 1.7; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
-code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
-.check-fail { border: 1px solid rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .06); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
-.check-fail-hint { color: var(--danger, #ef4444); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.check-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--text-2, #374151); }
+code { background: var(--bg); border: 1px solid var(--line); padding: 2px 6px; border-radius: 4px; color: var(--text-2); font-size: 12px; }
+.check-fail { border: 1px solid rgba(255, 107, 120, .35); background: var(--danger-subtle); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.check-fail-hint { color: var(--danger); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.check-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--text-2); }
 .check-row .check-mark { flex: 0 0 auto; width: 16px; text-align: center; }
-.check-row.fail { color: var(--danger, #ef4444); }
+.check-row.fail { color: var(--danger); }
 .check-row.fail .check-mark { font-weight: 700; }
 .check-detail { color: inherit; opacity: .8; font-size: 12px; word-break: break-all; }
+
+/* Element Plus 深色主题化（亮色孤岛修复） */
+.wizard :deep(.el-button) {
+  --el-button-bg-color: var(--panel2); --el-button-border-color: var(--line);
+  --el-button-text-color: var(--text); --el-button-hover-bg-color: #1e2330;
+  --el-button-hover-border-color: var(--line-strong); --el-button-hover-text-color: var(--text);
+  height: 36px; border-radius: 8px; font-size: 13.5px;
+}
+.wizard :deep(.el-button--primary) {
+  --el-button-bg-color: var(--accent); --el-button-border-color: var(--accent);
+  --el-button-text-color: #fff; --el-button-hover-bg-color: var(--accent-hover);
+  --el-button-hover-border-color: var(--accent-hover); --el-button-hover-text-color: #fff;
+  height: 40px; font-weight: 600;
+}
+.wizard :deep(.el-button.is-text) { height: auto; background: transparent; border: none; color: var(--text-2); }
+.wizard :deep(.el-steps) { --el-color-primary: var(--accent); --el-color-success: var(--ok); --el-border-color: var(--line); --el-text-color-placeholder: var(--muted); }
+.wizard :deep(.el-step__title) { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.wizard :deep(.el-step__title.is-process) { color: #fff; font-weight: 600; }
+.wizard :deep(.el-step__title.is-finish) { color: var(--text-2); }
+.wizard :deep(.el-step__head) { --el-text-color-placeholder: var(--muted); }
+.wizard :deep(.el-step__head.is-finish) { color: var(--ok); --el-color-primary: var(--ok); border-color: rgba(69, 211, 156, .4); }
+.wizard :deep(.el-step__head.is-process) { color: var(--accent); border-color: var(--accent); }
+.wizard :deep(.el-step__head.is-wait) { color: var(--muted); border-color: var(--line-strong); background: transparent; }
+.wizard :deep(.el-step__head .el-step__icon) { background: var(--panel2); border-color: var(--line-strong); }
+.wizard :deep(.el-step__head.is-process .el-step__icon) { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wizard :deep(.el-step__head.is-finish .el-step__icon) { background: var(--ok-subtle); border-color: transparent; color: var(--ok); }
+.wizard :deep(.el-step__line) { background: var(--line); }
+.wizard :deep(.el-input__wrapper), .wizard :deep(.el-textarea__inner) {
+  background: var(--panel2); box-shadow: 0 0 0 1px var(--line) inset; border-radius: 8px; color: var(--text);
+}
+.wizard :deep(.el-input__wrapper.is-focus), .wizard :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 1px var(--focus) inset; }
+.wizard :deep(.el-input__inner) { color: var(--text); }
+.wizard :deep(.el-input__inner::placeholder), .wizard :deep(.el-textarea__inner::placeholder) { color: #5c6478; }
+.wizard :deep(.el-alert) { background: var(--panel2); border: 1px solid var(--line); color: var(--text-2); --el-alert-text-color: var(--text-2); }
 </style>

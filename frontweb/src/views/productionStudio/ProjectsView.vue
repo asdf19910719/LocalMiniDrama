@@ -27,7 +27,11 @@
     </header>
     <div class="page-body">
       <div v-if="items.length === 0" class="empty-box">
-        <p class="muted">{{ status === 'archived' ? '回收站为空' : '还没有项目' }}</p>
+        <svg><use href="#i-film"/></svg>
+        <div>
+          <p style="font-size:13.5px">{{ status === 'archived' ? '回收站为空' : '还没有项目' }}</p>
+          <p class="xs muted" style="margin-top:4px">{{ status === 'archived' ? '删除的项目会在这里保留 30 天' : '从一部短剧的剧本开始，创建第一个项目' }}</p>
+        </div>
         <button v-if="status !== 'archived'" class="btn primary" @click="$router.push('/projects/new')">新建项目</button>
       </div>
       <div class="proj-grid">
@@ -193,11 +197,12 @@ export default {
   border-radius: 8px; border: 1px solid var(--line-strong); background: var(--panel2);
   padding: 0 12px; font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.pcard .resume:hover { border-color: var(--accent); }
+.pcard .resume:hover { border-color: var(--line-strong); background: #1e2330; }
 .pcard .resume .go { margin-left: auto; color: var(--accent); display: flex; }
 .pcard .resume .go svg { width: 15px; height: 15px; }
 .pcard .taskline { display: flex; gap: 6px; align-items: center; min-height: 22px; }
 .pcard-menu { position: absolute; right: 8px; top: 8px; z-index: 5; }
+.pcard-menu .icon-btn { background: rgba(10, 12, 18, .55); color: #e6e9f2; }
 .pcard-pop { position: absolute; right: 0; top: 34px; z-index: 6; padding: 6px; min-width: 130px; }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 .sort-native {
@@ -206,26 +211,5 @@ export default {
 }
 .sort-native option { background: var(--panel2); color: var(--text); }
 .empty-box { text-align: center; padding: 90px 0; display: flex; flex-direction: column; gap: 16px; align-items: center; }
-.ph-0 { background:
-  radial-gradient(120% 100% at 75% 15%, rgba(124,92,255,.30), transparent 55%),
-  radial-gradient(90% 80% at 20% 90%, rgba(79,140,255,.18), transparent 60%),
-  linear-gradient(155deg, #1c2440 0%, #0e1424 60%, #141b2e 100%); }
-.ph-1 { background:
-  radial-gradient(130% 100% at 70% 80%, rgba(255,182,92,.25), transparent 55%),
-  radial-gradient(90% 80% at 20% 15%, rgba(255,107,120,.14), transparent 55%),
-  linear-gradient(160deg, #2a1d33 0%, #10131f 60%, #191225 100%); }
-.ph-2 { background:
-  radial-gradient(120% 100% at 25% 20%, rgba(69,211,156,.22), transparent 55%),
-  radial-gradient(80% 70% at 80% 85%, rgba(88,166,255,.18), transparent 60%),
-  linear-gradient(150deg, #10281f 0%, #0c1622 65%, #122032 100%); }
-.ph-3 { background:
-  radial-gradient(120% 100% at 50% 10%, rgba(88,166,255,.30), transparent 55%),
-  linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%); }
-.ph-4 { background:
-  radial-gradient(110% 90% at 30% 75%, rgba(179,160,255,.22), transparent 55%),
-  linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%); }
-.ph-5 { background:
-  radial-gradient(120% 90% at 75% 60%, rgba(69,211,156,.18), transparent 55%),
-  radial-gradient(90% 80% at 15% 20%, rgba(124,92,255,.22), transparent 60%),
-  linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%); }
+.empty-box svg { width: 40px; height: 40px; color: var(--muted); }
 </style>

@@ -204,11 +204,11 @@
             <div class="spacer"></div>
             <span class="muted xs">场次 {{ preview?.check?.scenes }} · 字数 {{ (preview?.check?.chars || 0).toLocaleString() }} · 预计 {{ preview?.check?.estimatedSeconds }}s</span>
           </div>
-          <div class="imp-row">
+          <div class="imp-row" v-if="preview?.assetChanges?.changed || preview?.assetChanges?.added || preview?.assetChanges?.removed">
             <div class="ic" style="background:var(--neutral-subtle); color:var(--muted)"><svg><use href="#i-doc"/></svg></div>
             <div><b>{{ preview?.assetChanges?.changed }} 个场次已修改</b><span>另有 {{ preview?.assetChanges?.added }} 个新增 / {{ preview?.assetChanges?.removed }} 个删除</span></div>
           </div>
-          <div class="imp-row">
+          <div class="imp-row" v-if="preview?.downstream?.storyboardPackagesStale">
             <div class="ic" style="background:var(--warn-subtle); color:var(--warn)"><svg><use href="#i-clap"/></svg></div>
             <div><b>{{ preview?.downstream?.storyboardPackagesStale }} 个镜头的分镜包将过期</b><span>需要复核后重新生成</span></div>
           </div>
@@ -462,7 +462,11 @@ export default {
       const text = el.value.substring(el.selectionStart, el.selectionEnd).trim()
       this.selectionText = text
       if (text.length > 4) {
-        this.aiPop = { visible: true, top: 140 + Math.random() * 40, right: 120, text }
+        // 锚定选中文本所在行：按选区前换行数 × 行高估算，同一选区位置稳定可复现
+        const linesBefore = el.value.slice(0, el.selectionEnd).split('\n').length
+        const lineHeight = 14.5 * 1.9
+        const top = Math.max(56, Math.min((el.scrollHeight || 600) - 60, 24 + linesBefore * lineHeight - (el.scrollTop || 0)))
+        this.aiPop = { visible: true, top, right: 120, text }
       } else {
         this.aiPop.visible = false
       }
@@ -629,14 +633,14 @@ export default {
 .ed { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ed-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .ed-head .ttl { font-weight: 600; font-size: 14px; }
-.ed-body { flex: 1; overflow: auto; padding: 20px 28px; position: relative; }
-.layout-view { flex: 1; overflow: auto; padding: 18px 22px; cursor: text; line-height: 2; font-size: 14px; }
-.layout-view .ln { white-space: pre-wrap; padding: 1px 6px; border-radius: 5px; }
+.ed-body { flex: 1; overflow: auto; padding: 20px 56px 20px 28px; position: relative; }
+.layout-view { flex: 1; overflow: auto; padding: 18px 22px; cursor: text; line-height: 1.9; font-size: 14.5px; }
+.layout-view .ln { white-space: pre-wrap; padding: 1px 6px; border-radius: 5px; max-width: 860px; }
 .layout-view .ln-scene { font-weight: 600; color: var(--accent); margin: 10px 0 4px; }
 .layout-view .ln-dialogue .dlg-name { font-weight: 700; color: var(--text); }
-.layout-view .sel-hl { background: var(--accent-subtle); outline: 1px solid var(--accent); }
+.layout-view .sel-hl { background: rgba(124, 92, 255, .30); border-radius: 3px; }
 .ed-text {
-  width: 100%; min-height: 320px; flex: 1; resize: vertical;
+  width: 100%; min-height: 320px; flex: 1; resize: none;
   background: transparent; border: none; outline: none; color: var(--text-2);
   font-size: 14.5px; line-height: 1.9; font-family: inherit;
 }
