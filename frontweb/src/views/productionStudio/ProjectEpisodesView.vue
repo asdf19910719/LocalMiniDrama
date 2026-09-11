@@ -55,7 +55,7 @@
         <span v-if="notice" class="badge warn">{{ notice }}<span style="cursor:pointer; margin-left:6px" @click="notice = ''">×</span></span>
       </div>
       <div class="ep-list">
-        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention }">
+        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: ep.needsAttention || (highlightId && String(ep.id) === highlightId) }">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
           <div class="ep-title"><b>{{ ep.title || '未命名' }}</b></div>
           <div class="ep-src">
@@ -186,6 +186,11 @@ export default {
   },
   computed: {
     projectId() { return this.$route.params.projectId },
+    // 导入成功页「查看剧集行」等入口带 ?highlight=<episodeId> 时，对应行复用 current 高亮（不自动清除）
+    highlightId() {
+      const h = this.$route.query.highlight
+      return h ? String(h) : ''
+    },
     counts() {
       return {
         all: this.allItems.length,
