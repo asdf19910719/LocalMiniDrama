@@ -582,6 +582,15 @@ function createV21Router({ db, cfg, log }) {
     });
   }));
 
+  const { createRelocationService } = require('./datatools/relocationService.js');
+  const relocation = createRelocationService({ db, log, storageRoot: assetStorage });
+  r.post('/datatools/relocation/scan', wrap((req, res) => {
+    response.success(res, relocation.scan(req.body?.dir));
+  }));
+  r.post('/datatools/relocation/confirm', wrap((req, res) => {
+    response.success(res, relocation.confirm(req.body?.items || []));
+  }));
+
   return r;
 }
 

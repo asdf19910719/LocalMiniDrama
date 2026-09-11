@@ -44,7 +44,38 @@
         <div v-else-if="active === 'relocation'" class="card pad">
           <b style="font-size:14px">媒体重定位</b>
           <p class="muted small" style="margin:8px 0 14px">固定流程：选目录 → 扫描匹配 → 逐文件预览 → 明确确认更新。确认前不写入任何路径。</p>
-          <button class="btn primary" @click="comingSoon('重定位扫描（需本地文件系统扫描器）')">选择目录并扫描</button>
+          <div class="row" style="gap:8px">
+            <input class="input grow" v-model="relocDir" placeholder="输入媒体文件所在目录（如移动后的盘符/目录）">
+            <button class="btn primary" :disabled="!relocDir || relocScanning" @click="runRelocScan">{{ relocScanning ? '扫描中…' : '扫描' }}</button>
+          </div>
+          <p v-if="relocError" class="small" style="color:var(--danger);margin-top:8px">扫描失败：{{ relocError }}</p>
+          <template v-if="relocResult">
+            <div class="stats-row" style="margin-top:12px">
+              <span class="badge ok">唯一命中 {{ relocResult.summary.unique }}</span>
+              <span class="badge warn">多候选 {{ relocResult.summary.ambiguous }}</span>
+              <span class="badge danger">未找到 {{ relocResult.summary.none }}</span>
+            </div>
+            <div v-for="row in relocResult.rows" :key="`${row.table}-${row.id}`" class="issue">
+              <span class="badge" :class="row.match.status === 'unique' ? 'ok' : row.match.status === 'ambiguous' ? 'warn' : 'danger'">
+                {{ row.match.status === 'unique' ? '唯一命中' : row.match.status === 'ambiguous' ? '多候选' : '未找到' }}
+              </span>
+              <span class="ellipsis mono xs grow">{{ row.table }}#{{ row.id }} · {{ row.missingPath }}</span>
+              <template v-if="row.match.status === 'unique'">
+                <span class="mono xs ellipsis" style="max-width:220px">→ {{ row.match.candidates[0] }}</span>
+                <label class="act"><input type="checkbox" :value="`${row.table}|${row.id}|${row.match.candidates[0]}`" v-model="relocSelected"> 勾选</label>
+              </template>
+              <select v-else-if="row.match.status === 'ambiguous'" class="input xs" style="max-width:220px" @change="setAmbiguous(row, $event.target.value)">
+                <option value="">选择候选…</option>
+                <option v-for="c in row.match.candidates" :key="c" :value="c">{{ c }}</option>
+              </select>
+            </div>
+            <div class="divider"></div>
+            <div class="row">
+              <span class="small t2">已勾选 {{ relocSelected.length }} 项 · 确认后才更新路径</span>
+              <div class="spacer"></div>
+              <button class="btn primary" :disabled="!relocSelected.length" @click="relocModalOpen = true">确认更新…</button>
+            </div>
+          </template>
         </div>
 
         <!-- 迁移与恢复记录 -->
@@ -109,6 +140,23 @@
         </div>
       </div>
     </div>
+
+    <!-- 媒体重定位确认 Modal -->
+    <div v-if="relocModalOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:480px">
+        <div class="modal-h">
+          <h3>确认更新媒体路径</h3>
+          <button class="icon-btn" @click="relocModalOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small">将把 <b>{{ relocSelected.length }}</b> 条媒体记录的 local_path 更新为扫描命中的新位置。此操作直接写库，请确认勾选无误。</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn" @click="relocModalOpen = false">取消</button>
+          <button class="btn primary" :disabled="relocExecuting" @click="executeReloc">{{ relocExecuting ? '更新中…' : '确认更新' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -125,6 +173,8 @@ export default {
       cleanupScanning: false, cleanupError: '', cleanupResult: null,
       cleanupSelected: [], cleanupConfirmText: '', cleanupModalOpen: false,
       cleanupExecuting: false, cleanupDone: null,
+      relocDir: '', relocScanning: false, relocError: '', relocResult: null,
+      relocSelected: [], relocAmbiguous: {}, relocModalOpen: false, relocExecuting: false, relocDone: null,
       tools: [
         { id: 'integrity', label: '完整性检查' },
         { id: 'relocation', label: '媒体重定位' },
@@ -193,6 +243,46 @@ export default {
         this.cleanupExecuting = false
       }
     },
+    async runRelocScan() {
+      this.relocScanning = true
+      this.relocError = ''
+      this.relocSelected = []
+      this.relocAmbiguous = {}
+      this.relocDone = null
+      try {
+        this.relocResult = await v21.relocationScan(this.relocDir)
+        // 唯一命中默认勾选（预览后仍需明确确认才写库）
+        this.relocSelected = this.relocResult.rows
+          .filter((r) => r.match.status === 'unique')
+          .map((r) => `${r.table}|${r.id}|${r.match.candidates[0]}`)
+      } catch (err) {
+        this.relocError = err.message || '未知错误'
+      } finally {
+        this.relocScanning = false
+      }
+    },
+    setAmbiguous(row, candidate) {
+      const base = `${row.table}|${row.id}|`
+      this.relocSelected = this.relocSelected.filter((item) => !item.startsWith(base))
+      if (candidate) this.relocSelected.push(base + candidate)
+    },
+    async executeReloc() {
+      this.relocExecuting = true
+      try {
+        const items = this.relocSelected.map((item) => {
+          const [table, id, newPath] = item.split('|')
+          return { table, id: Number(id), newPath }
+        })
+        this.relocDone = await v21.relocationConfirm(items)
+        this.relocModalOpen = false
+        await this.runRelocScan()
+      } catch (err) {
+        this.relocError = err.message || '未知错误'
+        this.relocModalOpen = false
+      } finally {
+        this.relocExecuting = false
+      }
+    },
     recoveryLabel(key) {
       return (key && this.recoveries[key] && this.recoveries[key].label) || ''
     },
@@ -201,9 +291,6 @@ export default {
       if (!target) return
       if (target.tool) this.active = target.tool
       else if (target.route) this.$router.push(target.route)
-    },
-    comingSoon(name) {
-      alert(`${name}将在本迭代内启用`)
     },
   },
 }

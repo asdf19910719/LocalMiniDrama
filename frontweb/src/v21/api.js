@@ -38,6 +38,8 @@ export const v21 = {
   runIntegrity: () => post('/datatools/integrity/run'),
   cleanupDryRun: () => post('/datatools/cleanup/dry-run'),
   cleanupExecute: (items, confirmText) => post('/datatools/cleanup/execute', { items, confirmText }),
+  relocationScan: (dir) => post('/datatools/relocation/scan', { dir }),
+  relocationConfirm: (items) => post('/datatools/relocation/confirm', { items }),
   // 项目
   listProjects: (params) => get('/projects', params),
   createProject: (body) => post('/projects', body),

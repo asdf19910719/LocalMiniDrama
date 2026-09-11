@@ -14,6 +14,7 @@
 
 ### 新增
 
+- **V2.1 媒体重定位扫描器（A5）**：「高级数据工具 · 媒体重定位」由占位提示替换为真实流程——新增 `POST /api/v2/datatools/relocation/scan`（找出 local_path 不可访问的媒体行，按相对路径→文件名→大小→hash 在指定目录匹配，输出唯一命中/多候选/未找到三类预览，唯一命中默认勾选）与 `POST /api/v2/datatools/relocation/confirm`（明确确认后才真实 UPDATE 行路径，非法表/不存在路径跳过并给原因）；前端固定「选目录→扫描→逐文件预览→确认更新」流程，确认经专用 Modal
 - **V2.1 物理清理执行器（A3）**：「高级数据工具 · 物理清理」由演示数据替换为真实执行——新增 `POST /api/v2/datatools/cleanup/dry-run`（扫描 storage 下文件，逐文件判定引用计数/活动任务占用并输出可清理或阻断原因）与 `POST /api/v2/datatools/cleanup/execute`（「永久清理」文本门禁 + 执行时逐文件复检，删除报告含未删除原因写入 data/backups/cleanup-reports/）；前端 dry-run 清单真实勾选、删除经专用确认弹窗（替换 window.confirm）并展示已删除/未删除与报告位置
 - **V2.1 完整性检查扫描器（A2）**：「高级数据工具 · 完整性检查」由演示数据替换为真实只读扫描——新增 `POST /api/v2/datatools/integrity/run` 逐项体检 SQLite 一致性（integrity_check/foreign_key_check）、媒体存在性（image_generations/characters/scenes/props/director_artifacts 的本地路径）、引用完整性（剧集角色/分镜引用/场景关联悬空检测）、任务索引（生成任务归属指向不存在的分镜）、受控目录越界与孤儿文件；每项产出「正常/警告/错误 + 唯一恢复落点」（媒体重定位/重建任务索引/物理清理/路径配置），前端按落点直达对应工具
 - **V2.1 真实 Provider 接入（A1）**：分镜图/镜头视频/H3 编译/生成报价接入真实执行通道——新增 providerRouter 按「本次覆盖 → 全局默认 → mock 回落」解析图片与视频通道（无 Key 时自动回落 mock，核心流程仍可离线运行）；图片经既有 imageService（API/网页/ComfyUI 通道）产出并写入 image_generations 候选，视频经统一视频生成服务（MiniMax H3 / ComfyUI / 各云协议）产出并写入 director 候选三表，候选→采用合同与 mock 通道完全一致；H3 编译委托 h3PromptDraftService（真实 H3 结构写入同一草稿表，人工编辑经 legacy 校验保存，提交门禁完整保留）；生成报价展示真实 Provider/模型与费用口径（Provider 未返回价格时如实标注）；模型能力（引用数/时长上限）驱动分镜页联合检查第 2 行；统一视频生成运行时收敛为 /api/v1 与 /api/v2 共享单例（同一 GPU 互斥锁与任务恢复）；新增任务状态轮询与取消端点（`GET/POST /api/v2/video-tasks/:taskId/*`）
