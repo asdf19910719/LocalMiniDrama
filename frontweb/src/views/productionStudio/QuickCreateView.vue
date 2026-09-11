@@ -5,20 +5,25 @@
       <h1>自由创作</h1>
       <span class="sub">快速图片 / 快速视频 · 不参与四阶段 Gate</span>
       <div class="spacer"></div>
-      <span class="badge warn">如果最终用于项目，请在保存时选择项目和剧集</span>
+      <span class="badge outline">更多工具 · 独立页</span>
     </header>
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px; max-width:900px; margin:0 auto">
 
+      <div class="notice-strip warn">
+        <svg style="width:14px;height:14px"><use href="#i-warn"/></svg>
+        <span>生成结果先留在本页；如果最终用于项目，请在保存时选择项目和剧集。</span>
+      </div>
+
       <div class="grid-2">
         <div class="card recipe" @click="openConfig('image')">
-          <div class="ic" style="background:var(--accent-subtle); color:var(--accent)"><svg><use href="#i-image"/></svg></div>
-          <b>快速图片</b>
-          <p>输入提示词生成图片 · mock 通道 · ¥0</p>
+          <div class="ic"><svg><use href="#i-image"/></svg></div>
+          <div class="grow"><b>快速图片</b><p>输入提示词生成图片 · mock 通道 · ¥0</p></div>
+          <svg class="go" style="width:15px;height:15px"><use href="#i-fwd"/></svg>
         </div>
         <div class="card recipe" @click="openConfig('video')">
-          <div class="ic" style="background:var(--info-subtle); color:var(--info)"><svg><use href="#i-film"/></svg></div>
-          <b>快速视频</b>
-          <p>提示词生成短视频 · mock 通道 · ¥0</p>
+          <div class="ic"><svg><use href="#i-film"/></svg></div>
+          <div class="grow"><b>快速视频</b><p>提示词生成短视频 · mock 通道 · ¥0</p></div>
+          <svg class="go" style="width:15px;height:15px"><use href="#i-fwd"/></svg>
         </div>
       </div>
 
@@ -539,12 +544,13 @@ export default {
 
 <style scoped>
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.recipe { padding: 22px 20px; cursor: pointer; display: flex; flex-direction: column; gap: 9px; }
-.recipe:hover { border-color: var(--accent); }
-.recipe .ic { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-.recipe .ic svg { width: 19px; height: 19px; }
-.recipe b { font-size: 14.5px; }
-.recipe p { margin: 0; font-size: 12px; color: var(--muted); }
+.recipe { padding: 18px 20px; cursor: pointer; display: flex; align-items: center; gap: 14px; }
+.recipe:hover { border-color: var(--line-strong); background: var(--panel2); }
+.recipe .ic { width: 42px; height: 42px; border-radius: 11px; background: var(--accent-subtle); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.recipe .ic svg { width: 20px; height: 20px; }
+.recipe b { font-size: 15px; }
+.recipe p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.recipe .go { color: var(--muted); flex: 0 0 auto; }
 .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 4px 0; }
 .kv .k { color: var(--muted); flex: 0 0 auto; }
 .kv .v { color: var(--text-2); text-align: right; }

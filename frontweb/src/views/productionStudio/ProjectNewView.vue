@@ -60,8 +60,9 @@
               <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
                 <svg><use href="#i-folder"/></svg>backend-node/data（本地工作区，只读）
               </div>
+              <button class="btn" style="flex:0 0 auto" @click="$router.push('/settings')">更改</button>
             </div>
-            <div class="frow"><div class="flabel"></div><div class="fhint">项目媒体将保存在该目录下，可随时在设置中迁移。</div></div>
+            <div class="frow"><div class="flabel"></div><div class="fhint">项目媒体将保存在该目录下；更换工作区请前往「设置」，迁移前会自动备份。</div></div>
           </div>
 
           <div class="card pad">

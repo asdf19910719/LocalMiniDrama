@@ -919,9 +919,9 @@ export default {
 .cand.cur .im { border: 2px solid var(--ok); }
 .cand .cap { font-size: 10.5px; color: var(--muted); text-align: center; margin-top: 4px; }
 .sec-t { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; letter-spacing: .3px; }
-.ptabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
-.ptab { padding: 6px 16px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 500; }
+.ptabs { display: flex; gap: 2px; }
+.ptab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 600; }
 /* 五标签抽屉 */
 .cand-head { display: flex; align-items: center; gap: 6px; }
 .head-gen-btn { margin-left: auto; height: 26px; padding: 0 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }

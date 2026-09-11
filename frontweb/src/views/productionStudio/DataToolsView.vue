@@ -5,14 +5,14 @@
       <h1>高级数据工具</h1>
       <span class="sub">完整性检查 · 媒体重定位 · 迁移记录 · 物理清理</span>
       <div class="spacer"></div>
-      <span class="badge warn">运行中任务将阻断危险写入</span>
+      <span class="badge outline">只读检查 · 受控清理</span>
     </header>
     <div class="page-body" style="display:flex; gap:16px; overflow:auto">
 
       <!-- 左侧工具导航 -->
-      <div class="col" style="width:220px; flex:0 0 220px; gap:6px">
-        <button v-for="tool in tools" :key="tool.id" class="btn" :class="{ primary: tool.id === active }" style="width:100%; justify-content:flex-start" @click="openTool(tool.id)">
-          {{ tool.label }}
+      <div class="col" style="width:220px; flex:0 0 220px; gap:4px">
+        <button v-for="tool in tools" :key="tool.id" class="btn tool-btn" :class="{ on: tool.id === active }" style="width:100%; justify-content:flex-start" @click="openTool(tool.id)">
+          <svg><use :href="toolIcon(tool.id)"/></svg>{{ tool.label }}
         </button>
       </div>
 
@@ -25,17 +25,20 @@
           <p v-if="!checked && !scanError" class="muted small">默认只读检查；完成后按「正常 / 警告 / 错误」列出结果，每项提供唯一恢复落点。</p>
           <p v-if="scanError" class="small" style="color:var(--danger)">检查失败：{{ scanError }}</p>
           <template v-if="checked">
-            <div class="stats-row">
-              <span class="badge ok">正常 {{ integrity.summary.ok }}</span>
-              <span class="badge warn">警告 {{ integrity.summary.warn }}</span>
-              <span class="badge danger">错误 {{ integrity.summary.error }}</span>
+            <div class="sum-row">
+              <div class="card sum-tile"><b class="ok-t">{{ integrity.summary.ok }}</b><span>正常</span></div>
+              <div class="card sum-tile"><b class="warn-t">{{ integrity.summary.warn }}</b><span>警告</span></div>
+              <div class="card sum-tile"><b class="danger-t">{{ integrity.summary.error }}</b><span>错误</span></div>
             </div>
             <div v-for="entry in integrity.items" :key="entry.id" class="issue">
               <span class="badge" :class="entry.severity === 'ok' ? 'ok' : entry.severity === 'warn' ? 'warn' : 'danger'">
                 {{ entry.severity === 'ok' ? '正常' : entry.severity === 'warn' ? '警告' : '错误' }}
               </span>
-              <span class="ellipsis">{{ entry.title }} · {{ entry.detail }}</span>
-              <span v-if="recoveryLabel(entry.recovery)" class="act" @click="goRecovery(entry.recovery)">{{ recoveryLabel(entry.recovery) }}</span>
+              <div class="grow" style="min-width:0">
+                <b style="font-size:13px">{{ entry.title }}</b>
+                <div class="xs muted ellipsis">{{ entry.detail }}</div>
+              </div>
+              <button v-if="recoveryLabel(entry.recovery)" class="btn sm" @click="goRecovery(entry.recovery)">{{ recoveryLabel(entry.recovery) }}</button>
             </div>
           </template>
         </div>
@@ -138,16 +141,28 @@
           <button class="btn primary" :disabled="cleanupScanning" @click="runCleanupDryRun">{{ cleanupScanning ? '扫描中…' : '生成 dry-run 清单' }}</button>
           <p v-if="cleanupError" class="small" style="color:var(--danger);margin-top:8px">扫描失败：{{ cleanupError }}</p>
           <template v-if="cleanupResult">
-            <div class="divider"></div>
-            <div v-for="f in cleanupResult.files" :key="f.path" class="issue">
-              <span v-if="f.eligible" class="badge ok">可清理</span>
-              <span v-else class="badge danger">阻断</span>
-              <span class="ellipsis mono xs">{{ f.path }} · {{ formatBytes(f.sizeBytes) }}<template v-if="!f.eligible"> · {{ f.reason }}</template></span>
-              <label v-if="f.eligible" class="act"><input type="checkbox" :value="f.path" v-model="cleanupSelected"> 勾选</label>
+            <div class="row" style="margin-bottom:10px">
+              <span class="badge danger">不可恢复</span>
+              <span class="xs muted">只读预演，尚未删除任何文件 · 共 {{ cleanupResult.files.length }} 项 · 可清理 {{ cleanupResult.summary.eligible }} · 阻断 {{ cleanupResult.files.length - cleanupResult.summary.eligible }}</span>
+            </div>
+            <div class="cl-head">
+              <span style="flex:1">文件路径</span><span style="width:80px">大小</span><span style="width:120px">判定</span><span style="width:70px">勾选</span>
+            </div>
+            <div v-for="f in cleanupResult.files" :key="f.path" class="cl-tr" :class="{ blocked: !f.eligible }">
+              <span class="ellipsis mono" style="font-size:11px" :title="f.path">{{ f.path }}</span>
+              <span class="mono xs muted" style="width:80px">{{ formatBytes(f.sizeBytes) }}</span>
+              <span style="width:120px">
+                <span v-if="f.eligible" class="badge ok">可清理</span>
+                <span v-else class="badge" :class="reasonTone(f.reason)">{{ f.reason }}</span>
+              </span>
+              <span style="width:70px">
+                <label v-if="f.eligible" style="display:inline-flex; align-items:center; gap:5px; cursor:pointer"><input type="checkbox" :value="f.path" v-model="cleanupSelected"> 勾选</label>
+                <span v-else class="xs muted">—</span>
+              </span>
             </div>
             <div class="divider"></div>
             <div class="row">
-              <span class="small t2">预计回收 {{ formatBytes(cleanupResult.summary.reclaimableBytes) }} · 可清理 {{ cleanupResult.summary.eligible }} 个文件</span>
+              <span class="small t2">预计回收 <b>{{ formatBytes(cleanupResult.summary.reclaimableBytes) }}</b> · 可清理 {{ cleanupResult.summary.eligible }} 个文件<template v-if="cleanupSelected.length"> · 已勾选 {{ cleanupSelected.length }}</template></span>
               <div class="spacer"></div>
               <button class="btn danger" :disabled="!cleanupSelected.length" @click="cleanupModalOpen = true">永久清理…</button>
             </div>
@@ -462,6 +477,16 @@ export default {
     recoveryLabel(key) {
       return (key && this.recoveries[key] && this.recoveries[key].label) || ''
     },
+    toolIcon(id) {
+      return { integrity: '#i-shield', relocation: '#i-folder', migrations: '#i-hist', cleanup: '#i-trash' }[id] || '#i-gear'
+    },
+    reasonTone(reason) {
+      // 阻断原因分色：有引用 = warn 待处理 · 任务占用 = info 进行中 · 路径越界等 = danger
+      const r = String(reason || '')
+      if (r.includes('引用') || r.includes('被引用')) return 'warn'
+      if (r.includes('任务')) return 'info'
+      return 'danger'
+    },
     goRecovery(key) {
       const target = this.recoveries[key]
       if (!target) return
@@ -475,6 +500,16 @@ export default {
 <style scoped>
 .page-body { display: flex; gap: 16px; overflow: auto; }
 .stats-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.tool-btn.on { background: var(--accent-subtle); border-color: var(--accent); color: #fff; }
+.tool-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.sum-row { display: flex; gap: 12px; margin-bottom: 14px; }
+.sum-tile { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; }
+.sum-tile b { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sum-tile span { font-size: 12px; color: var(--muted); }
+.cl-head, .cl-tr { display: flex; align-items: center; gap: 12px; padding: 8px 10px; min-width: 0; }
+.cl-head { background: var(--panel2); border-radius: 8px; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.cl-tr { border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.cl-tr.blocked { opacity: .55; }
 .issue { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 12.5px; border-bottom: 1px solid var(--line); }
 .issue .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12px; }
 .v-row { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 13px 12px; display: flex; align-items: flex-start; gap: 12px; }

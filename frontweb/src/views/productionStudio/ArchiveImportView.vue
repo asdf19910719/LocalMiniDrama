@@ -8,7 +8,7 @@
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
       <div class="wsteps">
         <span v-for="(s, i) in ['选择归档', '校验并确认', '导入结果']" :key="s" class="wstep" :class="{ on: phase === i, done: phase > i }">
-          <span class="wn">{{ phase > i ? '✓' : i + 1 }}</span>{{ s }}
+          <span class="wn"><svg v-if="phase > i"><use href="#i-check"/></svg><template v-else>{{ i + 1 }}</template></span>{{ s }}
         </span>
       </div>
 
@@ -44,10 +44,15 @@
         </div>
 
         <div class="grid-2" style="margin-top:14px">
-          <div class="col" style="gap:4px">
-            <div v-for="c in validateResult?.checks || []" :key="c.id" class="ck-row">
-              <svg :style="{ color: checkColor(c.status) }"><use :href="checkIcon(c.status)"/></svg>
-              <span>{{ c.label }} · {{ checkStatusLabel(c.status) }}<template v-if="c.detail"> — {{ c.detail }}</template></span>
+          <div class="col" style="gap:8px">
+            <div class="ck-grid">
+              <div v-for="c in validateResult?.checks || []" :key="c.id" class="card ck-card">
+                <div class="row" style="gap:7px">
+                  <span class="ck-ic" :style="{ background: checkTone(c.status).bg, color: checkTone(c.status).fg }"><svg><use :href="checkIcon(c.status)"/></svg></span>
+                  <b style="font-size:12.5px">{{ c.label }}</b>
+                </div>
+                <div class="xs" style="margin-top:6px" :style="{ color: checkColor(c.status) }">{{ checkStatusLabel(c.status) }}<template v-if="c.detail"> · {{ c.detail }}</template></div>
+              </div>
             </div>
           </div>
           <div class="col" style="gap:12px">
@@ -159,6 +164,15 @@ export default {
     checkColor(status) {
       return CHECK_STATUS_COLOR[status] || 'var(--muted)'
     },
+    checkTone(status) {
+      // 检查卡图标块底色：通过 = ok · 警告 = warn · 失败/其余 = danger/neutral
+      const tones = {
+        pass: { bg: 'var(--ok-subtle)', fg: 'var(--ok)' },
+        warn: { bg: 'var(--warn-subtle)', fg: 'var(--warn)' },
+        fail: { bg: 'var(--danger-subtle)', fg: 'var(--danger)' },
+      }
+      return tones[status] || { bg: 'var(--neutral-subtle)', fg: 'var(--muted)' }
+    },
     checkIcon(status) {
       return status === 'pass' ? '#i-check-c' : '#i-warn'
     },
@@ -192,15 +206,10 @@ export default {
 </script>
 
 <style scoped>
-.wsteps { display: flex; align-items: center; gap: 14px; padding: 4px 2px; }
-.wstep { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.wstep .wn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; }
-.wstep.on { color: #fff; font-weight: 600; }
-.wstep.on .wn { background: var(--accent); border-color: var(--accent); color: #fff; }
-.wstep.done { color: var(--ok); }
-.wstep.done .wn { background: var(--ok-subtle); border-color: var(--ok); color: var(--ok); }
-.ck-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; padding: 5px 0; }
-.ck-row svg { width: 14px; height: 14px; flex: 0 0 auto; margin-top: 1px; }
+.ck-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.ck-card { padding: 10px 12px; }
+.ck-ic { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ck-ic svg { width: 14px; height: 14px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 4px 0; }
 .kv .k { color: var(--muted); flex: 0 0 auto; }

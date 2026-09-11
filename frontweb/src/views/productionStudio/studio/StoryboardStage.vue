@@ -182,10 +182,11 @@
           <!-- 生成条 -->
           <div class="genbar" style="margin-top:auto">
             <button class="btn primary" :disabled="!guard.canSubmit || h3Dirty" @click="openVideoSheet">
-              <svg><use href="#i-film"/></svg>用 H3 生成视频
+              <svg><use href="#i-film"/></svg>用 H3 生成视频<span v-if="quotePrice" class="price">{{ quotePrice }}</span>
             </button>
             <span class="chip" style="height:28px">输出 {{ current.duration }}s</span>
             <span class="chip" style="height:28px">候选 {{ videoCount }} 个</span>
+            <span class="chip" style="height:28px">{{ quoteTimeChip }}</span>
             <div class="spacer"></div>
             <span class="xs" :class="guard.canSubmit ? 'ok-t' : 'warn-t'">
               生成前联合检查 {{ passedChecks }}/{{ totalChecks }}{{ guard.canSubmit ? ' 通过' : ' · ' + failedCheckLabels }}
@@ -425,51 +426,80 @@
       </div>
       <div class="drawer-b" style="overflow:auto">
         <div class="grp-t">出场角色</div>
-        <div v-for="r in references.characters" :key="'rc' + r.referenceId" class="ref-row">
-          <span class="avatar">{{ (r.name || '?').slice(0, 1) }}</span><b>{{ r.name }}</b>
-          <span class="v">固定版本</span>
-          <button class="btn sm ghost" style="border:1px solid var(--line)" @click="removeRef(r.referenceId)">移除</button>
+        <div v-for="(r, i) in references.characters" :key="'rc' + r.referenceId" class="ref-card">
+          <span class="avatar">{{ (r.name || '?').slice(0, 1) }}</span>
+          <div class="grow" style="min-width:0">
+            <b style="font-size:12.5px">{{ r.name }}</b>
+            <div class="xs muted">固定版本<template v-if="r.variantId"> · v{{ r.variantId }}</template> · <span class="accent-t">@图片{{ i + 1 }}</span></div>
+          </div>
+          <button class="icon-btn" style="color:var(--danger)" title="移除" @click="removeRef(r.referenceId)"><svg><use href="#i-close"/></svg></button>
         </div>
-        <div class="grp-t">分镜场景（不可移除）</div>
-        <div v-for="r in references.scene?.refs || []" :key="'sc' + r.assetId" class="ref-row">
-          <span class="mini ph"></span><b>{{ r.name }}</b><span class="v">结构性</span>
+        <div class="grp-t">分镜场景</div>
+        <div v-for="r in references.scene?.refs || []" :key="'sc' + r.assetId" class="ref-card">
+          <span class="mini ph"></span>
+          <div class="grow" style="min-width:0">
+            <b style="font-size:12.5px">{{ r.name }}</b>
+            <div class="xs muted">结构性引用</div>
+          </div>
+          <span class="badge outline" style="height:20px">本镜场景 · 不可移除</span>
         </div>
         <div class="grp-t">场景道具</div>
-        <div v-for="r in references.props" :key="'rp' + r.referenceId" class="ref-row">
-          <span class="mini ph c"></span><b>{{ r.name }}</b>
-          <button class="btn sm ghost" style="border:1px solid var(--line); margin-left:auto" @click="removeRef(r.referenceId)">移除</button>
+        <div v-for="(r, j) in references.props" :key="'rp' + r.referenceId" class="ref-card">
+          <span class="mini ph c"></span>
+          <div class="grow" style="min-width:0">
+            <b style="font-size:12.5px">{{ r.name }}</b>
+            <div class="xs muted">固定版本 · <span class="accent-t">@图片{{ references.characters.length + j + 1 }}</span></div>
+          </div>
+          <button class="icon-btn" style="color:var(--danger)" title="移除" @click="removeRef(r.referenceId)"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="divider"></div>
         <div class="grp-t">从项目素材添加</div>
-        <div v-for="a in addableAssets" :key="a.assetType + a.id" class="ref-row">
-          <span class="mini ph"></span><b>{{ a.name }}</b>
-          <button class="btn sm ghost" style="border:1px solid var(--line); margin-left:auto" @click="addRef(a)">添加</button>
+        <div v-for="a in addableAssets" :key="a.assetType + a.id" class="ref-card">
+          <span class="mini ph"></span>
+          <div class="grow" style="min-width:0"><b style="font-size:12.5px">{{ a.name }}</b></div>
+          <button class="btn sm ghost" style="border:1px solid var(--line)" @click="addRef(a)">添加</button>
         </div>
         <p v-if="!addableAssets.length" class="xs muted" style="padding:2px 6px">没有可添加的素材（已在本镜引用或未就绪的素材不显示）</p>
+        <div class="notice-card info" style="margin-top:10px">
+          <svg><use href="#i-shield"/></svg>
+          <span>增删会即时重排 @槽位，并让 H3 提示词标记「引用已变化」；场景为结构性引用，不可移除。</span>
+        </div>
       </div>
-      <div class="drawer-f"><span class="muted xs">增删即时重排 @槽位并令 H3 标记「引用已变化」</span></div>
+      <div class="drawer-f">
+        <span class="muted xs">引用变化会同步到中栏与 H3 草稿</span>
+        <div class="spacer"></div>
+        <button class="btn primary" @click="refManageOpen = false">完成</button>
+      </div>
     </aside>
 
     <!-- 素材预览抽屉（27） -->
     <div v-if="assetPreviewOpen" class="scrim" style="z-index:80" @click="assetPreviewOpen = false"></div>
-    <aside v-if="assetPreviewOpen" class="drawer" style="z-index:90; width:480px">
+    <aside v-if="assetPreviewOpen" class="drawer w520" style="z-index:90">
       <div class="drawer-h">
         <h3>{{ assetPreview?.name || '素材预览' }}</h3>
+        <span v-if="assetPreview" class="badge accent">{{ typeLabel(assetPreview.assetType) }} · 本集固定版本</span>
         <button class="icon-btn" @click="assetPreviewOpen = false"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
-        <div v-if="assetPreview?.currentImage" style="border-radius:10px; overflow:hidden; margin-bottom:12px">
-          <img :src="assetPreview.currentImage" style="width:100%; display:block">
+        <div class="row" style="gap:16px; align-items:flex-start">
+          <div style="width:180px; aspect-ratio:3/4; border-radius:10px; overflow:hidden; flex:0 0 auto" :class="assetPreview?.currentImage ? '' : 'ph'">
+            <img v-if="assetPreview?.currentImage" :src="assetPreview.currentImage" style="width:100%; height:100%; object-fit:cover; display:block">
+          </div>
+          <div class="grow col" style="gap:2px; min-width:0">
+            <div class="kv"><span class="k">类型</span><span class="v">{{ typeLabel(assetPreview?.assetType) }}</span></div>
+            <div class="kv"><span class="k">本集状态</span><span class="v">固定版本</span></div>
+            <div class="kv"><span class="k">@槽位</span><span class="v accent-t">{{ assetSlotLabel }}</span></div>
+            <div class="kv"><span class="k">出现时段</span><span class="v">{{ usedInSegmentsText }}</span></div>
+            <div class="kv"><span class="k">最新候选</span><span class="v">{{ assetPreview?.candidates?.length ? '候选 ' + assetPreview.candidates[0].candidateId : '无' }}</span></div>
+          </div>
         </div>
-        <div class="kv"><span class="k">类型</span><span class="v">{{ typeLabel(assetPreview?.assetType) }}</span></div>
-        <div class="kv"><span class="k">本集状态</span><span class="v">固定版本</span></div>
-        <div class="kv"><span class="k">@槽位</span><span class="v accent-t">{{ assetSlotLabel }}</span></div>
-        <div class="kv"><span class="k">出现时段</span><span class="v">{{ usedInSegmentsText }}</span></div>
-        <div class="kv"><span class="k">最新候选</span><span class="v">{{ assetPreview?.candidates?.length ? '候选 ' + assetPreview.candidates[0].candidateId : '无' }}</span></div>
-        <div class="row" style="margin-top:14px">
-          <button class="btn sm" :disabled="!canUpdateToLatest" @click="updateToLatest" :title="canUpdateToLatest ? '' : '已是最新版本'">换绑到最新版</button>
-          <button class="btn sm ghost" style="border:1px solid var(--line)" @click="$router.push(`/projects/${projectId}/assets`)">在素材库中查看</button>
-        </div>
+        <div class="sec-t">版本信息</div>
+        <div class="kv"><span class="k">本集固定</span><span class="v">当前使用版本<template v-if="canUpdateToLatest"> · 素材库已有更新的候选</template></span></div>
+        <div class="xs" :class="canUpdateToLatest ? 'warn-t' : 'muted'" style="margin-top:2px">{{ canUpdateToLatest ? '换绑到最新版只影响之后的新生成；本镜已生成媒体不变，提示词将标记引用已变化。' : '已是最新版本，无需换绑。' }}</div>
+      </div>
+      <div class="drawer-f">
+        <button class="btn ghost grow" style="border:1px solid var(--line)" @click="$router.push(`/projects/${projectId}/assets`)">在项目素材中查看</button>
+        <button class="btn primary grow" :disabled="!canUpdateToLatest" @click="updateToLatest">换绑到最新版</button>
       </div>
     </aside>
 
@@ -692,6 +722,20 @@ export default {
     quote() {
       return { count: this.videoCount }
     },
+    // 工具栏镜头下拉的 v-model 桥（此前未定义导致下拉恒空白）
+    currentShotIdProxy: {
+      get() { return this.currentShotId },
+      set(v) { if (v != null && v !== this.currentShotId) this.selectShot(v) },
+    },
+    quotePrice() {
+      const q = this.sheetQuote
+      const cost = q?.estimatedCost
+      if (q?.channel === 'real' && cost?.estimated != null) return `¥${(Number(cost.estimated) * this.videoCount).toFixed(2)}`
+      return ''
+    },
+    quoteTimeChip() {
+      return this.sheetQuote?.estimatedTime || '预计 1–2 分钟'
+    },
     sheetChannelText() {
       const q = this.sheetQuote
       if (!q) return '读取通道中…'
@@ -859,6 +903,7 @@ export default {
       const fc = detail.frameChaining
       this.frameChaining = { ...fc, stateLabel: { linked: '已衔接', linkable: '可衔接', waiting: '等待上一镜完成', none: '首镜' }[fc.state] }
       this.refreshGuard()
+      this.loadSheetQuote()
       // T2.5：历史抽屉开着时切镜需重拉，避免展示上一镜的陈旧任务；关着时留给 openHistory 按需拉取
       if (this.historyOpen) await this.loadHistory()
       // 横切 B：切换镜头时把 shot 持久化到 URL（replace，刷新可恢复）
@@ -1365,6 +1410,11 @@ export default {
 .ref-row .mini { width: 26px; height: 26px; border-radius: 6px; }
 .ref-row b { font-size: 12.5px; font-weight: 500; }
 .ref-row .v { font-size: 11px; color: var(--muted); margin-left: auto; }
+/* 抽屉内的卡片行（设计稿 26：区别于左栏检查器的 hover 行） */
+.ref-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel2); border-radius: 8px; margin-bottom: 6px; }
+.ref-card .avatar { width: 26px; height: 26px; font-size: 11px; flex: 0 0 auto; }
+.ref-card .mini { width: 26px; height: 26px; border-radius: 6px; flex: 0 0 auto; }
+.sec-t { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; letter-spacing: .3px; }
 .work { flex: 1; min-width: 0; padding: 10px 14px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
 .seg-card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .seg-card .sc-h { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }

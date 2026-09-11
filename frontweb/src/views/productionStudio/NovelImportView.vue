@@ -8,7 +8,7 @@
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
       <div class="wsteps">
         <span v-for="(s, i) in ['粘贴文本', '预览章节', '拆集结果']" :key="s" class="wstep" :class="{ on: phase === i, done: phase > i }">
-          <span class="wn">{{ phase > i ? '✓' : i + 1 }}</span>{{ s }}
+          <span class="wn"><svg v-if="phase > i"><use href="#i-check"/></svg><template v-else>{{ i + 1 }}</template></span>{{ s }}
         </span>
       </div>
 
@@ -143,13 +143,6 @@ export default {
 </script>
 
 <style scoped>
-.wsteps { display: flex; align-items: center; gap: 14px; padding: 4px 2px; }
-.wstep { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.wstep .wn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; }
-.wstep.on { color: #fff; font-weight: 600; }
-.wstep.on .wn { background: var(--accent); border-color: var(--accent); color: #fff; }
-.wstep.done { color: var(--ok); }
-.wstep.done .wn { background: var(--ok-subtle); border-color: var(--ok); color: var(--ok); }
 .ch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
 textarea.input { resize: vertical; }
 </style>

@@ -5,9 +5,7 @@
       <h1>常规设置</h1>
       <span class="sub">工作区 · 目录 · 创作默认值 · 备份</span>
       <div class="spacer"></div>
-      <span class="badge" :class="dirty ? 'warn' : 'ok'">{{ dirty ? '有未保存修改' : '已保存' }}</span>
-      <button v-if="dirty" class="btn ghost" @click="discard">放弃更改</button>
-      <button class="btn primary" :disabled="!canSave || saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+      <span class="badge outline">全局默认 · 只影响新建项目 / 剧集 / 任务</span>
     </header>
     <div class="page-body" style="display:flex; flex-direction:column; gap:14px; overflow:auto">
       <div v-if="saveError" class="card pad" style="padding:10px 14px">
@@ -18,7 +16,7 @@
         <div class="sec-title"><svg><use href="#i-folder"/></svg>工作区</div>
         <div class="frow" style="align-items:center">
           <div class="flabel">工作区目录</div>
-          <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
+          <div class="path-code grow">
             <svg><use href="#i-folder"/></svg>backend-node/data（本地 SQLite + 媒体）
           </div>
           <button class="btn" @click="migrateOpen = true">更改工作区</button>
@@ -30,7 +28,7 @@
         <div class="sec-title"><svg><use href="#i-image"/></svg>媒体 / 成片 / 临时目录</div>
         <div v-for="row in dirs" :key="row.key" class="frow" style="align-items:center">
           <div class="flabel">{{ row.label }}</div>
-          <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
+          <div class="path-code grow">
             <svg><use href="#i-folder"/></svg>{{ row.path }}
           </div>
           <template v-if="row.key !== 'tmp'">
@@ -91,7 +89,7 @@
         <div class="sec-title"><svg><use href="#i-shield"/></svg>备份</div>
         <div class="frow" style="align-items:center">
           <div class="flabel">备份目录</div>
-          <div class="input grow" style="width:100%; color:var(--text-2); font-family:Consolas,monospace; font-size:12.5px">
+          <div class="path-code grow">
             <svg><use href="#i-folder"/></svg>{{ backupStatsData ? backupStatsData.backupDir : (backupStatsFailed ? '暂不可用' : '读取中…') }}
           </div>
         </div>
@@ -131,6 +129,17 @@
           <div class="tool-card card" @click="$router.push('/settings/data-tools')"><b>物理清理</b><p>dry-run → 永久清理</p></div>
         </div>
       </div>
+
+      <!-- 底部保存条（设计稿 14：dirty 状态常驻可见，长表单滚动到中部也能保存） -->
+      <div class="save-bar">
+        <span v-if="saveError" class="badge danger">保存失败</span>
+        <span v-else-if="dirty" class="badge warn">有未保存修改</span>
+        <span v-else class="badge ok">已保存</span>
+        <span class="xs muted">{{ saveError ? saveError : (dirty ? '修改只在本机生效，保存后写入工作区数据库' : '更改会自动呈现于新建项目与剧集的默认值') }}</span>
+        <div class="spacer"></div>
+        <button v-if="dirty" class="btn ghost" @click="discard">放弃更改</button>
+        <button class="btn primary" :disabled="!canSave || saving" @click="save">{{ saving ? '保存中…' : '保存更改' }}</button>
+      </div>
     </div>
 
     <!-- 离开守卫确认（自建弹窗，dirty 时拦截路由离开） -->
@@ -161,11 +170,19 @@
           <button class="icon-btn" @click="migrateOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b">
-          <!-- 步骤条 -->
-          <div class="seg" style="margin-bottom:14px">
-            <span :class="{ on: migrateStep === 'select' }">1 选择</span>
-            <span :class="{ on: ['check', 'preview', 'confirm'].includes(migrateStep) }">2 检查与预览</span>
-            <span :class="{ on: migrateStep === 'executing' || migrateStep === 'done' }">3 执行</span>
+          <!-- 步骤条（三态节点） -->
+          <div class="wsteps" style="margin-bottom:14px">
+            <span class="wstep" :class="{ on: migrateStep === 'select', done: migrateStep !== 'select' }">
+              <span class="wn"><svg v-if="migrateStep !== 'select'"><use href="#i-check"/></svg><template v-else>1</template></span>选择
+            </span>
+            <span class="wsep"></span>
+            <span class="wstep" :class="{ on: ['check', 'preview', 'confirm'].includes(migrateStep), done: migrateStep === 'executing' || migrateStep === 'done' }">
+              <span class="wn"><svg v-if="migrateStep === 'executing' || migrateStep === 'done'"><use href="#i-check"/></svg><template v-else>2</template></span>检查与预览
+            </span>
+            <span class="wsep"></span>
+            <span class="wstep" :class="{ on: migrateStep === 'executing' || migrateStep === 'done' }">
+              <span class="wn">3</span>执行
+            </span>
           </div>
 
           <template v-if="migrateStep === 'select'">
@@ -174,12 +191,12 @@
               <input class="input grow" v-model="migrateDir" placeholder="例如 D:\\LocalMiniDrama（目录不存在时会自动创建）">
             </div>
             <div class="grid-2" style="margin-top:10px">
-              <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">drama_generator.db · 全部项目数据</div></div></div>
-              <div class="v-row"><div><b style="font-size:13px">媒体文件</b><div class="vm">storage/ 目录 · 分镜图与成片</div></div></div>
+              <div class="tile"><b>数据库</b><small>drama_generator.db · 全部项目数据</small></div>
+              <div class="tile"><b>媒体文件</b><small>storage/ 目录 · 分镜图与成片</small></div>
             </div>
-            <div class="xs" style="color:var(--warn); line-height:1.7; margin-top:10px">
-              <svg style="width:12px;height:12px;vertical-align:-1px"><use href="#i-warn"/></svg>
-              有活动任务时禁止危险迁移；迁移前自动创建备份与回滚点，原目录默认保留。迁移完成后需要重新打开工作区。
+            <div class="notice-card warn" style="margin-top:12px">
+              <svg><use href="#i-warn"/></svg>
+              <span>有活动任务时禁止危险迁移；迁移前自动创建备份与回滚点，原目录默认保留。迁移完成后需要重新打开工作区。</span>
             </div>
           </template>
 
@@ -189,17 +206,19 @@
                 <div v-for="b in migrateCheck.blockers" :key="b.code" class="issue-row">
                   <span class="badge danger">阻断</span><span>{{ b.message }}</span>
                 </div>
+                <div class="notice-card danger" style="margin-top:10px">
+                  <svg><use href="#i-shield"/></svg>
+                  <span>请在任务中心等待运行中任务完成或取消后，再回到此步骤确认迁移。</span>
+                </div>
               </template>
               <template v-else>
                 <div class="issue-row"><span class="badge ok">通过</span><span>无活动任务 · 目录可写<template v-if="migrateCheck.details.freeBytes != null"> · 剩余空间 {{ formatBytes(migrateCheck.details.freeBytes) }}</template></span></div>
                 <template v-if="migratePreview">
                   <div class="grid-2" style="margin-top:10px">
-                    <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">{{ formatBytes(migratePreview.database.bytes) }}</div></div></div>
-                    <div class="v-row"><div><b style="font-size:13px">媒体 storage</b><div class="vm">{{ formatBytes(migratePreview.storage.bytes) }} · {{ migratePreview.storage.files }} 个文件</div></div></div>
-                  </div>
-                  <div class="grid-2" style="margin-top:10px">
-                    <div class="v-row"><div><b style="font-size:13px">任务</b><div class="vm">{{ migrateCheck.details.activeTasks > 0 ? migrateCheck.details.activeTasks + ' 个进行中任务' : '无进行中任务' }} · 运行中任务将阻断迁移</div></div></div>
-                    <div class="v-row"><div><b style="font-size:13px">备份</b><div class="vm">迁移前自动创建备份（含 SHA-256 清单与回滚点）</div></div></div>
+                    <div class="tile"><b>数据库</b><small>{{ formatBytes(migratePreview.database.bytes) }}</small></div>
+                    <div class="tile"><b>媒体 storage</b><small>{{ formatBytes(migratePreview.storage.bytes) }} · {{ migratePreview.storage.files }} 个文件</small></div>
+                    <div class="tile"><b>任务</b><small>{{ migrateCheck.details.activeTasks > 0 ? migrateCheck.details.activeTasks + ' 个进行中 · 将阻断迁移' : '无进行中任务' }}</small></div>
+                    <div class="tile"><b>备份</b><small>迁移前自动创建（含 SHA-256 清单与回滚点）</small></div>
                   </div>
                   <p class="muted xs" style="margin-top:8px">{{ migratePreview.note }}</p>
                 </template>
@@ -208,7 +227,8 @@
           </template>
 
           <template v-else-if="migrateStep === 'executing'">
-            <p class="small">正在迁移：创建备份 → 复制数据库与媒体 → 原子改写配置 → 写迁移记录…</p>
+            <div class="row" style="gap:8px; margin-bottom:8px"><span class="badge info">迁移中</span><span class="small">创建备份 → 复制数据库与媒体 → 原子改写配置 → 写迁移记录…</span></div>
+            <div class="progress info"><i style="width:34%"></i></div>
           </template>
 
           <template v-else-if="migrateStep === 'done'">
@@ -480,7 +500,21 @@ export default {
 </script>
 
 <style scoped>
-.card.pad { max-width: 860px; }
+.card.pad { max-width: 860px; margin: 0 auto; }
+.save-bar {
+  position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 10px;
+  max-width: 860px; margin: 0 auto; padding: 10px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.path-code {
+  display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  font-family: Consolas, monospace; font-size: 12px; color: var(--text-2);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 0 10px; height: 36px;
+  overflow: hidden; white-space: nowrap;
+}
+.path-code svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
 .sec-title { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; margin-bottom: 14px; }
 .sec-title svg { width: 16px; height: 16px; color: var(--muted); }
 .frow { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 10px; }
@@ -489,7 +523,7 @@ export default {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tool-card { padding: 13px 14px; cursor: pointer; }
-.tool-card:hover { border-color: var(--accent); }
+.tool-card:hover { border-color: var(--line-strong); background: var(--panel2); }
 .tool-card b { font-size: 13px; display: block; margin-bottom: 4px; }
 .tool-card p { margin: 0; font-size: 11px; color: var(--muted); }
 .v-row { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 13px 12px; }

@@ -20,29 +20,28 @@
       <div class="card pad">
         <b style="font-size:13.5px">通道解析顺序</b>
         <div class="chain" style="margin-top:10px">
-          <span class="chip">本次任务覆盖</span>
+          <span class="chip chain-first">本次任务覆盖</span>
           <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-fwd"/></svg>
           <span class="chip">项目默认</span>
           <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-fwd"/></svg>
           <span class="chip">全局默认</span>
           <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-fwd"/></svg>
           <span class="chip">安装默认</span>
-          <div class="spacer"></div>
-          <span class="xs muted">任务创建后冻结 Provider/模型/费用快照，不随设置漂移</span>
         </div>
+        <div class="xs muted" style="margin-top:8px">任务创建后冻结 Provider/模型/费用快照，不随设置漂移</div>
       </div>
 
       <!-- 三通道卡 -->
       <div class="grid-3">
         <div class="card pad chan">
-          <div class="row"><b style="font-size:14px">API 中转站</b><span class="badge info">联网</span></div>
+          <div class="chan-h"><span class="chan-ic ic-a"><svg><use href="#i-external"/></svg></span><div class="grow"><div class="row"><b style="font-size:14px">API 中转站</b><span class="badge info">联网</span></div></div></div>
           <p class="muted small" style="margin:7px 0 10px">OpenAI 兼容接口 · 图片 / 视频 / 剧本文本 · 按 Provider 计费</p>
           <div class="kv"><span class="k">已配置</span><span class="v">{{ providers.length }} 项</span></div>
           <div class="kv"><span class="k">可用</span><span class="v">{{ usableCount }} 项 · 缺密钥 {{ missingKeyCount }} 项</span></div>
           <div class="kv"><span class="k">费用</span><span class="v">Provider 返回价</span></div>
         </div>
         <div class="card pad chan">
-          <div class="row"><b style="font-size:14px">ChatGPT 网页</b><span class="badge ok">零费用</span></div>
+          <div class="chan-h"><span class="chan-ic ic-g"><svg><use href="#i-spark"/></svg></span><div class="grow"><div class="row"><b style="font-size:14px">ChatGPT 网页</b><span class="badge ok">零费用</span></div></div></div>
           <p class="muted small" style="margin:7px 0 10px">网页自动化出图 · 需要本机浏览器会话与登录状态</p>
           <div class="kv"><span class="k">通道开关</span><span class="v">{{ chatgptWebEnabled ? '已启用' : '已停用' }}</span></div>
           <div class="kv"><span class="k">浏览器程序</span><span class="v">{{ chatgptExecutable || '未设置' }}</span></div>
@@ -51,7 +50,7 @@
           <p class="xs muted" style="margin:8px 0 0">环境检查（浏览器 / 登录 / 捕获 / 桥接）依赖桌面桥，当前版本未接入；此处只显示可读取的本机配置状态，不伪造检测结果。</p>
         </div>
         <div class="card pad chan">
-          <div class="row"><b style="font-size:14px">ComfyUI 本地</b><span class="badge outline">本地</span></div>
+          <div class="chan-h"><span class="chan-ic ic-i"><svg><use href="#i-monitor"/></svg></span><div class="grow"><div class="row"><b style="font-size:14px">ComfyUI 本地</b><span class="badge outline">本地</span></div></div></div>
           <p class="muted small" style="margin:7px 0 10px">本机工作流执行 · 显存与队列由本机 GPU 决定</p>
           <div class="kv"><span class="k">费用</span><span class="v">本地执行 · ¥0 API 费用</span></div>
           <div class="kv"><span class="k">依赖</span><span class="v">本机 ComfyUI 服务在线</span></div>
@@ -539,7 +538,14 @@ export default {
 
 <style scoped>
 .chain { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chain-first { border-color: var(--accent); background: var(--accent-subtle); color: #fff; font-weight: 500; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.chan-h { display: flex; align-items: center; gap: 12px; }
+.chan-ic { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.chan-ic svg { width: 19px; height: 19px; }
+.chan-ic.ic-a { background: var(--accent-subtle); color: var(--accent); }
+.chan-ic.ic-g { background: var(--ok-subtle); color: var(--ok); }
+.chan-ic.ic-i { background: var(--info-subtle); color: var(--info); }
 .chan .kv { border-top: 1px solid var(--line); padding: 6px 0; }
 .chan .kv:first-of-type { border-top: none; margin-top: 4px; }
 .prov { background: var(--panel2); }

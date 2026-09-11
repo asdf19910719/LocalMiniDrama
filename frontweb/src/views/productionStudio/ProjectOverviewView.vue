@@ -53,8 +53,12 @@
           <div class="row"><b style="font-size:13.5px">下一步</b><span class="badge accent">继续制作</span></div>
           <template v-if="overview.nextStep">
             <div>
-              <div class="bold" style="font-size:15px">第 {{ overview.nextStep.episodeNumber }} 集 · {{ stageLabel(overview.nextStep.stage) }}</div>
+              <div class="bold" style="font-size:15px">第 {{ overview.nextStep.episodeNumber }} 集<template v-if="overview.nextStep.episodeTitle"> · 《{{ overview.nextStep.episodeTitle }}》</template> · {{ stageLabel(overview.nextStep.stage) }}</div>
               <div class="muted small" style="margin-top:4px">上次工作 {{ relTime(overview.hero.updatedAt) }}</div>
+            </div>
+            <div v-if="nextStageProgress" class="col" style="gap:5px">
+              <div class="progress"><i :style="{ width: nextStageProgress.percent + '%' }"></i></div>
+              <span class="xs muted">{{ nextStageProgress.label }}</span>
             </div>
             <div class="row" style="margin-top:4px">
               <button class="btn primary" @click="$router.push(`/projects/${projectId}/episodes/${overview.nextStep.episodeId}/${overview.nextStep.stage}`)">继续制作</button>
@@ -305,6 +309,16 @@ export default {
     styleName() {
       return this.currentStyle?.labelZh || this.overview?.style?.styleId || '未设置'
     },
+    // 下一步卡的阶段进度（数据源：nextStep.stageMeta 文案中的 "N/M" 计数，如「1/2 已采用」）
+    nextStageProgress() {
+      const meta = String(this.overview?.nextStep?.stageMeta || '')
+      const m = meta.match(/(\d+)\s*\/\s*(\d+)/)
+      if (!m) return null
+      const done = Number(m[1])
+      const total = Number(m[2])
+      if (!total) return null
+      return { percent: Math.round((done / total) * 100), label: meta }
+    },
     selectedStyleName() {
       const hit = (this.styles || []).find((s) => s.id === this.selectedStyleId)
       return hit ? (hit.labelZh || hit.id) : (this.selectedStyleId || '未选择')
@@ -312,7 +326,18 @@ export default {
   },
   mounted() {
     this.bindEsc(this.onEsc)
+    // 项目操作菜单外点关闭（菜单内部点击经 stop 不会冒泡到 document）
+    this.opsOutside = (e) => {
+      if (!this.opsOpen) return
+      const pop = e.target.closest?.('.more-pop')
+      const btn = e.target.closest?.('.page-head .btn.ghost')
+      if (!pop && !btn) this.opsOpen = false
+    }
+    document.addEventListener('click', this.opsOutside)
     this.load()
+  },
+  unmounted() {
+    if (this.opsOutside) document.removeEventListener('click', this.opsOutside)
   },
   methods: {
     // Esc 自上而下关本视图的弹层（确认弹窗 → 风格弹窗 → 风格抽屉 → 编辑抽屉（脏时先确认）→ 项目操作菜单）

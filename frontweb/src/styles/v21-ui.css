@@ -93,6 +93,17 @@
 }
 .v21-root .rail-btn svg { width: 21px; height: 21px; }
 .v21-root .rail-spacer { flex: 1; }
+
+/* Rail 自绘 tooltip（替代原生 title：无延迟、随主题） */
+.v21-root .rail-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+  background: var(--panel2); border: 1px solid var(--line-strong); color: var(--text);
+  font-size: 12px; padding: 4px 9px; border-radius: 6px; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 80; box-shadow: var(--shadow);
+  transition: opacity .12s ease .18s;
+}
+.v21-root .rail-btn[data-tip]:hover::after, .v21-root .rail-btn[data-tip]:focus-visible::after { opacity: 1; }
 .v21-root .rail-more { position: relative; }
 .v21-root .rail-more .rail-more-btn { border: none; background: transparent; padding: 0; }
 .v21-root .rail-more .rail-more-btn:hover,
@@ -537,6 +548,12 @@ html.v21-active .pcard .resume { background: var(--panel2) !important; border-co
 .v21-root .wstep.cur { color: #fff; }
 .v21-root .wstep.cur .wn { background: var(--accent); border-color: var(--accent); color: #fff; }
 .v21-root .wsep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; flex: 0 0 auto; }
+/* 兼容既有向导的 .wsteps/.wstep.on 命名（节点三态同款；容器不强制条带位） */
+.v21-root .wsteps { display: flex; align-items: center; gap: 14px; }
+.v21-root .wstep.on { color: #fff; }
+.v21-root .wstep.on .wn { background: var(--accent); border-color: var(--accent); color: #fff; }
+.v21-root .wstep.done { color: var(--text-2); }
+.v21-root .wstep.done .wn { border-color: transparent; background: var(--ok-subtle); color: var(--ok); }
 .v21-root .wiz-footer {
   display: flex; align-items: center; gap: 10px; padding: 12px 24px;
   border-top: 1px solid var(--line); background: var(--panel);

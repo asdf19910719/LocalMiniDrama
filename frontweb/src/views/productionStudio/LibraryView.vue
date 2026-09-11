@@ -39,7 +39,6 @@
               <div class="thumb" :class="item.image_url ? 'has-img' : 'ph ph-' + ((i + grp.key.length) % 6)">
                 <img v-if="item.image_url" :src="item.image_url">
                 <span v-if="!item.local_path && !item.image_url" class="st badge danger">文件不可访问</span>
-                <span v-else class="st badge neutral">v1</span>
               </div>
               <div class="info"><b>{{ item.name || item.location }}</b><p>{{ descOf(item) }}</p></div>
             </div>
@@ -62,30 +61,35 @@
     <aside v-if="detail" class="drawer" style="z-index:90">
       <div class="drawer-h">
         <h3>{{ detail.name || '素材' }} <span class="muted" style="font-weight:400; font-size:12px">· 资产库</span></h3>
+        <span class="badge outline">{{ typeLabel(detail._kind) }}</span>
+        <span v-if="!detail.local_path && !detail.image_url" class="badge danger">文件不可访问</span>
         <button class="icon-btn" @click="detail = null"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-b" style="overflow:auto">
-        <div v-if="detail.image_url" style="border-radius:10px; overflow:hidden; margin-bottom:14px">
-          <img :src="detail.image_url" style="width:100%; display:block">
+        <div class="row" style="gap:16px; align-items:flex-start; margin-bottom:14px">
+          <div class="thumb-prev" :class="detail.image_url ? '' : 'ph'">
+            <img v-if="detail.image_url" :src="detail.image_url">
+          </div>
+          <div class="grow col" style="gap:2px; min-width:0">
+            <div class="kv"><span class="k">类型</span><span class="v">{{ typeLabel(detail._kind) }}</span></div>
+            <div class="kv"><span class="k">描述</span><span class="v">{{ detail.description || '—' }}</span></div>
+            <div class="kv"><span class="k">当前版本</span><span class="v">v1</span></div>
+          </div>
         </div>
-        <div class="sec-t">基本资料</div>
-        <div class="kv"><span class="k">类型</span><span class="v">{{ typeLabel(detail._kind) }}</span></div>
-        <div class="kv"><span class="k">描述</span><span class="v">{{ detail.description || '—' }}</span></div>
-        <div class="sec-t">版本历史</div>
-        <div class="kv"><span class="k">当前版本</span><span class="v">v1</span></div>
         <div class="sec-t">来源与许可</div>
         <div class="kv"><span class="k">来源</span><span class="v">{{ detail.source_type || '本地导入' }}</span></div>
         <div class="sec-t">文件状态</div>
+        <div class="kv"><span class="k">状态</span><span class="v" :class="detail.local_path || detail.image_url ? 'ok-t' : 'danger-t'">{{ detail.local_path || detail.image_url ? '可访问' : '文件不可访问' }}</span></div>
         <div class="kv"><span class="k">本地路径</span><span class="v mono xs">{{ detail.local_path || detail.image_url || '—' }}</span></div>
-        <div class="row" style="margin-top:14px; padding:9px 12px; border:1px solid var(--line); border-radius:8px">
-          <svg style="width:14px;height:14px;color:var(--muted)"><use href="#i-shield"/></svg>
-          <span class="xs muted" style="line-height:1.6">被项目引用的资产只能归档，不能物理删除；用于项目时选择「使用这个版本」固定当前版本，不随库更新漂移。</span>
+        <div class="notice-card info" style="margin-top:14px">
+          <svg><use href="#i-shield"/></svg>
+          <span>被项目引用的资产只能归档，不能物理删除；用于项目时选择「使用这个版本」固定当前版本，不随库更新漂移。</span>
         </div>
       </div>
       <div class="drawer-f">
-        <button class="btn ghost" @click="comingSoon('归档')">归档</button>
+        <button class="btn ghost" style="border:1px solid var(--line)" @click="comingSoon('归档')">归档</button>
         <div class="spacer"></div>
-        <button class="btn primary" @click="useInProject">用于项目</button>
+        <button class="btn primary" :disabled="!detail.local_path && !detail.image_url" @click="useInProject">用于项目</button>
       </div>
     </aside>
 
@@ -619,20 +623,23 @@ export default {
 
 <style scoped>
 .toolbar { display: flex; align-items: center; gap: 12px; }
-.sec-label { font-size: 13px; font-weight: 600; margin: 4px 0 10px; }
-.sec-label .hint { font-weight: 400; font-size: 11.5px; }
-.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 13px; margin-bottom: 20px; }
+.sec-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin: 4px 0 10px; }
+.sec-label .hint { font-weight: 400; font-size: 11.5px; letter-spacing: 0; }
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
 .acard { cursor: pointer; overflow: hidden; }
 .acard .thumb { position: relative; overflow: hidden; }
-.acard.character .thumb { height: 200px; }
-.acard.scene .thumb { height: 144px; }
-.acard.prop .thumb { height: 144px; }
+.acard.character .thumb { aspect-ratio: 3 / 4; height: auto; }
+.acard.scene .thumb { aspect-ratio: 16 / 9; height: auto; }
+.acard.prop .thumb { aspect-ratio: 1 / 1; height: auto; }
 .acard .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .acard.offline .thumb { filter: grayscale(.7) brightness(.6); }
-.acard .st { position: absolute; left: 8px; bottom: 8px; z-index: 2; }
+.acard .st { position: absolute; left: 8px; top: 8px; z-index: 2; }
 .acard .info { padding: 8px 12px 10px; }
 .acard .info b { font-size: 13.5px; display: block; }
 .acard .info p { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb-prev { width: 120px; height: 160px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
+.acard.prop .thumb-prev, .drawer .thumb-prev { background: var(--panel2); }
+.thumb-prev img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sec-t { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; letter-spacing: .3px; }
 .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 4px 0; }
 .kv .k { color: var(--muted); flex: 0 0 auto; }
@@ -640,12 +647,6 @@ export default {
 .mono { font-family: Consolas, monospace; }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 .add-path-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
-.add-path-card:hover { border-color: var(--accent); background: var(--accent-subtle); }
+.add-path-card:hover { border-color: var(--line-strong); background: var(--panel2); }
 .add-path-card b { font-size: 14px; }
-.ph-0 { background: radial-gradient(120% 100% at 75% 15%, rgba(124,92,255,.30), transparent 55%), linear-gradient(155deg, #1c2440 0%, #0e1424 60%, #141b2e 100%); }
-.ph-1 { background: radial-gradient(130% 100% at 70% 80%, rgba(255,182,92,.25), transparent 55%), linear-gradient(160deg, #2a1d33 0%, #10131f 60%, #191225 100%); }
-.ph-2 { background: radial-gradient(120% 100% at 25% 20%, rgba(69,211,156,.22), transparent 55%), linear-gradient(150deg, #10281f 0%, #0c1622 65%, #122032 100%); }
-.ph-3 { background: radial-gradient(120% 100% at 50% 10%, rgba(88,166,255,.30), transparent 55%), linear-gradient(165deg, #101b33 0%, #0b1220 60%, #0f1a2c 100%); }
-.ph-4 { background: radial-gradient(110% 90% at 30% 75%, rgba(179,160,255,.22), transparent 55%), linear-gradient(150deg, #1d1830 0%, #0d101c 60%, #151228 100%); }
-.ph-5 { background: radial-gradient(120% 90% at 75% 60%, rgba(69,211,156,.18), transparent 55%), linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%); }
 </style>

@@ -159,6 +159,10 @@
           </div>
         </div>
         <p v-if="items.length === 0" class="muted" style="text-align:center; padding:60px 0">{{ emptyText }}</p>
+        <div v-if="items.length" class="row" style="justify-content:center; gap:6px; padding:14px 0 2px">
+          <svg style="width:13px;height:13px;color:var(--muted)"><use href="#i-trash"/></svg>
+          <span class="xs muted">删除的剧集进入回收站，30 天内可在「已归档」筛选中恢复</span>
+        </div>
       </div>
     </div>
 

@@ -53,30 +53,30 @@
     <div class="app">
       <aside class="rail">
         <div class="logo">剧</div>
-        <router-link to="/projects" class="rail-btn" :class="{ active: isActive('/projects') }" title="项目"
+        <router-link to="/projects" class="rail-btn" :class="{ active: isActive('/projects') }" data-tip="项目"
                      style="text-decoration:none">
           <svg><use href="#i-grid"/></svg>
         </router-link>
-        <router-link to="/library" class="rail-btn" :class="{ active: isActive('/library') }" title="资产库"
+        <router-link to="/library" class="rail-btn" :class="{ active: isActive('/library') }" data-tip="资产库"
                      style="text-decoration:none">
           <svg><use href="#i-box"/></svg>
         </router-link>
-        <router-link to="/tasks" class="rail-btn" :class="{ active: isActive('/tasks') }" title="任务中心"
+        <router-link to="/tasks" class="rail-btn" :class="{ active: isActive('/tasks') }" data-tip="任务中心"
                      style="text-decoration:none">
           <svg><use href="#i-tasks"/></svg>
         </router-link>
         <div class="rail-spacer"></div>
-        <router-link to="/ai-config" class="rail-btn" :class="{ active: isActive('/ai-config') }" title="AI 配置"
+        <router-link to="/ai-config" class="rail-btn" :class="{ active: isActive('/ai-config') }" data-tip="AI 配置"
                      style="text-decoration:none">
           <svg><use href="#i-spark"/></svg>
         </router-link>
-        <router-link to="/settings" class="rail-btn" :class="{ active: isActive('/settings') }" title="设置"
+        <router-link to="/settings" class="rail-btn" :class="{ active: isActive('/settings') }" data-tip="设置"
                      style="text-decoration:none">
           <svg><use href="#i-gear"/></svg>
         </router-link>
         <!-- 更多工具（规格 §24.7：自由创作/媒体素材库/高级页不进 Rail 一级导航，经此入口） -->
         <div class="rail-more">
-          <button class="rail-btn rail-more-btn" :class="{ open: moreToolsOpen }" title="更多工具"
+          <button class="rail-btn rail-more-btn" :class="{ open: moreToolsOpen }" data-tip="更多工具"
                   aria-label="更多工具" @click.stop="moreToolsOpen = !moreToolsOpen">
             <svg><use href="#i-more"/></svg>
           </button>
