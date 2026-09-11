@@ -36,3 +36,16 @@ test('A3/A5 物理清理与媒体重定位：真实执行器 + 无 window.confir
   assert.doesNotMatch(view, /window\.confirm|window\.alert|window\.prompt|alert\(/, '本视图不得再使用浏览器原生弹窗')
   assert.doesNotMatch(view, /演示|占位/, '不得残留演示占位文案')
 })
+
+test('A4 工作区迁移向导：SettingsView 串六步真实执行器，按钮解禁', () => {
+  const api = read('src/v21/api.js')
+  assert.match(api, /workspaceCheck/, 'api：迁移检查')
+  assert.match(api, /workspacePreview/, 'api：范围预览')
+  assert.match(api, /workspaceMigrate/, 'api：迁移执行')
+  const view = read('src/views/productionStudio/SettingsView.vue')
+  assert.match(view, /runWorkspaceCheck/, '检查步骤真实调用')
+  assert.match(view, /runWorkspaceMigrate/, '迁移真实执行')
+  assert.match(view, /确认迁移并重新打开/, '设计稿 24 的确认按钮保留')
+  assert.doesNotMatch(view, /disabled title="工作区迁移执行器将在后续版本接入"/, '执行器已接入，禁用占位应移除')
+  assert.match(view, /重新打开工作区/, '完成提示保留')
+})

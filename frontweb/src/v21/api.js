@@ -40,6 +40,9 @@ export const v21 = {
   cleanupExecute: (items, confirmText) => post('/datatools/cleanup/execute', { items, confirmText }),
   relocationScan: (dir) => post('/datatools/relocation/scan', { dir }),
   relocationConfirm: (items) => post('/datatools/relocation/confirm', { items }),
+  workspaceCheck: (dir) => post('/datatools/workspace/check', { dir }),
+  workspacePreview: (dir) => post('/datatools/workspace/preview', { dir }),
+  workspaceMigrate: (dir, confirmText) => post('/datatools/workspace/migrate', { dir, confirmText }),
   // 项目
   listProjects: (params) => get('/projects', params),
   createProject: (body) => post('/projects', body),

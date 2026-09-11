@@ -77,31 +77,89 @@
       </div>
     </div>
 
-    <!-- 更改工作区向导（24） -->
-    <div v-if="migrateOpen" class="scrim" style="z-index:80" @click="migrateOpen = false"></div>
+    <!-- 更改工作区向导（24）：选择 → 检查 → 范围预览 → 执行 → 重新打开提示 -->
+    <div v-if="migrateOpen" class="scrim" style="z-index:80" @click="migrateStep !== 'executing' && (migrateOpen = false)"></div>
     <div v-if="migrateOpen" class="modal-wrap" style="z-index:90">
       <div class="modal" style="width:640px">
         <div class="modal-h">
           <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-folder"/></svg>
-          <h3>更改工作区 · 迁移范围预览</h3>
+          <h3>更改工作区 · {{ migrateStepLabel }}</h3>
           <button class="icon-btn" @click="migrateOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b">
-          <div class="grid-2">
-            <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">drama_generator.db · 全部项目数据</div></div></div>
-            <div class="v-row"><div><b style="font-size:13px">媒体文件</b><div class="vm">storage/ 目录 · 分镜图与成片</div></div></div>
-            <div class="v-row"><div><b style="font-size:13px">任务记录</b><div class="vm">async_tasks · 含进行中任务</div></div></div>
-            <div class="v-row"><div><b style="font-size:13px">备份</b><div class="vm">backups/ · 迁移前自动创建回滚点</div></div></div>
+          <!-- 步骤条 -->
+          <div class="seg" style="margin-bottom:14px">
+            <span :class="{ on: migrateStep === 'select' }">1 选择</span>
+            <span :class="{ on: ['check', 'preview', 'confirm'].includes(migrateStep) }">2 检查与预览</span>
+            <span :class="{ on: migrateStep === 'executing' || migrateStep === 'done' }">3 执行</span>
           </div>
-          <div class="divider"></div>
-          <div class="xs" style="color:var(--warn); line-height:1.7">
-            <svg style="width:12px;height:12px;vertical-align:-1px"><use href="#i-warn"/></svg>
-            有活动任务时禁止危险迁移；迁移前自动创建备份与回滚点，原目录默认保留。迁移完成后需要重新打开工作区。
-          </div>
+
+          <template v-if="migrateStep === 'select'">
+            <div class="frow" style="align-items:center">
+              <div class="flabel">新工作区目录</div>
+              <input class="input grow" v-model="migrateDir" placeholder="例如 D:\\LocalMiniDrama（目录不存在时会自动创建）">
+            </div>
+            <div class="grid-2" style="margin-top:10px">
+              <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">drama_generator.db · 全部项目数据</div></div></div>
+              <div class="v-row"><div><b style="font-size:13px">媒体文件</b><div class="vm">storage/ 目录 · 分镜图与成片</div></div></div>
+            </div>
+            <div class="xs" style="color:var(--warn); line-height:1.7; margin-top:10px">
+              <svg style="width:12px;height:12px;vertical-align:-1px"><use href="#i-warn"/></svg>
+              有活动任务时禁止危险迁移；迁移前自动创建备份与回滚点，原目录默认保留。迁移完成后需要重新打开工作区。
+            </div>
+          </template>
+
+          <template v-else-if="migrateStep === 'check' || migrateStep === 'preview'">
+            <template v-if="migrateCheck">
+              <template v-if="!migrateCheck.ok">
+                <div v-for="b in migrateCheck.blockers" :key="b.code" class="issue-row">
+                  <span class="badge danger">阻断</span><span>{{ b.message }}</span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="issue-row"><span class="badge ok">通过</span><span>无活动任务 · 目录可写<template v-if="migrateCheck.details.freeBytes != null"> · 剩余空间 {{ formatBytes(migrateCheck.details.freeBytes) }}</template></span></div>
+                <template v-if="migratePreview">
+                  <div class="grid-2" style="margin-top:10px">
+                    <div class="v-row"><div><b style="font-size:13px">数据库</b><div class="vm">{{ formatBytes(migratePreview.database.bytes) }}</div></div></div>
+                    <div class="v-row"><div><b style="font-size:13px">媒体 storage</b><div class="vm">{{ formatBytes(migratePreview.storage.bytes) }} · {{ migratePreview.storage.files }} 个文件</div></div></div>
+                  </div>
+                  <p class="muted xs" style="margin-top:8px">{{ migratePreview.note }}</p>
+                </template>
+              </template>
+            </template>
+          </template>
+
+          <template v-else-if="migrateStep === 'executing'">
+            <p class="small">正在迁移：创建备份 → 复制数据库与媒体 → 原子改写配置 → 写迁移记录…</p>
+          </template>
+
+          <template v-else-if="migrateStep === 'done'">
+            <div class="issue-row"><span class="badge ok">完成</span><span>迁移完成，备份与迁移记录已保留在原工作区。</span></div>
+            <p class="muted xs" style="margin-top:8px">请重新打开工作区（重启后端）后使用新目录：<br><span class="mono">{{ migrateDir }}</span></p>
+            <p class="muted xs">回滚点：<span class="mono">{{ migrateResult && migrateResult.backupDir }}</span></p>
+          </template>
+
+          <p v-if="migrateError" class="small" style="color:var(--danger);margin-top:10px">{{ migrateError }}</p>
         </div>
-        <div class="modal-f">
+        <div class="modal-f" style="justify-content:space-between">
           <button class="btn ghost" @click="migrateOpen = false">取消</button>
-          <button class="btn primary" disabled title="工作区迁移执行器将在后续版本接入">确认迁移并重新打开</button>
+          <div class="row" style="gap:8px">
+            <template v-if="migrateStep === 'select'">
+              <button class="btn primary" :disabled="!migrateDir || migrateChecking" @click="runWorkspaceCheck">{{ migrateChecking ? '检查中…' : '检查并预览' }}</button>
+            </template>
+            <template v-else-if="migrateStep === 'check' || migrateStep === 'preview'">
+              <button class="btn" @click="migrateStep = 'select'">上一步</button>
+              <button v-if="migrateCheck && migrateCheck.ok" class="btn primary" @click="migrateStep = 'confirm'">下一步</button>
+            </template>
+            <template v-else-if="migrateStep === 'confirm'">
+              <button class="btn" @click="migrateStep = 'preview'">上一步</button>
+              <input class="input" style="width:170px" v-model="migrateConfirmText" placeholder='输入「确认迁移」'>
+              <button class="btn danger" :disabled="migrateConfirmText !== '确认迁移'" @click="runWorkspaceMigrate">确认迁移并重新打开</button>
+            </template>
+            <template v-else-if="migrateStep === 'done'">
+              <button class="btn primary" @click="migrateOpen = false">知道了</button>
+            </template>
+          </div>
         </div>
       </div>
     </div>
@@ -110,6 +168,7 @@
 
 <script>
 import axios from 'axios'
+import { v21 } from '../../v21/api.js'
 
 export default {
   name: 'SettingsView',
@@ -123,11 +182,17 @@ export default {
         { key: 'export', label: '成片导出目录', path: 'backend-node/data/storage/v21-exports' },
         { key: 'tmp', label: '临时目录', path: '系统临时目录' },
       ],
+      migrateStep: 'select', migrateDir: '', migrateChecking: false,
+      migrateCheck: null, migratePreview: null, migrateConfirmText: '',
+      migrateExecuting: false, migrateResult: null, migrateError: '',
     }
   },
   computed: {
     formChanged() {
       return JSON.stringify(this.form) !== this.savedForm
+    },
+    migrateStepLabel() {
+      return { select: '选择目录', check: '检查与范围预览', preview: '检查与范围预览', confirm: '确认迁移', executing: '正在迁移', done: '迁移完成' }[this.migrateStep] || '迁移'
     },
   },
   watch: {
@@ -142,6 +207,43 @@ export default {
     }).catch(() => {})
   },
   methods: {
+    formatBytes(n) {
+      const num = Number(n) || 0
+      if (num >= 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`
+      if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`
+      return `${num} B`
+    },
+    async runWorkspaceCheck() {
+      this.migrateChecking = true
+      this.migrateError = ''
+      this.migrateCheck = null
+      this.migratePreview = null
+      try {
+        this.migrateCheck = await v21.workspaceCheck(this.migrateDir)
+        if (this.migrateCheck.ok) {
+          this.migratePreview = await v21.workspacePreview(this.migrateDir)
+        }
+        this.migrateStep = 'check'
+      } catch (err) {
+        this.migrateError = err.message || '未知错误'
+      } finally {
+        this.migrateChecking = false
+      }
+    },
+    async runWorkspaceMigrate() {
+      this.migrateExecuting = true
+      this.migrateError = ''
+      this.migrateStep = 'executing'
+      try {
+        this.migrateResult = await v21.workspaceMigrate(this.migrateDir, this.migrateConfirmText)
+        this.migrateStep = 'done'
+      } catch (err) {
+        this.migrateError = err.message || '迁移失败'
+        this.migrateStep = 'preview'
+      } finally {
+        this.migrateExecuting = false
+      }
+    },
     async save() {
       try {
         if (this.form.language) {
@@ -175,6 +277,8 @@ export default {
 .tool-card p { margin: 0; font-size: 11px; color: var(--muted); }
 .v-row { border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 13px 12px; }
 .v-row .vm { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+.issue-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; }
+.mono { font-family: Consolas, monospace; }
 .badge.warn { background: var(--warn-subtle); color: var(--warn); }
 .badge.ok { background: var(--ok-subtle); color: var(--ok); }
 </style>

@@ -14,6 +14,7 @@
 
 ### 新增
 
+- **V2.1 工作区迁移执行器（A4）**：「常规设置 · 更改工作区」向导由禁用占位替换为真实六步执行——新增 `POST /api/v2/datatools/workspace/check|preview|migrate`：活动任务检查（有 pending/running 即阻断）→ 目录可用性/嵌套/空间检查 → 备份（复用备份服务，含 manifest 与 SHA-256）→ 复制数据库与媒体 storage → 原子改写 configs/config.yaml 的 database.path 与 storage.local_path（行级改写保留注释，失败回滚原文）→ 写迁移记录；前端向导串「选择→检查与范围预览→确认迁移→执行→重新打开提示」，确认文本门禁「确认迁移」
 - **V2.1 媒体重定位扫描器（A5）**：「高级数据工具 · 媒体重定位」由占位提示替换为真实流程——新增 `POST /api/v2/datatools/relocation/scan`（找出 local_path 不可访问的媒体行，按相对路径→文件名→大小→hash 在指定目录匹配，输出唯一命中/多候选/未找到三类预览，唯一命中默认勾选）与 `POST /api/v2/datatools/relocation/confirm`（明确确认后才真实 UPDATE 行路径，非法表/不存在路径跳过并给原因）；前端固定「选目录→扫描→逐文件预览→确认更新」流程，确认经专用 Modal
 - **V2.1 物理清理执行器（A3）**：「高级数据工具 · 物理清理」由演示数据替换为真实执行——新增 `POST /api/v2/datatools/cleanup/dry-run`（扫描 storage 下文件，逐文件判定引用计数/活动任务占用并输出可清理或阻断原因）与 `POST /api/v2/datatools/cleanup/execute`（「永久清理」文本门禁 + 执行时逐文件复检，删除报告含未删除原因写入 data/backups/cleanup-reports/）；前端 dry-run 清单真实勾选、删除经专用确认弹窗（替换 window.confirm）并展示已删除/未删除与报告位置
 - **V2.1 完整性检查扫描器（A2）**：「高级数据工具 · 完整性检查」由演示数据替换为真实只读扫描——新增 `POST /api/v2/datatools/integrity/run` 逐项体检 SQLite 一致性（integrity_check/foreign_key_check）、媒体存在性（image_generations/characters/scenes/props/director_artifacts 的本地路径）、引用完整性（剧集角色/分镜引用/场景关联悬空检测）、任务索引（生成任务归属指向不存在的分镜）、受控目录越界与孤儿文件；每项产出「正常/警告/错误 + 唯一恢复落点」（媒体重定位/重建任务索引/物理清理/路径配置），前端按落点直达对应工具

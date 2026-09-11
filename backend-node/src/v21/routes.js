@@ -590,6 +590,33 @@ function createV21Router({ db, cfg, log }) {
   r.post('/datatools/relocation/confirm', wrap((req, res) => {
     response.success(res, relocation.confirm(req.body?.items || []));
   }));
+  // A4 工作区迁移执行器
+  const { createWorkspaceMigrationService } = require('./datatools/workspaceMigrationService.js');
+  const workspaceMigration = createWorkspaceMigrationService({ db, log });
+  r.post('/datatools/workspace/check', wrap((req, res) => {
+    workspaceMigration.check(req.body?.dir).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/datatools/workspace/preview', wrap((req, res) => {
+    workspaceMigration.preview(req.body?.dir).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
+  r.post('/datatools/workspace/migrate', wrap((req, res) => {
+    workspaceMigration.migrate(req.body?.dir, req.body?.confirmText).then((result) => {
+      response.success(res, result);
+    }).catch((err) => {
+      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
+    });
+  }));
 
   return r;
 }
