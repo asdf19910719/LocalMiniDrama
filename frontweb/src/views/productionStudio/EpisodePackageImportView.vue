@@ -93,14 +93,15 @@
               <span class="xs muted ellipsis imp-key">{{ m.sourceKey }}</span>
               <span class="badge" :class="{ ok: m.action === 'create', accent: m.action === 'reuse', info: m.action === 'match-with-character' }">{{ matchActionLabel(m) }}</span>
               <span class="spacer"></span>
-              <label class="xs muted" style="display:inline-flex; align-items:center; gap:5px; cursor:pointer">
+              <label v-if="m.action !== 'match-with-character'" class="xs muted" style="display:inline-flex; align-items:center; gap:5px; cursor:pointer">
                 <input v-model="ignoredMap[m.sourceKey]" type="checkbox">忽略此项
               </label>
+              <span v-else class="xs muted">随人物处理，请在人物行忽略</span>
             </div>
             <p v-if="plan.assets.matches.length === 0" class="muted small">该制作包不包含素材条目。</p>
             <p class="xs muted" style="margin-top:8px">
-              勾选「忽略此项」的素材不会创建、也不会关联到本集（confirm 以 ignoredSourceKeys 提交）；
-              已有素材按 source_key 精确匹配复用，不产生新记录。
+              勾选「忽略此项」的人物/场景/道具不会创建、也不会关联到本集（confirm 以 ignoredSourceKeys 提交）；
+              人物状态随其人物行一并处理（忽略状态请在其人物行勾选）。已有素材按 source_key 精确匹配复用，不产生新记录。
             </p>
           </section>
 

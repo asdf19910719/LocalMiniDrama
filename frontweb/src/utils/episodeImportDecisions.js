@@ -26,9 +26,10 @@ export function matchActionLabel(m) {
   return '新建'
 }
 
-// 后端当前 preview 不返回冲突标记；若未来补回 requiresDecision/ambiguous 等显式标记，UI 即生效
+// 后端当前 preview 不返回冲突标记；若未来补回 requiresDecision/ambiguous/conflict 等显式标记，UI 即生效
+// （conflict 命名对齐同域 novelSplitService.js 的冲突字段先例）
 export function matchRequiresDecision(m) {
-  return Boolean(m && (m.requiresDecision === true || m.ambiguous === true))
+  return Boolean(m && (m.requiresDecision === true || m.ambiguous === true || m.conflict === true))
 }
 
 // 从 per-sourceKey 勾选表收集被忽略的 sourceKeys（保持 matches 顺序，跳过空键）

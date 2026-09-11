@@ -36,11 +36,12 @@ test('matchActionLabel：reuse 带 existingId 显示复用已有，match-with-ch
   assert.equal(matchActionLabel({ action: 'match-with-character', existingId: null }), '随人物处理')
 })
 
-test('matchRequiresDecision 仅在后端显式标记 requiresDecision/ambiguous 时为真', () => {
+test('matchRequiresDecision 仅在后端显式标记 requiresDecision/ambiguous/conflict 时为真', () => {
   assert.equal(matchRequiresDecision({ action: 'create' }), false)
   assert.equal(matchRequiresDecision({ action: 'reuse', existingId: 3 }), false)
   assert.equal(matchRequiresDecision({ requiresDecision: true }), true)
   assert.equal(matchRequiresDecision({ ambiguous: true }), true)
+  assert.equal(matchRequiresDecision({ conflict: true }), true)
   assert.equal(matchRequiresDecision(null), false)
 })
 
@@ -79,6 +80,18 @@ test('P0-4 ① 预览步以 v-for 逐项渲染 assets.matches，每行提供「�
   assert.match(src, /v-model="ignoredMap\[m\.sourceKey\]"/, '勾选应绑定 per-sourceKey 忽略表')
   assert.match(src, /matchTypeLabel/, '应展示类型标签')
   assert.match(src, /matchActionLabel/, '应展示动作徽标（新建/复用）')
+})
+
+test('P0-4 ① 人物状态行（match-with-character）不渲染忽略勾选，行内提示随人物处理', () => {
+  const src = importView()
+  // 后端 ensureAssetRows 的 skip() 不覆盖 states 循环：状态行勾选忽略是静默无效操作，
+  // 故勾选必须以 v-if 排除 match-with-character 行，并给出人物行引导
+  assert.match(
+    src,
+    /v-if="m\.action !== 'match-with-character'"[\s\S]{0,140}v-model="ignoredMap\[m\.sourceKey\]"/,
+    '忽略勾选应排除 match-with-character 行',
+  )
+  assert.match(src, /随人物处理，请在人物行忽略/, '状态行应提示在人物行忽略')
 })
 
 // ---------- P0-4 文件身份区 + 协议徽标 ----------
