@@ -67,6 +67,10 @@ export const v21 = {
   restoreEpisode: (episodeId) => post(`/episodes/${episodeId}/restore`),
   getImportSource: (episodeId) => get(`/episodes/${episodeId}/import-source`),
   getDeleteImpact: (episodeId) => get(`/episodes/${episodeId}/delete-impact`),
+  // 小说拆集 / 来源视频
+  previewNovelSplit: (projectId, body) => post(`/projects/${projectId}/episodes/import-novel/preview`, body),
+  confirmNovelSplit: (projectId, body) => post(`/projects/${projectId}/episodes/import-novel/confirm`, body),
+  registerSourceVideo: (projectId, body) => post(`/projects/${projectId}/episodes/source-video`, body),
   // 剧本
   getScript: (episodeId) => get(`/episodes/${episodeId}/script`),
   getStageNav: (episodeId) => get(`/episodes/${episodeId}/script/stage-nav`),

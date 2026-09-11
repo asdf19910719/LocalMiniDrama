@@ -109,27 +109,27 @@ function createV21Router({ db, cfg, log }) {
     }));
   }));
 
-  // 小说/长文本拆集：复用既有 importNovel（预览→确认在向导前端分两步调用）
+  // 小说/长文本拆集（B2）：预览（建议集号+冲突标注）→ 确认逐集创建草稿（零媒体任务）
+  const { createNovelSplitService } = require('./import/novelSplitService.js');
+  const novelSplit = createNovelSplitService({ db, log });
   r.post('/projects/:id/episodes/import-novel/preview', wrap((req, res) => {
-    const novelImportService = require('../services/novelImportService.js');
     const text = String(req.body?.text || '');
     if (!text.trim()) throw Object.assign(new Error('请提供小说文本'), { status: 400, code: 'VALIDATION_ERROR' });
-    const chapters = novelImportService.detectChaptersByRules(text);
-    response.success(res, {
-      chapterCount: chapters.length,
-      suggestedEpisodes: Math.min(chapters.length, Number(req.body?.maxChapters) || 20),
-      preview: chapters.slice(0, 20).map((c, i) => ({ index: i + 1, title: c.title, chars: (c.content || '').length })),
-    });
+    response.success(res, novelSplit.preview(text, {
+      maxChapters: Number(req.body?.maxChapters) || 20,
+      startNumber: req.body?.startNumber,
+      dramaId: req.params.id,
+    }));
   }));
-  r.post('/projects/:id/episodes/import-novel/confirm', wrap(async (req, res) => {
-    const novelImportService = require('../services/novelImportService.js');
-    const created = await novelImportService.importNovel(db, log, {
-      text: String(req.body?.text || ''),
+  r.post('/projects/:id/episodes/import-novel/confirm', wrap((req, res) => {
+    const text = String(req.body?.text || '');
+    if (!text.trim()) throw Object.assign(new Error('请提供小说文本'), { status: 400, code: 'VALIDATION_ERROR' });
+    response.created(res, novelSplit.confirm(text, {
       title: req.body?.title || '',
       maxChapters: Number(req.body?.maxChapters) || 20,
-      aiSummarize: false,
-    });
-    response.created(res, { episodes: created });
+      startNumber: req.body?.startNumber,
+      dramaId: req.params.id,
+    }));
   }));
 
   // 从已有视频开始剪辑：登记来源媒体（零生成、零费用）
@@ -566,29 +566,6 @@ function createV21Router({ db, cfg, log }) {
       else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
     });
   }));
-  const { createRelocationService } = require('./datatools/relocationService.js');
-  const relocation = createRelocationService({ db, log, storageRoot: assetStorage });
-  r.post('/datatools/relocation/scan', wrap((req, res) => {
-    response.success(res, relocation.scan(req.body?.dir));
-  }));
-  r.post('/datatools/relocation/confirm', wrap((req, res) => {
-    response.success(res, relocation.confirm(req.body?.items || []));
-  }));
-
-  const { createCleanupService } = require('./datatools/cleanupService.js');
-  const cleanup = createCleanupService({ db, log, storageRoot: assetStorage });
-  r.post('/datatools/cleanup/dry-run', wrap((req, res) => {
-    response.success(res, cleanup.dryRun());
-  }));
-  r.post('/datatools/cleanup/execute', wrap((req, res) => {
-    cleanup.execute(req.body?.items || [], req.body?.confirmText).then((result) => {
-      response.success(res, result);
-    }).catch((err) => {
-      if (err && err.code && err.status) res.status(err.status).json({ error: { code: err.code, message: err.message } });
-      else res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } });
-    });
-  }));
-
   const { createRelocationService } = require('./datatools/relocationService.js');
   const relocation = createRelocationService({ db, log, storageRoot: assetStorage });
   r.post('/datatools/relocation/scan', wrap((req, res) => {

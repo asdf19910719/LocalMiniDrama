@@ -42,6 +42,18 @@ const router = createRouter({
       meta: { title: '导入制作包' },
     },
     {
+      path: '/projects/:projectId/episodes/import-novel',
+      name: 'episode-import-novel',
+      component: () => import('@/views/productionStudio/NovelImportView.vue'),
+      meta: { title: '小说 / 长文本拆集' },
+    },
+    {
+      path: '/projects/:projectId/episodes/import-video',
+      name: 'episode-import-video',
+      component: () => import('@/views/productionStudio/SourceVideoView.vue'),
+      meta: { title: '从已有视频开始剪辑' },
+    },
+    {
       path: '/projects/import-archive',
       name: 'project-import-archive',
       component: () => import('@/views/productionStudio/ArchiveImportView.vue'),

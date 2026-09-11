@@ -14,6 +14,7 @@
 
 ### 新增
 
+- **V2.1 小说拆集与来源视频向导（B2/B3）**：剧集页「导入 / 协作」菜单两项由占位提示替换为真实向导——小说 / 长文本拆集：新增 `v21/import/novelSplitService.js` 与 `POST /api/v2/projects/:id/episodes/import-novel/preview|confirm`（此前 confirm 只解析不落库），预览按规则解析章节并给出字数/建议集号/冲突标注，确认逐集创建草稿剧集与剧本草稿版本（冲突集跳过并给原因，全程零媒体任务）；前端三步向导（粘贴/上传文本 → 章节预览 → 拆集结果）。从已有视频开始剪辑：三步向导（选择目标集 → 本地路径/URL + 合法使用权确认 → 登记并跳转成片页），复用 `POST /episodes/source-video` 零生成登记合同
 - **V2.1 更新分镜结构 diff 向导（B1）**：分镜页更多菜单「更新分镜结构（从已确认剧本重建）」由直接重建改为 diff 向导——新增 `GET/POST /api/v2/episodes/:id/storyboard/structure-diff|apply-structure-diff`：只读推导期望结构与当前结构对比（新增/变更/删除/未变分组），人工改动镜头（structure_revision>1）标注并可勾选「跳过」；应用在事务内按 diff 增/改/软删，删除为回收站式且媒体候选保留，受影响镜头 structure_revision 递增（SHOT_REVISION_CONFLICT 保护不变）；前端向导预览差异行（imp-row 样式）后确认创建新结构版本
 - **V2.1 工作区迁移执行器（A4）**：「常规设置 · 更改工作区」向导由禁用占位替换为真实六步执行——新增 `POST /api/v2/datatools/workspace/check|preview|migrate`：活动任务检查（有 pending/running 即阻断）→ 目录可用性/嵌套/空间检查 → 备份（复用备份服务，含 manifest 与 SHA-256）→ 复制数据库与媒体 storage → 原子改写 configs/config.yaml 的 database.path 与 storage.local_path（行级改写保留注释，失败回滚原文）→ 写迁移记录；前端向导串「选择→检查与范围预览→确认迁移→执行→重新打开提示」，确认文本门禁「确认迁移」
 - **V2.1 媒体重定位扫描器（A5）**：「高级数据工具 · 媒体重定位」由占位提示替换为真实流程——新增 `POST /api/v2/datatools/relocation/scan`（找出 local_path 不可访问的媒体行，按相对路径→文件名→大小→hash 在指定目录匹配，输出唯一命中/多候选/未找到三类预览，唯一命中默认勾选）与 `POST /api/v2/datatools/relocation/confirm`（明确确认后才真实 UPDATE 行路径，非法表/不存在路径跳过并给原因）；前端固定「选目录→扫描→逐文件预览→确认更新」流程，确认经专用 Modal

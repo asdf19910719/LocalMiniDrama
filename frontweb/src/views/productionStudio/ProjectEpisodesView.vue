@@ -39,12 +39,12 @@
             <div class="ic"><svg><use href="#i-spark"/></svg></div>
             <div><b>外部 AI 制作</b><p>创建任务包，外部会话结果 JSON 回流为草稿</p></div>
           </div>
-          <div class="pop-item" @click="comingSoon('小说 / 长文本拆集')">
+          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-novel`)">
             <div class="ic"><svg><use href="#i-doc"/></svg></div>
             <div><b>小说 / 长文本拆集</b><p>按章节预览拆集与编号，逐集生成草稿</p></div>
           </div>
           <div class="pop-sep"></div>
-          <div class="pop-item" @click="comingSoon('从已有视频开始剪辑')">
+          <div class="pop-item" @click="$router.push(`/projects/${projectId}/episodes/import-video`)">
             <div class="ic" style="background:var(--neutral-subtle); color:var(--muted)"><svg><use href="#i-film"/></svg></div>
             <div><b>从已有视频开始剪辑</b><p>登记原片后进入短片页，只读保护原文件</p></div>
           </div>
