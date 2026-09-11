@@ -1,122 +1,231 @@
 <template>
-  <div class="page">
-    <el-button text @click="$router.push('/projects')">← 返回项目列表</el-button>
-    <div v-if="overview" class="hero">
-      <div class="cover">{{ (overview.hero.title || '项').slice(0, 1) }}</div>
-      <div class="hero-info">
-        <h1>{{ overview.hero.title }}</h1>
-        <div class="meta">
-          {{ overview.hero.genre || '未设置题材' }} · {{ overview.hero.aspectRatio }} · {{ overview.hero.episodeCount }} 集 ·
-          最近编辑 {{ formatTime(overview.hero.updatedAt) }}
+  <div>
+    <header class="page-head">
+      <button class="icon-btn" @click="$router.push('/projects')"><svg><use href="#i-back"/></svg></button>
+      <span class="t2 bold">{{ overview?.hero?.title || '…' }}</span>
+      <nav class="ptabs">
+        <span class="ptab on">概览</span>
+        <span class="ptab" @click="$router.push(`/projects/${projectId}/episodes`)">剧集</span>
+        <span class="ptab" @click="$router.push(`/projects/${projectId}/assets`)">项目素材</span>
+      </nav>
+      <div class="spacer"></div>
+      <div class="more-wrap">
+        <button class="btn ghost" @click="opsOpen = !opsOpen"><svg><use href="#i-more"/></svg>项目操作</button>
+        <div v-if="opsOpen" class="card more-pop" @click="opsOpen = false">
+          <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="$router.push('/projects/import-archive')">从备份恢复（导入归档）</button>
+          <button class="btn ghost sm danger" style="width:100%;justify-content:flex-start" @click="deleteProject">移入回收站</button>
         </div>
-        <div class="hero-desc">{{ overview.hero.description || '暂无简介' }}</div>
       </div>
-      <div class="hero-actions">
-        <el-button @click="editOpen = true">编辑项目</el-button>
-        <el-button type="primary" @click="$router.push(`/projects/${projectId}/episodes`)">进入剧集</el-button>
+      <button class="btn" @click="editOpen = true"><svg><use href="#i-pencil"/></svg>编辑项目</button>
+    </header>
+    <div class="page-body" style="display:flex; flex-direction:column; gap:14px">
+
+      <!-- Hero -->
+      <div class="card hero" v-if="overview">
+        <div class="cover" :class="overview.hero.thumbnail ? '' : 'ph'">
+          <img v-if="overview.hero.thumbnail" :src="overview.hero.thumbnail">
+        </div>
+        <div class="grow col" style="gap:8px; justify-content:center">
+          <div class="row" style="gap:10px">
+            <h1 style="font-size:22px">{{ overview.hero.title }}</h1>
+            <span class="badge" :class="statusBadgeClass">{{ statusLabel }}</span>
+          </div>
+          <div class="t2 small">{{ overview.hero.description || '暂无简介' }}</div>
+          <div class="muted small">
+            {{ overview.hero.genre || '未设置题材' }} · {{ overview.hero.aspectRatio }} · {{ overview.hero.episodeCount }} 集 · 最近编辑 {{ relTime(overview.hero.updatedAt) }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 下一步 + 待处理 -->
+      <div class="grid-2" v-if="overview">
+        <div class="card pad" style="display:flex; flex-direction:column; gap:10px">
+          <div class="row"><b style="font-size:13.5px">下一步</b><span class="badge accent">继续制作</span></div>
+          <template v-if="overview.nextStep">
+            <div>
+              <div class="bold" style="font-size:15px">第 {{ overview.nextStep.episodeNumber }} 集 · {{ stageLabel(overview.nextStep.stage) }}</div>
+              <div class="muted small" style="margin-top:4px">上次工作 {{ relTime(overview.hero.updatedAt) }}</div>
+            </div>
+            <div class="row" style="margin-top:4px">
+              <button class="btn primary" @click="$router.push(`/projects/${projectId}/episodes/${overview.nextStep.episodeId}/${overview.nextStep.stage}`)">继续制作</button>
+              <button class="btn ghost" @click="$router.push(`/projects/${projectId}/episodes`)">换一集</button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="muted small">还没有剧集</div>
+            <button class="btn primary" style="align-self:flex-start" @click="$router.push(`/projects/${projectId}/episodes`)">创建第 1 集</button>
+          </template>
+        </div>
+        <div class="card pad">
+          <div class="row" style="margin-bottom:4px"><b style="font-size:13.5px">待处理</b><span class="badge" :class="(overview.pending || []).length ? 'warn' : 'ok'">{{ (overview.pending || []).length }}</span><div class="spacer"></div><span class="muted xs">仅显示项目级优先项</span></div>
+          <div v-for="(p, i) in overview.pending || []" :key="i" class="todo-item">
+            <span class="badge" :class="p.severity === 'danger' ? 'danger' : 'warn'">{{ p.badge }}</span>
+            <span class="ellipsis">{{ p.text }}</span>
+            <span class="act" @click="goPending(p)">{{ p.action }}</span>
+          </div>
+          <p v-if="!(overview.pending || []).length" class="xs muted" style="padding:6px 0">暂无待处理项</p>
+        </div>
+      </div>
+
+      <!-- 四阶段项目级汇总 -->
+      <div class="grid-4" v-if="overview">
+        <div v-for="(st, key) in overview.stageSummary || {}" :key="key" class="card stage-card">
+          <div class="head"><svg><use :href="stageIcon(key)"/></svg><b>{{ stageLabel(key) }}</b><span class="muted xs">{{ overview.hero.episodeCount }} 集</span></div>
+          <div class="srow"><span class="k"><span class="dot" style="background:var(--ok)"></span>已确认</span><span>{{ st.approved }} 集</span></div>
+          <div class="srow"><span class="k"><span class="dot" style="background:var(--info)"></span>制作中</span><span>{{ st.inProgress }} 集</span></div>
+          <div class="srow"><span class="k"><span class="dot" style="background:var(--warn)"></span>需处理</span><span>{{ st.needsAttention }} 集</span></div>
+          <div class="srow"><span class="k"><span class="dot" style="background:var(--neutral)"></span>未开始</span><span>{{ st.notStarted }} 集</span></div>
+        </div>
+      </div>
+
+      <!-- 项目画面风格 -->
+      <div class="card look-card" v-if="overview">
+        <div class="ph" style="width:132px; height:88px; border-radius:8px"></div>
+        <div class="grow col" style="gap:6px">
+          <div class="row"><b style="font-size:13.5px">项目画面风格</b><span class="badge ok">{{ overview.style.styleId }}</span></div>
+          <div class="muted xs">应用只影响之后的新生成，不会改动现有素材与成片</div>
+        </div>
+        <div class="col" style="gap:8px">
+          <button class="btn" @click="openStyleModal">更换风格</button>
+        </div>
       </div>
     </div>
 
-    <div v-if="overview" class="grid">
-      <section class="card next-step">
-        <h3>下一步</h3>
-        <template v-if="overview.nextStep">
-          <p>第 {{ overview.nextStep.episodeNumber }} 集 · {{ stageLabel(overview.nextStep.stage) }}</p>
-          <el-button type="primary" @click="$router.push(`/projects/${projectId}/episodes/${overview.nextStep.episodeId}/${overview.nextStep.stage}`)">
-            继续制作
-          </el-button>
-        </template>
-        <template v-else>
-          <p>还没有剧集</p>
-          <el-button type="primary" @click="$router.push(`/projects/${projectId}/episodes`)">创建第 1 集</el-button>
-        </template>
-        <div class="assets-line">
-          项目素材：{{ overview.assetsAggregate.objectCount }} 个对象<span v-if="overview.assetsAggregate.missingImageCount">，{{ overview.assetsAggregate.missingImageCount }} 个缺少可用形象</span>
-          <el-button text type="primary" @click="$router.push(`/projects/${projectId}/assets`)">去项目素材</el-button>
+    <!-- 编辑项目抽屉（31） -->
+    <div v-if="editOpen" class="scrim" style="z-index:80" @click="closeEdit"></div>
+    <aside v-if="editOpen" class="drawer narrow" style="z-index:90">
+      <div class="drawer-h">
+        <h3>编辑项目</h3>
+        <span v-if="editDirty" class="badge warn" style="height:19px">有未保存修改</span>
+        <button class="icon-btn" @click="closeEdit"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-b" style="overflow:auto">
+        <div class="col" style="gap:12px">
+          <label class="col" style="gap:4px"><span class="xs muted">名称</span><input class="input" style="width:100%" v-model="editForm.title"></label>
+          <label class="col" style="gap:4px"><span class="xs muted">题材</span><input class="input" style="width:100%" v-model="editForm.genre"></label>
+          <label class="col" style="gap:4px"><span class="xs muted">画幅</span>
+            <select class="input" style="width:100%" v-model="editForm.aspectRatio">
+              <option>16:9</option><option>9:16</option><option>1:1</option>
+            </select>
+          </label>
+          <label class="col" style="gap:4px"><span class="xs muted">简介</span><textarea class="input" style="width:100%; height:72px; padding:8px" v-model="editForm.description"></textarea></label>
+          <div class="xs muted">保存只更新项目资料，并使外部 AI 协作上下文标记需要更新；不影响已有素材与成片。</div>
         </div>
-      </section>
+      </div>
+      <div class="drawer-f">
+        <button class="btn ghost" @click="closeEdit">取消</button>
+        <div class="spacer"></div>
+        <button class="btn primary" :disabled="!editDirty" @click="saveProfile">保存</button>
+      </div>
+    </aside>
 
-      <section class="card style-card">
-        <h3>当前画面风格</h3>
-        <p class="style-name">{{ overview.style.styleId || '未设置' }}</p>
-        <p class="hint">应用风格只影响之后的新生成，不会改动现有素材与成片</p>
-        <el-button @click="openStyleModal">更换画面风格</el-button>
-      </section>
-    </div>
-
-    <el-drawer v-model="editOpen" title="编辑项目" size="420px">
-      <el-form label-width="80px">
-        <el-form-item label="名称"><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="题材"><el-input v-model="form.genre" /></el-form-item>
-        <el-form-item label="画幅">
-          <el-select v-model="form.aspectRatio">
-            <el-option label="16:9 横屏" value="16:9" />
-            <el-option label="9:16 竖屏" value="9:16" />
-            <el-option label="1:1 方形" value="1:1" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="简介"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
-        <el-button type="primary" @click="saveProfile">保存</el-button>
-      </el-form>
-    </el-drawer>
-
-    <el-dialog v-model="styleOpen" title="更换画面风格" width="720px">
-      <el-tabs v-model="styleTab">
-        <el-tab-pane label="预设风格" name="presets">
-          <el-input v-model="styleQuery" placeholder="搜索风格" @input="loadStyles" />
-          <div class="style-list">
-            <div v-for="s in styles" :key="s.id" class="style-item" :class="{ selected: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
-              <div class="style-name">{{ s.labelZh || s.id }}</div>
-              <div class="style-desc">{{ s.descriptionZh || '' }}</div>
+    <!-- 风格选择 Modal（17） -->
+    <div v-if="styleOpen" class="scrim" style="z-index:80" @click="styleOpen = false"></div>
+    <div v-if="styleOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:880px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-palette"/></svg>
+          <h3>更换画面风格</h3>
+          <button class="icon-btn" @click="styleOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b" style="overflow:hidden">
+          <div class="tabs" style="margin-bottom:14px">
+            <span class="tab on">预设风格</span>
+            <span class="tab">我的风格</span>
+            <span class="tab">自定义风格</span>
+          </div>
+          <div class="input" style="width:280px; margin-bottom:12px">
+            <svg><use href="#i-search"/></svg>
+            <input v-model="styleQuery" placeholder="搜索风格" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13px" @input="loadStyles">
+          </div>
+          <div class="style-grid">
+            <div v-for="s in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
+              <div class="ph" style="height:64px; border-radius:7px"></div>
+              <b style="font-size:12.5px; display:block; margin-top:7px">{{ s.labelZh || s.label_zh || s.id }}</b>
+              <span class="xs muted ellipsis" style="display:block">{{ s.descriptionZh || s.description_zh || '' }}</span>
             </div>
           </div>
-        </el-tab-pane>
-        <el-tab-pane label="我的风格" name="mine">
-          <p class="hint">自定义风格保存后出现在此列表</p>
-        </el-tab-pane>
-        <el-tab-pane label="自定义风格" name="custom">
-          <p class="hint">在风格目录基础上定义专属风格（首发以预设为准）</p>
-        </el-tab-pane>
-      </el-tabs>
-      <template #footer>
-        <el-button @click="styleOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedStyleId" @click="applyStyle">应用风格</el-button>
-      </template>
-    </el-dialog>
+          <div class="xs muted" style="margin-top:12px">应用风格只影响之后的新生成，不会改动现有素材与成片。</div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="styleOpen = false">取消</button>
+          <button class="btn primary" :disabled="!selectedStyleId" @click="applyStyle">应用风格</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ElMessage } from 'element-plus'
 import v21 from '@/v21/api.js'
 
 export default {
   name: 'ProjectOverviewView',
   data() {
-    return { overview: null, editOpen: false, form: {}, styleOpen: false, styleTab: 'presets', styles: [], styleQuery: '', selectedStyleId: '' }
+    return {
+      overview: null, editOpen: false, editForm: {}, editDirty: false, savedForm: '',
+      styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
+      opsOpen: false,
+    }
   },
   computed: {
     projectId() { return this.$route.params.projectId },
+    statusLabel() {
+      if (!this.overview) return ''
+      const pending = (this.overview.pending || []).length
+      if (this.overview.hero.episodeCount === 0) return '未开始'
+      if (pending > 0) return '需要处理'
+      return '制作中'
+    },
+    statusBadgeClass() {
+      return this.statusLabel === '需要处理' ? 'warn' : this.statusLabel === '未开始' ? 'neutral' : 'info'
+    },
   },
   mounted() { this.load() },
   methods: {
     async load() {
-      try {
-        this.overview = await v21.getOverview(this.projectId)
-        this.form = {
-          title: this.overview.hero.title,
-          genre: this.overview.hero.genre || '',
-          aspectRatio: this.overview.hero.aspectRatio || '16:9',
-          description: this.overview.hero.description || '',
-        }
-      } catch (e) {
-        ElMessage.error(e.message)
+      this.overview = await v21.getOverview(this.projectId)
+      this.editForm = {
+        title: this.overview.hero.title,
+        genre: this.overview.hero.genre || '',
+        aspectRatio: this.overview.hero.aspectRatio || '16:9',
+        description: this.overview.hero.description || '',
       }
+      this.savedForm = JSON.stringify(this.editForm)
+      this.editDirty = false
     },
     stageLabel(stage) {
-      return { script: '剧本', assets: '设定', storyboard: '分镜', cut: '成片' }[stage] || '剧本'
+      return { script: '剧本', assets: '本集设定', storyboard: '分镜', cut: '成片' }[stage] || '剧本'
     },
-    formatTime(t) { return t ? String(t).slice(0, 10) : '' },
+    stageIcon(key) {
+      return { script: '#i-book', assets: '#i-user', storyboard: '#i-clap', cut: '#i-monitor' }[key] || '#i-book'
+    },
+    relTime(t) {
+      if (!t) return ''
+      const diff = Date.now() - new Date(t).getTime()
+      const m = Math.floor(diff / 60000)
+      if (m < 1) return '刚刚'
+      if (m < 60) return `${m} 分钟前`
+      const h = Math.floor(m / 60)
+      if (h < 24) return `${h} 小时前`
+      const d = Math.floor(h / 24)
+      if (d < 7) return `${d} 天前`
+      return String(t).slice(0, 10)
+    },
+    goPending(p) {
+      this.$router.push(`/projects/${this.projectId}/episodes/${p.target.episodeId}/${p.target.route}`)
+    },
+    closeEdit() {
+      if (this.editDirty) {
+        if (!window.confirm('有未保存修改，确定关闭？')) return
+      }
+      this.editOpen = false
+    },
+    async saveProfile() {
+      await v21.updateProject(this.projectId, this.editForm)
+      this.editOpen = false
+      await this.load()
+    },
     async openStyleModal() {
       this.styleOpen = true
       this.selectedStyleId = this.overview.style.styleId || ''
@@ -124,43 +233,52 @@ export default {
     },
     async loadStyles() {
       try {
-        const items = await v21.listStyles({ query: this.styleQuery || undefined })
-        this.styles = items || []
+        this.styles = await v21.listStyles({ query: this.styleQuery || undefined })
       } catch { this.styles = [] }
     },
     async applyStyle() {
       await v21.applyStyle(this.projectId, this.selectedStyleId)
-      ElMessage.success('风格已应用，只影响之后的新生成')
       this.styleOpen = false
-      this.load()
+      await this.load()
     },
-    async saveProfile() {
-      await v21.updateProject(this.projectId, this.form)
-      ElMessage.success('已保存')
-      this.editOpen = false
-      this.load()
+    async deleteProject() {
+      this.opsOpen = false
+      if (!window.confirm(`确定将项目“${this.overview.hero.title}”移入回收站？删除可恢复。`)) return
+      await v21.deleteProject(this.projectId)
+      this.$router.push('/projects')
+    },
+  },
+  watch: {
+    editForm: {
+      deep: true,
+      handler() { this.editDirty = JSON.stringify(this.editForm) !== this.savedForm },
     },
   },
 }
 </script>
 
 <style scoped>
-.page { padding: 24px 32px; max-width: 1100px; }
-.hero { display: flex; gap: 20px; margin-top: 16px; align-items: flex-start; }
-.cover { width: 84px; height: 84px; border-radius: 12px; background: #e8efff; color: #2563eb; font-size: 34px; display: flex; align-items: center; justify-content: center; flex: none; }
-.hero-info { flex: 1; }
-.hero-info h1 { margin: 0 0 6px; }
-.meta { color: #6b7280; font-size: 13px; }
-.hero-desc { margin-top: 8px; color: #374151; font-size: 14px; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
-.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; }
-.card h3 { margin: 0 0 12px; }
-.style-name { font-weight: 600; }
-.hint { color: #9ca3af; font-size: 12px; }
-.assets-line { margin-top: 16px; color: #6b7280; font-size: 13px; }
-.style-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; max-height: 320px; overflow: auto; }
-.style-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; cursor: pointer; }
-.style-item.selected { border-color: #2563eb; background: #eff6ff; }
-.style-name { font-weight: 600; font-size: 13px; }
-.style-desc { color: #9ca3af; font-size: 12px; margin-top: 4px; }
+.hero { display: flex; gap: 20px; padding: 20px; }
+.hero .cover { width: 140px; height: 92px; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+.hero .cover img { width: 100%; height: 100%; object-fit: cover; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.todo-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.todo-item:last-of-type { border-bottom: none; }
+.todo-item .act { margin-left: auto; color: var(--accent); cursor: pointer; white-space: nowrap; font-size: 12px; }
+.stage-card .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.stage-card .head svg { width: 15px; height: 15px; color: var(--muted); }
+.stage-card .srow { display: flex; justify-content: space-between; padding: 5px 14px; font-size: 12.5px; color: var(--text-2); }
+.stage-card .srow .k { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.stage-card .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.look-card { display: flex; gap: 18px; padding: 16px; align-items: center; }
+.ptabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
+.ptab { padding: 6px 16px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.ptab.on { background: var(--accent-subtle); color: #fff; font-weight: 500; }
+.more-wrap { position: relative; }
+.more-pop { position: absolute; right: 0; top: 38px; z-index: 30; padding: 6px; min-width: 210px; display: flex; flex-direction: column; gap: 2px; }
+.style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 380px; overflow: auto; }
+.style-item { padding: 8px; cursor: pointer; }
+.style-item.sel { border-color: var(--accent); background: var(--accent-subtle); }
+.badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 </style>

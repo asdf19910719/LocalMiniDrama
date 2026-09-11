@@ -287,6 +287,106 @@ function createProjectService(db, { log = console } = {}) {
     return { id: Number(id), title: String(title).trim() };
   }
 
+  /** 项目级四阶段汇总（单位：集） */
+  function stageSummaryOf(projectId, episodeCount) {
+    const episodes = db
+      .prepare('SELECT id FROM episodes WHERE drama_id = ? AND deleted_at IS NULL')
+      .all(projectId);
+    const summary = {
+      script: { approved: 0, inProgress: 0, needsAttention: 0, notStarted: 0 },
+      assets: { approved: 0, inProgress: 0, needsAttention: 0, notStarted: 0 },
+      storyboard: { approved: 0, inProgress: 0, needsAttention: 0, notStarted: 0 },
+      cut: { approved: 0, inProgress: 0, needsAttention: 0, notStarted: 0 },
+    };
+    for (const ep of episodes) {
+      for (const stage of Object.keys(summary)) {
+        const st = db
+          .prepare('SELECT status FROM production_stage_states WHERE episode_id = ? AND stage = ?')
+          .get(ep.id, stage);
+        const key = !st || st.status === 'not_started'
+          ? 'notStarted'
+          : st.status === 'approved' ? 'approved'
+            : st.status === 'stale' || st.status === 'ready_for_review' ? 'needsAttention'
+              : 'inProgress';
+        summary[stage][key] += 1;
+      }
+      // 无状态记录但有草稿内容的剧集：script 视为制作中
+      const scriptState = db
+        .prepare("SELECT status FROM production_stage_states WHERE episode_id = ? AND stage = 'script'")
+        .get(ep.id);
+      if (!scriptState) {
+        const hasContent = db
+          .prepare("SELECT id FROM episode_script_revisions WHERE episode_id = ? LIMIT 1")
+          .get(ep.id);
+        if (hasContent) {
+          summary.script.notStarted -= 1;
+          summary.script.inProgress += 1;
+        }
+      }
+    }
+    void episodeCount;
+    return summary;
+  }
+
+  /** 概览待处理项（Gate/素材缺失/失败任务聚合，仅项目级优先项） */
+  function pendingItemsOf(projectId) {
+    const items = [];
+    // 1. 素材缺失（本集引用的角色/场景缺当前图）
+    const missing = db.prepare(
+      `SELECT e.id AS episode_id, e.episode_number, e.title AS ep_title, c.id AS asset_id, c.name
+       FROM episode_characters ec
+       JOIN episodes e ON e.id = ec.episode_id AND e.deleted_at IS NULL
+       JOIN characters c ON c.id = ec.character_id AND c.deleted_at IS NULL
+       WHERE e.drama_id = ? AND (c.image_url IS NULL OR c.image_url = '')
+       LIMIT 3`
+    ).all(projectId);
+    for (const m of missing) {
+      items.push({
+        type: 'missing-asset', severity: 'warn', badge: '素材缺失',
+        text: `第 ${m.episode_number} 集「${m.ep_title || '未命名'}」的角色「${m.name}」缺少当前图`,
+        target: { route: 'assets', projectId, episodeId: m.episode_id },
+        action: '去处理',
+      });
+    }
+    // 2. 失败任务（仅在 async_tasks 具备 V2.1 扩展列时查询）
+    const taskCols = new Set(db.prepare('PRAGMA table_info(async_tasks)').all().map((r) => r.name));
+    if (taskCols.has('owner_id') && taskCols.has('owner_type')) {
+      const failed = db.prepare(
+        `SELECT t.id, t.error, sb.episode_id, e.episode_number
+         FROM async_tasks t
+         JOIN storyboards sb ON CAST(t.owner_id AS INTEGER) = sb.id AND t.owner_type = 'storyboard_video'
+         JOIN episodes e ON e.id = sb.episode_id
+         WHERE e.drama_id = ? AND t.status = 'failed' AND t.deleted_at IS NULL
+         ORDER BY t.updated_at DESC LIMIT 2`
+      ).all(projectId);
+      for (const f of failed) {
+        items.push({
+          type: 'failed-task', severity: 'danger', badge: '任务失败',
+          text: `第 ${f.episode_number} 集镜头视频生成失败 · ${f.error || '可按原输入重试'}`,
+          target: { route: 'storyboard', projectId, episodeId: f.episode_id },
+          action: '重试',
+        });
+      }
+    }
+    // 3. 需要更新（stale 阶段）
+    const stale = db.prepare(
+      `SELECT s.stage, s.episode_id, e.episode_number
+       FROM production_stage_states s JOIN episodes e ON e.id = s.episode_id
+       WHERE e.drama_id = ? AND e.deleted_at IS NULL AND s.status = 'stale'
+       LIMIT 2`
+    ).all(projectId);
+    const stageNames = { script: '剧本', assets: '本集设定', storyboard: '分镜', cut: '成片' };
+    for (const s of stale) {
+      items.push({
+        type: 'stale', severity: 'warn', badge: '需要更新',
+        text: `第 ${s.episode_number} 集 ${stageNames[s.stage]}阶段已过期（上游变化）`,
+        target: { route: s.stage, projectId, episodeId: s.episode_id },
+        action: '查看',
+      });
+    }
+    return items.slice(0, 5);
+  }
+
   function getOverview(projectId) {
     const row = getProject(projectId);
     if (!row) throw httpError('NOT_FOUND', 404, '项目不存在');
@@ -336,7 +436,8 @@ function createProjectService(db, { log = console } = {}) {
       style: { styleId: row.style_id || null, appliesTo: 'future-generations-only' },
       assetsAggregate: { objectCount, missingImageCount },
       nextStep: deriveLastWork(row.id),
-      pending: [],
+      pending: pendingItemsOf(row.id),
+      stageSummary: stageSummaryOf(row.id, episodeCount),
     };
   }
 
