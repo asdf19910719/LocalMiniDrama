@@ -37,7 +37,7 @@
               <span v-if="!item.local_path && !item.image_url" class="st badge danger">文件不可访问</span>
               <span v-else class="st badge neutral">v1</span>
             </div>
-            <div class="info"><b>{{ item.name }}</b><p>{{ descOf(item) }}</p></div>
+            <div class="info"><b>{{ item.name || item.location }}</b><p>{{ descOf(item) }}</p></div>
           </div>
         </div>
       </div>
@@ -280,9 +280,12 @@
 import axios from 'axios'
 import v21 from '@/v21/api.js'
 import { findConflictingItem } from '@/v21/libraryIdentity.js'
+import { v21Toast } from '@/v21/ui.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'LibraryView',
+  mixins: [escMixin],
   data() {
     return {
       type: 'all', q: '', loaded: false,
@@ -309,7 +312,7 @@ export default {
         ['prop', '道具', this.props],
       ]) {
         if (this.type !== 'all' && this.type !== key) continue
-        const filtered = this.q ? items.filter((i) => String(i.name || '').toLowerCase().includes(this.q.toLowerCase())) : items
+        const filtered = this.q ? items.filter((i) => String(i.name || i.location || '').toLowerCase().includes(this.q.toLowerCase())) : items
         if (filtered.length === 0) continue
         groups.push({ key, label, items: filtered })
       }
@@ -329,9 +332,19 @@ export default {
       return p ? p.title : ''
     },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.bindEsc(this.onEsc)
+    this.load()
+  },
   beforeUnmount() { if (this.noticeTimer) clearTimeout(this.noticeTimer) },
   methods: {
+    // Esc 自上而下关本视图的弹层（添加向导 → 用于项目弹窗 → 详情抽屉）
+    onEsc() {
+      if (this.addOpen) { this.closeAdd(); return true }
+      if (this.useOpen) { this.useOpen = false; return true }
+      if (this.detail) { this.detail = null; return true }
+      return false
+    },
     async load() {
       this.loaded = true
       try {
@@ -382,13 +395,14 @@ export default {
           fields: { name: item.name, description: item.description || '' },
         })
         this.useOpen = false
-        alert(`已复制「${item.name}」到目标项目素材（复制独立副本，保留来源记录）`)
+        // 遮罩下的跨层反馈：成功走全局 toast（P3.4 deferred）
+        v21Toast(`已复制「${item.name}」到目标项目素材（复制独立副本，保留来源记录）`)
       } catch (e) {
-        alert(e.message)
+        v21Toast(e.message, 'danger')
       }
     },
     comingSoon(name) {
-      alert(`${name}将在本迭代内启用`)
+      v21Toast(`${name}将在本迭代内启用`)
     },
     // ---------- 添加到资产库（P0-13） ----------
     openAddSelector() {
@@ -566,7 +580,8 @@ export default {
     finishAddSuccess() {
       this.addDone = true
       this.load()
-      this.flashNotice('ok', '已保存到个人资产库')
+      // 入库成功：弹窗仍在遮罩下，notice 会被遮挡 → 用全局 toast 跨层反馈
+      v21Toast(`「${this.addDoneName}」已保存到个人资产库`)
     },
   },
 }

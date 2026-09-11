@@ -245,15 +245,37 @@
         </div>
       </div>
     </div>
+
+    <!-- 危险操作确认 Modal（替代原生 confirm：关闭未保存编辑 / 移入回收站） -->
+    <div v-if="confirmOpen" class="scrim" style="z-index:95" @click="cancelConfirm"></div>
+    <div v-if="confirmOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>请确认</h3>
+          <button class="icon-btn" @click="cancelConfirm"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small" style="line-height:1.6">{{ confirmText }}</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="cancelConfirm">取消</button>
+          <button class="btn danger" @click="runConfirm">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios'
 import v21 from '@/v21/api.js'
+import { v21Toast } from '@/v21/ui.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectOverviewView',
+  mixins: [escMixin],
   data() {
     return {
       overview: null, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
@@ -261,6 +283,7 @@ export default {
       styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
       styleDrawerOpen: false,
       opsOpen: false, opsError: '', exporting: false,
+      confirmOpen: false, confirmText: '', confirmAction: '',
     }
   },
   computed: {
@@ -288,8 +311,20 @@ export default {
       return hit ? (hit.labelZh || hit.id) : (this.selectedStyleId || '未选择')
     },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.bindEsc(this.onEsc)
+    this.load()
+  },
   methods: {
+    // Esc 自上而下关本视图的弹层（确认弹窗 → 风格弹窗 → 风格抽屉 → 编辑抽屉（脏时先确认）→ 项目操作菜单）
+    onEsc() {
+      if (this.confirmOpen) { this.cancelConfirm(); return true }
+      if (this.styleOpen) { this.styleOpen = false; return true }
+      if (this.styleDrawerOpen) { this.styleDrawerOpen = false; return true }
+      if (this.editOpen) { this.closeEdit(); return true }
+      if (this.opsOpen) { this.opsOpen = false; return true }
+      return false
+    },
     async load() {
       this.loadError = ''
       try {
@@ -321,6 +356,8 @@ export default {
         a.click()
         URL.revokeObjectURL(url)
         this.opsOpen = false
+        // 导出成功为跨层反馈（菜单已收起），走全局 toast
+        v21Toast('项目备份已导出，已开始下载')
       } catch (e) {
         const status = e?.response?.status
         this.opsError = `导出项目备份失败：${status ? `HTTP ${status}` : (e.message || '网络错误')}`
@@ -354,7 +391,8 @@ export default {
     },
     closeEdit() {
       if (this.editDirty) {
-        if (!window.confirm('有未保存修改，确定关闭？')) return
+        this.askConfirm('有未保存修改，确定关闭？', 'closeEdit')
+        return
       }
       this.editOpen = false
     },
@@ -404,11 +442,28 @@ export default {
         this.applying = false
       }
     },
-    async deleteProject() {
+    deleteProject() {
       this.opsOpen = false
-      if (!window.confirm(`确定将项目“${this.overview.hero.title}”移入回收站？删除可恢复。`)) return
-      await v21.deleteProject(this.projectId)
-      this.$router.push('/projects')
+      this.askConfirm(`确定将项目「${this.overview.hero.title}」移入回收站？删除可恢复。`, 'deleteProject')
+    },
+    askConfirm(text, action) {
+      this.confirmText = text
+      this.confirmAction = action
+      this.confirmOpen = true
+    },
+    cancelConfirm() {
+      this.confirmOpen = false
+      this.confirmAction = ''
+    },
+    async runConfirm() {
+      const action = this.confirmAction
+      this.cancelConfirm()
+      if (action === 'closeEdit') {
+        this.editOpen = false
+      } else if (action === 'deleteProject') {
+        await v21.deleteProject(this.projectId)
+        this.$router.push('/projects')
+      }
     },
   },
   watch: {

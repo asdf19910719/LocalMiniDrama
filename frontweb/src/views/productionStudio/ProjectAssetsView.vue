@@ -181,15 +181,22 @@
           </template>
         </div>
 
-        <!-- 标签 3：使用位置 -->
+        <!-- 标签 3：使用位置（软删剧集：episodeNumber 为 null 时显示“已删除剧集”且不可点击，P3.1 deferred） -->
         <div v-if="activeTab === 'usage'">
           <p v-if="(detail?.usage || []).length === 0" class="muted empty-tip">尚未被任何剧集使用</p>
           <template v-else>
-            <router-link v-for="u in detail?.usage || []" :key="u.kind + '-' + u.episodeId" class="usage-row" :to="`/projects/${projectId}/episodes/${u.episodeId}/script`">
-              <b>第 {{ u.episodeNumber ?? '—' }} 集</b>
-              <span class="badge">{{ usageLabel(u.kind) }}</span>
-              <span class="muted go-tip">打开剧本 ›</span>
-            </router-link>
+            <template v-for="u in detail?.usage || []" :key="u.kind + '-' + u.episodeId">
+              <router-link v-if="u.episodeNumber != null" class="usage-row" :to="`/projects/${projectId}/episodes/${u.episodeId}/script`">
+                <b>第 {{ u.episodeNumber }} 集</b>
+                <span class="badge">{{ usageLabel(u.kind) }}</span>
+                <span class="muted go-tip">打开剧本 ›</span>
+              </router-link>
+              <div v-else class="usage-row deleted">
+                <b>已删除剧集</b>
+                <span class="badge">{{ usageLabel(u.kind) }}</span>
+                <span class="muted go-tip">已删除 · 不可打开</span>
+              </div>
+            </template>
           </template>
         </div>
 
@@ -378,9 +385,11 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectAssetsView',
+  mixins: [escMixin],
   data() {
     return {
       items: [], type: 'all', q: '',
@@ -438,10 +447,26 @@ export default {
     },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     this.load()
     v21.getOverview(this.projectId).then((o) => { this.projectTitle = o.hero.title }).catch(() => {})
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（清除音色确认 → 音色弹窗 → 批量抽屉（执行中不关不穿透）→ 生成 Sheet → 删除确认 → 详情抽屉 → 新增弹窗）
+    onEsc() {
+      if (this.voiceClearOpen) { this.voiceClearOpen = false; return true }
+      if (this.voiceSheetOpen) { this.voiceSheetOpen = false; return true }
+      if (this.batchOpen) {
+        if (this.batchRunning) return true // 批量执行中不提供 Esc 中断，也不允许穿透关闭底层
+        this.closeBatch()
+        return true
+      }
+      if (this.genSheetOpen) { this.genSheetOpen = false; return true }
+      if (this.removeOpen) { this.removeOpen = false; return true }
+      if (this.detailOpen) { this.detailOpen = false; return true }
+      if (this.createOpen) { this.createOpen = false; return true }
+      return false
+    },
     async load() {
       const data = await v21.listAssets(this.projectId, { type: this.type, q: this.q })
       this.items = data.items || []
@@ -846,6 +871,8 @@ export default {
 .extract-row { display: flex; align-items: center; gap: 8px; }
 .usage-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; color: var(--text); text-decoration: none; font-size: 13px; }
 .usage-row:hover { border-color: var(--line-strong); }
+.usage-row.deleted { opacity: .6; cursor: default; }
+.usage-row.deleted:hover { border-color: var(--line); }
 .usage-row .go-tip { margin-left: auto; font-size: 11.5px; }
 .record-row { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
 .record-row .prompt-txt { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }

@@ -159,12 +159,14 @@
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 const STEP_LABELS = ['选择目标', '自动汇总上下文', '补充本次要求', '预览并创建任务包', '等待外部结果', '选择结果 JSON', '预览导入', '已导入草稿']
 const STEP_KEYS = ['target', 'context', 'note', 'package', 'waiting', 'result', 'preview', 'done']
 
 export default {
   name: 'ExternalAiWizardView',
+  mixins: [escMixin],
   data() {
     return {
       step: 'target',
@@ -195,11 +197,17 @@ export default {
     },
   },
   async mounted() {
+    this.bindEsc(this.onEsc)
     this.blankEpisodes = (await v21.listBlankEpisodes(this.projectId)).items || []
     const taskId = this.$route.query.taskId
     if (taskId) await this.restoreFromTask(String(taskId))
   },
   methods: {
+    // Esc 关本视图唯一的遮罩层（素材快照摘要不一致三选面板）
+    onEsc() {
+      if (this.digestModal) { this.digestModal = false; return true }
+      return false
+    },
     /** 离页恢复：按 URL 中的 taskId 取回任务与其当前步（waiting-result / imported-draft） */
     async restoreFromTask(taskId) {
       try {

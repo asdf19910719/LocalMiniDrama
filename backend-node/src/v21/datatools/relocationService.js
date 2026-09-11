@@ -150,7 +150,7 @@ function createRelocationService({ db, log = console, storageRoot = null } = {})
       if (nameHits.length === 1) {
         status = 'unique';
         candidatesOut = nameHits;
-        evidence = storedHash ? '文件名唯一命中，正在校验内容 hash' : '文件名唯一命中';
+        evidence = storedHash ? '文件名唯一命中，正在校验内容 hash' : '文件名唯一命中（未记录内容 hash，未校验）';
       } else if (nameHits.length > 1) {
         // 文件名多命中：再按大小/hash 收敛
         const sizeHits = missingSize != null ? nameHits.filter((abs) => {
@@ -159,7 +159,7 @@ function createRelocationService({ db, log = console, storageRoot = null } = {})
         if (sizeHits.length === 1) {
           status = 'unique';
           candidatesOut = sizeHits;
-          evidence = '文件名多命中，按文件大小收敛为唯一';
+          evidence = '文件名多命中，按文件大小收敛为唯一（未记录内容 hash，未校验）';
         } else if (sizeHits.length > 1) {
           const hash = nullSafeHash(row.resolvedPath, missingSize);
           const hashHits = hash ? sizeHits.filter((abs) => safeHash(abs) === hash) : [];
@@ -177,7 +177,7 @@ function createRelocationService({ db, log = console, storageRoot = null } = {})
         if (sizeHits.length === 1) {
           status = 'unique';
           candidatesOut = sizeHits;
-          evidence = '无同名文件，按文件大小唯一命中';
+          evidence = '无同名文件，按文件大小唯一命中（未记录内容 hash，未校验）';
         } else {
           evidence = '新目录中未找到可信候选，继续保持离线';
         }

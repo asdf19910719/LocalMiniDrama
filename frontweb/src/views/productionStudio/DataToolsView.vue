@@ -106,6 +106,7 @@
                     <template v-if="migrations.journal.backupDir">备份位置 {{ migrations.journal.backupDir }}<br></template>
                     <template v-if="migrations.journal.status === 'FAILED' && migrations.journal.failureReason">失败原因 {{ migrations.journal.failureReason }}<br></template>
                   </template>
+                  <template v-else-if="!migrationsLoaded">正在读取迁移记录…</template>
                   <template v-else>暂无迁移 journal（本工作区尚未执行过 schema 迁移，无需恢复动作）。</template>
                 </div>
               </div>
@@ -237,6 +238,7 @@
 
 <script>
 import { v21 } from '../../v21/api.js'
+import escMixin from '../../v21/escMixin.js'
 
 const RELOC_STATUS_LABEL = {
   unique: '唯一命中',
@@ -263,6 +265,7 @@ const JOURNAL_STATUS_LABEL = {
 
 export default {
   name: 'DataToolsView',
+  mixins: [escMixin],
   data() {
     return {
       active: 'integrity', scanning: false, checked: false,
@@ -274,7 +277,7 @@ export default {
       relocDir: '', relocScanning: false, relocError: '', relocResult: null,
       relocSelected: [], relocAmbiguous: {}, relocModalOpen: false, relocExecuting: false, relocDone: null,
       migrations: { journal: null, journalPath: '', backups: [] },
-      migrationsLoading: false, migrationsError: '', journalDrawerOpen: false,
+      migrationsLoading: false, migrationsLoaded: false, migrationsError: '', journalDrawerOpen: false,
       tools: [
         { id: 'integrity', label: '完整性检查' },
         { id: 'relocation', label: '媒体重定位' },
@@ -288,6 +291,9 @@ export default {
         paths: { label: '查看路径配置', route: '/settings' },
       },
     }
+  },
+  mounted() {
+    this.bindEsc(this.onEsc)
   },
   computed: {
     selectedBytes() {
@@ -305,6 +311,14 @@ export default {
     },
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（清理终审 → 迁移日志 → 清理确认 → 重定位确认）
+    onEsc() {
+      if (this.cleanupFinalOpen) { this.cleanupFinalOpen = false; return true }
+      if (this.journalDrawerOpen) { this.journalDrawerOpen = false; return true }
+      if (this.cleanupModalOpen) { this.cleanupModalOpen = false; return true }
+      if (this.relocModalOpen) { this.relocModalOpen = false; return true }
+      return false
+    },
     formatBytes(n) {
       const num = Number(n) || 0
       if (num >= 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`
@@ -330,6 +344,8 @@ export default {
           journalPath: result.journalPath || '',
           backups: Array.isArray(result.backups) ? result.backups : [],
         }
+        // M-2：加载完成后才允许显示“暂无迁移 journal”空态（加载中显示“正在读取迁移记录…”）
+        this.migrationsLoaded = true
       } catch (err) {
         this.migrationsError = err.message || '未知错误'
       } finally {
@@ -351,8 +367,9 @@ export default {
       return RELOC_BADGE_CLASS[status] || 'danger'
     },
     isRelocBlocked(row) {
+      // M-1：未找到（none）不算阻断跳过——归入“未找到”计数；仅 hash 不一致与路径越界阻断
       const status = row && row.match && row.match.status
-      return status === 'hash_mismatch' || status === 'path_escape' || status === 'none'
+      return status === 'hash_mismatch' || status === 'path_escape'
     },
     relocKey(row) {
       return `${row.table}|${row.id}|${row.match.candidates[0]}`

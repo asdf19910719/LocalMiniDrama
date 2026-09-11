@@ -54,8 +54,11 @@
 </template>
 
 <script>
+import escMixin from '@/v21/escMixin.js'
+
 export default {
   name: 'MediaLibraryView',
+  mixins: [escMixin],
   data() {
     return { type: 'all', q: '', media: [], detail: null }
   },
@@ -70,8 +73,16 @@ export default {
       return list
     },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.bindEsc(this.onEsc)
+    this.load()
+  },
   methods: {
+    // Esc 关媒体详情抽屉
+    onEsc() {
+      if (this.detail) { this.detail = null; return true }
+      return false
+    },
     async load() {
       // 从项目素材 + 成片导出目录聚合（经 /api/v2 项目资产与已知导出路径）
       const media = []

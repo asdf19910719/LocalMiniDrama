@@ -609,6 +609,22 @@ html.v21-active .pcard .resume { background: var(--panel2) !important; border-co
     linear-gradient(155deg, #14243a 0%, #0c1220 65%, #101c30 100%);
 }
 
+/* --- 全局 toast（跨层反馈：遮罩下的成功/失败提示；App.vue 唯一容器 .v21-toasts） --- */
+.v21-root .v21-toasts {
+  position: fixed; right: 20px; bottom: 20px; z-index: 300;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: none;
+}
+.v21-root .v21-toast {
+  pointer-events: auto; max-width: 360px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line-strong); border-left: 3px solid var(--ok);
+  box-shadow: var(--shadow);
+  font-size: 13px; line-height: 1.55; word-break: break-word;
+}
+.v21-root .v21-toast.danger { border-left-color: var(--danger); }
+
 /* --- 浮层入场动效（尊重系统减弱动态设置） --- */
 @keyframes v21-slide-in-right {
   from { transform: translateX(28px); opacity: 0; }
@@ -626,4 +642,5 @@ html.v21-active .pcard .resume { background: var(--panel2) !important; border-co
   .v21-root .drawer { animation: v21-slide-in-right .2s cubic-bezier(.2, .7, .3, 1); }
   .v21-root .modal { animation: v21-pop-in .18s cubic-bezier(.2, .7, .3, 1); }
   .v21-root .scrim { animation: v21-fade .16s ease; }
+  .v21-root .v21-toast { animation: v21-pop-in .18s cubic-bezier(.2, .7, .3, 1); }
 }

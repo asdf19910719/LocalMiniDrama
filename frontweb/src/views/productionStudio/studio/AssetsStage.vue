@@ -199,9 +199,11 @@
 <script>
 import axios from 'axios'
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'AssetsStage',
+  mixins: [escMixin],
   props: { projectId: String, episodeId: String },
   data() {
     return {
@@ -259,8 +261,19 @@ export default {
       return this.voiceChoice?.url || ''
     },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.bindEsc(this.onEsc)
+    this.load()
+  },
   methods: {
+    // Esc 自上而下关本视图的弹层（URL 弹窗 → 新增状态弹窗 → 音色抽屉 → 素材详情抽屉）
+    onEsc() {
+      if (this.imgUrlOpen) { this.imgUrlOpen = false; return true }
+      if (this.variantModalOpen) { this.variantModalOpen = false; return true }
+      if (this.voiceOpen) { this.voiceOpen = false; return true }
+      if (this.detailOpen) { this.detailOpen = false; return true }
+      return false
+    },
     async load() {
       try {
         const data = await v21.getEpisodeAssets(this.episodeId)

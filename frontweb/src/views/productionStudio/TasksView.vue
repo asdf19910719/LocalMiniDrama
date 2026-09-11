@@ -134,11 +134,32 @@
         <button v-if="retryable(detail)" class="btn primary" @click="retryTask(detail)">按原输入重试</button>
       </div>
     </aside>
+
+    <!-- 取消外部任务确认 Modal（替代原生 confirm） -->
+    <div v-if="cancelConfirmOpen" class="scrim" style="z-index:95" @click="cancelConfirmOpen = false"></div>
+    <div v-if="cancelConfirmOpen" class="modal-wrap" style="z-index:95">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>取消外部 AI 任务</h3>
+          <button class="icon-btn" @click="cancelConfirmOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small" style="line-height:1.6">确认取消该外部 AI 任务？取消后记录保留。</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="cancelConfirmOpen = false">返回</button>
+          <button class="btn danger" @click="confirmCancelTask">确认取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import v21 from '../../v21/api.js'
+import { v21Toast } from '../../v21/ui.js'
+import escMixin from '../../v21/escMixin.js'
 
 const SOURCE_LABELS = { async: '平台任务', external: '外部协作', compose: '成片合成' }
 const SOURCE_TAG_LABELS = { async: '本地任务', external: '外部任务', compose: '合成任务' }
@@ -147,6 +168,7 @@ const STAGE_LABELS = { storyboard: '分镜阶段', cut: '成片阶段', episodes
 
 export default {
   name: 'TasksView',
+  mixins: [escMixin],
   data() {
     return {
       all: [],
@@ -162,6 +184,7 @@ export default {
       detail: null,
       selected: null,
       techOpen: false,
+      cancelConfirmOpen: false, cancelTarget: null,
       lastSync: '',
       loadError: '',
       loading: false,
@@ -196,6 +219,7 @@ export default {
     },
   },
   async mounted() {
+    this.bindEsc(this.onEsc)
     await this.load()
     await this.consumeFocusQuery()
     this.timer = setInterval(() => this.load(), 5000)
@@ -205,6 +229,12 @@ export default {
     clearTimeout(this.qTimer)
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（取消确认 → 详情抽屉）
+    onEsc() {
+      if (this.cancelConfirmOpen) { this.cancelConfirmOpen = false; return true }
+      if (this.detail) { this.closeDetail(); return true }
+      return false
+    },
     buildListParams(page) {
       const params = { status: this.tab, page, page_size: this.pageSize }
       if (this.typeFilter) params.type = this.typeFilter
@@ -403,7 +433,7 @@ export default {
     openExternalWizard(task) {
       const pid = task?.target?.projectId
       if (!pid) {
-        window.alert('缺少项目信息，无法打开外部向导')
+        v21Toast('缺少项目信息，无法打开外部向导', 'danger')
         return
       }
       // 带 taskId 让外部 AI 向导直接恢复到该任务
@@ -412,25 +442,32 @@ export default {
     openCutStage(task) {
       const tg = task?.target
       if (!tg || !tg.projectId || !tg.episodeId) {
-        window.alert('缺少剧集信息，无法打开成片页')
+        v21Toast('缺少剧集信息，无法打开成片页', 'danger')
         return
       }
       // 合成任务的重试入口在成片阶段页（聚合 sourceId 是剪辑版本 id，不适用 /video-tasks/:id/retry）
       this.$router.push(`/projects/${tg.projectId}/episodes/${tg.episodeId}/cut`)
     },
-    async cancelTask(task) {
+    cancelTask(task) {
       // 本期仅外部协作任务支持在任务中心直接取消；其余类型给说明性提示（到对应阶段页操作）
       if (task.source !== 'external') {
-        window.alert('该任务类型暂不支持在任务中心直接取消，请打开对象进入对应阶段页（分镜/成片）操作。')
+        v21Toast('该任务类型暂不支持在任务中心直接取消，请打开对象进入对应阶段页（分镜/成片）操作。', 'danger')
         return
       }
-      if (!window.confirm('确认取消该外部 AI 任务？取消后记录保留。')) return
+      this.cancelTarget = task
+      this.cancelConfirmOpen = true
+    },
+    async confirmCancelTask() {
+      const task = this.cancelTarget
+      this.cancelConfirmOpen = false
+      this.cancelTarget = null
+      if (!task) return
       try {
         await v21.cancelExternalTask(task.sourceId)
         this.closeDetail()
         await this.load()
       } catch (e) {
-        window.alert(e?.message || '取消失败，请稍后重试')
+        v21Toast(e?.message || '取消失败，请稍后重试', 'danger')
       }
     },
     async retryTask(task) {
@@ -439,7 +476,7 @@ export default {
         this.closeDetail()
         await this.load()
       } catch (e) {
-        window.alert(e?.message || '该任务类型暂不支持自动重试，请在原页面按原输入重新提交')
+        v21Toast(e?.message || '该任务类型暂不支持自动重试，请在原页面按原输入重新提交', 'danger')
       }
     },
   },

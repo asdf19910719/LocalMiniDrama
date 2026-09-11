@@ -78,18 +78,40 @@
         </div>
       </div>
     </div>
+
+    <!-- 移入回收站确认 Modal（替代原生 confirm） -->
+    <div v-if="deleteConfirmOpen" class="scrim" style="z-index:80" @click="cancelDeleteProject"></div>
+    <div v-if="deleteConfirmOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:420px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--danger)"><use href="#i-trash"/></svg>
+          <h3>移入回收站</h3>
+          <button class="icon-btn" @click="cancelDeleteProject"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small" style="line-height:1.6">确定将项目「{{ deleteTarget?.title }}」移入回收站？删除可恢复（保留 30 天）。</p>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="cancelDeleteProject">取消</button>
+          <button class="btn danger" @click="confirmDeleteProject">移入回收站</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ProjectsView',
+  mixins: [escMixin],
   data() {
     return {
       items: [], total: 0, q: '', status: 'all', sort: 'recent',
       searchTimer: null, openMenuId: null,
+      deleteConfirmOpen: false, deleteTarget: null,
       statusOptions: [
         { key: 'all', label: '全部' },
         { key: 'making', label: '制作中' },
@@ -103,6 +125,7 @@ export default {
     '$route.query': { immediate: true, handler() { this.syncFromUrl(); this.load() } },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     this.globalClose = () => { this.openMenuId = null }
     window.addEventListener('click', this.globalClose)
   },
@@ -110,6 +133,12 @@ export default {
     window.removeEventListener('click', this.globalClose)
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（确认弹窗 → 卡片操作菜单）
+    onEsc() {
+      if (this.deleteConfirmOpen) { this.cancelDeleteProject(); return true }
+      if (this.openMenuId != null) { this.openMenuId = null; return true }
+      return false
+    },
     syncFromUrl() {
       this.q = String(this.$route.query.q || '')
       this.status = String(this.$route.query.status || 'all')
@@ -167,9 +196,19 @@ export default {
     toggleMenu(cardId) {
       this.openMenuId = this.openMenuId === cardId ? null : cardId
     },
-    async deleteProject(card) {
+    deleteProject(card) {
       this.openMenuId = null
-      if (!window.confirm(`确定将项目“${card.title}”移入回收站？删除可恢复。`)) return
+      this.deleteTarget = card
+      this.deleteConfirmOpen = true
+    },
+    cancelDeleteProject() {
+      this.deleteConfirmOpen = false
+      this.deleteTarget = null
+    },
+    async confirmDeleteProject() {
+      const card = this.deleteTarget
+      this.cancelDeleteProject()
+      if (!card) return
       await v21.deleteProject(card.id)
       this.load()
     },

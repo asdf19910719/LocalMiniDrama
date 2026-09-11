@@ -97,26 +97,37 @@
         <router-view />
       </div>
     </div>
+
+    <!-- 全局 toast 容器（唯一；跨层反馈：如遮罩下的成功提示） -->
+    <div class="v21-toasts" aria-live="polite">
+      <div v-for="t in toasts" :key="t.id" class="v21-toast" :class="t.type">{{ t.message }}</div>
+    </div>
   </div>
 </template>
 
 <script>
+import { dispatchEsc } from './v21/escBus.js'
+
 export default {
   name: 'AppV21',
   data() {
-    return { moreToolsOpen: false }
+    return { moreToolsOpen: false, toasts: [] }
   },
   mounted() {
     document.documentElement.classList.add('v21-active')
     document.body.classList.add('v21-active')
     document.addEventListener('click', this.onDocClick)
     document.addEventListener('keydown', this.onKeydown)
+    window.addEventListener('v21:toast', this.onToastEvent)
   },
   unmounted() {
     document.documentElement.classList.remove('v21-active')
     document.body.classList.remove('v21-active')
     document.removeEventListener('click', this.onDocClick)
     document.removeEventListener('keydown', this.onKeydown)
+    window.removeEventListener('v21:toast', this.onToastEvent)
+    for (const t of this.toasts) clearTimeout(t.timer)
+    this.toasts = []
   },
   methods: {
     isActive(prefix) {
@@ -127,10 +138,30 @@ export default {
       this.moreToolsOpen = false
     },
     onKeydown(e) {
-      if (e.key === 'Escape') this.moreToolsOpen = false
+      if (e.key !== 'Escape') return
+      // 先分发给订阅视图（最上层先关）；无人消费时才落到本壳层的工具弹层
+      if (!dispatchEsc()) this.moreToolsOpen = false
     },
     closeMoreTools() {
       this.moreToolsOpen = false
+    },
+    onToastEvent(e) {
+      const d = (e && e.detail) || {}
+      const toast = {
+        message: String(d.message || ''),
+        type: d.type === 'danger' ? 'danger' : 'ok',
+        id: d.id != null ? d.id : Date.now() + Math.random(),
+      }
+      // 3.5s 自动出队（P3.4 deferred：遮罩下的跨层反馈）
+      toast.timer = setTimeout(() => this.removeToast(toast.id), 3500)
+      this.toasts.push(toast)
+    },
+    removeToast(id) {
+      const at = this.toasts.findIndex((t) => t.id === id)
+      if (at >= 0) {
+        clearTimeout(this.toasts[at].timer)
+        this.toasts.splice(at, 1)
+      }
     },
   },
 }

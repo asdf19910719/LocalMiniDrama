@@ -247,6 +247,7 @@
 <script>
 import axios from 'axios'
 import { v21 } from '../../v21/api.js'
+import escMixin from '../../v21/escMixin.js'
 
 function clampIntField(value, min, max) {
   const n = Number(value)
@@ -255,6 +256,7 @@ function clampIntField(value, min, max) {
 
 export default {
   name: 'SettingsView',
+  mixins: [escMixin],
   data() {
     return {
       dirty: false, migrateOpen: false,
@@ -298,6 +300,7 @@ export default {
     form: { deep: true, handler() { this.dirty = JSON.stringify(this.form) !== this.savedForm } },
   },
   async mounted() {
+    this.bindEsc(this.onEsc)
     await Promise.all([
       axios.get('/api/v1/settings/language').then((r) => {
         const lang = r.data?.data?.language
@@ -326,6 +329,16 @@ export default {
     this.leaveConfirmOpen = true
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（离开守卫确认 → 更改工作区向导；迁移执行中不允许关闭）
+    onEsc() {
+      if (this.leaveConfirmOpen) { this.cancelLeave(); return true }
+      if (this.migrateOpen) {
+        if (this.migrateStep === 'executing') return true
+        this.migrateOpen = false
+        return true
+      }
+      return false
+    },
     formatBytes(n) {
       const num = Number(n) || 0
       if (num >= 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`

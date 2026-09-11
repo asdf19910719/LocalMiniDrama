@@ -264,9 +264,12 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import { v21Toast } from '@/v21/ui.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'QuickCreateView',
+  mixins: [escMixin],
   data() {
     return {
       configOpen: false, confirmOpen: false, kind: 'image', prompt: '', busy: false,
@@ -283,9 +286,19 @@ export default {
     }
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     v21.listProjects({}).then((d) => { this.projects = d.items || [] }).catch(() => {})
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（放弃确认 → 绑定 / 分镜弹窗 → 确认抽屉（busy 时不动）→ 配置抽屉）
+    onEsc() {
+      if (this.abandonOpen) { this.abandonOpen = false; return true }
+      if (this.bindOpen) { this.bindOpen = false; return true }
+      if (this.shotOpen) { this.shotOpen = false; return true }
+      if (this.confirmOpen) { this.dismissConfirm(); return true }
+      if (this.configOpen) { this.configOpen = false; return true }
+      return false
+    },
     openConfig(kind) {
       this.kind = kind
       this.prompt = ''
@@ -371,7 +384,9 @@ export default {
         if (this.kind === 'video') body.description = `[视频] ${this.result.url} ${body.description}`
         await v21.addToLibrary(this.libraryKind, body)
         this.markCurrent('已归档')
-        this.notice = '已加入个人资产库'
+        // 归档成功会清空 result，页内 notice 随之消失 → 用全局 toast 跨层反馈
+        v21Toast('已加入个人资产库')
+        this.notice = ''
         this.noticeOk = true
         this.result = null
       } catch (e) {
@@ -431,7 +446,8 @@ export default {
           if (!target) return
           // B6/4.5：URL 写入所选素材的新候选（仅入候选，不改当前图）
           await v21.uploadAssetCandidate(target.assetType, target.id, this.result.url)
-          this.notice = `已写入${target.typeLabel}素材「${target.name || target.id}」候选，可在项目素材页设为当前`
+          v21Toast(`已写入${target.typeLabel}素材「${target.name || target.id}」候选，可在项目素材页设为当前`)
+          this.notice = ''
         } else {
           // 无合适素材：保留原自动创建路径作为回退；场景类型带 location
           const fields = {
@@ -444,7 +460,8 @@ export default {
             ? await v21.generateAssetCandidate(this.bindProjectId, { type: this.bindNewType, assetId: created.id, prompt: this.prompt })
             : null
           if (cand) await v21.useCandidate({ type: this.bindNewType, assetId: created.id, candidateId: cand.candidateId })
-          this.notice = '已在项目中新建素材并绑定'
+          v21Toast('已在项目中新建素材并绑定')
+          this.notice = ''
         }
         this.noticeOk = true
         this.markCurrent('已归档')
@@ -503,7 +520,8 @@ export default {
       try {
         await v21.uploadShotImage(this.shotShotId, { imageUrl: this.result.url })
         this.markCurrent('已归档')
-        this.notice = '已作为该镜头分镜图候选，可在分镜页设为当前'
+        v21Toast('已作为该镜头分镜图候选，可在分镜页设为当前')
+        this.notice = ''
         this.noticeOk = true
         this.result = null
         this.shotOpen = false

@@ -324,9 +324,11 @@
 <script>
 import { inject } from 'vue'
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'ScriptStage',
+  mixins: [escMixin],
   props: { projectId: String, episodeId: String },
   setup() {
     const studioSave = inject('studioSave', null)
@@ -411,6 +413,7 @@ export default {
     },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     this.load()
     this.keyHandler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -424,6 +427,16 @@ export default {
     window.removeEventListener('keydown', this.keyHandler)
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（版本比较 → AI 候选 → 确认摘要 → 历史抽屉 → AI 浮层 / 菜单）
+    onEsc() {
+      if (this.diffOpen) { this.diffOpen = false; return true }
+      if (this.candidateOpen) { this.candidateOpen = false; return true }
+      if (this.confirmOpen) { this.confirmOpen = false; return true }
+      if (this.historyOpen) { this.historyOpen = false; return true }
+      if (this.aiPop.visible) { this.aiPop = { ...this.aiPop, visible: false }; return true }
+      if (this.aiMenuOpen) { this.aiMenuOpen = false; return true }
+      return false
+    },
     setSave(text, error = false) {
       if (this.studioSave) {
         this.studioSave.text = text

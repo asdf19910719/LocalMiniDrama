@@ -309,11 +309,14 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import { v21Toast } from '@/v21/ui.js'
+import escMixin from '@/v21/escMixin.js'
 
 const STAGE_ORDER = ['script', 'assets', 'storyboard', 'cut']
 
 export default {
   name: 'ProjectEpisodesView',
+  mixins: [escMixin],
   data() {
     return {
       items: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
@@ -364,6 +367,7 @@ export default {
     },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     // 消费 ?imported=<episodeId>：顶部横幅 + 高亮该行
     const imported = this.$route.query.imported
     if (imported) this.importedId = String(imported)
@@ -374,6 +378,18 @@ export default {
     this.load()
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（导入来源抽屉 → 排序面板 → 目标时长 → 重命名 → 新建 → 删除确认 → 行内菜单 / 导入菜单）
+    onEsc() {
+      if (this.importSourceOpen) { this.importSourceOpen = false; return true }
+      if (this.reorderPanelOpen) { this.reorderPanelOpen = false; return true }
+      if (this.targetTarget) { this.targetTarget = null; return true }
+      if (this.renameTarget) { this.renameTarget = null; return true }
+      if (this.newEpOpen) { this.newEpOpen = false; return true }
+      if (this.deleteTarget) { this.deleteTarget = null; return true }
+      if (this.rowMenuId != null) { this.rowMenuId = null; return true }
+      if (this.importOpen) { this.importOpen = false; return true }
+      return false
+    },
     async load() {
       const params = { q: this.q, sort: this.sort }
       if (this.status === 'archived') params.status = 'archived'
@@ -626,6 +642,8 @@ export default {
         await v21.restoreEpisode(ep.id)
         this.flashId = String(ep.id)
         this.notice = ''
+        // P3.6：恢复成功为跨层反馈（列表切回全部页签），用全局 toast 提示
+        v21Toast(`已恢复第 ${ep.episodeNumber} 集`)
         await this.load()
       } catch (e) {
         this.notice = e.message || '恢复失败'

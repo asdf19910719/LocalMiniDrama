@@ -270,6 +270,7 @@
 <script>
 import { v21 } from '@/v21/api'
 import { buildExportPayload, parseImportedConfig, diffImportedConfig, buildUpdateBody } from '@/v21/aiConfigTransfer'
+import escMixin from '@/v21/escMixin.js'
 
 const CHANNEL_LABELS = { api: 'API 中转站', chatgpt_web: 'ChatGPT 网页' }
 const SOURCE_LABELS = { global_default: '全局默认', project_default: '项目默认', install_default: '安装默认' }
@@ -281,6 +282,7 @@ const STATUS_META = {
 
 export default {
   name: 'AiConfigV21View',
+  mixins: [escMixin],
   data() {
     return {
       loading: false,
@@ -335,10 +337,17 @@ export default {
     projectId() { this.load() },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     this.loadProjects()
     this.load()
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（导出确认 → 编辑抽屉）
+    onEsc() {
+      if (this.exportConfirmOpen) { this.exportConfirmOpen = false; return true }
+      if (this.editOpen) { this.editOpen = false; return true }
+      return false
+    },
     channelLabel(c) { return CHANNEL_LABELS[c] || c || '—' },
     sourceLabel(s) { return SOURCE_LABELS[s] || s || '—' },
     statusMeta(status) { return STATUS_META[status] || { label: status || '未知', cls: 'outline' } },

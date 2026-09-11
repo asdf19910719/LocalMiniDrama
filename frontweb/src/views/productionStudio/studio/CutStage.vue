@@ -159,6 +159,7 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 const BLOCKER_REASONS = {
   generating: '视频正在生成，请等待完成或回分镜查看',
@@ -169,6 +170,7 @@ const BLOCKER_REASONS = {
 
 export default {
   name: 'CutStage',
+  mixins: [escMixin],
   props: { projectId: String, episodeId: String },
   data() {
     return {
@@ -229,8 +231,17 @@ export default {
       return (this.review.shots || []).find((s) => s.shotId === this.waiver.shotId) || null
     },
   },
-  mounted() { this.load() },
+  mounted() {
+    this.bindEsc(this.onEsc)
+    this.load()
+  },
   methods: {
+    // Esc 自上而下关本视图的弹层（豁免原因弹窗 → 生成成片确认弹窗）
+    onEsc() {
+      if (this.waiver.open) { this.closeWaiver(); return true }
+      if (this.composeConfirmOpen) { this.composeConfirmOpen = false; return true }
+      return false
+    },
     pad(n) {
       return String(n ?? '').padStart(2, '0')
     },

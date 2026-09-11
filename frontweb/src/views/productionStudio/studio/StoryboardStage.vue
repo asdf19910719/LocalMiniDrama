@@ -572,9 +572,11 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import escMixin from '@/v21/escMixin.js'
 
 export default {
   name: 'StoryboardStage',
+  mixins: [escMixin],
   props: { projectId: String, episodeId: String },
   beforeUnmount() {
     if (this.pollTimer) clearInterval(this.pollTimer)
@@ -690,6 +692,7 @@ export default {
     },
   },
   mounted() {
+    this.bindEsc(this.onEsc)
     this.keyHandler = (e) => {
       const tag = (e.target.tagName || '').toLowerCase()
       if (['input', 'textarea', 'select'].includes(tag)) return
@@ -703,6 +706,22 @@ export default {
     window.removeEventListener('keydown', this.keyHandler)
   },
   methods: {
+    // Esc 自上而下关本视图的弹层（z95 的 URL 弹窗最先，其次各 Modal / 抽屉，最后非遮罩浮层）
+    onEsc() {
+      if (this.imgUrlOpen) { this.imgUrlOpen = false; return true }
+      if (this.videoSheetOpen) { this.videoSheetOpen = false; return true }
+      if (this.diffOpen) { this.diffOpen = false; return true }
+      if (this.batchOpen) { this.batchOpen = false; return true }
+      if (this.refManageOpen) { this.refManageOpen = false; return true }
+      if (this.assetPreviewOpen) { this.assetPreviewOpen = false; return true }
+      if (this.historyOpen) { this.historyOpen = false; return true }
+      if (this.h3SheetOpen) { this.h3SheetOpen = false; return true }
+      if (this.imgPreviewOpen) { this.imgPreviewOpen = false; return true }
+      if (this.cutSummaryOpen) { this.cutSummaryOpen = false; return true }
+      if (this.moreOpen) { this.moreOpen = false; return true }
+      if (this.imgPromptOpen) { this.imgPromptOpen = false; return true }
+      return false
+    },
     async load() {
       const data = await v21.getStoryboard(this.episodeId)
       this.shots = data.shots || []
