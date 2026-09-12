@@ -359,6 +359,36 @@ function createEpisodeImportV21(db, { log = console } = {}) {
         );
       const storyboardId = Number(info.lastInsertRowid);
 
+      // 提示词与外部内容补写：canonical 的 base_video_prompt 及转换器保留在 extensions 中的
+      // 万能提示词/画面描述/声音设计/转场等，写入 storyboards 对应列（无则保持原值，零侵入）。
+      const extensions = shot.extensions && typeof shot.extensions === 'object' ? shot.extensions : null;
+      const updates = [];
+      const params = [];
+      const pushUpdate = (column, value) => {
+        updates.push(`${column} = ?`);
+        params.push(value);
+      };
+      if (shot.base_video_prompt) pushUpdate('video_prompt', shot.base_video_prompt);
+      if (extensions) {
+        if (extensions.image_prompt) pushUpdate('image_prompt', extensions.image_prompt);
+        if (extensions.universal_segment_text) pushUpdate('universal_segment_text', extensions.universal_segment_text);
+        if (extensions.description) pushUpdate('description', extensions.description);
+        if (extensions.shot_type) pushUpdate('shot_type', extensions.shot_type);
+        if (extensions.audio_description) pushUpdate('audio_description', JSON.stringify(extensions.audio_description));
+        if (extensions.transition && extensions.transition.type) pushUpdate('transition', extensions.transition.type);
+        pushUpdate('is_primary', extensions.is_primary ? 1 : 0);
+      }
+      const dialogueText = (shot.timed_segments || [])
+        .flatMap((segment) => segment.dialogue || [])
+        .map((line) => `${line.speaker_ref ? line.speaker_ref + '：' : ''}${line.text}`)
+        .join('\n');
+      if (dialogueText) pushUpdate('dialogue', dialogueText);
+      const narrationText = (shot.audio?.narration || []).join('\n');
+      if (narrationText) pushUpdate('narration', narrationText);
+      if (updates.length > 0) {
+        db.prepare(`UPDATE storyboards SET ${updates.join(', ')} WHERE id = ?`).run(...params, storyboardId);
+      }
+
       // 时段
       let seq = 0;
       for (const segment of shot.timed_segments || []) {

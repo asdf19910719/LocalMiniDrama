@@ -303,6 +303,7 @@ function basicResponseSchema() {
       version: { const: '2' },
       prompt_contract: { const: 'base_prompt' },
       package_id: { type: 'string', minLength: 1 },
+      assets_digest: { type: 'string', minLength: 1 },
       generator: { type: 'object' },
       audio_plan: { type: 'object' },
       episode: { type: 'object' },

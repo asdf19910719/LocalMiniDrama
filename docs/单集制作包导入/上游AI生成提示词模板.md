@@ -16,7 +16,7 @@
 
 1. 最终只返回一个 UTF-8 JSON 对象，不要 Markdown 代码围栏、解释、注释或尾随逗号。
 2. `schema` 必须是 `local-mini-drama.external-ai-result`，`version` 必须是字符串 `2`，`prompt_contract` 必须是 `base_prompt`。
-3. `package_id` 必须从 `任务说明.md` 原样复制，不能自行生成或修改。
+3. `package_id` 与 `assets_digest` 必须从 `任务说明.md` 顶部或 `任务回执.json` 原样复制（逐字符，不能自行生成、截断或修改）。
 4. 只整理当前会话中已经确认的本集剧情，不擅自续写下一集或改写既有世界观。
 5. `当前项目资产.json` 中的资产是只读的：只通过其中的 `source_key` 引用，不要在 `new_assets` 重复声明，也不要修改其名称、性格、外貌、状态或提示词。
 6. 只有本集首次出现的新人物、新场景、新道具，以及已有人物在本集首次出现的新状态，才能写入 `new_assets`。
@@ -30,7 +30,7 @@
 
 提交前自检：
 
-- `package_id` 与任务说明完全一致；
+- `package_id` 与 `assets_digest` 和任务回执完全一致；
 - `version` 为 `2` 且 `prompt_contract` 为 `base_prompt`；
 - 本集集号与任务目标一致；
 - 已有资产全部引用 `source_key`，新资产全部使用唯一 `local_ref`；

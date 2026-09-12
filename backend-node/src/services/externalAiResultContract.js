@@ -197,6 +197,9 @@ const EXTERNAL_AI_RESULT_SCHEMA = {
     version: { const: '2' },
     prompt_contract: { const: 'base_prompt' },
     package_id: str(true),
+    // 导入校验回执：任务说明要求外部 AI 从任务回执中逐字符复制；Schema 必须声明该字段，
+    // 否则「必须复制」的说明与 additionalProperties:false 的 Schema 自相矛盾（P1 遗留修复）。
+    assets_digest: str(false),
     generator: strictObject({
       name: str(true),
       model: str(false),

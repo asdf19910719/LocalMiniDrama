@@ -2,6 +2,7 @@
   "schema": "local-mini-drama.external-ai-result",
   "version": "2",
   "package_id": "extai_请替换为项目生成的真实任务ID",
+  "assets_digest": "请替换为任务回执.json中的assets_digest原值",
   "generator": {
     "name": "外部 AI",
     "model": "示例模型",

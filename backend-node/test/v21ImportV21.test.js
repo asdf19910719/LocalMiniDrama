@@ -357,8 +357,132 @@ function guestCharacterWithStates() {
   ];
 }
 
-test('外部 AI 回流：adaptExternalAiResultV21 合并新资产并生成规范 2.1 包', () => {
-  const { db, wizard } = setup();
+/** 构造严格符合任务包《返回格式.schema.json》的外部结果（storyboards/local_ref 形态） */
+function packageFormatResult(task, { withDigest = true } = {}) {
+  const result = {
+    schema: 'local-mini-drama.external-ai-result',
+    version: '2',
+    prompt_contract: 'base_prompt',
+    package_id: task.packageId,
+    episode: {
+      episode_number: task.targetEpisodeNumber,
+      title: '客房来电',
+      summary: '夜班服务员发现不存在的房间发来订单。',
+      script: '内景·酒店走廊·深夜\n林夏走到 208 门前。',
+      duration_target_seconds: 8,
+    },
+    new_assets: {
+      characters: [
+        {
+          local_ref: 'new_guest',
+          name: '陌生访客',
+          role: 'supporting',
+          description: '深夜到访的神秘访客。',
+          personality: '神秘',
+          appearance: '黑色大衣',
+          base_image_prompt: '黑色大衣访客',
+          negative_prompt: '模糊',
+          voice_profile: '低沉男声',
+          variants: [
+            {
+              local_ref: 'new_guest_default',
+              name: '默认',
+              description: '雨夜',
+              appearance: '湿透黑大衣',
+              base_image_prompt: '雨夜黑大衣访客',
+              negative_prompt: '模糊',
+              is_default: true,
+            },
+            {
+              local_ref: 'new_guest_wet',
+              name: '更湿',
+              description: '更湿的大衣',
+              appearance: '滴水',
+              base_image_prompt: '滴水黑大衣访客',
+              negative_prompt: '模糊',
+              is_default: false,
+            },
+          ],
+        },
+      ],
+      character_variants: [],
+      scenes: [
+        {
+          local_ref: 'new_corridor',
+          name: '208 客房走廊',
+          state: '深夜',
+          description: '老酒店二层走廊尽头的客房门',
+          atmosphere: '冷清、压迫',
+          base_image_prompt: '深夜酒店走廊尽头客房门',
+          negative_prompt: '模糊',
+        },
+      ],
+      props: [
+        {
+          local_ref: 'new_keycard',
+          name: '13 层门卡',
+          type: '钥匙',
+          description: '刷不开 208 的门卡',
+          base_image_prompt: '旧式酒店门卡特写',
+          negative_prompt: '模糊',
+        },
+      ],
+    },
+    storyboards: [
+      {
+        local_ref: 'sb_01',
+        storyboard_number: 1,
+        title: '林夏确认声音来自空房内部',
+        description: '林夏在空房门口听见电话铃声。',
+        duration_seconds: 8,
+        scene_ref: 'new_corridor',
+        character_refs: [
+          {
+            character_ref: 'new_guest',
+            variant_ref: 'new_guest_default',
+            reference_role: 'primary',
+            sort_order: 1,
+            framing_note: '访客在门口中景',
+          },
+        ],
+        prop_refs: ['new_keycard'],
+        shot_type: 'medium',
+        camera_angle: 'eye_level',
+        camera_movement: 'slow_push_in',
+        composition: '林夏位于右侧，房门占据左侧',
+        action: {
+          start: '林夏缓慢转头看向门口',
+          progression: '电话铃声持续，门缝渗出光线',
+          end: '门卡指示灯由红转绿',
+        },
+        dialogue: [{ speaker: '陌生访客', line: '谁在那里？', performance: '低沉' }],
+        narration: '',
+        audio_description: {
+          ambience: ['走廊空调低鸣'],
+          sound_effects: ['电话铃'],
+          dialogue_treatment: '对白清晰',
+          silence: false,
+          music_cue: { mode: 'mute', intensity: 0, start: null, end: null },
+        },
+        transition: {
+          type: 'cut',
+          duration: 0,
+          visual_description: '硬切',
+          audio_bridge: { mode: 'none', duration_ms: 0, description: '无音频桥接' },
+        },
+        base_image_prompt: '深夜酒店走廊，林夏回头看向 208 房门，电影写实',
+        base_video_prompt: '镜头缓推，林夏转头，门卡指示灯转绿',
+        universal_segment_text: '@图片1 深夜走廊，@图片2 站在门口，@图片3 在手中',
+        is_primary: true,
+      },
+    ],
+  };
+  if (withDigest) result.assets_digest = task.assetsDigest;
+  return result;
+}
+
+test('外部 AI 回流：convertExternalResultToV21 合并新资产并生成规范 2.1 包', () => {
+  const { wizard } = setup();
   const created = wizard.createPackage(1, { mode: 'create_new', taskNote: '本集保持雨夜氛围' });
   const task = wizard.getTask(created.taskId);
   assert.equal(task.status, 'waiting');
@@ -366,89 +490,23 @@ test('外部 AI 回流：adaptExternalAiResultV21 合并新资产并生成规范
   assert.equal(task.taskNote, '本集保持雨夜氛围');
   assert.match(task.contextVersion, /^[a-f0-9]{64}$/);
 
-  const result = {
-    schema: 'local-mini-drama.external-ai-result',
-    version: '2',
-    package_id: task.packageId,
-    assets_digest: task.assetsDigest,
-    generator: { name: 'ChatGPT' },
-    episode: {
-      episode_number: task.targetEpisodeNumber,
-      title: '客房来电',
-      summary: '夜班服务员发现不存在的房间发来订单。',
-      script: '内景·酒店走廊·深夜',
-      duration_target_seconds: 8,
-    },
-    new_assets: {
-      characters: [
-        {
-          source_key: 'char_new_guest',
-          name: '陌生访客',
-          role: 'supporting',
-          description: '深夜到访',
-          personality: '神秘',
-          appearance: '黑色大衣',
-          base_image_prompt: '黑色大衣访客',
-          negative_prompt: '模糊',
-          voice_profile: '低沉男声',
-          states: [
-            {
-              source_key: 'state_guest_default',
-              name: '默认',
-              description: '雨夜',
-              appearance: '湿透黑大衣',
-              is_default: true,
-            },
-          ],
-        },
-      ],
-      character_states: [
-        {
-          character_ref: 'char_new_guest',
-          source_key: 'state_guest_wet',
-          name: '更湿',
-          description: '更湿的大衣',
-          appearance: '滴水',
-          is_default: false,
-        },
-      ],
-      scene_assets: validPackage().assets.scene_assets,
-      props: validPackage().assets.props,
-    },
-    story_scenes: validPackage().story_scenes,
-    shot_packages: resultShotPackages(),
-  };
-  const adapted = wizard.adaptResult(created.taskId, result);
-  assert.equal(adapted.schema, 'local-mini-drama.episode-package');
-  assert.equal(adapted.version, '2.1');
-  assert.equal(adapted.assets.characters.length, 1, '既有项目无人物，合并结果只有新人物');
-  assert.equal(adapted.assets.characters[0].states.length, 2, 'character_states 追加为状态');
-  const guestRefs = JSON.stringify(adapted.shot_packages);
-  assert.ok(guestRefs.includes('state_guest_default'), '镜头引用指向结果声明的人物状态');
-  assert.equal(adapted.story_scenes.length, 1);
-  assert.equal(adapted.shot_packages.length, 1);
+  const adapted = wizard.adaptResult(created.taskId, packageFormatResult(task));
+  assert.equal(adapted.canonical.schema, 'local-mini-drama.episode-package');
+  assert.equal(adapted.canonical.version, '2.1');
+  assert.equal(adapted.canonical.assets.characters.length, 1, '既有项目无人物，合并结果只有新人物');
+  assert.equal(adapted.canonical.assets.characters[0].states.length, 2, 'variants 全部转换为状态');
+  const stateRef = adapted.canonical.shot_packages[0].timed_segments[0].character_state_refs[0];
+  assert.match(stateRef, /^ai_.*guest_default$/, '镜头引用应解析为分配后的状态 source_key');
+  assert.equal(adapted.canonical.story_scenes.length, 1);
+  assert.equal(adapted.canonical.shot_packages.length, 1);
+  assert.equal(adapted.assetDigestStatus, 'current');
 });
 
 test('外部 AI 回流：篡改 package_id 或 assets_digest 被拒', () => {
   const { wizard } = setup();
   const created = wizard.createPackage(1, { mode: 'create_new' });
   const task = wizard.getTask(created.taskId);
-  const base = {
-    schema: 'local-mini-drama.external-ai-result',
-    version: '2',
-    package_id: task.packageId,
-    assets_digest: task.assetsDigest,
-    episode: {
-      episode_number: task.targetEpisodeNumber,
-      title: 'T',
-      summary: 'S',
-      script: 'X',
-      duration_target_seconds: 8,
-    },
-    new_assets: { characters: [], character_states: [], scene_assets: validPackage().assets.scene_assets, props: validPackage().assets.props },
-    story_scenes: validPackage().story_scenes,
-    shot_packages: validPackage().shot_packages,
-  };
+  const base = packageFormatResult(task);
 
   assert.throws(
     () => wizard.adaptResult(created.taskId, { ...base, package_id: 'extai_wrong' }),
@@ -464,27 +522,7 @@ test('外部 AI 回流端到端：任务包 → 校验 → 预览 → 导入（�
   const { db, wizard } = setup();
   const created = wizard.createPackage(1, { mode: 'create_new', taskNote: '' });
   const task = wizard.getTask(created.taskId);
-  const result = {
-    schema: 'local-mini-drama.external-ai-result',
-    version: '2',
-    package_id: task.packageId,
-    assets_digest: task.assetsDigest,
-    episode: {
-      episode_number: task.targetEpisodeNumber,
-      title: '客房来电',
-      summary: '夜班服务员发现不存在的房间发来订单。',
-      script: '内景·酒店走廊·深夜\n林夏走到 208 门前。',
-      duration_target_seconds: 8,
-    },
-    new_assets: {
-      characters: guestCharacterWithStates(),
-      character_states: [],
-      scene_assets: validPackage().assets.scene_assets,
-      props: validPackage().assets.props,
-    },
-    story_scenes: validPackage().story_scenes,
-    shot_packages: resultShotPackages(),
-  };
+  const result = packageFormatResult(task);
   const validation = wizard.validateResult(created.taskId, JSON.stringify(result));
   assert.equal(validation.ok, true, JSON.stringify(validation.checks));
   const checkMap = Object.fromEntries(validation.checks.map((c) => [c.id, c.ok]));

@@ -467,4 +467,7 @@ function adaptExternalAiResult(db, result, task) {
 
 module.exports = {
   adaptExternalAiResult,
+  packagePrefix,
+  keyPart,
+  normalizeUniversalSegmentText,
 };

@@ -113,6 +113,7 @@ describe('externalAiTaskBundleService', () => {
     assert.equal(first.asset_manifest.project.style.readonly, true);
     assert.equal('style_prompt_zh' in first.asset_manifest.project, false);
     assert.equal(first.response_schema.properties.prompt_contract.const, 'base_prompt');
+    assert.ok(first.response_schema.properties.assets_digest, '打包 Schema 必须声明 assets_digest（否则与说明的“原样复制”要求自相矛盾）');
     assert.match(first.instructions_markdown, /禁止返回 style\/style_id/);
     assert.match(first.instructions_markdown, /assets_digest[\s\S]*?原样复制/, '任务说明必须要求外部 AI 原样复制 assets_digest（防导入摘要失配）');
     assert.equal('id' in first.asset_manifest.characters[0], false);

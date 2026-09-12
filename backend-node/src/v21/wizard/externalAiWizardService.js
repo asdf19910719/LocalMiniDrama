@@ -1,8 +1,12 @@
 'use strict';
 const crypto = require('node:crypto');
 
-const { validateFullV21, SCHEMA_NAME } = require('../import/packageContractV21.js');
 const { createEpisodeImportV21 } = require('../import/episodeImportV21.js');
+const {
+  convertExternalResultToV21,
+  collectReferenceErrors,
+} = require('./externalResultToV21.js');
+const { validateExternalAiResult } = require('../../services/externalAiResultContract');
 const {
   createTaskBundle,
   getTaskBundle,
@@ -19,11 +23,6 @@ function httpError(code, status, message) {
 
 function sha256Text(text) {
   return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
-}
-
-function nonEmpty(value, fallback) {
-  const s = typeof value === 'string' ? value.trim() : '';
-  return s.length > 0 ? s : fallback;
 }
 
 const RESULT_SCHEMA_NAME = 'local-mini-drama.external-ai-result';
@@ -270,56 +269,35 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       `schema=${result.schema} version=${result.version}`);
     push('package_id', '任务包 ID 匹配', result.package_id === row.package_id,
       `结果 ${result.package_id} vs 任务 ${row.package_id}`);
-    push('project', '目标项目匹配', Number(row.drama_id) === Number(row.drama_id) && Boolean(row.drama_id),
+    push('project', '目标项目匹配', Boolean(row.drama_id),
       `任务绑定项目 #${row.drama_id}`);
     const episodeOk = result.episode && Number(result.episode.episode_number) === Number(row.target_episode_number);
     push('episode', '目标剧集匹配', episodeOk,
       `结果第 ${result.episode?.episode_number} 集 vs 任务目标第 ${row.target_episode_number} 集`);
-    push('assets_digest', '素材快照摘要匹配', result.assets_digest === row.assets_digest,
-      'assets_digest 必须与任务包冻结值一致（即上下文版本匹配）');
+    const digestAbsent = result.assets_digest === undefined || result.assets_digest === null;
+    const digestOk = digestAbsent || result.assets_digest === row.assets_digest;
+    push('assets_digest', '素材快照摘要匹配', digestOk,
+      digestAbsent
+        ? '结果未携带 assets_digest（按返回格式 Schema 可省略）；导入将按任务包冻结快照校验引用'
+        : digestOk
+          ? 'assets_digest 与任务包冻结值一致'
+          : 'assets_digest 与任务包冻结值不一致（多为外部 AI 转写时改动了该字段，或建包后项目素材已变化）');
 
-    // 资产映射：new_assets 引用必须可解析
+    // 资产映射：包 Schema 结构校验 + 引用完整性（与导入转换共用同一套规则）
     const mappingErrors = [];
-    const newAssets = result.new_assets || {};
-    const characterKeys = new Set([
-      ...((row.asset_manifest_json ? JSON.parse(row.asset_manifest_json).characters : []) || []).map((c) => c.source_key),
-      ...((newAssets.characters || []).map((c) => c.source_key)),
-    ]);
-    const stateKeys = new Set();
-    for (const c of newAssets.characters || []) {
-      for (const s of c.states || []) stateKeys.add(s.source_key);
-    }
-    // 任务清单中的既有状态存于 variants 字段（manifest 形态），与 results 的 states 等价
-    for (const c of (row.asset_manifest_json ? JSON.parse(row.asset_manifest_json).characters : []) || []) {
-      for (const v of c.variants || c.states || []) stateKeys.add(v.source_key);
-    }
-    for (const s of newAssets.character_states || []) {
-      if (!characterKeys.has(s.character_ref)) {
-        mappingErrors.push(`character_states[${s.source_key}] 的 character_ref "${s.character_ref}" 不存在`);
+    const contract = validateExternalAiResult(result);
+    if (!contract.ok) {
+      mappingErrors.push(...contract.errors.slice(0, 3).map((e) => `${e.path || '(root)'}: ${e.message}`));
+    } else {
+      let manifest = {};
+      try {
+        manifest = JSON.parse(row.asset_manifest_json || '{}');
+      } catch (_) {
+        manifest = {};
       }
+      mappingErrors.push(...collectReferenceErrors(result, manifest).slice(0, 3));
     }
-    const sceneKeys = new Set([
-      ...((row.asset_manifest_json ? JSON.parse(row.asset_manifest_json).scenes : []) || []).map((s) => s.source_key),
-      ...((newAssets.scene_assets || []).map((s) => s.source_key)),
-    ]);
-    const propKeys = new Set([
-      ...((row.asset_manifest_json ? JSON.parse(row.asset_manifest_json).props : []) || []).map((p) => p.source_key),
-      ...((newAssets.props || []).map((p) => p.source_key)),
-    ]);
-    for (const shot of result.shot_packages || []) {
-      for (const seg of shot.timed_segments || []) {
-        for (const ref of seg.scene_asset_refs || []) {
-          if (!sceneKeys.has(ref)) mappingErrors.push(`场景引用 "${ref}" 不存在`);
-        }
-        for (const ref of seg.character_state_refs || []) {
-          if (!stateKeys.has(ref) && !characterKeys.has(ref)) mappingErrors.push(`人物状态引用 "${ref}" 不存在`);
-        }
-        for (const ref of seg.prop_refs || []) {
-          if (!propKeys.has(ref)) mappingErrors.push(`道具引用 "${ref}" 不存在`);
-        }
-      }
-    }
-    push('asset-mapping', '人物、场景、道具映射完整', mappingErrors.length === 0, mappingErrors.slice(0, 3).join('；'));
+    push('asset-mapping', '人物、场景、道具映射完整', mappingErrors.length === 0, mappingErrors.join('；'));
 
     // 非空目标保护（fill 模式在导入引擎事务内还会重检）
     if (row.target_episode_id) {
@@ -336,8 +314,10 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     return { ok: checks.every((c) => c.ok), checks, errors: checks.filter((c) => !c.ok).map((c) => c.detail || c.label) };
   }
 
-  /** 确定性适配：external-ai-result@2.1 → 规范 episode-package@2.1（不写库）
-   *  options.frozenSnapshot：仅当素材快照摘要（assets_digest）失配时跳过该单项校验，其余校验照常。 */
+  /**
+   * 确定性适配：external-ai-result@2（任务包返回格式：storyboards/local_ref）→ 规范 episode-package@2.1（不写库）。
+   * assets_digest 回执缺失不阻断（转换后按冻结快照校验全部既有引用）；提供但不一致时才要求 frozenSnapshot。
+   */
   function adaptResult(packageId, result, options = {}) {
     const row = requireTaskRow(packageId);
     if (result.schema !== RESULT_SCHEMA_NAME || String(result.version) !== '2') {
@@ -350,116 +330,42 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     if (result.package_id !== row.package_id) {
       throw httpError('PACKAGE_TASK_MISMATCH', 409, '结果中的 package_id 与任务不匹配');
     }
-    if (result.assets_digest !== row.assets_digest && !options.frozenSnapshot) {
+    const digestProvided = result.assets_digest !== undefined && result.assets_digest !== null;
+    const digestMatched = digestProvided && result.assets_digest === row.assets_digest;
+    if (digestProvided && !digestMatched && !options.frozenSnapshot) {
       throw httpError('ASSETS_DIGEST_MISMATCH', 409, '素材快照摘要与任务包不一致（上下文已变化）');
     }
-    if (Number(result.episode.episode_number) !== Number(row.target_episode_number)) {
+    if (Number(result.episode?.episode_number) !== Number(row.target_episode_number)) {
       throw httpError('PACKAGE_TARGET_MISMATCH', 409, '结果集号与任务目标不一致');
     }
 
-    const manifest = JSON.parse(row.asset_manifest_json);
-    const fill = (value) => nonEmpty(value, '未填写');
-
-    const characters = (manifest.characters || []).map((c) => {
-      const states = (c.variants || []).map((v) => ({
-        source_key: v.source_key,
-        name: fill(v.name),
-        description: fill(v.description),
-        appearance: fill(v.appearance),
-        base_image_prompt: typeof v.base_image_prompt === 'string' ? v.base_image_prompt : '',
-        negative_prompt: typeof v.negative_prompt === 'string' ? v.negative_prompt : '',
-        is_default: Boolean(v.is_default),
-      }));
-      // 既有角色没有任何状态时合成默认状态（schema 要求 states ≥ 1 且 is_default）
-      if (states.length === 0) {
-        states.push({
-          source_key: `${c.source_key}_default_state`,
-          name: '默认',
-          description: fill(c.description),
-          appearance: fill(c.appearance),
-          base_image_prompt: typeof c.base_image_prompt === 'string' ? c.base_image_prompt : '',
-          negative_prompt: '',
-          is_default: true,
-        });
-      }
-      return {
-        source_key: c.source_key,
-        name: fill(c.name),
-        role: ['main', 'supporting', 'minor'].includes(c.role) ? c.role : 'minor',
-        description: fill(c.description),
-        personality: fill(c.personality),
-        appearance: fill(c.appearance),
-        base_image_prompt: typeof c.base_image_prompt === 'string' ? c.base_image_prompt : '',
-        negative_prompt: typeof c.negative_prompt === 'string' ? c.negative_prompt : '',
-        voice_profile: c.voice_profile ? String(c.voice_profile) : null,
-        states,
-      };
+    let manifest = {};
+    try {
+      manifest = JSON.parse(row.asset_manifest_json || '{}');
+    } catch (_) {
+      manifest = {};
+    }
+    const adapted = convertExternalResultToV21(result, {
+      packageId: row.package_id,
+      assetsDigest: row.assets_digest,
+      manifest,
     });
-
-    const newCharacters = result.new_assets?.characters || [];
-    for (const nc of newCharacters) characters.push(nc);
-
-    // new_assets.character_states 按 character_ref 追加为状态
-    for (const extra of result.new_assets?.character_states || []) {
-      const owner = characters.find((c) => c.source_key === extra.character_ref);
-      if (!owner) {
-        throw httpError('PACKAGE_REFERENCE_INVALID', 400, `character_states 引用的人物 "${extra.character_ref}" 不存在`);
-      }
-      const { character_ref, ...state } = extra;
-      void character_ref;
-      owner.states.push(state);
-    }
-
-    const canonical = {
-      schema: SCHEMA_NAME,
-      version: '2.1',
-      episode: result.episode,
-      assets: {
-        characters,
-        scene_assets: (manifest.scenes || []).map((s) => ({
-          source_key: s.source_key,
-          name: fill(s.name),
-          state: fill(s.state),
-          description: fill(s.description),
-          atmosphere: fill(s.atmosphere),
-          base_image_prompt: typeof s.base_image_prompt === 'string' ? s.base_image_prompt : '',
-          negative_prompt: typeof s.negative_prompt === 'string' ? s.negative_prompt : '',
-        })).concat(result.new_assets?.scene_assets || []),
-        props: (manifest.props || []).map((p) => ({
-          source_key: p.source_key,
-          name: fill(p.name),
-          type: fill(p.type),
-          description: fill(p.description),
-          base_image_prompt: typeof p.base_image_prompt === 'string' ? p.base_image_prompt : '',
-          negative_prompt: typeof p.negative_prompt === 'string' ? p.negative_prompt : '',
-        })).concat(result.new_assets?.props || []),
-      },
-      story_scenes: result.story_scenes,
-      shot_packages: result.shot_packages,
-    };
-    if (result.audio_plan) canonical.audio_plan = result.audio_plan;
-    if (result.extensions) canonical.extensions = result.extensions;
-
-    const validation = validateFullV21(canonical);
-    if (!validation.ok) {
-      const first = validation.errors.slice(0, 5).map((e) => `${e.path || '(root)'}: ${e.message}`).join('; ');
-      throw httpError('PACKAGE_INVALID', 400, `适配后的制作包校验失败：${first}`);
-    }
-    return canonical;
+    return { canonical: adapted.package, warnings: adapted.warnings, assetDigestStatus: adapted.assetDigestStatus, digestProvided, digestMatched };
   }
 
   function previewImport(packageId, resultJson, options = {}) {
     const row = requireTaskRow(packageId);
     const result = parseResultJson(resultJson);
-    const digestMatched = result.assets_digest === row.assets_digest;
-    const canonical = adaptResult(packageId, result, options);
-    const plan = importer.buildImportPlan(db, canonical, {
+    const adapted = adaptResult(packageId, result, options);
+    const plan = importer.buildImportPlan(db, adapted.canonical, {
       dramaId: row.drama_id,
       targetEpisodeId: row.target_episode_id,
       sourceFilename: 'external-ai-result.json',
       sourceSha256: sha256Text(resultJson),
     });
-    if (options.frozenSnapshot && !digestMatched) return { ...plan, frozenSnapshot: true };
+    if (options.frozenSnapshot && adapted.digestProvided && !adapted.digestMatched) plan.frozenSnapshot = true;
+    plan.assetDigestStatus = adapted.assetDigestStatus;
+    if (adapted.warnings.length > 0) plan.externalWarnings = adapted.warnings;
     return plan;
   }
 
@@ -468,9 +374,8 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     if (row.imported_at) throw httpError('PACKAGE_ALREADY_IMPORTED', 409, '该任务已成功导入，不能重复使用');
     if (row.cancelled_at) throw httpError('TASK_CANCELLED', 409, '任务已取消，不能导入');
     const result = parseResultJson(resultJson);
-    const digestMatched = result.assets_digest === row.assets_digest;
-    const canonical = adaptResult(packageId, result, options);
-    const frozenUsed = Boolean(options.frozenSnapshot) && !digestMatched;
+    const adapted = adaptResult(packageId, result, options);
+    const frozenUsed = Boolean(options.frozenSnapshot) && adapted.digestProvided && !adapted.digestMatched;
     if (!row.target_episode_id) {
       const occupied = db
         .prepare('SELECT id FROM episodes WHERE drama_id = ? AND episode_number = ? AND deleted_at IS NULL')
@@ -479,15 +384,18 @@ function createExternalAiWizardService(db, { log = console } = {}) {
         throw httpError('PACKAGE_TARGET_OCCUPIED', 409, `任务目标第 ${row.target_episode_number} 集已存在，请重新生成任务包`);
       }
     }
+    const reportExtra = {};
+    if (frozenUsed) reportExtra.frozenSnapshot = true;
+    if (adapted.warnings.length > 0) reportExtra.externalWarnings = adapted.warnings.map((w) => w.code);
     const imported = importer.confirmImport(db, {
-      pkg: canonical,
+      pkg: adapted.canonical,
       dramaId: row.drama_id,
       targetEpisodeId: row.target_episode_id,
       sourceFilename: 'external-ai-result.json',
       sourceSha256: sha256Text(resultJson),
       taskPackageId: row.package_id,
-      sourceLabel: 'external-ai-result@2.1',
-      reportExtra: frozenUsed ? { frozenSnapshot: true } : null,
+      sourceLabel: 'external-ai-result@2',
+      reportExtra: Object.keys(reportExtra).length > 0 ? reportExtra : null,
     });
     // 原子回填：imported_at + target_episode_id（create_new 导入后才有真实集 id，剧集中心「打开剧本」与离页恢复依赖）
     db.prepare(
@@ -500,6 +408,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
     return {
       ...imported,
       targetEpisodeNumber: row.target_episode_number,
+      assetDigestStatus: adapted.assetDigestStatus,
       ...(frozenUsed ? { frozenSnapshot: true } : {}),
       opensRoute: { routeId: 'studio-script', params: { projectId: row.drama_id, episodeId: imported.episodeId } },
     };

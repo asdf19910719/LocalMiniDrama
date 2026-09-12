@@ -28,6 +28,9 @@
       "type": "string",
       "minLength": 1
     },
+    "assets_digest": {
+      "type": "string"
+    },
     "generator": {
       "type": "object",
       "properties": {

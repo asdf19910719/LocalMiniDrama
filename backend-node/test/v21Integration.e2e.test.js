@@ -169,10 +169,11 @@ test('剧本二：外部 AI 制作包回流（包→篡改拒绝→校验→五�
     assert.equal(zip.status, 200);
     assert.ok((await zip.arrayBuffer()).byteLength > 0, '任务包 ZIP 可下载');
 
-    // 合法结果（契约：external-ai-result@2.1）
+    // 合法结果（契约：external-ai-result@2，任务包《返回格式.schema.json》形态：storyboards/local_ref）
     const validResult = {
       schema: 'local-mini-drama.external-ai-result',
       version: '2',
+      prompt_contract: 'base_prompt',
       package_id: pkg.packageId,
       assets_digest: pkg.assetsDigest,
       episode: {
@@ -184,29 +185,30 @@ test('剧本二：外部 AI 制作包回流（包→篡改拒绝→校验→五�
       },
       new_assets: {
         characters: [{
-          source_key: 'char_caller', name: '来电人', role: 'minor', description: '只闻其声',
-          personality: '低沉', appearance: '未知', voice_profile: null,
-          states: [{ source_key: 'state_caller_d', name: '默认', description: '雨夜', appearance: '未知', is_default: true }],
+          local_ref: 'new_caller', name: '来电人', role: 'minor', description: '只闻其声的神秘来电人。',
+          personality: '低沉', appearance: '藏在电话阴影里，无人看清', base_image_prompt: '雨夜电话阴影中的来电人',
+          negative_prompt: '模糊', voice_profile: '低沉男声',
+          variants: [{ local_ref: 'new_caller_d', name: '默认', description: '雨夜来电', appearance: '电话阴影', base_image_prompt: '电话阴影里的来电人', negative_prompt: '模糊', is_default: true }],
         }],
-        character_states: [],
-        scene_assets: [{ source_key: 'scene_flat', name: '公寓', state: '雨夜', description: '一居室', atmosphere: '压抑' }],
+        character_variants: [],
+        scenes: [{ local_ref: 'new_flat', name: '公寓', state: '雨夜', description: '一居室', atmosphere: '压抑', base_image_prompt: '雨夜中的一居室公寓', negative_prompt: '模糊' }],
         props: [],
       },
-      story_scenes: [{
-        source_key: 'sc_01', scene_number: 1, heading: '内景·公寓·雨夜',
-        location_scene_ref: 'scene_flat', summary: '电话响起。',
-      }],
-      shot_packages: [{
-        source_key: 'shot_01', shot_number: 1, story_scene_refs: ['sc_01'],
-        planned_duration_seconds: 6, story_intent: '接起电话',
-        visual: { shot_size: 'close', camera_angle: 'eye_level', camera_movement: 'static', composition: '居中', lighting: '冷光' },
-        timed_segments: [{
-          start_seconds: 0, end_seconds: 6, action: '接起电话',
-          scene_asset_refs: ['scene_flat'], character_state_refs: ['state_caller_d'], prop_refs: [],
-          dialogue: [{ speaker_ref: 'char_caller', start_seconds: 2, end_seconds: 4, text: '是我。' }],
-        }],
-        continuity: { entry: {}, exit: {}, axis: null },
-        audio: { dialogue: [], narration: [], ambience: ['雨声'], sound_effects: [], music_intent: null },
+      storyboards: [{
+        local_ref: 'sb_01', storyboard_number: 1, title: '接起电话', description: '林夏在雨夜接起陌生来电。',
+        duration_seconds: 6, scene_ref: 'new_flat',
+        character_refs: [{ character_ref: 'new_caller', variant_ref: 'new_caller_d', reference_role: 'primary', sort_order: 1, framing_note: '阴影中' }],
+        prop_refs: [],
+        shot_type: 'close', camera_angle: 'eye_level', camera_movement: 'static', composition: '居中',
+        action: { start: '电话铃声响起', progression: '林夏犹豫后接起', end: '听筒里传来低沉的声音' },
+        dialogue: [{ speaker: '来电人', line: '是我。', performance: '低沉' }],
+        narration: '',
+        audio_description: { ambience: ['雨声'], sound_effects: [], dialogue_treatment: '对白清晰', silence: false, music_cue: { mode: 'mute', intensity: 0, start: null, end: null } },
+        transition: { type: 'cut', duration: 0, visual_description: null, audio_bridge: { mode: 'none', duration_ms: 0, description: '无音频桥接' } },
+        base_image_prompt: '雨夜公寓，林夏接起电话，电影写实',
+        base_video_prompt: '林夏在雨声中接起电话，镜头静止',
+        universal_segment_text: '@图片1 雨夜公寓，@图片2 在听筒旁',
+        is_primary: true,
       }],
     };
 

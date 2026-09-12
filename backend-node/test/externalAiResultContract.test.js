@@ -17,6 +17,15 @@ describe('externalAiResultContract', () => {
     assert.equal(EXTERNAL_AI_RESULT_SCHEMA.properties.package_id.type, 'string');
   });
 
+  it('accepts the task receipt assets_digest declared by the schema', () => {
+    // 任务说明要求外部 AI 逐字符复制 assets_digest 回执；Schema 必须声明该字段，否则说明与 Schema 自相矛盾
+    assert.ok(EXTERNAL_AI_RESULT_SCHEMA.properties.assets_digest, 'Schema 应声明 assets_digest 字段');
+    const value = validResult();
+    value.assets_digest = 'e'.repeat(64);
+    const result = validateExternalAiResult(value);
+    assert.deepEqual(result, { ok: true, errors: [] });
+  });
+
   it('rejects unknown fields at root and nested result-owned objects', () => {
     const value = validResult();
     value.surprise = true;
