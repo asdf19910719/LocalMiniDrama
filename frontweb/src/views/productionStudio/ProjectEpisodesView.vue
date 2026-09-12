@@ -118,7 +118,7 @@
       <StateBlock v-if="loading && !loaded" state="loading" />
       <StateBlock v-else-if="loadError" state="error" :message="'剧集列表加载失败：' + loadError" @retry="load" />
       <div v-else class="ep-list">
-        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: isHighlighted(ep), attention: ep.needsAttention && !isHighlighted(ep) }">
+        <div v-for="ep in items" :key="ep.id" class="card ep-row" :class="{ current: isHighlighted(ep), attention: ep.needsAttention && !isHighlighted(ep) }" @click="open(ep)" @keydown.enter="open(ep)">
           <span class="ep-no">E{{ String(ep.episodeNumber).padStart(2, '0') }}</span>
           <div class="ep-title">
             <b>{{ ep.title || '未命名' }}</b>
@@ -135,18 +135,16 @@
             <div class="s-cell" :class="cellClass(ep, 'cut')"><svg><use :href="cellIcon(ep, 'cut')"/></svg>成片 {{ cellText(ep, 'cut') }}</div>
           </div>
           <div class="ep-last">上次 · {{ stageLabel(ep.stage) }}<br>{{ relTime(ep.lastWorkedAt) }}</div>
-          <div class="row">
+          <div class="row" @click.stop>
             <template v-if="status === 'archived'">
               <span class="xs muted">归档于 {{ relTime(ep.deletedAt) }}</span>
               <button class="btn sm" @click="restoreEp(ep)"><svg><use href="#i-refresh"/></svg>恢复</button>
             </template>
             <template v-else>
-              <button v-if="ep.status === 'completed'" class="btn primary sm" @click="openCut(ep)">查看成片</button>
-              <button v-else-if="ep.status !== 'blank' && (isHighlighted(ep) || ep.needsAttention)" class="btn primary sm" @click="open(ep)">继续制作</button>
-              <button v-else-if="ep.status === 'blank'" class="btn sm" @click="open(ep)">开始创建</button>
+              <button v-if="rowAction(ep)" :class="['btn sm', rowAction(ep).kind === 'primary' ? 'primary' : '']" @click="rowAction(ep).status === 'completed' ? openCut(ep) : open(ep)">{{ rowAction(ep).label }}</button>
               <div class="more-wrap" style="position:relative">
                 <button class="icon-btn" @click.stop="rowMenuId = rowMenuId === ep.id ? null : ep.id"><svg><use href="#i-more"/></svg></button>
-                <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:170px" @click="rowMenuId = null">
+                <div v-if="rowMenuId === ep.id" class="card more-pop" style="position:absolute; right:0; top:calc(100% + 4px); z-index:70; width:170px" @click.stop="rowMenuId = null">
                   <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startRename(ep)">重命名</button>
                   <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="copyDraft(ep)">复制为草稿</button>
                   <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="startTargetDuration(ep)">设置目标时长<span v-if="ep.targetDuration" class="xs muted" style="margin-left:auto">{{ ep.targetDuration }}s</span></button>
@@ -190,9 +188,13 @@
             回收站保护：30 天内可从回收站筛选恢复。运行中任务需先取消；导出成片与外部来源审计记录随项目保留。
           </div>
         </div>
+        <div v-if="deleteError" class="notice-card danger" style="margin-bottom:10px">
+          <svg><use href="#i-warn"/></svg>
+          <span>{{ deleteError }}</span>
+        </div>
         <div class="modal-f">
           <button class="btn ghost" @click="deleteTarget = null">取消</button>
-          <button class="btn primary" style="background:var(--danger); border-color:var(--danger)" @click="doDelete">确认删除（可恢复）</button>
+          <button class="btn danger solid" :disabled="deleting" @click="doDelete">{{ deleting ? '删除中…' : '确认删除（可恢复）' }}</button>
         </div>
       </div>
     </div>
@@ -332,7 +334,7 @@ export default {
     return {
       items: [], _allItems: [], _archivedItems: [], q: '', status: 'all', sort: 'episode', stageFilter: '', importOpen: false,
       loading: false, loaded: false, loadError: '',
-      projectTitle: '', deleteTarget: null, deleteImpact: {},
+      projectTitle: '', deleteTarget: null, deleteImpact: {}, deleteError: '', deleting: false,
       rowMenuId: null,
       newEpOpen: false, newEpChoice: 'create', newEpNextNumber: 1, blankEpisodes: [],
       renameTarget: null, renameTitle: '', notice: '',
@@ -700,13 +702,30 @@ export default {
       v21.getDeleteImpact(ep.id).then((impact) => {
         this.deleteImpact = impact
         this.deleteTarget = ep
+      }).catch((e) => {
+        this.notice = e?.message || '删除影响评估失败，请稍后重试'
       })
     },
     async doDelete() {
-      if (!this.deleteTarget) return
-      await v21.deleteEpisode(this.deleteTarget.id)
-      this.deleteTarget = null
-      this.load()
+      if (!this.deleteTarget || this.deleting) return
+      this.deleting = true
+      this.deleteError = ''
+      try {
+        await v21.deleteEpisode(this.deleteTarget.id)
+        this.deleteTarget = null
+        this.load()
+      } catch (e) {
+        this.deleteError = e?.message || '删除失败，请重试'
+      } finally {
+        this.deleting = false
+      }
+    },
+    // P0-07：行主动作统一计算——普通"制作中"行也必须有可见入口
+    rowAction(ep) {
+      if (this.status === 'archived') return null
+      if (ep.status === 'blank') return { label: '开始创建', kind: 'default', status: ep.status }
+      if (ep.status === 'completed') return { label: '查看成片', kind: 'primary', status: ep.status }
+      return { label: '继续制作', kind: isHighlighted(ep) || ep.needsAttention ? 'primary' : 'default', status: ep.status }
     },
     async openImportSource(ep) {
       this.rowMenuId = null

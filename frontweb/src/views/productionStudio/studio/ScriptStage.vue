@@ -323,6 +323,38 @@
         </div>
       </div>
     </div>
+
+    <!-- 版本冲突 Modal（P0-14：本机 vs 服务端对比，三动作显式决策，不做静默覆盖） -->
+    <div v-if="conflictModalOpen" class="scrim" style="z-index:95" @click.self></div>
+    <div v-if="conflictModalOpen" class="modal-wrap" style="z-index:96">
+      <div class="modal" style="width:560px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>版本冲突</h3>
+          <button class="icon-btn" @click="conflictModalOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small t2" style="margin-bottom:10px">另一窗口已保存{{ conflictServerRevision ? ' v' + conflictServerRevision : '新版本' }}。请比较两侧内容后选择如何处理；本机修改不会被自动丢弃。</p>
+          <div class="row" style="align-items:stretch; gap:10px">
+            <div class="grow">
+              <div class="xs muted" style="margin-bottom:4px">本机修改（未保存）</div>
+              <pre class="conflict-pane">{{ draftText || '（空）' }}</pre>
+            </div>
+            <div class="grow">
+              <div class="xs muted" style="margin-bottom:4px">服务端最新{{ conflictServerRevision ? ' · v' + conflictServerRevision : '' }}</div>
+              <pre class="conflict-pane">{{ conflictLoading ? '读取中…' : (conflictServerText || '（读取失败，无法对比）') }}</pre>
+            </div>
+          </div>
+        </div>
+        <div class="modal-f" style="justify-content:space-between">
+          <button class="btn ghost" @click="conflictModalOpen = false">保留现状（稍后处理）</button>
+          <div class="row" style="gap:8px">
+            <button class="btn" :disabled="conflictLoading" @click="loadServerVersion">载入最新版本（放弃本机修改）</button>
+            <button class="btn danger solid" :disabled="conflictLoading" @click="overwriteServerVersion">覆盖服务端版本</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -345,6 +377,7 @@ export default {
       mode: '', pasteText: '', candidate: null, candidateOpen: false, historyOpen: false, diffOpen: false,
       sceneStats: {}, preview: null, sceneQuery: '', selectedSceneIdx: 0,
       confirmOpen: false, confirmDetailOpen: false, confirmError: '', busy: false, saveConflict: false,
+      conflictModalOpen: false, conflictServerText: '', conflictServerRevision: null, conflictLoading: false,
       aiMenuOpen: false, selectionText: '', editMode: 'edit', aiPop: { visible: false, top: 0, right: 60, text: '' },
       diffData: null, diffScene: null,
       diffOld: [], diffNew: [],
@@ -394,9 +427,9 @@ export default {
     aiModeMap() {
       return { continue: 'continue', polish: 'polish', rewrite: 'rewrite', expand: 'expand', shorten: 'condense' }
     },
-    // 409 保存冲突：主 CTA 变“重试保存”，成功保存后恢复确认文案
+    // 409 保存冲突：主 CTA 变“解决版本冲突”，成功保存后恢复确认文案
     mainCtaLabel() {
-      return this.saveConflict ? '重试保存' : this.confirmLabel
+      return this.saveConflict ? '解决版本冲突' : this.confirmLabel
     },
     mainCtaDisabled() {
       return this.busy || this.saving || (!this.saveConflict && !this.canConfirm)
@@ -564,7 +597,20 @@ export default {
       } catch (e) {
         if (e.code === 'REVISION_CONFLICT' || e.status === 409) {
           this.saveConflict = true
-          this.setSave('保存冲突：另一窗口已保存新版本，可点击「重试保存」', true)
+          this.setSave('保存冲突：另一窗口已保存新版本，请比较后选择', true)
+          // P0-14：拉取服务端草稿做真实对比，不再默认以本机内容覆盖
+          this.conflictLoading = true
+          this.conflictModalOpen = true
+          try {
+            const server = await v21.getScript(this.episodeId)
+            this.conflictServerText = server?.draft?.content || ''
+            this.conflictServerRevision = server?.draft?.revision ?? null
+          } catch {
+            this.conflictServerText = ''
+            this.conflictServerRevision = null
+          } finally {
+            this.conflictLoading = false
+          }
         } else {
           this.setSave(`保存失败 · ${e.message}`, true)
         }
@@ -573,18 +619,24 @@ export default {
         this.saving = false
       }
     },
-    // 409 重试：先取最新修订号再按正常保存流程保存本地内容；仍失败保持冲突态
-    async retrySave() {
-      if (this.saving) return
+    // 409 冲突三动作：载入最新（放弃本机）/ 明确确认后覆盖 / 保留现状继续编辑
+    async loadServerVersion() {
+      this.draftText = this.conflictServerText
+      this.dirty = false
+      this.saveConflict = false
+      this.conflictModalOpen = false
       try {
         this.model = await v21.getScript(this.episodeId)
-      } catch {
-        // 取不到最新修订号时按原修订号重试，失败仍保持冲突态
-      }
+      } catch { /* 保留现有修订号视图 */ }
+      this.setSave('已载入最新版本')
+    },
+    async overwriteServerVersion() {
+      if (this.saving) return
       await this.saveDraft(this.draftText, this.model?.draft?.revision)
+      if (!this.saveConflict) this.conflictModalOpen = false
     },
     mainCtaClick() {
-      if (this.saveConflict) this.retrySave()
+      if (this.saveConflict) this.conflictModalOpen = true
       else this.openConfirm()
     },
     async appendScene() {
@@ -719,4 +771,10 @@ export default {
 .diff-nav { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .add-frag { background: rgba(69,211,156,.14); border-radius: 3px; padding: 0 2px; }
 .del-frag { background: rgba(255,107,120,.12); border-radius: 3px; padding: 0 2px; text-decoration: line-through; }
+/* 版本冲突对比窗格 */
+.conflict-pane {
+  flex: 1; min-width: 0; height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  font-family: inherit; font-size: 12.5px; line-height: 1.8; color: var(--text-2); margin: 0;
+}
 </style>

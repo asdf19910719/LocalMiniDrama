@@ -239,6 +239,8 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       rows.map((g) => ({
         candidateId: g.id,
         provider: g.provider || 'mock',
+        model: g.model || 'mock',
+        size: g.size || '',
         createdAt: g.created_at,
         prompt: g.prompt || '',
         status: g.status || '',
@@ -247,7 +249,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       return project(
         db
           .prepare(
-            `SELECT g.id, g.provider, g.created_at, g.prompt, g.status FROM image_generations g
+            `SELECT g.id, g.provider, g.model, g.size, g.created_at, g.prompt, g.status FROM image_generations g
              JOIN image_generation_tasks t ON t.image_generation_id = g.id
              WHERE t.target_type = 'prop' AND t.target_id = ? AND g.deleted_at IS NULL
              ORDER BY g.id DESC LIMIT 50`
@@ -259,7 +261,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     return project(
       db
         .prepare(
-          `SELECT id, provider, created_at, prompt, status FROM image_generations
+          `SELECT id, provider, model, size, created_at, prompt, status FROM image_generations
            WHERE ${column} = ? AND deleted_at IS NULL
            ORDER BY id DESC LIMIT 50`
         )
@@ -302,6 +304,9 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       candidateId: g.id,
       url: g.image_url,
       provider: g.provider || 'mock',
+      model: g.model || 'mock',
+      size: g.size || '',
+      prompt: g.prompt || '',
       createdAt: g.created_at,
       isCurrent: currentImageOf(type, row) === g.image_url,
     }));
@@ -382,13 +387,14 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     const relativeUrl = result.url;
     const info = db
       .prepare(
-        `INSERT INTO image_generations (drama_id, character_id, scene_id, provider, prompt, image_url, local_path, status, completed_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'mock', ?, ?, ?, 'succeeded', ?, ?, ?)`
+        `INSERT INTO image_generations (drama_id, character_id, scene_id, provider, model, size, prompt, image_url, local_path, status, completed_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'mock', 'mock', ?, ?, ?, ?, 'succeeded', ?, ?, ?)`
       )
       .run(
         Number(dramaId),
         type === 'character' ? Number(assetId) : null,
         type === 'scene' ? Number(assetId) : null,
+        size,
         composedPrompt,
         relativeUrl,
         result.artifactPath,

@@ -132,13 +132,14 @@
             </select>
           </label>
           <label class="col" style="gap:4px"><span class="xs muted">简介</span><textarea class="input" style="width:100%; height:72px; padding:8px" v-model="editForm.description"></textarea></label>
+          <div v-if="profileError" class="notice-card danger"><svg><use href="#i-warn"/></svg><span>{{ profileError }}</span></div>
           <div class="xs muted">保存只更新项目资料，并使外部 AI 协作上下文标记需要更新；不影响已有素材与成片。</div>
         </div>
       </div>
       <div class="drawer-f">
         <button class="btn ghost" @click="closeEdit">取消</button>
         <div class="spacer"></div>
-        <button class="btn primary" :disabled="!editDirty" @click="saveProfile">保存</button>
+        <button class="btn primary" :disabled="!editDirty || profileSaving" @click="saveProfile">{{ profileSaving ? '保存中…' : '保存' }}</button>
       </div>
     </aside>
 
@@ -285,7 +286,7 @@ export default {
       styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
       styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
       styleDrawerOpen: false,
-      opsOpen: false, opsError: '', exporting: false,
+      opsOpen: false, opsError: '', exporting: false, profileSaving: false, profileError: '',
       confirmOpen: false, confirmText: '', confirmAction: '',
     }
   },
@@ -424,9 +425,18 @@ export default {
       this.editOpen = false
     },
     async saveProfile() {
-      await v21.updateProject(this.projectId, this.editForm)
-      this.editOpen = false
-      await this.load()
+      if (this.profileSaving) return
+      this.profileSaving = true
+      this.profileError = ''
+      try {
+        await v21.updateProject(this.projectId, this.editForm)
+        this.editOpen = false
+        await this.load()
+      } catch (e) {
+        this.profileError = e?.message || '保存失败，请重试'
+      } finally {
+        this.profileSaving = false
+      }
     },
     async openStyleModal() {
       this.styleOpen = true

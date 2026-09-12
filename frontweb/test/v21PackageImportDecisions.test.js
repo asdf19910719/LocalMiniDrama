@@ -147,3 +147,42 @@ test('P0-4 ⑤ ProjectEpisodesView 读取 route.query.highlight 并复用既有�
   assert.match(src, /current:\s*isHighlighted\(ep\)/, '当前集应走 current 样式分支')
   assert.match(src, /attention:\s*ep\.needsAttention/, '需处理行应有独立 attention 样式分支（warn 语义）')
 })
+
+// ---------- P0-10/P0-07/P0-14 数据安全与入口修复（2026-09-12 差距清单第一批） ----------
+
+test('P0-10a 剧集删除链路不得静默失败', () => {
+  const src = episodesView()
+  assert.match(src, /getDeleteImpact\(ep\.id\)\s*\n?\s*\.then\([\s\S]*?\.catch\(/, 'impact 拉取失败必须有 catch 并呈现错误')
+  assert.match(src, /deleteError/, '确认弹窗内应有 deleteError 错误呈现')
+  assert.doesNotMatch(src, /async doDelete\(\)\s*\{[\s\S]{0,80}await/, 'doDelete 必须先进入 try/catch 再调用删除接口')
+})
+
+test('P0-10c 编辑项目保存不得静默失败', () => {
+  const src = read('src/views/productionStudio/ProjectOverviewView.vue')
+  assert.match(src, /async saveProfile\(\)\s*\{[\s\S]*?try\s*\{/, 'saveProfile 必须有 try/catch')
+  assert.match(src, /profileSaving/, '保存按钮应有 Saving 态')
+  assert.match(src, /profileError/, '保存失败应有弹窗内错误呈现')
+})
+
+test('P0-07 剧集中心普通制作中行必须有打开入口', () => {
+  const src = episodesView()
+  assert.match(src, /class="card ep-row"[^>]*@click="open\(ep\)"/, '剧集行本体必须可点击打开')
+  assert.match(src, /rowAction\(ep\)/, '主动作应由 rowAction(ep) 统一计算，普通行不得缺席')
+})
+
+test('P0-14 剧本 409 冲突必须对比解决，不得默认覆盖', () => {
+  const src = read('src/views/productionStudio/studio/ScriptStage.vue')
+  assert.match(src, /conflictModalOpen/, '409 时应打开冲突对比 Modal')
+  assert.match(src, /conflictServerText/, '应拉取服务端草稿内容做对比')
+  assert.match(src, /loadServerVersion/, '应提供「载入最新版本」动作')
+  assert.match(src, /overwriteServerVersion/, '覆盖必须走显式确认动作')
+  assert.doesNotMatch(src, /async retrySave\(\)/, '不得保留直接覆盖式 retrySave')
+})
+
+test('E 域付费确认：分镜图生成须经确认 Sheet（通道/提示词/结果规则）', () => {
+  const src = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  assert.match(src, /imageSheetOpen/, '应存在分镜图生成确认 Sheet')
+  assert.match(src, /openImageSheet\(\)/, '「生成分镜图」按钮先打开确认 Sheet')
+  assert.match(src, /只新增候选/, '应呈现结果规则：只新增候选不自动采用')
+  assert.match(src, /confirmGenerateImage/, '确认后才执行生成')
+})

@@ -99,7 +99,7 @@
             </div>
           </div>
           <div class="row" style="padding:0 4px">
-            <button class="btn sm grow" :loading="generatingImage" :disabled="generatingImage" @click="generateImage">
+            <button class="btn sm grow" :loading="generatingImage" :disabled="generatingImage" @click="openImageSheet">
               <svg><use href="#i-spark"/></svg>生成分镜图
             </button>
             <button class="btn sm ghost" style="border:1px solid var(--line)" title="上传图片" @click="openImageUrl"><svg><use href="#i-upload"/></svg></button>
@@ -339,6 +339,33 @@
         <div class="modal-f">
           <button class="btn ghost" @click="imgUrlOpen = false">取消</button>
           <button class="btn primary" :disabled="!imgUrlText.trim()" @click="confirmImageUrl">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 生成分镜图确认 Sheet（规格 §8.2：付费动作前置确认） -->
+    <div v-if="imageSheetOpen" class="scrim" style="z-index:80" @click="imageSheetOpen = false"></div>
+    <div v-if="imageSheetOpen" class="modal-wrap" style="z-index:90">
+      <div class="modal" style="width:520px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-image"/></svg>
+          <h3>生成分镜图 · 分镜 {{ pad(current.number) }}</h3>
+          <button class="icon-btn" @click="imageSheetOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <div class="kv"><span class="k">对象</span><span class="v">{{ current.title || '分镜 ' + current.number }}</span></div>
+          <div class="kv"><span class="k">通道 / 模型</span><span class="v">mock 本地通道 · ¥0</span></div>
+          <div class="kv" style="align-items:flex-start"><span class="k">本次使用提示词</span>
+            <span class="v" style="white-space:normal; text-align:right; line-height:1.6; max-width:320px">{{ imagePrompt.text || '（将按引用与时段自动拼装）' }}</span>
+          </div>
+          <div class="notice-card info" style="margin-top:10px">
+            <svg><use href="#i-shield"/></svg>
+            <span>生成只新增候选，不会自动替换当前分镜图；需要在候选预览中显式「设为当前」。</span>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn ghost" @click="imageSheetOpen = false">取消</button>
+          <button class="btn primary" :disabled="generatingImage" @click="confirmGenerateImage">{{ generatingImage ? '生成中…' : '确认生成' }}</button>
         </div>
       </div>
     </div>
@@ -639,7 +666,7 @@ export default {
       videoCandidates: [], previewCandidate: null, previewUrl: '', videoCount: 1,
       staleVideoIds: [],
       activeVideoTasks: [], pollTimer: null, sheetQuote: null, sheetDemoDelay: false, notice: '',
-      imgUrlOpen: false, imgUrlText: '',
+      imgUrlOpen: false, imgUrlText: '', imageSheetOpen: false,
       generatingImage: false, readiness: { status: 'checking' },
       frameChaining: { state: 'none', stateLabel: '首镜' },
       trackFilter: 'all', moreOpen: false, batchOpen: false,
@@ -1009,6 +1036,14 @@ export default {
       } finally {
         this.generatingImage = false
       }
+    },
+    openImageSheet() {
+      // 规格 §8.2：生成分镜图为付费动作，需先经确认 Sheet（通道/完整提示词/结果规则）
+      this.imageSheetOpen = true
+    },
+    async confirmGenerateImage() {
+      this.imageSheetOpen = false
+      await this.generateImage()
     },
     openImageUrl() {
       // C1：分镜图 URL 输入走专用 Modal

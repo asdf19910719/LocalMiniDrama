@@ -323,3 +323,24 @@ test('generateCandidate：stateId 注入状态名前缀（仅提示词组装，�
     '状态不存在 404'
   );
 });
+
+// ---- P0-01：候选与生成记录透出 model/size/prompt（前后端双层补齐的后端侧） ----
+
+test('generateCandidate 落库 size/model，getDetail 候选与 records 透出生成元数据', async () => {
+  const { db, assets } = setup();
+  insertCharacter(db, { id: 1, name: '林夏' });
+  const created = await assets.generateCandidate(1, {
+    type: 'character', assetId: 1, prompt: '雨夜制服少女', size: '1024x1024',
+  });
+  const detail = assets.getDetail('character', 1);
+  const cand = detail.candidates.find((c) => c.candidateId === created.candidateId);
+  assert.ok(cand, '候选存在');
+  assert.equal(cand.size, '1024x1024', '候选透出生成尺寸');
+  assert.equal(cand.model, 'mock', '候选透出生成模型');
+  assert.equal(cand.prompt, '雨夜制服少女', '候选透出生成提示词');
+  const rec = (detail.records || []).find((r) => r.candidateId === created.candidateId);
+  assert.ok(rec, '生成记录存在');
+  assert.equal(rec.size, '1024x1024', '记录透出生成尺寸');
+  assert.equal(rec.model, 'mock', '记录透出生成模型');
+  assert.equal(rec.prompt, '雨夜制服少女', '记录透出完整提示词');
+});

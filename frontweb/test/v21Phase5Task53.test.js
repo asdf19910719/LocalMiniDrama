@@ -74,7 +74,7 @@ test('② 归档导入：validate() 调 /archive/validate 并渲染检查矩阵�
 
 test('③ P2-1 剧集中心：completed 剧集主按钮为“查看成片”', () => {
   const view = read('src/views/productionStudio/ProjectEpisodesView.vue')
-  assert.match(view, /ep\.status === 'completed'[^>]*>查看成片|查看成片</, 'completed 行主按钮文案为查看成片')
+  assert.match(view, /rowAction\(ep\)[\s\S]*?查看成片/, 'completed 行主按钮经 rowAction 仍为“查看成片”')
   assert.match(view, /openCut\(ep\)/, '查看成片走 openCut')
   const fn = view.match(/openCut\(ep\) \{[\s\S]*?\n    \},/)
   assert.ok(fn, 'openCut 方法存在')

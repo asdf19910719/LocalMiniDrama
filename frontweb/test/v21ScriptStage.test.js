@@ -43,12 +43,16 @@ test('B9 影响明细：查看影响明细按钮切换明细区，不再是关�
   assert.match(view, /v-else[^>]*>无</, '空类显示“无”')
 })
 
-test('409 保存冲突：主 CTA 变“重试保存”并走保存流程，成功后恢复确认文案', () => {
+test('409 保存冲突：走对比解决流（P0-14），主 CTA 变“解决版本冲突”打开冲突 Modal', () => {
   const view = read()
   assert.match(view, /saveConflict/, '存在保存冲突状态')
-  assert.match(view, /重试保存/, '主按钮提供重试保存')
+  assert.match(view, /解决版本冲突/, '主按钮提供解决版本冲突入口')
   assert.match(view, /e\.code === 'REVISION_CONFLICT' \|\| e\.status === 409/, '按错误码或 409 状态判定')
-  assert.match(view, /retrySave/, '重试走保存流程')
+  assert.match(view, /conflictModalOpen/, '409 打开冲突对比 Modal')
+  assert.match(view, /conflictServerText/, '拉取服务端草稿内容做真实对比')
+  assert.match(view, /loadServerVersion/, '提供「载入最新版本（放弃本机修改）」动作')
+  assert.match(view, /overwriteServerVersion/, '覆盖服务端必须走显式确认动作')
+  assert.doesNotMatch(view, /retrySave/, '不得保留静默覆盖式重试保存')
 })
 
 test('doConfirm 失败兜底：catch 内提示错误且弹窗保持打开', () => {

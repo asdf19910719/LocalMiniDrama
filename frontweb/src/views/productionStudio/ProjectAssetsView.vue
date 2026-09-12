@@ -148,7 +148,7 @@
           <div class="cand-row">
             <div v-for="c in detail?.candidates || []" :key="c.candidateId" class="cand" :class="{ cur: c.isCurrent }" @click="useCandidate(c)">
               <div class="im"><img :src="c.url" style="width:100%;height:100%;object-fit:cover"></div>
-              <div class="cap" :class="c.isCurrent ? 'ok-t' : ''">{{ c.isCurrent ? '当前图' : providerLabel(c.provider) }} · {{ shortTime(c.createdAt) }}</div>
+              <div class="cap" :class="c.isCurrent ? 'ok-t' : ''" :title="c.prompt || ''">{{ c.isCurrent ? '当前图' : providerLabel(c.provider) }}<template v-if="c.size"> · {{ c.size }}</template> · {{ shortTime(c.createdAt) }}</div>
             </div>
             <div class="cand"><div class="im" style="border:1px dashed var(--line-strong); display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer" @click="openGenSheet"><svg style="width:18px;height:18px"><use href="#i-plus"/></svg></div><div class="cap">生成</div></div>
           </div>
@@ -211,9 +211,16 @@
           <p v-if="(detail?.records || []).length === 0" class="muted empty-tip">还没有生成或上传记录——到「版本与候选」标签生成第一张候选图</p>
           <div v-for="r in detail?.records || []" :key="r.candidateId" class="record-row">
             <div class="kv"><span class="k">时间</span><span class="v">{{ shortTime(r.createdAt) || '—' }}</span></div>
-            <div class="kv"><span class="k">通道</span><span class="v">{{ providerLabel(r.provider) }}</span></div>
+            <div class="kv"><span class="k">生成</span><span class="v">{{ providerLabel(r.provider) }}<template v-if="r.model"> · {{ r.model }}</template><template v-if="r.size"> · {{ r.size }}</template></span></div>
             <div class="kv"><span class="k">结果</span><span class="v" :class="r.status === 'succeeded' ? 'ok-t' : ''">{{ recordStatusLabel(r.status) }}</span></div>
-            <div class="kv" v-if="r.prompt"><span class="k">提示词</span><span class="v prompt-txt">{{ r.prompt }}</span></div>
+            <div class="kv" v-if="r.prompt">
+              <span class="k">提示词</span>
+              <span class="v prompt-txt" v-if="expandedRecordId !== r.candidateId">{{ r.prompt }}</span>
+              <span class="v" v-else style="white-space:normal; text-align:right; line-height:1.6">{{ r.prompt }}</span>
+            </div>
+            <div v-if="r.prompt && r.prompt.length > 40" class="row" style="justify-content:flex-end">
+              <span class="xs accent-t" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px" @click="expandedRecordId = expandedRecordId === r.candidateId ? null : r.candidateId">{{ expandedRecordId === r.candidateId ? '收起' : '查看完整提示词' }}</span>
+            </div>
           </div>
         </div>
 
@@ -403,7 +410,7 @@ export default {
       items: [], _all: [], type: 'all', q: '',
       loading: false, loaded: false, loadError: '',
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
-      detailOpen: false, detail: null, generating: false, projectTitle: '',
+      detailOpen: false, detail: null, generating: false, projectTitle: '', expandedRecordId: null,
       notice: '',
       removeOpen: false, removing: false, removeError: '',
       genSheetOpen: false, genPrompt: '', genSize: '720x480', genError: '',
