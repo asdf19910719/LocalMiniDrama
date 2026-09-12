@@ -77,7 +77,8 @@
               <svg><use href="#i-more"/></svg>
             </button>
             <div v-if="openMenuId === card.id" class="pcard-pop card">
-              <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="deleteProject(card)">移入回收站</button>
+              <button v-if="status === 'archived'" class="btn ghost sm" style="width:100%;justify-content:flex-start" :disabled="restoringId === card.id" @click="restoreProject(card)">{{ restoringId === card.id ? '恢复中…' : '恢复项目' }}</button>
+              <button v-else class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="deleteProject(card)">移入回收站</button>
             </div>
           </div>
         </div>
@@ -108,6 +109,7 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import { v21Toast } from '@/v21/ui.js'
 import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
@@ -119,7 +121,7 @@ export default {
     return {
       items: [], total: 0, q: '', status: 'all', sort: 'recent',
       searchTimer: null, openMenuId: null,
-      deleteConfirmOpen: false, deleteTarget: null,
+      deleteConfirmOpen: false, deleteTarget: null, restoringId: null,
       loading: false, loaded: false, loadError: '',
       statusOptions: [
         { key: 'all', label: '全部' },
@@ -250,6 +252,20 @@ export default {
       if (!card) return
       await v21.deleteProject(card.id)
       this.load()
+    },
+    async restoreProject(card) {
+      this.openMenuId = null
+      if (!card || this.restoringId) return
+      this.restoringId = card.id
+      try {
+        await v21.restoreProject(card.id)
+        v21Toast('项目已恢复，可继续制作')
+        this.load()
+      } catch (e) {
+        v21Toast(e.message || '恢复失败，请重试', 'danger')
+      } finally {
+        this.restoringId = null
+      }
     },
   },
 }

@@ -15,3 +15,10 @@ test('制作头 runningTasks：接真实运行任务计数（30s 轮询），预
   assert.match(view, /clearInterval\(this\.tasksTimer\)/, '卸载清理轮询')
   assert.match(view, /费用 · 本地 ¥0/, '预算摘要为本地执行 ¥0 的诚实口径')
 })
+
+test('项目列表归档页签：卡片菜单提供恢复项目入口（restoreProject 零调用清零）', () => {
+  const view = read('src/views/productionStudio/ProjectsView.vue')
+  assert.match(view, /v21\.restoreProject\(/, '归档项目恢复必须调用既有封装')
+  assert.match(view, /恢复项目/, '菜单提供恢复项目动作')
+  assert.match(view, /恢复失败，请重试|v21Toast/, '恢复失败不得静默')
+})
