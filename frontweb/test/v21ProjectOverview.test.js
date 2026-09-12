@@ -68,8 +68,11 @@ test('查看风格：只读抽屉（来源/视觉规则/使用口径/版本记�
   assert.match(v, /currentStyle\.descriptionZh/, '视觉规则应来自目录条目描述字段')
   // 使用与影响口径（固定文案）
   assert.match(v, /项目内未来生成默认使用该风格；更换风格不会自动重新生成已有素材/, '抽屉应有使用与影响口径说明')
-  // 版本记录：getOverview 未返回风格版本事件 → 当前版本号 + 暂未记录，不伪造
-  assert.match(v, /版本历史暂未记录/, '无版本事件时应显示「版本历史暂未记录」')
+  // 版本记录：接真实应用历史（listStyleVersions）；无记录时据实显示「还没有更换风格的记录」
+  assert.match(v, /listStyleVersions/, '抽屉应拉取真实风格版本记录')
+  assert.match(v, /styleVersions/, '应渲染版本记录列表')
+  assert.match(v, /本项目还没有更换风格的记录/, '无版本事件时据实显示，不伪造')
+  assert.doesNotMatch(v, /版本历史暂未记录/, '旧占位文案（与事实不符）应清除')
   assert.match(v, /styleDrawerOpen/, '查看风格应为独立只读抽屉')
 })
 
