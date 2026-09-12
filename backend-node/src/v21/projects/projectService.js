@@ -511,6 +511,18 @@ function createProjectService(db, { log = console } = {}) {
     return { restored: true };
   }
 
+  /** 风格版本记录：project_style_events 倒序只读（应用历史即版本历史，可回看） */
+  function listStyleVersions(projectId) {
+    const row = getProject(projectId);
+    if (!row) throw httpError('NOT_FOUND', 404, '项目不存在');
+    const rows = db.prepare(
+      'SELECT id, event_type, style_id, created_at FROM project_style_events WHERE drama_id = ? ORDER BY id DESC LIMIT 50'
+    ).all(row.id);
+    return {
+      items: rows.map((r) => ({ id: r.id, eventType: r.event_type, styleId: r.style_id, createdAt: r.created_at })),
+    };
+  }
+
   return {
     getProject,
     listProjects,
@@ -518,6 +530,7 @@ function createProjectService(db, { log = console } = {}) {
     getOverview,
     updateProfile,
     applyStyle,
+    listStyleVersions,
     softDeleteProject,
     restoreProject,
     deriveEpisodeStage,

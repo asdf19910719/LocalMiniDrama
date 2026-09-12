@@ -40,6 +40,10 @@ function createV21Router({ db, cfg, log }) {
   r.put('/projects/:id/style', wrap((req, res) => {
     response.success(res, projects.applyStyle(req.params.id, req.body || {}));
   }));
+  // 风格版本记录（应用历史倒序只读；「查看风格」抽屉消费）
+  r.get('/projects/:id/style/versions', wrap((req, res) => {
+    response.success(res, projects.listStyleVersions(req.params.id));
+  }));
   r.delete('/projects/:id', wrap((req, res) => {
     response.success(res, projects.softDeleteProject(req.params.id));
   }));

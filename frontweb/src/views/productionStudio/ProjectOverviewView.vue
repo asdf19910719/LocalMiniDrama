@@ -171,7 +171,12 @@
           <div class="col" style="gap:4px">
             <span class="xs muted">版本记录</span>
             <div class="small">当前版本 v{{ currentStyle ? currentStyle.version : '?' }}</div>
-            <div class="xs muted">版本历史暂未记录</div>
+            <template v-if="styleVersions.length">
+              <div v-for="(ev, i) in styleVersions" :key="ev.id" class="xs" style="padding:2px 0; color:var(--text-2)">
+                第 {{ styleVersions.length - i }} 次 · 应用「{{ ev.styleId }}」 · {{ (ev.createdAt || '').slice(0, 16).replace('T', ' ') }}
+              </div>
+            </template>
+            <div v-else class="xs muted">本项目还没有更换风格的记录</div>
           </div>
         </div>
       </div>
@@ -285,7 +290,7 @@ export default {
       overview: null, loading: false, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
       styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
       styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
-      styleDrawerOpen: false,
+      styleDrawerOpen: false, styleVersions: [],
       opsOpen: false, opsError: '', exporting: false, profileSaving: false, profileError: '',
       confirmOpen: false, confirmText: '', confirmAction: '',
     }
@@ -465,6 +470,8 @@ export default {
       this.styleDrawerOpen = true
       // 目录全量拉取，供 currentStyle 解析名称/描述/版本
       try { this.styles = await v21.listStyles({}) } catch { this.styles = [] }
+      // 版本记录接真实应用历史（project_style_events）；失败按空列表据实显示
+      try { this.styleVersions = (await v21.listStyleVersions(this.projectId)).items || [] } catch { this.styleVersions = [] }
     },
     async confirmApplyStyle() {
       this.applying = true

@@ -62,6 +62,8 @@ export const v21 = {
   getOverview: (projectId) => get(`/projects/${projectId}/overview`),
   updateProject: (projectId, body) => patch(`/projects/${projectId}`, body),
   applyStyle: (projectId, styleId) => put(`/projects/${projectId}/style`, { styleId }),
+  // 风格版本记录（project_style_events 倒序只读）
+  listStyleVersions: (projectId) => get(`/projects/${projectId}/style/versions`),
   deleteProject: (projectId) => del(`/projects/${projectId}`),
   restoreProject: (projectId) => post(`/projects/${projectId}/restore`),
   // 风格目录（复用既有接口）

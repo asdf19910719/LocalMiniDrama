@@ -66,3 +66,12 @@ test('高级画布：页头与画布内明示节点为示例投影，不再暗�
   assert.match(cv, /示例数据/, '画布内说明节点与连线为示例数据')
   assert.doesNotMatch(cv, /标准页数据的投影/, '移除含混的「数据投影」口径')
 })
+
+test('查看风格抽屉：版本记录渲染真实应用历史，删除「暂未记录」假话', () => {
+  const view = read('src/views/productionStudio/ProjectOverviewView.vue')
+  const api = read('src/v21/api.js')
+  assert.match(api, /listStyleVersions: \(projectId\)/, 'api 封装提供风格版本记录端点')
+  assert.match(view, /listStyleVersions/, '抽屉打开时拉取真实版本记录')
+  assert.match(view, /styleVersions/, '渲染版本记录列表')
+  assert.doesNotMatch(view, /版本历史暂未记录/, '不得保留与事实不符的占位')
+})
