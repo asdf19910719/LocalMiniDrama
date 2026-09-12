@@ -146,12 +146,18 @@
         </div>
         <div class="modal-b">
           <p class="xs" style="line-height:1.8; color:var(--text-2)">
-            结果 JSON 的 <code>assets_digest</code> 与任务包冻结值不一致（建包后项目素材已变化，或结果来自旧版本任务包）。
+            结果 JSON 的 <code>assets_digest</code> 与任务包冻结值不一致（多为外部 AI 转写时改动了该字段，或建包后项目素材已变化）。
             请选择下一步：按冻结快照继续导入、放弃本任务，或返回修改结果 JSON。
           </p>
+          <div class="kv" style="margin-top:8px"><span class="k">任务包冻结值</span><span class="v mono">{{ digestPrefix(task?.assetsDigest) || '—' }}</span></div>
+          <div class="kv"><span class="k">结果 JSON 携带值</span><span class="v mono" :class="digestMatched ? 'ok-t' : 'danger-t'">{{ resultDigest ? digestPrefix(resultDigest) : '（解析失败或缺失）' }}</span></div>
+          <div v-if="digestError" class="notice-card danger" style="margin-top:8px">
+            <svg><use href="#i-warn"/></svg>
+            <span>{{ digestError }}</span>
+          </div>
         </div>
         <div class="modal-f" style="flex-wrap:wrap; justify-content:flex-start; gap:8px">
-          <button class="btn primary" :disabled="importing" @click="importFrozenSnapshot()">按冻结快照导入（素材快照与建包时不一致，确认后继续）</button>
+          <button class="btn primary" :disabled="importing" @click="importFrozenSnapshot()">{{ importing ? '导入中…' : '按冻结快照导入（确认后继续）' }}</button>
           <button class="btn ghost" :disabled="abandoning" @click="abandonAndRecreate">放弃并创建新任务</button>
           <button class="btn ghost" @click="digestModal = false">返回修改结果 JSON</button>
         </div>
@@ -187,6 +193,7 @@ export default {
       imported: null,
       creating: false, validating: false, importing: false,
       restoreNotice: '', digestModal: false, abandoning: false,
+      digestError: '', resultDigest: '',
       // 上下文步真实数据：本地下一集号与项目素材对象数（任务包创建前的可预知事实）
       localNextNumber: null, projectAssetCount: null,
     }
@@ -194,6 +201,9 @@ export default {
   computed: {
     projectId() { return this.$route.params.projectId },
     stepIndex() { return STEP_KEYS.indexOf(this.step) },
+    digestMatched() {
+      return Boolean(this.task?.assetsDigest && this.resultDigest && this.task.assetsDigest === this.resultDigest)
+    },
     nextNumber() {
       return this.task?.targetEpisodeNumber || this.localNextNumber || null
     },
@@ -221,6 +231,15 @@ export default {
     if (taskId) await this.restoreFromTask(String(taskId))
   },
   methods: {
+    digestPrefix(v) {
+      return v ? String(v).slice(0, 12) + '…' : ''
+    },
+    syncResultDigest() {
+      // 从用户粘贴的 JSON 里取回它声称的 assets_digest，用于失配面板肉眼比对
+      try {
+        this.resultDigest = JSON.parse(this.resultText || '{}')?.assets_digest || ''
+      } catch { this.resultDigest = '' }
+    },
     // Esc 关本视图唯一的遮罩层（素材快照摘要不一致三选面板）
     onEsc() {
       if (this.digestModal) { this.digestModal = false; return true }
@@ -331,6 +350,8 @@ export default {
         this.step = 'preview'
       } catch (e) {
         if (e.code === 'ASSETS_DIGEST_MISMATCH') {
+          this.syncResultDigest()
+          this.digestError = ''
           this.digestModal = true
           return
         }
@@ -346,16 +367,18 @@ export default {
         this.digestModal = false
         this.step = 'done'
       } catch (e) {
+        // 错误保留在失配面板内呈现（toast 一闪而过，用户感知为"没有用"）
+        this.digestError = e.message
         if (e.code === 'ASSETS_DIGEST_MISMATCH') {
+          this.syncResultDigest()
           this.digestModal = true
-          return
         }
-        ElMessage.error(e.message)
       } finally {
         this.importing = false
       }
     },
     async importFrozenSnapshot() {
+      this.digestError = ''
       await this.confirmImport({ frozenSnapshot: true })
     },
     /** 放弃当前任务：取消后回第一步，可重新创建新任务包 */

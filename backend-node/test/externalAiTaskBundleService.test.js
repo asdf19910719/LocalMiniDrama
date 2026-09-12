@@ -114,6 +114,7 @@ describe('externalAiTaskBundleService', () => {
     assert.equal('style_prompt_zh' in first.asset_manifest.project, false);
     assert.equal(first.response_schema.properties.prompt_contract.const, 'base_prompt');
     assert.match(first.instructions_markdown, /禁止返回 style\/style_id/);
+    assert.match(first.instructions_markdown, /assets_digest[\s\S]*?原样复制/, '任务说明必须要求外部 AI 原样复制 assets_digest（防导入摘要失配）');
     assert.equal('id' in first.asset_manifest.characters[0], false);
     assert.equal('character_id' in first.asset_manifest.characters[0].variants[0], false);
     assert.equal(first.asset_snapshot.characters.char_21.id, 21);

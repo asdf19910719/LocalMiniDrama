@@ -328,7 +328,7 @@ function buildInstructions(drama, target, packageId) {
     '4. 新人物必须完整提供性格、外貌、base_image_prompt、负向提示词、声音设定和至少一个状态。',
     '5. 分镜编号必须从 1 连续递增，所有引用必须指向已有 source_key 或本结果中的 local_ref。',
     '6. universal_segment_text 中如需引用参考图，必须使用规范槽位 @图片1、@图片2……：@图片1 对应场景，随后按 character_refs 的 sort_order 对应人物状态，最后对应 prop_refs；不要写 @场景/@人物/@道具或资产名称来代替槽位。',
-    '7. package_id 必须原样返回，version 必须为字符串 2，prompt_contract 必须为 base_prompt。',
+    '7. package_id 与 assets_digest 必须从本任务 JSON 原样复制返回，禁止改动、截断或自行计算/猜测这两个字段的值——它们是导入校验回执，值不对结果会被拒绝；version 必须为字符串 2，prompt_contract 必须为 base_prompt。',
     '8. 项目风格为只读权威配置。禁止返回 style/style_id/style_prompt_*，也禁止返回 image_prompt/video_prompt/final_prompt/compiled_prompt；只能提交内容层 base_image_prompt/base_video_prompt，项目会在创建任务时编译并冻结最终提示词。',
   ].join('\n');
 }

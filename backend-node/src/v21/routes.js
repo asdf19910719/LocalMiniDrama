@@ -577,10 +577,26 @@ function createV21Router({ db, cfg, log }) {
     response.success(res, wizard.validateResult(req.params.taskId, req.body?.resultJson || ""));
   }));
   r.post('/external-ai/tasks/:taskId/import/preview', wrap((req, res) => {
-    response.success(res, wizard.previewImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
+    try {
+      response.success(res, wizard.previewImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
+    } catch (e) {
+      log.error?.('V2.1 external-ai import preview failed', { taskId: req.params.taskId, code: e.code, message: e.message });
+      throw e;
+    }
   }));
   r.post('/external-ai/tasks/:taskId/import/confirm', wrap((req, res) => {
-    response.created(res, wizard.confirmImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
+    try {
+      response.created(res, wizard.confirmImport(req.params.taskId, req.body?.resultJson || "", req.body || {}));
+    } catch (e) {
+      log.error?.('V2.1 external-ai import confirm failed', {
+        taskId: req.params.taskId,
+        code: e.code,
+        message: e.message,
+        frozenSnapshot: Boolean(req.body?.frozenSnapshot),
+        resultDigest: (() => { try { return JSON.parse(req.body?.resultJson || '{}')?.assets_digest?.slice(0, 12); } catch { return null; } })(),
+      });
+      throw e;
+    }
   }));
 
   // ---- 成片阶段（Task 5.x） ----
