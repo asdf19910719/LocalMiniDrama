@@ -368,7 +368,7 @@ test('外部 AI 回流：adaptExternalAiResultV21 合并新资产并生成规范
 
   const result = {
     schema: 'local-mini-drama.external-ai-result',
-    version: '2.1',
+    version: '2',
     package_id: task.packageId,
     assets_digest: task.assetsDigest,
     generator: { name: 'ChatGPT' },
@@ -435,7 +435,7 @@ test('外部 AI 回流：篡改 package_id 或 assets_digest 被拒', () => {
   const task = wizard.getTask(created.taskId);
   const base = {
     schema: 'local-mini-drama.external-ai-result',
-    version: '2.1',
+    version: '2',
     package_id: task.packageId,
     assets_digest: task.assetsDigest,
     episode: {
@@ -466,7 +466,7 @@ test('外部 AI 回流端到端：任务包 → 校验 → 预览 → 导入（�
   const task = wizard.getTask(created.taskId);
   const result = {
     schema: 'local-mini-drama.external-ai-result',
-    version: '2.1',
+    version: '2',
     package_id: task.packageId,
     assets_digest: task.assetsDigest,
     episode: {

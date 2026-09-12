@@ -26,7 +26,7 @@ function setup() {
 function validPackage() {
   return {
     schema: 'local-mini-drama.episode-package',
-    version: '2.1',
+    version: '2',
     episode: {
       episode_number: 1,
       title: '客房来电',
@@ -146,7 +146,7 @@ function guestCharacterWithStates() {
 function validResult(task) {
   return {
     schema: 'local-mini-drama.external-ai-result',
-    version: '2.1',
+    version: '2',
     package_id: task.packageId,
     assets_digest: task.assetsDigest,
     episode: {

@@ -266,7 +266,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       return { ok: false, checks, errors: [err.message] };
     }
 
-    push('schema', 'Schema 协议版本', result.schema === RESULT_SCHEMA_NAME && result.version === '2.1',
+    push('schema', 'Schema 协议版本', result.schema === RESULT_SCHEMA_NAME && String(result.version) === '2',
       `schema=${result.schema} version=${result.version}`);
     push('package_id', '任务包 ID 匹配', result.package_id === row.package_id,
       `结果 ${result.package_id} vs 任务 ${row.package_id}`);
@@ -340,11 +340,11 @@ function createExternalAiWizardService(db, { log = console } = {}) {
    *  options.frozenSnapshot：仅当素材快照摘要（assets_digest）失配时跳过该单项校验，其余校验照常。 */
   function adaptResult(packageId, result, options = {}) {
     const row = requireTaskRow(packageId);
-    if (result.schema !== RESULT_SCHEMA_NAME || result.version !== '2.1') {
+    if (result.schema !== RESULT_SCHEMA_NAME || String(result.version) !== '2') {
       throw httpError(
         'PACKAGE_SCHEMA_UNSUPPORTED',
         400,
-        `粘贴的内容不是外部 AI 结果 JSON（需要 schema="local-mini-drama.external-ai-result" 且 version="2.1"，实际收到 schema=${result.schema || '（缺失）'}、version=${result.version || '（缺失）'}）。请确认粘贴的是外部 AI 返回的结果，而不是任务书 episode-task.json`
+        `粘贴的内容不是外部 AI 结果 JSON（需要 schema="local-mini-drama.external-ai-result" 且 version="2"，实际收到 schema=${result.schema || '（缺失）'}、version=${result.version === undefined ? '（缺失）' : result.version}）。请确认粘贴的是外部 AI 返回的结果，而不是任务书 episode-task.json`
       );
     }
     if (result.package_id !== row.package_id) {

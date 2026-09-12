@@ -172,7 +172,7 @@ test('剧本二：外部 AI 制作包回流（包→篡改拒绝→校验→五�
     // 合法结果（契约：external-ai-result@2.1）
     const validResult = {
       schema: 'local-mini-drama.external-ai-result',
-      version: '2.1',
+      version: '2',
       package_id: pkg.packageId,
       assets_digest: pkg.assetsDigest,
       episode: {
