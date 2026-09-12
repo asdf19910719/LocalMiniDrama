@@ -1045,6 +1045,9 @@ export default {
         await v21.generateShotImage(this.currentShotId, {})
         const detail = await v21.getShot(this.currentShotId)
         this.imageCandidates = detail.imageCandidates
+      } catch (e) {
+        // QA-008：Provider 不可达等失败必须可见（此前 502 静默，用户点了没反应）
+        this.notice = e.message || '分镜图生成失败，请检查生成通道后重试'
       } finally {
         this.generatingImage = false
       }
