@@ -363,7 +363,7 @@ function createTaskBundle(db, dramaId, options = {}) {
     targetEpisodeId: target.episode?.id,
     targetEpisodeNumber: target.episodeNumber,
   });
-  let responseSchema = basicResponseSchema();
+  let responseSchema = basicResponseSchema(assetsDigest);
   try {
     const contract = require('./externalAiResultContract');
     if (contract.EXTERNAL_AI_RESULT_SCHEMA) responseSchema = contract.EXTERNAL_AI_RESULT_SCHEMA;
