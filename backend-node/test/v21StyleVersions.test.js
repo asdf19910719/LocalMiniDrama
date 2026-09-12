@@ -22,10 +22,10 @@ function setup() {
 test('listStyleVersions：applyStyle 每次应用留痕，倒序返回可回看的版本记录', () => {
   const { projects } = setup();
   projects.applyStyle(1, { styleId: 'rh-101-cinematic' });
-  projects.applyStyle(1, { styleId: 'rh-102-anime' });
+  projects.applyStyle(1, { styleId: 'rh-102-bw-film' });
   const { items } = projects.listStyleVersions(1);
   assert.equal(items.length, 2);
-  assert.equal(items[0].styleId, 'rh-102-anime', '最近应用在前');
+  assert.equal(items[0].styleId, 'rh-102-bw-film', '最近应用在前');
   assert.equal(items[0].eventType, 'style-applied');
   assert.ok(items[0].createdAt, '带应用时间');
 });

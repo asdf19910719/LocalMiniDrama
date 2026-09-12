@@ -23,7 +23,15 @@ function setup() {
 test('小说拆集来源：confirm 后各集 importSchema=novel-split，导入来源抽屉可读', () => {
   const { db, episodes } = setup();
   const novel = createNovelSplitService({ db, log });
-  const result = novel.confirm('第一章 夜行\n凌晨的街道空无一人。\n\n第二章 巷口\n路灯在雾里晃。', { dramaId: 1, maxChapters: 5 });
+  // 章节正文需超过 20 字才被检测为一章
+  const text = [
+    '第一章 夜行',
+    '凌晨的街道空无一人，只有路灯在雾里晃动，林夏收起伞，沿着湿漉漉的青石板走向巷口深处。',
+    '',
+    '第二章 巷口',
+    '巷口的老钟敲了三下，陈默靠在斑驳的墙边等待，远处的脚步声由远及近，打破了整条街的寂静。',
+  ].join('\n');
+  const result = novel.confirm(text, { dramaId: 1, maxChapters: 5 });
   assert.equal(result.episodes.length, 2);
   const list = episodes.listEpisodes(1, {});
   for (const ep of list.items) assert.equal(ep.importSchema, 'novel-split');

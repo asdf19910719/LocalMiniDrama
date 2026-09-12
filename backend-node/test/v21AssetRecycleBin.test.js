@@ -55,6 +55,6 @@ test('listAssets recycled：回收站口径与类型筛选、搜索组合生效'
   assert.equal(binAll.items.length, 2);
   const binChar = assets.listAssets(1, { recycled: true, type: 'character' });
   assert.deepEqual(binChar.items.map((i) => i.id), [c1.id]);
-  const binSearched = assets.listAssets(1, { recycled: true, q: '陈' });
-  assert.deepEqual(binSearched.items.map((i) => i.id), [c2.id]);
+  const binSearched = assets.listAssets(1, { recycled: true, q: '林' });
+  assert.deepEqual(binSearched.items.map((i) => i.id), [c1.id]);
 });
