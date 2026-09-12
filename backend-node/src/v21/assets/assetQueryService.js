@@ -34,13 +34,13 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
     return row.image_url || null;
   }
 
-  function listAssets(dramaId, { type = 'all', q = '', onlyBlocked = false } = {}) {
+  function listAssets(dramaId, { type = 'all', q = '', onlyBlocked = false, recycled = false } = {}) {
     const out = [];
     const types = type === 'all' ? ['character', 'scene', 'prop'] : [type];
     for (const t of types) {
       const table = TABLE_BY_TYPE[t];
       const rows = db
-        .prepare(`SELECT * FROM ${table} WHERE drama_id = ? AND deleted_at IS NULL ORDER BY id`)
+        .prepare(`SELECT * FROM ${table} WHERE drama_id = ? AND deleted_at IS ${recycled ? 'NOT NULL' : 'NULL'} ORDER BY deleted_at DESC, id`)
         .all(Number(dramaId));
       for (const row of rows) {
         const name = row.name || row.location || '';
@@ -58,6 +58,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
           description,
           currentImage: imageUrl,
           blocked,
+          ...(recycled ? { deletedAt: row.deleted_at || null } : {}),
         });
       }
     }

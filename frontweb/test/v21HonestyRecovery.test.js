@@ -22,3 +22,12 @@ test('项目列表归档页签：卡片菜单提供恢复项目入口（restoreP
   assert.match(view, /恢复项目/, '菜单提供恢复项目动作')
   assert.match(view, /恢复失败，请重试|v21Toast/, '恢复失败不得静默')
 })
+
+test('项目素材回收站：筛选段提供回收站视图与恢复动作，删除文案指向本页回收站', () => {
+  const view = read('src/views/productionStudio/ProjectAssetsView.vue')
+  assert.match(view, /view === 'recycled'/, '存在回收站视图状态')
+  assert.match(view, /recycled: this\.view === 'recycled'/, '列表请求带回收站口径')
+  assert.match(view, /restoreOne/, '回收站卡片提供恢复动作')
+  assert.match(view, /可在本页「回收站」筛选中恢复/, '删除确认文案指向本页回收站（不再指向高级数据工具）')
+  assert.doesNotMatch(view, /可在高级数据工具中恢复删除/, '不得再承诺不存在的入口')
+})

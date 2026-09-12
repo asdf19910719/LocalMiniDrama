@@ -24,7 +24,7 @@
       <StateBlock v-else-if="loadError && !loaded" state="error" :message="'项目素材加载失败：' + loadError" @retry="retryLoad" />
       <template v-else>
 
-      <div class="stats">
+      <div class="stats" v-if="view === 'active'">
         <div class="card stat"><div class="ic"><svg><use href="#i-user"/></svg></div><div><b>{{ countOf('character') }}</b><span>人物</span></div></div>
         <div class="card stat"><div class="ic"><svg><use href="#i-scene"/></svg></div><div><b>{{ countOf('scene') }}</b><span>场景资产</span></div></div>
         <div class="card stat"><div class="ic"><svg><use href="#i-cube"/></svg></div><div><b>{{ countOf('prop') }}</b><span>道具</span></div></div>
@@ -37,6 +37,8 @@
           <span :class="{ on: type === 'character' }" @click="setType('character')">人物 {{ countOf('character') }}</span>
           <span :class="{ on: type === 'scene' }" @click="setType('scene')">场景 {{ countOf('scene') }}</span>
           <span :class="{ on: type === 'prop' }" @click="setType('prop')">道具 {{ countOf('prop') }}</span>
+          <span :class="{ on: view === 'recycled' }" @click="setView('recycled')">回收站</span>
+          <span v-if="view === 'recycled'" :class="{ on: view === 'active' }" @click="setView('active')">返回素材</span>
         </div>
         <div class="input" style="width:210px">
           <svg><use href="#i-search"/></svg>
@@ -56,17 +58,22 @@
               <span class="st badge" :class="item.offline ? 'danger' : (item.blocked ? 'warn' : 'ok')">{{ item.offline ? '媒体离线' : (item.blocked ? '缺少当前图' : '已确认') }}</span>
             </div>
             <div class="info"><b>{{ item.name }}</b><p>{{ typeLabel(item.assetType) }} · {{ item.description || '—' }}</p></div>
+            <!-- 回收站视图：提供恢复动作（仅回收站口径渲染） -->
+            <div v-if="view === 'recycled'" class="row" style="padding:0 12px 12px; gap:8px">
+              <span class="xs muted" style="flex:1">移入回收站于 {{ (item.deletedAt || '').slice(0, 10) || '—' }}</span>
+              <button class="btn sm" :disabled="restoringId === item.assetType + ':' + item.id" @click.stop="restoreOne(item)">{{ restoringId === item.assetType + ':' + item.id ? '恢复中…' : '恢复' }}</button>
+            </div>
           </div>
         </div>
       </template>
       <div v-if="grouped.length === 0" class="empty-box">
         <svg style="width:38px;height:38px;color:var(--muted)"><use :href="q ? '#i-search' : '#i-cube'"/></svg>
         <div style="text-align:center">
-          <p style="font-size:13.5px">{{ q ? '没有匹配的素材' : '还没有项目素材' }}</p>
-          <p class="xs muted" style="margin-top:4px">{{ q ? '换个关键词，或清除搜索后重试' : '人物、场景、道具会在这里建档，供剧本与分镜引用' }}</p>
+          <p style="font-size:13.5px">{{ view === 'recycled' ? '回收站为空' : (q ? '没有匹配的素材' : '还没有项目素材') }}</p>
+          <p class="xs muted" style="margin-top:4px">{{ view === 'recycled' ? '移入回收站的素材会在这里保留，可随时恢复' : (q ? '换个关键词，或清除搜索后重试' : '人物、场景、道具会在这里建档，供剧本与分镜引用') }}</p>
         </div>
         <button v-if="q" class="btn" @click="q = ''; load()">清除搜索</button>
-        <button v-else class="btn primary" @click="createOpen = true">新增第一个素材</button>
+        <button v-else-if="view !== 'recycled'" class="btn primary" @click="createOpen = true">新增第一个素材</button>
       </div>
       </template>
     </div>
@@ -235,7 +242,7 @@
           <div class="kv"><span class="k">状态数</span><span class="v">{{ (detail?.states || []).length }}</span></div>
           <div class="sec-t" style="color:var(--danger)">危险区</div>
           <div class="danger-zone">
-            <p class="muted" style="margin:0; font-size:12px; line-height:1.6">移入回收站后素材不再出现在项目素材列表，可在高级数据工具中恢复删除。</p>
+            <p class="muted" style="margin:0; font-size:12px; line-height:1.6">移入回收站后素材不再出现在项目素材列表，可在本页「回收站」筛选中恢复。</p>
             <button class="btn danger" @click="askRemove"><svg><use href="#i-trash"/></svg>移入回收站</button>
           </div>
         </div>
@@ -398,6 +405,7 @@
 
 <script>
 import v21 from '@/v21/api.js'
+import { v21Toast } from '@/v21/ui.js'
 import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
 
@@ -408,6 +416,8 @@ export default {
   data() {
     return {
       items: [], _all: [], type: 'all', q: '',
+      // 回收站视图：view=recycled 时列表走回收站口径并提供恢复动作
+      view: 'active', restoringId: null,
       loading: false, loaded: false, loadError: '',
       createOpen: false, createForm: { type: 'character', name: '', description: '' },
       detailOpen: false, detail: null, generating: false, projectTitle: '', expandedRecordId: null,
@@ -487,9 +497,9 @@ export default {
     async load() {
       this.loading = true
       try {
-        const data = await v21.listAssets(this.projectId, { type: this.type, q: this.q })
+        const data = await v21.listAssets(this.projectId, { type: this.type, q: this.q, recycled: this.view === 'recycled' })
         this.items = data.items || []
-        this._all = await v21.listAssets(this.projectId, { type: 'all', q: this.q }).then((d) => d.items || [])
+        this._all = await v21.listAssets(this.projectId, { type: 'all', q: this.q, recycled: this.view === 'recycled' }).then((d) => d.items || [])
         this.loadError = ''
         this.loaded = true
       } catch (e) {
@@ -508,6 +518,27 @@ export default {
     async retryLoad() {
       await this.load()
       await this.consumeAssetQuery()
+    },
+    // 回收站视图切换：重载列表（回收站口径 / 默认口径）
+    setView(v) {
+      if (this.view === v) return
+      this.view = v
+      this.load()
+    },
+    // 回收站恢复：调既有 restore 端点，成功回默认口径，失败就地提示
+    async restoreOne(item) {
+      const key = item.assetType + ':' + item.id
+      if (this.restoringId) return
+      this.restoringId = key
+      try {
+        await v21.restoreAsset(item.assetType, item.id)
+        v21Toast('素材已恢复')
+        this.load()
+      } catch (e) {
+        this.notice = e.message || '恢复失败，请重试'
+      } finally {
+        this.restoringId = null
+      }
     },
     // ---- 横切 B：?asset=<type>:<id> URL 恢复（规格 ASSETS-030 本期最小：只做 asset 参数） ----
     // 列表加载后消费深链：命中素材打开详情抽屉；未命中清除参数，不留死链
