@@ -97,10 +97,18 @@ test('更换风格：预览图真实渲染，点卡片选中 → 右下角确认
 test('风格详情与创建我的风格：详情可见中英文提示词，创建走 /styles/custom（对齐旧版能力）', () => {
   const v = view()
   const api = readApi()
-  // 详情：大图 + 中文名/说明 + 中英文提示词
+  // 详情：大图 + 中文名/说明 + 中英文提示词（默认展开，不收起）
   assert.match(v, /openStyleDetail|styleDetail/, '卡片提供详情入口')
   assert.match(v, /promptZh/, '详情展示中文风格提示词')
   assert.match(v, /promptEn/, '详情展示英文风格提示词')
+  const detailOpen = v.match(/openStyleDetail\(s\) \{[\s\S]*?\n    \},/)
+  assert.ok(detailOpen, 'openStyleDetail 方法应存在')
+  assert.match(detailOpen[0], /showZhPrompt = true/, '详情中文提示词默认展开')
+  assert.match(detailOpen[0], /showEnPrompt = true/, '详情英文提示词默认展开')
+  // 预览图尺寸对齐旧版：16:10 比例（约 265×165），弹窗 1120px 四列
+  assert.match(v, /aspect-ratio:16\/10/, '预览图按 16:10 比例展示（不再固定 96px 高）')
+  assert.match(v, /width:1120px/, '弹窗宽度对齐旧版 1120px')
+  assert.doesNotMatch(v, /height:96px/, '不得保留 96px 固定小图')
   // 创建：表单必填 + 走 /styles/custom 端点
   assert.match(api, /styles\/custom/, 'api 封装提供自定义风格创建端点')
   assert.match(v, /创建我的风格/, '提供创建我的风格入口')

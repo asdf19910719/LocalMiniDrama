@@ -189,7 +189,7 @@
     <!-- 更换风格 Modal（17）：点卡片选中 → 右下角确认一步更换；卡片带预览图与详情；支持创建我的风格 -->
     <div v-if="styleOpen" class="scrim" style="z-index:80" @click="styleOpen = false"></div>
     <div v-if="styleOpen" class="modal-wrap" style="z-index:90">
-      <div class="modal" style="width:880px">
+      <div class="modal" style="width:1120px; max-width:94vw">
         <div class="modal-h">
           <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-palette"/></svg>
           <h3>{{ styleStep === 'detail' ? '风格详情' : styleStep === 'create' ? '创建我的风格' : '更换画面风格' }}</h3>
@@ -213,8 +213,8 @@
             <div class="style-grid">
               <div v-for="(s, i) in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
                 <div style="position:relative">
-                  <img v-if="s.preview?.localPath" :src="s.preview.localPath" :alt="`${s.labelZh || s.id} 预览`" loading="lazy" style="width:100%; height:96px; object-fit:cover; display:block">
-                  <div v-else class="ph" style="height:96px; border-radius:0"></div>
+                  <img v-if="s.preview?.localPath" :src="s.preview.localPath" :alt="`${s.labelZh || s.id} 预览`" loading="lazy" style="width:100%; aspect-ratio:16/10; object-fit:cover; display:block">
+                  <div v-else class="ph" style="aspect-ratio:16/10; border-radius:0"></div>
                   <span v-if="s.id === overview?.style?.styleId" class="badge accent" style="position:absolute; left:7px; top:7px; height:20px">当前使用</span>
                   <span v-else-if="s.id === selectedStyleId" class="badge accent" style="position:absolute; left:7px; top:7px; height:20px">已选</span>
                   <button class="btn sm ghost" style="position:absolute; right:7px; top:7px; height:22px; padding:0 8px; background:rgba(10,12,18,.65); border:none; color:#e6e9f2; font-size:11px" @click.stop="openStyleDetail(s)">详情</button>
@@ -505,11 +505,11 @@ export default {
       this.selectedStyleId = this.overview.style.styleId || ''
       await this.loadStyles()
     },
-    // 风格详情：大图 + 说明 + 中英文提示词（数据来自目录条目，本就含 promptZh/promptEn）
+    // 风格详情：大图 + 说明 + 中英文提示词（默认展开，数据来自目录条目本就含 promptZh/promptEn）
     openStyleDetail(s) {
       this.styleDetail = s
-      this.showZhPrompt = false
-      this.showEnPrompt = false
+      this.showZhPrompt = true
+      this.showEnPrompt = true
       this.styleStep = 'detail'
     },
     useDetailStyle() {
@@ -637,9 +637,9 @@ export default {
 .more-sep { height: 1px; background: var(--line); margin: 4px 2px; }
 .more-note { padding: 2px 6px 4px; white-space: normal; line-height: 1.5; }
 .tab.disabled { opacity: .45; cursor: not-allowed; }
-.style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 380px; overflow: auto; }
+.style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-height: 56vh; overflow: auto; }
 .style-item { padding: 0; overflow: hidden; cursor: pointer; }
-.style-item .ph { height: 96px; border-radius: 0; }
+.style-item .ph { aspect-ratio: 16/10; border-radius: 0; }
 .style-item.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--panel2); }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 </style>
