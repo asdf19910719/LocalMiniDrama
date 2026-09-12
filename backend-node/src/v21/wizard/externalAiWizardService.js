@@ -341,7 +341,11 @@ function createExternalAiWizardService(db, { log = console } = {}) {
   function adaptResult(packageId, result, options = {}) {
     const row = requireTaskRow(packageId);
     if (result.schema !== RESULT_SCHEMA_NAME || result.version !== '2.1') {
-      throw httpError('PACKAGE_SCHEMA_UNSUPPORTED', 400, '外部 AI 结果必须是 external-ai-result@2.1');
+      throw httpError(
+        'PACKAGE_SCHEMA_UNSUPPORTED',
+        400,
+        `粘贴的内容不是外部 AI 结果 JSON（需要 schema="local-mini-drama.external-ai-result" 且 version="2.1"，实际收到 schema=${result.schema || '（缺失）'}、version=${result.version || '（缺失）'}）。请确认粘贴的是外部 AI 返回的结果，而不是任务书 episode-task.json`
+      );
     }
     if (result.package_id !== row.package_id) {
       throw httpError('PACKAGE_TASK_MISMATCH', 409, '结果中的 package_id 与任务不匹配');
