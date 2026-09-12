@@ -64,6 +64,10 @@ export const v21 = {
   applyStyle: (projectId, styleId) => put(`/projects/${projectId}/style`, { styleId }),
   // 风格版本记录（project_style_events 倒序只读）
   listStyleVersions: (projectId) => get(`/projects/${projectId}/style/versions`),
+  // 创建我的风格（v1 复用端点：中英文名/说明/中英文提示词全必填）
+  createCustomStyle: async (body) => {
+    try { return unwrap(await axios.post('/api/v1/styles/custom', body)) } catch (e) { throw toError(e) }
+  },
   deleteProject: (projectId) => del(`/projects/${projectId}`),
   restoreProject: (projectId) => post(`/projects/${projectId}/restore`),
   // 风格目录（复用既有接口）

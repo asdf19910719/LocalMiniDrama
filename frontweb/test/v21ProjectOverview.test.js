@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 const view = () => read('src/views/productionStudio/ProjectOverviewView.vue')
+const readApi = () => read('src/v21/api.js')
 
 test('概览操作菜单：导出项目备份 + 高级数据工具 + 归档导入诚实文案（O1）', () => {
   const v = view()
@@ -76,37 +77,36 @@ test('查看风格：只读抽屉（来源/视觉规则/使用口径/版本记�
   assert.match(v, /styleDrawerOpen/, '查看风格应为独立只读抽屉')
 })
 
-test('更换风格：影响确认弹窗前置，确认后才调 applyStyle（O4/O5）', () => {
+test('更换风格：预览图真实渲染，点卡片选中 → 右下角确认一步更换（对齐旧版交互）', () => {
   const v = view()
-  // 选择步页脚不得直连 applyStyle
+  // 风格卡渲染真实预览图（preview.localPath），无图回退占位渐变
+  assert.match(v, /s\.preview\?\.localPath/, '风格卡应渲染 preview.localPath 预览图')
+  assert.match(v, /v-else.*class="ph|class="ph[\s\S]{0,80}v-else|:class="\[s\.preview/, '无预览图时回退占位渐变')
+  // 一步流程：footer 直接确认更换调用 confirmApplyStyle，不再有“下一步：确认影响”中间步
   assert.match(v, /confirmApplyStyle/, '应有 confirmApplyStyle 确认方法')
-  assert.match(v, /@click="confirmApplyStyle"/, '「确认更换」应绑定 confirmApplyStyle')
   const confirmFn = v.match(/async confirmApplyStyle\(\) \{[\s\S]*?\n    \},/)
   assert.ok(confirmFn, 'confirmApplyStyle 方法应存在')
   assert.match(confirmFn[0], /v21\.applyStyle/, '确认方法才调用 v21.applyStyle')
   assert.match(confirmFn[0], /catch/, '应用风格失败应有 catch')
-  // 三条确认口径
-  assert.match(v, /确认后创建新风格版本/, '确认口径①')
-  assert.match(v, /已引用素材与候选不自动重新生成/, '确认口径②')
-  assert.match(v, /历史版本保留可回看/, '确认口径③')
-  // 两步结构：选择步按钮为进入确认，不再单步直应用
-  assert.match(v, /styleStep/, '风格弹窗应有分步状态')
+  assert.doesNotMatch(v, /下一步：确认影响/, '不得保留两步流程的中间确认步')
   assert.doesNotMatch(v, /@click="applyStyle"/, '不得存在直连 applyStyle 的按钮')
+  // 选中反馈可见：卡片带“已选”徽标
+  assert.match(v, /已选/, '选中卡片应有“已选”徽标（选中态可见）')
 })
 
-test('风格 Modal 三标签：预设/我的/自定义，按 type 过滤或诚实禁用（O5）', () => {
+test('风格详情与创建我的风格：详情可见中英文提示词，创建走 /styles/custom（对齐旧版能力）', () => {
   const v = view()
-  assert.match(v, /预设风格/, '预设风格 tab 应存在')
-  assert.match(v, /我的风格/, '我的风格 tab 应存在')
-  assert.match(v, /自定义风格/, '自定义风格 tab 应存在')
-  assert.match(v, /styleTab/, '应有 styleTab 状态')
-  // /api/v1/styles 支持 type 过滤：预设=system、我的=custom 均可真实拉取
-  const loadStyles = v.match(/async loadStyles\([\s\S]*?\n    \},/)
-  assert.ok(loadStyles, 'loadStyles 方法应存在')
-  assert.match(loadStyles[0], /query\.type = 'system'/, '预设风格 tab 应按 type=system 过滤')
-  assert.match(loadStyles[0], /query\.type = 'custom'/, '我的风格 tab 应按 type=custom 过滤')
-  // 自定义风格 tab：无安装目录支持 → 禁用态 + 说明
-  assert.match(v, /安装自定义风格目录后开放/, '自定义风格 tab 应诚实禁用并说明')
+  const api = readApi()
+  // 详情：大图 + 中文名/说明 + 中英文提示词
+  assert.match(v, /openStyleDetail|styleDetail/, '卡片提供详情入口')
+  assert.match(v, /promptZh/, '详情展示中文风格提示词')
+  assert.match(v, /promptEn/, '详情展示英文风格提示词')
+  // 创建：表单必填 + 走 /styles/custom 端点
+  assert.match(api, /styles\/custom/, 'api 封装提供自定义风格创建端点')
+  assert.match(v, /创建我的风格/, '提供创建我的风格入口')
+  assert.match(v, /styleForm/, '存在创建表单状态')
+  // 不得再保留误导性禁用口径（创建端点一直可用）
+  assert.doesNotMatch(v, /安装自定义风格目录后开放/, '不得再保留“需安装目录”的误导文案')
 })
 
 test('概览加载失败不伪装：catch + 错误卡 + 重试（O7；Task 5-B 收口为 StateBlock 统一呈现）', () => {

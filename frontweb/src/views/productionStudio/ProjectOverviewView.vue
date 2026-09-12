@@ -186,32 +186,38 @@
       </div>
     </aside>
 
-    <!-- 更换风格 Modal（17）：选择 → 影响确认 → 应用 -->
+    <!-- 更换风格 Modal（17）：点卡片选中 → 右下角确认一步更换；卡片带预览图与详情；支持创建我的风格 -->
     <div v-if="styleOpen" class="scrim" style="z-index:80" @click="styleOpen = false"></div>
     <div v-if="styleOpen" class="modal-wrap" style="z-index:90">
       <div class="modal" style="width:880px">
         <div class="modal-h">
           <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-palette"/></svg>
-          <h3>{{ styleStep === 'confirm' ? '确认更换画面风格' : '更换画面风格' }}</h3>
+          <h3>{{ styleStep === 'detail' ? '风格详情' : styleStep === 'create' ? '创建我的风格' : '更换画面风格' }}</h3>
           <button class="icon-btn" @click="styleOpen = false"><svg><use href="#i-close"/></svg></button>
         </div>
         <div class="modal-b" style="overflow:hidden">
+          <!-- 选择视图 -->
           <template v-if="styleStep === 'select'">
-            <div class="tabs" style="margin-bottom:8px">
-              <span class="tab" :class="{ on: styleTab === 'preset' }" @click="switchStyleTab('preset')">预设风格</span>
-              <span class="tab" :class="{ on: styleTab === 'mine' }" @click="switchStyleTab('mine')">我的风格</span>
-              <span class="tab disabled">自定义风格</span>
+            <div class="row" style="margin-bottom:10px; gap:8px">
+              <div class="tabs" style="border:none">
+                <span class="tab" :class="{ on: styleTab === 'preset' }" @click="switchStyleTab('preset')">预设风格</span>
+                <span class="tab" :class="{ on: styleTab === 'mine' }" @click="switchStyleTab('mine')">我的风格<span v-if="customCount" class="cnt">{{ customCount }}</span></span>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn sm" style="border:1px solid var(--line)" @click="openCreateStyle"><svg><use href="#i-plus"/></svg>创建我的风格</button>
             </div>
-            <div class="xs muted" style="margin-bottom:10px">「自定义风格」需安装自定义风格目录后开放</div>
             <div class="input" style="width:280px; margin-bottom:12px">
               <svg><use href="#i-search"/></svg>
               <input v-model="styleQuery" placeholder="搜索风格" style="background:transparent;border:none;outline:none;color:var(--text);width:100%;font-size:13px" @input="loadStyles()">
             </div>
             <div class="style-grid">
-              <div v-for="s in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
+              <div v-for="(s, i) in styles" :key="s.id" class="style-item card" :class="{ sel: s.id === selectedStyleId }" @click="selectedStyleId = s.id">
                 <div style="position:relative">
-                  <div class="ph" style="height:96px; border-radius:0"></div>
+                  <img v-if="s.preview?.localPath" :src="s.preview.localPath" :alt="`${s.labelZh || s.id} 预览`" loading="lazy" style="width:100%; height:96px; object-fit:cover; display:block">
+                  <div v-else class="ph" style="height:96px; border-radius:0"></div>
                   <span v-if="s.id === overview?.style?.styleId" class="badge accent" style="position:absolute; left:7px; top:7px; height:20px">当前使用</span>
+                  <span v-else-if="s.id === selectedStyleId" class="badge accent" style="position:absolute; left:7px; top:7px; height:20px">已选</span>
+                  <button class="btn sm ghost" style="position:absolute; right:7px; top:7px; height:22px; padding:0 8px; background:rgba(10,12,18,.65); border:none; color:#e6e9f2; font-size:11px" @click.stop="openStyleDetail(s)">详情</button>
                 </div>
                 <div style="padding:8px 10px 10px">
                   <b style="font-size:12.5px; display:block">{{ s.labelZh || s.label_zh || s.id }}</b>
@@ -219,22 +225,56 @@
                 </div>
               </div>
             </div>
-            <p v-if="!styleLoading && !styles.length" class="xs muted" style="margin-top:10px">{{ styleTab === 'mine' ? '还没有自定义风格' : '没有匹配的风格' }}</p>
-            <div class="xs muted" style="margin-top:12px">应用风格只影响之后的新生成，不会改动现有素材与成片。</div>
+            <p v-if="!styleLoading && !styles.length" class="xs muted" style="margin-top:10px">{{ styleTab === 'mine' ? '还没有自定义风格，点右上角「创建我的风格」新建' : '没有匹配的风格' }}</p>
+            <div v-if="styleError" class="notice-strip danger small" style="margin-top:10px">{{ styleError }}</div>
+            <div class="xs muted" style="margin-top:12px">应用风格只影响之后的新生成，不会改动现有素材与成片；确认后创建新风格版本，历史版本保留可回看。</div>
           </template>
-          <template v-else>
-            <div class="col" style="gap:14px">
-              <div class="card pad" style="display:flex; align-items:center; gap:10px">
-                <svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-palette"/></svg>
-                <b>{{ selectedStyleName }}</b>
-                <span class="badge">{{ selectedStyleId }}</span>
+          <!-- 详情视图：大图 + 中文名/说明 + 中英文提示词（对齐旧版详情抽屉） -->
+          <template v-else-if="styleStep === 'detail' && styleDetail">
+            <div class="row" style="gap:14px; align-items:flex-start">
+              <div style="width:280px; flex:0 0 280px; border-radius:10px; overflow:hidden">
+                <img v-if="styleDetail.preview?.localPath" :src="styleDetail.preview.localPath" style="width:100%; aspect-ratio:16/10; object-fit:cover; display:block">
+                <div v-else class="ph" style="aspect-ratio:16/10"></div>
               </div>
-              <div class="col" style="gap:8px">
-                <div class="row" style="gap:10px"><span class="badge info">1</span><span class="small">确认后创建新风格版本</span></div>
-                <div class="row" style="gap:10px"><span class="badge info">2</span><span class="small">已引用素材与候选不自动重新生成</span></div>
-                <div class="row" style="gap:10px"><span class="badge info">3</span><span class="small">历史版本保留可回看</span></div>
+              <div class="grow col" style="gap:8px; min-width:0">
+                <div class="row" style="gap:8px">
+                  <b style="font-size:15px">{{ styleDetail.labelZh }}</b>
+                  <span class="badge">{{ styleDetail.id }}</span>
+                </div>
+                <div class="small" style="line-height:1.6; color:var(--text-2)">{{ styleDetail.descriptionZh || '—' }}</div>
+                <div class="xs muted">分类 · {{ categoryLabel(styleDetail.category) }}</div>
               </div>
-              <div v-if="styleError" class="notice-strip danger small">{{ styleError }}</div>
+            </div>
+            <div class="divider" style="margin:14px 0 10px"></div>
+            <div class="col" style="gap:10px">
+              <div>
+                <div class="row" style="cursor:pointer" @click="showZhPrompt = !showZhPrompt">
+                  <svg style="width:13px;height:13px;color:var(--muted)"><use :href="showZhPrompt ? '#i-chev-d' : '#i-fwd'"/></svg>
+                  <span class="small t2">中文风格提示词</span>
+                </div>
+                <p v-if="showZhPrompt" class="xs" style="white-space:pre-wrap; line-height:1.7; color:var(--text-2); padding:8px 0 0">{{ styleDetail.promptZh || '—' }}</p>
+              </div>
+              <div>
+                <div class="row" style="cursor:pointer" @click="showEnPrompt = !showEnPrompt">
+                  <svg style="width:13px;height:13px;color:var(--muted)"><use :href="showEnPrompt ? '#i-chev-d' : '#i-fwd'"/></svg>
+                  <span class="small t2">英文风格提示词</span>
+                </div>
+                <p v-if="showEnPrompt" class="xs" style="white-space:pre-wrap; line-height:1.7; color:var(--text-2); padding:8px 0 0">{{ styleDetail.promptEn || '—' }}</p>
+              </div>
+            </div>
+          </template>
+          <!-- 创建我的风格视图：五字段全必填（对齐旧版「创建我的画风」） -->
+          <template v-else-if="styleStep === 'create'">
+            <div class="col" style="gap:10px">
+              <div class="row" style="gap:10px">
+                <label class="col grow" style="gap:4px"><span class="xs muted">中文名称</span><input class="input" style="width:100%" v-model="styleForm.labelZh"></label>
+                <label class="col grow" style="gap:4px"><span class="xs muted">英文名称</span><input class="input" style="width:100%" v-model="styleForm.labelEn"></label>
+              </div>
+              <label class="col" style="gap:4px"><span class="xs muted">中文说明</span><textarea class="input" style="width:100%; height:56px; padding:8px" v-model="styleForm.descriptionZh"></textarea></label>
+              <label class="col" style="gap:4px"><span class="xs muted">中文风格提示词</span><textarea class="input" style="width:100%; height:72px; padding:8px" v-model="styleForm.promptZh"></textarea></label>
+              <label class="col" style="gap:4px"><span class="xs muted">英文风格提示词</span><textarea class="input" style="width:100%; height:72px; padding:8px" v-model="styleForm.promptEn"></textarea></label>
+              <div v-if="styleFormError" class="notice-card danger"><svg><use href="#i-warn"/></svg><span>{{ styleFormError }}</span></div>
+              <div class="xs muted">名称、说明与中英文提示词均为必填；创建后保存在本机「我的风格」中，可直接用于本项目。</div>
             </div>
           </template>
         </div>
@@ -242,12 +282,17 @@
           <template v-if="styleStep === 'select'">
             <button class="btn ghost" @click="styleOpen = false">取消</button>
             <div class="spacer"></div>
-            <button class="btn primary" :disabled="!selectedStyleId" @click="styleStep = 'confirm'">下一步：确认影响</button>
+            <button class="btn primary" :disabled="!selectedStyleId || selectedStyleId === overview?.style?.styleId || applying" @click="confirmApplyStyle">{{ applying ? '正在应用…' : '确认更换' }}</button>
+          </template>
+          <template v-else-if="styleStep === 'detail'">
+            <button class="btn ghost" @click="styleStep = 'select'">返回</button>
+            <div class="spacer"></div>
+            <button class="btn primary" @click="useDetailStyle">使用此风格</button>
           </template>
           <template v-else>
             <button class="btn ghost" @click="styleStep = 'select'">返回</button>
             <div class="spacer"></div>
-            <button class="btn primary" :disabled="applying" @click="confirmApplyStyle">{{ applying ? '正在应用…' : '确认更换' }}</button>
+            <button class="btn primary" :disabled="savingCustom || !styleFormComplete" @click="saveCustomStyle">{{ savingCustom ? '保存中…' : '保存并使用' }}</button>
           </template>
         </div>
       </div>
@@ -290,6 +335,9 @@ export default {
       overview: null, loading: false, loadError: '', editOpen: false, editForm: {}, editDirty: false, savedForm: '',
       styleOpen: false, styles: [], styleQuery: '', selectedStyleId: '',
       styleTab: 'preset', styleStep: 'select', styleError: '', applying: false, styleLoading: false,
+      styleDetail: null, showZhPrompt: false, showEnPrompt: false,
+      styleForm: { labelZh: '', labelEn: '', descriptionZh: '', promptZh: '', promptEn: '' },
+      styleFormError: '', savingCustom: false,
       styleDrawerOpen: false, styleVersions: [],
       opsOpen: false, opsError: '', exporting: false, profileSaving: false, profileError: '',
       confirmOpen: false, confirmText: '', confirmAction: '',
@@ -325,9 +373,12 @@ export default {
       if (!total) return null
       return { percent: Math.round((done / total) * 100), label: meta }
     },
-    selectedStyleName() {
-      const hit = (this.styles || []).find((s) => s.id === this.selectedStyleId)
-      return hit ? (hit.labelZh || hit.id) : (this.selectedStyleId || '未选择')
+    customCount() {
+      return (this.styles || []).filter((s) => s.type === 'custom').length
+    },
+    styleFormComplete() {
+      const f = this.styleForm
+      return [f.labelZh, f.labelEn, f.descriptionZh, f.promptZh, f.promptEn].every((v) => String(v || '').trim())
     },
   },
   mounted() {
@@ -448,8 +499,48 @@ export default {
       this.styleStep = 'select'
       this.styleError = ''
       this.styleTab = 'preset'
+      this.styleDetail = null
+      this.showZhPrompt = false
+      this.showEnPrompt = false
       this.selectedStyleId = this.overview.style.styleId || ''
       await this.loadStyles()
+    },
+    // 风格详情：大图 + 说明 + 中英文提示词（数据来自目录条目，本就含 promptZh/promptEn）
+    openStyleDetail(s) {
+      this.styleDetail = s
+      this.showZhPrompt = false
+      this.showEnPrompt = false
+      this.styleStep = 'detail'
+    },
+    useDetailStyle() {
+      if (this.styleDetail) this.selectedStyleId = this.styleDetail.id
+      this.styleStep = 'select'
+    },
+    openCreateStyle() {
+      this.styleForm = { labelZh: '', labelEn: '', descriptionZh: '', promptZh: '', promptEn: '' }
+      this.styleFormError = ''
+      this.styleStep = 'create'
+    },
+    async saveCustomStyle() {
+      if (!this.styleFormComplete || this.savingCustom) return
+      this.savingCustom = true
+      this.styleFormError = ''
+      try {
+        const created = await v21.createCustomStyle(this.styleForm)
+        // 创建后立即可选：进「我的风格」列表并选中
+        this.styleTab = 'mine'
+        this.styleQuery = ''
+        await this.loadStyles()
+        this.selectedStyleId = created.id
+        this.styleStep = 'select'
+      } catch (e) {
+        this.styleFormError = e.message || '创建失败，请重试'
+      } finally {
+        this.savingCustom = false
+      }
+    },
+    categoryLabel(value) {
+      return { realistic: '真人', '3d-special': '3D', '2d': '2D', custom: '我的风格' }[value] || value || '其他'
     },
     switchStyleTab(tab) {
       if (tab === 'custom') return
@@ -549,6 +640,6 @@ export default {
 .style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 380px; overflow: auto; }
 .style-item { padding: 0; overflow: hidden; cursor: pointer; }
 .style-item .ph { height: 96px; border-radius: 0; }
-.style-item.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--panel2); }
+.style-item.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--panel2); }
 .badge.neutral { background: var(--neutral-subtle); color: var(--muted); }
 </style>
