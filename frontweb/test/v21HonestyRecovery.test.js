@@ -51,3 +51,11 @@ test('媒体库筛选收窄：移除无数据源的视频段选并说明真实�
   assert.doesNotMatch(ml, /type === 'video'/, '不得保留无数据源的视频筛选段')
   assert.match(ml, /分镜视频请在分镜页查看/, '说明真实口径')
 })
+
+test('剧集来源标签：按 importSchema 区分小说拆集/制作包/外部 AI，不再把拆集集显示为手工创建', () => {
+  const view = read('src/views/productionStudio/ProjectEpisodesView.vue')
+  assert.match(view, /importSchema/, '来源标签消费 importSchema')
+  assert.match(view, /小说拆集/, '提供小说拆集标签')
+  assert.match(view, /制作包导入/, '提供制作包导入标签')
+  assert.match(view, /importSchemaLabel/, '导入来源抽屉协议行用用户语言')
+})

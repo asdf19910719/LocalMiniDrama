@@ -125,8 +125,7 @@
             <span v-if="ep.targetDuration">目标 {{ ep.targetDuration }}s</span>
           </div>
           <div class="ep-src">
-            <span v-if="ep.hasImportSource" class="badge accent">外部 AI 导入</span>
-            <span v-else class="badge outline">{{ sourceLabel(ep) }}</span>
+            <span class="badge" :class="ep.hasImportSource ? 'accent' : 'outline'">{{ sourceLabel(ep) }}</span>
           </div>
           <div class="stage-cells">
             <div class="s-cell" :class="cellClass(ep, 'script')"><svg><use :href="cellIcon(ep, 'script')"/></svg>剧本 {{ cellText(ep, 'script') }}</div>
@@ -302,7 +301,7 @@
         <template v-if="importSource">
           <p class="xs muted" style="margin-bottom:10px">最近一次成功导入的只读审计记录。</p>
           <div class="imp-rows">
-            <div class="kv"><span class="k">协议</span><span class="v">{{ importSource.schemaName || '—' }}{{ importSource.schemaVersion ? ` v${importSource.schemaVersion}` : '' }}</span></div>
+            <div class="kv"><span class="k">协议</span><span class="v">{{ importSchemaLabel(importSource.schemaName) }}<template v-if="importSource.schemaName">（{{ importSource.schemaName }}{{ importSource.schemaVersion ? ` v${importSource.schemaVersion}` : '' }}）</template><template v-else>—</template></span></div>
             <div class="kv"><span class="k">任务包</span><span class="v mono">{{ importSource.packageId || '—' }}</span></div>
             <div class="kv"><span class="k">文件名</span><span class="v">{{ importSource.sourceFilename || '—' }}</span></div>
             <div class="kv"><span class="k">SHA-256</span><span class="v mono" style="word-break:break-all; font-size:11px">{{ importSource.sourceSha256 || '—' }}</span></div>
@@ -507,7 +506,19 @@ export default {
     },
     sourceLabel(ep) {
       if (ep.status === 'blank') return '空白创建'
+      if (ep.hasImportSource) {
+        const s = String(ep.importSchema || '')
+        if (s.includes('novel')) return '小说拆集'
+        if (s.includes('package')) return '制作包导入'
+        return '外部 AI 导入'
+      }
       return '手工创建'
+    },
+    importSchemaLabel(s) {
+      const v = String(s || '')
+      if (v.includes('novel')) return '小说拆集'
+      if (v.includes('package')) return '制作包'
+      return '外部 AI 协作'
     },
     cellState(ep, stage) {
       if (ep.stage === null || ep.status === 'blank') {

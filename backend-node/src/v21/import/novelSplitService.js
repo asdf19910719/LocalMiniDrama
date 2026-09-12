@@ -81,6 +81,11 @@ function createNovelSplitService({ db, log = console } = {}) {
         const number = ep && ep.episodeNumber != null ? ep.episodeNumber : null;
         // 剧本草稿：章节标题 + 原文（仅草稿，不触发任何媒体任务）
         script.saveDraft(ep.id, { content: `${chapter.title}\n\n${chapter.content}` });
+        // 来源审计：拆集创建的集记录 novel-split 来源（剧集行来源标签与导入来源抽屉消费）
+        db.prepare(
+          `INSERT INTO episode_imports (episode_id, schema_name, schema_version, source_filename, imported_at)
+           VALUES (?, 'novel-split', '1', '小说 / 长文本拆集', ?)`
+        ).run(ep.id, new Date().toISOString());
         createdEpisodes.push({ episodeId: ep.id, episodeNumber: number, title: chapter.title });
         cursor = number != null ? number + 1 : null;
       } catch (err) {

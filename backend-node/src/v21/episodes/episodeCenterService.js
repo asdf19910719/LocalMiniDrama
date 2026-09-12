@@ -169,6 +169,12 @@ function createEpisodeCenterService(db, { log = console } = {}) {
       const hasImport = Boolean(
         db.prepare('SELECT id FROM episode_imports WHERE episode_id = ? LIMIT 1').get(r.id)
       );
+      // 来源标签细分：有导入记录时透出 schema 名（novel-split / episode-package / 外部 AI 任务包）
+      const importSchema = hasImport
+        ? (db.prepare(
+            'SELECT schema_name FROM episode_imports WHERE episode_id = ? ORDER BY imported_at DESC, id DESC LIMIT 1'
+          ).get(r.id)?.schema_name || null)
+        : null;
       return {
         id: r.id,
         episodeNumber: r.episode_number,
@@ -178,6 +184,7 @@ function createEpisodeCenterService(db, { log = console } = {}) {
         needsAttention: proj.status === 'needs-attention',
         lastWorkedAt: r.updated_at,
         hasImportSource: hasImport,
+        importSchema,
         targetDuration: r.target_duration_seconds === undefined || r.target_duration_seconds === null ? null : r.target_duration_seconds,
         updatedAt: r.updated_at,
         ...(archivedOnly ? { deletedAt: r.deleted_at } : {}),
