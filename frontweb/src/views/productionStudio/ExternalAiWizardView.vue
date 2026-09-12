@@ -31,12 +31,16 @@
         </div>
       </template>
 
-      <!-- 2 自动汇总上下文（只读） -->
+      <!-- 2 自动汇总上下文（只读）：目标/素材/版本指纹/生成时间接真实数据 -->
       <template v-else-if="step === 'context'">
         <h3>自动汇总上下文（只读）</h3>
         <div class="context-box">
-          <p>将包含：项目资料、当前画面风格、已确认的连续性、必要人物/场景/道具、上一集摘要。</p>
-          <p class="hint">上下文由系统自动编译，生成时间与版本将冻结进任务包；本步骤零费用。</p>
+          <p><b>目标</b>：{{ targetMode === 'create_new' ? (nextNumber ? `创建第 ${nextNumber} 集（新空白草稿）` : '创建下一集') : (targetNumber ? `填充第 ${targetNumber} 集（空白剧集）` : '填充所选空白剧集') }}</p>
+          <p><b>项目素材</b>：{{ projectAssetCount != null ? `${projectAssetCount} 个对象将纳入素材快照` : '素材清单将在创建任务包时冻结' }}</p>
+          <p><b>上下文版本</b>：{{ task?.contextVersion ? task.contextVersion.slice(0, 12) : '创建任务包时生成并冻结' }}</p>
+          <p><b>素材快照摘要</b>：{{ task?.assetsDigest ? task.assetsDigest.slice(0, 12) : '创建任务包时计算' }}</p>
+          <p><b>生成时间</b>：{{ task?.createdAt ? taskTimeText : '创建任务包时记录' }}</p>
+          <p class="hint">上下文包含：项目资料、当前画面风格、已确认的连续性、必要人物/场景/道具、上一集摘要；创建任务包时全部冻结，本步骤零费用。</p>
         </div>
         <div class="step-actions">
           <el-button @click="step = 'target'">上一步</el-button>
@@ -183,13 +187,18 @@ export default {
       imported: null,
       creating: false, validating: false, importing: false,
       restoreNotice: '', digestModal: false, abandoning: false,
+      // 上下文步真实数据：本地下一集号与项目素材对象数（任务包创建前的可预知事实）
+      localNextNumber: null, projectAssetCount: null,
     }
   },
   computed: {
     projectId() { return this.$route.params.projectId },
     stepIndex() { return STEP_KEYS.indexOf(this.step) },
     nextNumber() {
-      return this.task?.targetEpisodeNumber || null
+      return this.task?.targetEpisodeNumber || this.localNextNumber || null
+    },
+    taskTimeText() {
+      return String(this.task?.createdAt || '').slice(0, 16).replace('T', ' ') || ''
     },
     targetNumber() {
       const ep = this.blankEpisodes.find((e) => String(e.id) === String(this.targetEpisodeId))
@@ -198,6 +207,15 @@ export default {
   },
   async mounted() {
     this.bindEsc(this.onEsc)
+    // 上下文步真实数据：本地下一集号（同时修复目标步「创建第 N 集」集号空缺）与素材对象数
+    try {
+      const eps = (await v21.listEpisodes(this.projectId, {})).items || []
+      this.localNextNumber = eps.reduce((m, e) => Math.max(m, Number(e.episodeNumber) || 0), 0) + 1
+    } catch { /* 保持 null，目标步回退为不带集号文案 */ }
+    try {
+      const ov = await v21.getOverview(this.projectId)
+      this.projectAssetCount = ov?.assetsAggregate?.objectCount ?? null
+    } catch { /* 保持 null */ }
     this.blankEpisodes = (await v21.listBlankEpisodes(this.projectId)).items || []
     const taskId = this.$route.query.taskId
     if (taskId) await this.restoreFromTask(String(taskId))

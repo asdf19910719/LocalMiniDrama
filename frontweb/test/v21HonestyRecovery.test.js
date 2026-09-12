@@ -84,3 +84,14 @@ test('新建项目来源接续：novel/video 创建后直达对应导入向导�
   assert.match(branch, /import-video/, 'video 来源直达已有视频登记向导')
   assert.doesNotMatch(branch, /`\$\{pid\}\/episodes`/, '不得再回空剧集列表')
 })
+
+test('外部 AI 上下文步：目标/素材/上下文版本/生成时间接真实数据，未建任务时诚实说明冻结时点', () => {
+  const view = read('src/views/productionStudio/ExternalAiWizardView.vue')
+  assert.match(view, /localNextNumber/, '本地计算下一集号（修复目标步集号空缺）')
+  assert.match(view, /projectAssetCount/, '展示将冻结的素材对象数')
+  assert.match(view, /task\?\.contextVersion/, '已建任务显示真实上下文版本指纹')
+  assert.match(view, /task\?\.assetsDigest/, '显示素材快照摘要指纹')
+  assert.match(view, /task\?\.createdAt/, '已建任务显示真实生成时间')
+  assert.match(view, /创建任务包时/, '未建任务时说明数值冻结时点，不伪造')
+  assert.doesNotMatch(view, /上下文由系统自动编译，生成时间与版本将冻结/, '移除静态占位文案')
+})
