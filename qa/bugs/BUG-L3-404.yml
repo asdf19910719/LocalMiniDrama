@@ -3,7 +3,14 @@ case_id: TC-IMPORT-005
 severity: P1
 title: "示例项目导入仍不可用（BUG-L3-202 残留）：随包示例 project.json 为 v1.3 旧 schema 缺 drama.style_id，import-example 校验失败且错误恒映射 500"
 module: IMPORT
-status: OPEN
+status: fixed-verified
+verification: |
+  2026-09-12 Gatekeeper 独立复核（commit 8f72e86）：POST /api/v1/dramas/import-example →
+  201，drama_id=275 真实创建（修复者此前验证为 274）。legacy style 'ink wash' 经风格目录
+  id/标签匹配命中 rh-115-ink-wash（优于回落默认），metadata 带中文风格 prompt，episodes=1、
+  characters=4 还原；重复导入产生「 导入1」后缀独立项目（与 TC-IMPORT-012 语义一致）。
+  importExample catch 的 400 分流源码在位（STYLE/PROJECT_/VALIDATION/FORMAT/UNSUPPORTED +
+  格式不正确/缺少/不支持/损坏）。
 found_at: "2026-09-12T14:07:00Z"
 environment: "backend 5679（修复轮工作区代码，Node 22）· Gatekeeper 独立复核 2026-09-12"
 steps:

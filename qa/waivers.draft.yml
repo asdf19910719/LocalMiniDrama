@@ -1,0 +1,15 @@
+# waivers.draft.yml — L3 run_20260912_072912 (2026-09-12)
+# 用户裁定约束：仅"图片超分"允许模拟/豁免，其余必须真实测试。
+# 审查结论：本次全部失败与 blocked 项均不属于图片超分维度，均为真实缺陷，不予豁免。
+waivers: []
+review:
+  constraint: "除图片超分可模拟外，其余必须真实测试（用户 2026-09-12 指令）"
+  failed_cases_reviewed:
+    - {case: TC-TASK-007, bug: BUG-L3-102, verdict: NOT_WAIVABLE, reason: 真实契约缺陷（取消幂等标志被路由丢弃）}
+    - {case: TC-IMPORT/PROJ/PKG/SCRIPT x4, bug: BUG-L3-201..205, verdict: NOT_WAIVABLE, reason: 真实功能/契约缺陷（示例包 LFS 指针、任务包下载 500、时长写读不一致、source_key 缺失、空梗概 500）}
+    - {case: TC-ASSET-*, bug: BUG-L3-302, verdict: NOT_WAIVABLE, reason: 真实校验缺陷（9 类校验错误误返回 500）}
+    - {case: TC-E2E-011, bug: BUG-L3-401, verdict: NOT_WAIVABLE, reason: P1 主链缺陷（V2.1 真实视频生成不可用+守卫假绿+静默失败）}
+  blocked_cases_reviewed:
+    - {case: TC-E2E-009, bug: BUG-L3-403, verdict: NOT_WAIVABLE, reason: blocked 由 P1 功能回归（chatgpt_web 通道不可达）导致，非环境缺失}
+  sim_upscale_note: "UPSCALE 模块 11 条按用户授权以 sim-upscale 执行（evidence 均已标注），属授权模拟而非失败豁免，不进入 waivers。"
+  waived_by: TBD-BY-USER

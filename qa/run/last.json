@@ -34,9 +34,15 @@
     "max_rounds": 5
   },
   "gatekeeper_verdict": {
-    "verdict": "FAIL",
-    "round": 2,
-    "reason": "修复轮后 12 项中 11 项经独立复核成立（含双硬阻断 BUG-401 真实出片 6.000s/1312x736 与 BUG-403 通道入口打通）；仍 FAIL 因：①新立 BUG-L3-404（P0 用例 TC-IMPORT-005 仍失败：示例包 project.json v1.3 缺 style_id + importExample 一律 500，现场重放证实）②chatgpt_web 捕获回填未闭环（发送半链已真实验证，作为发版前验收条件，不豁免不 BLOCKED）③修复未提交（19 文件仅在工作区）。完成最小剩余清单后可升至 CONDITIONAL PASS",
+    "verdict": "CONDITIONAL PASS",
+    "round": 3,
+    "commit": "8f72e86",
+    "reason": "13/13 缺陷（12 项 + R2 新立 BUG-L3-404）全部修复并经独立验证：BUG-404 现场重放 import-example → 201 drama_id=275（legacy ink wash 命中 rh-115-ink-wash，episodes/characters 还原）；BUG-401 真实出片 6.000s/1312x736 + V2 候选在库；修复已提交 8f72e86 且提交点双套件 1157/1157 + 371/371。未升 PASS 因 chatgpt_web 捕获回填未在本窗口闭环（发送半链已真实验证，列为发版前验收条件 C1）且部分旅程/非功能维度未覆盖（已登记）",
+    "conditions": [
+      "C1 chatgpt_web 捕获回填闭环验证（迟到落地或新窗口完整闭环；若证实产品缺陷回退 FAIL）",
+      "C2 发布说明登记未覆盖维度与行为变更（明文 Key 移除/sim-upscale/TTS 密钥日志）",
+      "C3 扩展套件纳入常规回归；journey6/11/12/13/14、A-P04、数据工具深项后续补齐"
+    ],
     "uncovered_requirements": [
       "journey6 已有视频登记",
       "journey11 重启恢复",
@@ -48,21 +54,20 @@
       "桌面/扩展套件纳入",
       "性能/兼容性等非功能维度",
       "TTS 真实成功路径",
-      "chatgpt_web 捕获回填闭环（进行中）"
+      "chatgpt_web 捕获回填闭环（进行中，C1）"
     ],
     "requirement_ids_inconsistencies": [],
     "uncovered_dimensions": [
-      "performance",
-      "compatibility_matrix",
-      "migration",
+      "chatgpt_capture_backfill",
       "desktop_electron",
+      "extension_suite_inclusion",
       "restart_recovery",
-      "chatgpt_capture_backfill"
+      "migration",
+      "performance",
+      "compatibility_matrix"
     ],
-    "new_bugs": [
-      "BUG-L3-404"
-    ],
-    "judged_at": "2026-09-12T14:09:52.305059+08:00",
+    "bugs_closed": 13,
+    "judged_at": "2026-09-12T14:22:05.342022+08:00",
     "report": "qa/release_gate_report.md"
   },
   "checksum": "675afcd7a730e678"
