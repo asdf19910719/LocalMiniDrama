@@ -160,8 +160,10 @@ export default {
           this.$router.replace(`/projects/${pid}/episodes/import-package`)
         } else if (this.source === 'external_ai') {
           this.$router.replace(`/projects/${pid}/episodes/external-ai`)
-        } else if (this.source === 'novel' || this.source === 'video') {
-          this.$router.replace(`/projects/${pid}/episodes`)
+        } else if (this.source === 'novel') {
+          this.$router.replace(`/projects/${pid}/episodes/import-novel`)
+        } else if (this.source === 'video') {
+          this.$router.replace(`/projects/${pid}/episodes/import-video`)
         } else {
           this.$router.replace(`/projects/${pid}`)
         }

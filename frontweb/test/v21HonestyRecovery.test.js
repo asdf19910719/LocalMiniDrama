@@ -75,3 +75,12 @@ test('查看风格抽屉：版本记录渲染真实应用历史，删除「暂�
   assert.match(view, /styleVersions/, '渲染版本记录列表')
   assert.doesNotMatch(view, /版本历史暂未记录/, '不得保留与事实不符的占位')
 })
+
+test('新建项目来源接续：novel/video 创建后直达对应导入向导（不落空列表）', () => {
+  const view = read('src/views/productionStudio/ProjectNewView.vue')
+  const branch = view.slice(view.indexOf("this.source === 'novel'"), view.indexOf('} else {'))
+  assert.ok(branch.length > 0, 'novel/video 分支存在')
+  assert.match(branch, /import-novel/, 'novel 来源直达小说拆集向导')
+  assert.match(branch, /import-video/, 'video 来源直达已有视频登记向导')
+  assert.doesNotMatch(branch, /`\$\{pid\}\/episodes`/, '不得再回空剧集列表')
+})
