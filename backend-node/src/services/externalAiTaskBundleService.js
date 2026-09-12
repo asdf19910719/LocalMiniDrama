@@ -312,11 +312,12 @@ function basicResponseSchema() {
   };
 }
 
-function buildInstructions(drama, target, packageId) {
+function buildInstructions(drama, target, packageId, assetsDigest) {
   return [
     `# 《${drama.title || '未命名项目'}》第${target.episodeNumber}集制作任务`,
     '',
     `package_id：${packageId}`,
+    `assets_digest：${assetsDigest}`,
     '',
     '请把当前会话中已经确认的本集剧情整理为附件 Schema 要求的纯 JSON。',
     '',
@@ -328,7 +329,7 @@ function buildInstructions(drama, target, packageId) {
     '4. 新人物必须完整提供性格、外貌、base_image_prompt、负向提示词、声音设定和至少一个状态。',
     '5. 分镜编号必须从 1 连续递增，所有引用必须指向已有 source_key 或本结果中的 local_ref。',
     '6. universal_segment_text 中如需引用参考图，必须使用规范槽位 @图片1、@图片2……：@图片1 对应场景，随后按 character_refs 的 sort_order 对应人物状态，最后对应 prop_refs；不要写 @场景/@人物/@道具或资产名称来代替槽位。',
-    '7. package_id 与 assets_digest 必须从本任务 JSON 原样复制返回，禁止改动、截断或自行计算/猜测这两个字段的值——它们是导入校验回执，值不对结果会被拒绝；version 必须为字符串 2，prompt_contract 必须为 base_prompt。',
+    '7. 上面顶部的 package_id 与 assets_digest 是导入校验回执，结果 JSON 里这两个字段必须逐字符原样复制（禁止改动、截断、自行计算或猜测）；version 必须为字符串 2，prompt_contract 必须为 base_prompt。',
     '8. 项目风格为只读权威配置。禁止返回 style/style_id/style_prompt_*，也禁止返回 image_prompt/video_prompt/final_prompt/compiled_prompt；只能提交内容层 base_image_prompt/base_video_prompt，项目会在创建任务时编译并冻结最终提示词。',
   ].join('\n');
 }
@@ -370,7 +371,7 @@ function createTaskBundle(db, dramaId, options = {}) {
   } catch (error) {
     if (error.code !== 'MODULE_NOT_FOUND') throw error;
   }
-  const instructions = buildInstructions(drama, target, packageId);
+  const instructions = buildInstructions(drama, target, packageId, assetsDigest);
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO external_ai_package_tasks (
@@ -405,6 +406,11 @@ function buildTaskZip(task) {
   zip.addFile('任务说明.md', Buffer.from(task.instructions_markdown, 'utf8'));
   zip.addFile('当前项目资产.json', Buffer.from(JSON.stringify(task.asset_manifest, null, 2), 'utf8'));
   zip.addFile('返回格式.schema.json', Buffer.from(JSON.stringify(task.response_schema, null, 2), 'utf8'));
+  // 导入校验回执：assets_digest 必须随包可见，外部 AI 才有值可原样复制
+  zip.addFile('任务回执.json', Buffer.from(JSON.stringify({
+    package_id: task.package_id,
+    assets_digest: task.assets_digest,
+  }, null, 2), 'utf8'));
   return zip.toBuffer();
 }
 

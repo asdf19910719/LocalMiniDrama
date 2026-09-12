@@ -127,16 +127,20 @@ describe('externalAiTaskBundleService', () => {
     assert.equal(db.prepare('SELECT source_key FROM characters WHERE id = 21').get().source_key, 'char_21');
   });
 
-  it('packages exactly the three user-facing UTF-8 task files', () => {
+  it('packages exactly the four user-facing UTF-8 task files (含导入校验回执)', () => {
     const db = createDb();
     const task = createTaskBundle(db, 1, { targetEpisodeId: 12 });
     const zip = new AdmZip(buildTaskZip(task));
     const names = zip.getEntries().map((entry) => entry.entryName).sort();
 
-    assert.deepEqual(names, ['任务说明.md', '当前项目资产.json', '返回格式.schema.json'].sort());
+    assert.deepEqual(names, ['任务回执.json', '任务说明.md', '当前项目资产.json', '返回格式.schema.json'].sort());
     assert.match(zip.readAsText('任务说明.md'), new RegExp(task.package_id));
+    assert.match(zip.readAsText('任务说明.md'), new RegExp(task.assets_digest.slice(0, 16)), '任务说明顶部必须可见 assets_digest 回执值');
     assert.deepEqual(JSON.parse(zip.readAsText('当前项目资产.json')), task.asset_manifest);
     assert.equal(JSON.parse(zip.readAsText('返回格式.schema.json')).properties.package_id.type, 'string');
+    const receipt = JSON.parse(zip.readAsText('任务回执.json'));
+    assert.equal(receipt.package_id, task.package_id);
+    assert.equal(receipt.assets_digest, task.assets_digest);
   });
 
   it('rejects a target episode that belongs to another project', () => {
