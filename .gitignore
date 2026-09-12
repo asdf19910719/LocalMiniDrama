@@ -28,3 +28,9 @@ frontweb-edu
 .worktrees/
 build_edu
 node_modules
+
+# QA 运行期临时产物
+.qa-*.log
+.qa-*.tmp.json
+frontweb/vite-*.log
+task-4-report.tmp
