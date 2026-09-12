@@ -101,8 +101,9 @@ test('⑤ P2 批量清理：镜头轨筛选 / H3 文案 / 空态副文案 / 迁�
   // P2-4 H3 按钮文案
   assert.match(sb, /h3\.draftId \? '重新生成 H3 提示词' : '生成 H3 提示词'/, 'H3 主按钮完整文案')
   assert.doesNotMatch(sb, /h3\.draftId \? '重新生成' :/, '旧短文案清除')
-  // P2-5 分镜空态副文案
-  assert.match(sb, /从已确认剧本创建镜头，或导入分镜结构/, '空态补副文案（导入为后续后端工作，仅文案）')
+  // P2-5 分镜空态副文案（2026-09-12 二批：导入分镜结构已裁剪，文案收回导入承诺）
+  assert.match(sb, /从已确认剧本创建镜头开始/, '空态副文案存在且不再承诺导入')
+  assert.doesNotMatch(sb, /或导入分镜结构/, '不得再承诺导入分镜结构')
 
   // P2-6 DataToolsView 迁移区徽标加载中显示“读取中…”
   const dt = read('src/views/productionStudio/DataToolsView.vue')
