@@ -97,6 +97,12 @@
     <div class="ctx">
       <div class="card pad" style="padding:13px 14px">
         <div class="row" style="margin-bottom:8px"><b style="font-size:13px">修订状态</b><div class="spacer"></div><button class="btn ghost sm" @click="historyOpen = true">历史版本</button></div>
+        <!-- 防丢稿：本机存在未保存成功的快照时提供恢复入口 -->
+        <div v-if="hasLocalSnapshot" class="notice-card warn" style="margin-bottom:8px; align-items:flex-start">
+          <svg><use href="#i-warn"/></svg>
+          <span class="xs">检测到未保存的本地副本{{ snapshotTimeText ? `（${snapshotTimeText} 记录）` : '' }}，可能是上次未保存成功的内容。</span>
+          <button class="btn sm" style="flex:0 0 auto" @click="snapModalOpen = true">查看</button>
+        </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <span class="badge accent">当前 草稿 v{{ model?.draft?.revision ?? '—' }}</span>
           <template v-if="model?.approved">
@@ -355,6 +361,38 @@
         </div>
       </div>
     </div>
+
+    <!-- 本地副本恢复（防丢稿）：本机快照 vs 当前草稿对比，恢复不静默写库 -->
+    <div v-if="snapModalOpen" class="scrim" style="z-index:95" @click.self></div>
+    <div v-if="snapModalOpen" class="modal-wrap" style="z-index:96">
+      <div class="modal" style="width:560px">
+        <div class="modal-h">
+          <svg style="width:18px;height:18px;color:var(--warn)"><use href="#i-warn"/></svg>
+          <h3>本地副本</h3>
+          <button class="icon-btn" @click="snapModalOpen = false"><svg><use href="#i-close"/></svg></button>
+        </div>
+        <div class="modal-b">
+          <p class="small t2" style="margin-bottom:10px">浏览器在本机保留了一份未保存成功的修改副本。比较两侧内容后选择处理方式；恢复后仍需手动保存才会写入。</p>
+          <div class="row" style="gap:10px">
+            <div class="grow">
+              <div class="xs muted" style="margin-bottom:4px">本地副本{{ snapshotTimeText ? ' · ' + snapshotTimeText : '' }}</div>
+              <pre class="conflict-pane">{{ localSnapshot?.text || '（空）' }}</pre>
+            </div>
+            <div class="grow">
+              <div class="xs muted" style="margin-bottom:4px">当前草稿</div>
+              <pre class="conflict-pane">{{ draftText || '（空）' }}</pre>
+            </div>
+          </div>
+        </div>
+        <div class="modal-f" style="justify-content:space-between">
+          <button class="btn ghost" @click="snapModalOpen = false">保留（稍后处理）</button>
+          <div class="row" style="gap:8px">
+            <button class="btn" @click="discardLocalSnapshot">丢弃本地副本</button>
+            <button class="btn primary" @click="restoreLocalSnapshot">恢复本地副本</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -378,6 +416,7 @@ export default {
       sceneStats: {}, preview: null, sceneQuery: '', selectedSceneIdx: 0,
       confirmOpen: false, confirmDetailOpen: false, confirmError: '', busy: false, saveConflict: false,
       conflictModalOpen: false, conflictServerText: '', conflictServerRevision: null, conflictLoading: false,
+      localSnapshot: null, snapModalOpen: false, snapTimer: null,
       aiMenuOpen: false, selectionText: '', editMode: 'edit', aiPop: { visible: false, top: 0, right: 60, text: '' },
       diffData: null, diffScene: null,
       diffOld: [], diffNew: [],
@@ -431,6 +470,13 @@ export default {
     mainCtaLabel() {
       return this.saveConflict ? '解决版本冲突' : this.confirmLabel
     },
+    // 防丢稿：本机快照与服务端草稿存在差异时才提示可恢复
+    hasLocalSnapshot() {
+      return Boolean(this.localSnapshot && String(this.localSnapshot.text || '') !== String(this.draftText || ''))
+    },
+    snapshotTimeText() {
+      return String(this.localSnapshot?.savedAt || '').slice(11, 16) || ''
+    },
     mainCtaDisabled() {
       return this.busy || this.saving || (!this.saveConflict && !this.canConfirm)
     },
@@ -469,6 +515,7 @@ export default {
   // 定时器若存活会在卸载后仍触发保存——把被放弃/未保存的草稿写回库（放弃并切换路径同样被此兜住）
   beforeUnmount() {
     clearTimeout(this.timer)
+    clearTimeout(this.snapTimer)
   },
   unmounted() {
     window.removeEventListener('keydown', this.keyHandler)
@@ -481,6 +528,7 @@ export default {
   methods: {
     // Esc 自上而下关本视图的弹层（版本比较 → AI 候选 → 确认摘要 → 历史抽屉 → AI 浮层 / 菜单）
     onEsc() {
+      if (this.snapModalOpen) { this.snapModalOpen = false; return true }
       if (this.diffOpen) { this.diffOpen = false; return true }
       if (this.candidateOpen) { this.candidateOpen = false; return true }
       if (this.confirmOpen) { this.confirmOpen = false; return true }
@@ -504,6 +552,7 @@ export default {
       this.sceneStats = await v21.getSceneStats(this.episodeId)
       this.refreshPreview()
       this.setSave(this.model.draft ? '已保存' : '更改会自动保存')
+      this.checkLocalSnapshot()
     },
     async refreshPreview() {
       if (!this.model?.draft) { this.preview = null; return }
@@ -523,6 +572,37 @@ export default {
       this.setSave('有未保存修改 · Ctrl+S 立即保存')
       clearTimeout(this.timer)
       this.timer = setTimeout(() => this.saveDraft(this.draftText, this.model?.draft?.revision), 800)
+      // 独立节流写本机快照：自动保存失败/浏览器崩溃/误关页时正文仍有副本可恢复
+      clearTimeout(this.snapTimer)
+      this.snapTimer = setTimeout(() => this.writeLocalSnapshot(), 600)
+    },
+    snapshotKey() {
+      return `v21.script.snapshot.${this.episodeId}`
+    },
+    writeLocalSnapshot() {
+      try {
+        localStorage.setItem(this.snapshotKey(), JSON.stringify({ text: this.draftText, savedAt: new Date().toISOString() }))
+      } catch { /* 存储不可用时静默：快照是兜底而非依赖 */ }
+    },
+    checkLocalSnapshot() {
+      this.localSnapshot = null
+      try {
+        const raw = localStorage.getItem(this.snapshotKey())
+        if (raw) this.localSnapshot = JSON.parse(raw)
+      } catch { this.localSnapshot = null }
+    },
+    restoreLocalSnapshot() {
+      this.draftText = String(this.localSnapshot?.text || '')
+      this.dirty = true
+      if (this.studioSave) this.studioSave.dirty = true
+      this.snapModalOpen = false
+      this.setSave('已恢复本地副本，请检查后保存（Ctrl+S）')
+    },
+    discardLocalSnapshot() {
+      try { localStorage.removeItem(this.snapshotKey()) } catch { }
+      this.localSnapshot = null
+      this.snapModalOpen = false
+      this.setSave('已丢弃本地副本')
     },
     onSelect() {
       const el = this.$refs.editor
@@ -589,6 +669,9 @@ export default {
         this.dirty = false
         if (this.studioSave) this.studioSave.dirty = false
         this.saveConflict = false
+        clearTimeout(this.snapTimer)
+        try { localStorage.removeItem(this.snapshotKey()) } catch { }
+        this.localSnapshot = null
         const now = new Date()
         this.lastSavedAt = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
         this.setSave(`已保存 · ${this.lastSavedAt}`)
