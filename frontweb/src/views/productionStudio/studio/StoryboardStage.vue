@@ -23,7 +23,7 @@
     <div v-if="shots.length === 0" class="empty-box">
       <p class="muted">本集还没有分镜</p>
       <button class="btn primary" @click="createFromScript">从已确认剧本创建分镜</button>
-      <p class="xs muted" style="margin-top:8px">从已确认剧本创建镜头，或导入分镜结构</p>
+      <p class="xs muted" style="margin-top:8px">从已确认剧本创建镜头开始</p>
     </div>
 
     <!-- current 未就绪（getShot 飞行期间/非法深链兜底中）不渲染依赖 current.* 的内容，避免渲染抛错 -->
@@ -51,7 +51,7 @@
         <div class="spacer"></div>
         <button class="btn" @click="openBatch"><svg><use href="#i-layers"/></svg>批量生成</button>
         <div class="more-wrap">
-          <button class="btn ghost" style="border:1px solid var(--line)" @click="moreOpen = !moreOpen">更新分镜结构 / 导入 / 导出<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
+          <button class="btn ghost" style="border:1px solid var(--line)" @click="moreOpen = !moreOpen">更新分镜结构 / 导出<svg class="chev" style="width:13px;height:13px"><use href="#i-chev-d"/></svg></button>
           <div v-if="moreOpen" class="card more-pop" @click="moreOpen = false">
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="openStructureDiff">更新分镜结构（从已确认剧本重建）</button>
             <button class="btn ghost sm" style="width:100%;justify-content:flex-start" @click="exportSrt">导出 SRT 字幕</button>

@@ -15,16 +15,15 @@
         <div class="seg">
           <span :class="{ on: type === 'all' }" @click="type = 'all'">全部</span>
           <span :class="{ on: type === 'image' }" @click="type = 'image'">图片</span>
-          <span :class="{ on: type === 'video' }" @click="type = 'video'">视频</span>
         </div>
         <div class="spacer"></div>
-        <span class="muted xs">卡片标题优先显示业务名称；文件名作为次级信息</span>
+        <span class="muted xs">本页聚合项目素材图片 · 分镜视频请在分镜页查看</span>
       </div>
       <div class="agrid">
         <div v-for="(m, i) in filtered" :key="m.key" class="card acard" @click="openDetail(m)">
           <div class="thumb" :class="m.url ? '' : 'ph ph-' + (i % 6)">
             <img v-if="m.url" :src="m.url">
-            <svg v-else style="width:22px;height:22px;color:var(--muted)"><use :href="m.kind === 'video' ? '#i-film' : '#i-image'"/></svg>
+            <svg v-else style="width:22px;height:22px;color:var(--muted)"><use href="#i-image"/></svg>
           </div>
           <div class="info"><b>{{ m.title }}</b><p class="mono xs">{{ m.fileName }}</p></div>
         </div>
@@ -40,8 +39,7 @@
       </div>
       <div class="drawer-b" style="overflow:auto">
         <div v-if="detail.url" style="border-radius:10px; overflow:hidden; margin-bottom:12px">
-          <img v-if="detail.kind === 'image'" :src="detail.url" style="width:100%; display:block">
-          <video v-else :src="detail.url" controls style="width:100%"></video>
+          <img :src="detail.url" style="width:100%; display:block">
         </div>
         <div class="kv"><span class="k">类型</span><span class="v">{{ detail.kind }}</span></div>
         <div class="kv"><span class="k">文件名</span><span class="v mono xs">{{ detail.fileName }}</span></div>

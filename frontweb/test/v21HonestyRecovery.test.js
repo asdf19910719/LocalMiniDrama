@@ -31,3 +31,23 @@ test('项目素材回收站：筛选段提供回收站视图与恢复动作，�
   assert.match(view, /可在本页「回收站」筛选中恢复/, '删除确认文案指向本页回收站（不再指向高级数据工具）')
   assert.doesNotMatch(view, /可在高级数据工具中恢复删除/, '不得再承诺不存在的入口')
 })
+
+test('音色预设：撤除假波形装饰并明示暂无样音（收回试听承诺）', () => {
+  const stage = read('src/views/productionStudio/studio/AssetsStage.vue')
+  const presetRow = stage.slice(stage.indexOf('v-for="p in voicePresets"'), stage.indexOf('legacyVoiceUrl'))
+  assert.doesNotMatch(presetRow, /v-wave/, '预设行不得保留假波形（无音频可播）')
+  assert.match(presetRow, /暂无样音/, '预设行明示暂无样音')
+})
+
+test('分镜导入承诺收回：更多菜单按钮与空态文案不再出现「导入」', () => {
+  const sb = read('src/views/productionStudio/studio/StoryboardStage.vue')
+  assert.doesNotMatch(sb, /更新分镜结构 \/ 导入 \/ 导出/, '按钮文案不得承诺导入')
+  assert.match(sb, /更新分镜结构 \/ 导出/, '按钮文案收敛为更新结构与导出')
+  assert.doesNotMatch(sb, /或导入分镜结构/, '空态不得承诺导入分镜结构')
+})
+
+test('媒体库筛选收窄：移除无数据源的视频段选并说明真实口径', () => {
+  const ml = read('src/views/productionStudio/MediaLibraryView.vue')
+  assert.doesNotMatch(ml, /type === 'video'/, '不得保留无数据源的视频筛选段')
+  assert.match(ml, /分镜视频请在分镜页查看/, '说明真实口径')
+})

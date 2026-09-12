@@ -119,7 +119,7 @@
         <div v-for="p in voicePresets" :key="p.id" class="v-opt" :class="{ on: voiceChoice?.type === 'preset' && voiceChoice?.presetId === p.id }" @click="pickPreset(p)">
           <span class="rad"></span>
           <div class="grow"><b style="font-size:13px">{{ p.name }}</b><div class="vm">{{ p.desc }}</div></div>
-          <span class="v-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="xs muted" style="flex:0 0 auto">暂无样音</span>
         </div>
         <div class="v-opt" v-if="legacyVoiceUrl" :class="{ on: voiceChoice?.type === 'upload' && voiceChoice?.url === legacyVoiceUrl }" @click="voiceChoice = { type: 'upload', name: '已认证音色', url: legacyVoiceUrl }">
           <span class="rad"></span>
