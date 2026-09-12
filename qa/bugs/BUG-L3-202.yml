@@ -1,0 +1,23 @@
+id: BUG-L3-202
+case_id: TC-IMPORT-005
+status: fixed-verified
+severity: P1
+title: "示例项目导入开箱即坏：随包示例 ZIP 实为 Git LFS 指针文件，列表可见但导入必失败且报 500"
+module: IMPORT
+steps:
+  - "GET /api/v1/dramas/examples → 返回 [{filename:'衣服设计天才302.zip', name:'衣服设计天才302'}]"
+  - "POST /api/v1/dramas/import-example {filename:'衣服设计天才302.zip'}"
+expected: "示例项目导入成功（feature-inventory §2.6 标注 COMPLETE：有示例列表及导入路由），返回 201 与新项目 id"
+actual: "500 {\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"ZIP 文件损坏，无法解析\"}}，导入不可用"
+evidence: |
+  - example_drama/衣服设计天才302.zip 实际为 133 字节 ASCII 文本（Git LFS 指针）：
+    "version https://git-lfs.github.com/spec/v1 / oid sha256:f2aa6ec793270761b295e5ccc1fa5adb367dd36937db99e0b064667d8bb592f9 / size 82156132"
+  - python zipfile 校验：BadZipFile("File is not a zip file")；文件头 16 字节 76657273696f6e...（非 PK）
+  - 该文件自 2026-08-21 进入仓库（git log: f2aa6ec793），LFS 对象未随工作副本物化
+  - API 响应：import-example → 500 INTERNAL_ERROR（错误信息与损坏文件分类到 500，而非 400 参数错误）
+suspected_cause: |
+  1) 仓库通过 Git LFS 存储示例包，但部署/运行环境未拉取 LFS 对象，指针文件被当作示例 ZIP 提供；
+  2) listExamples 不校验文件完整性（指针文件照样列出）；
+  3) importExample 处理器对任何导入异常一律 response.internalError（drama.js importExample catch 分支），
+     未像 importDrama 一样把「格式/损坏」类错误映射为 400
+regression: "示例项目导入功能在当前部署完全不可用；用户首次引导路径断裂"

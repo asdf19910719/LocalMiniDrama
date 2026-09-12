@@ -1,0 +1,9 @@
+ASSERT PASS: 删除前剧集数 == 1 | actual=1
+[0.0s] permanent delete -> 200 {"success":true,"data":{"deleted":true,"counts":{"dramas":1,"episodes":1,"storyboards":0,"storyboard_characters":0,"storyboard_props":0,"storyboard_character_variants":0,"storyboard_h3_prompt_drafts":0,"frame_prompts":0,
+ASSERT PASS: delete status == 200 | actual=200
+ASSERT PASS: deleted=true == true | actual=true
+ASSERT PASS: storage 清理完成（ok 或 missing=无可清理目录） | {"directory":"E:\\project\\LocalMiniDrama\\backend-node\\data\\storage\\projects\\0044_20260912_QA-L3-PROJ-178917265","relative_path":"projects/0044_20260912_QA-L3-PROJ-178917265","exists":false,"file_count":0,"bytes":0,"cleanup_status":"missing"}
+ASSERT PASS: storage exists=false（目录已不存在） | false
+ASSERT PASS: DB dramas 行已删 | row=undefined
+ASSERT PASS: DB 级联删除剧集 == 0 | actual=0
+ASSERT PASS: 二次删除 404 == 404 | actual=404

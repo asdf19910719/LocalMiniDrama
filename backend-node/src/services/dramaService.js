@@ -123,8 +123,13 @@ function getDrama(db, dramaId, baseUrl) {
         }
       }
     } catch (_) {}
-    ep.duration = ep.storyboards.reduce((sum, s) => sum + (s.duration || 0), 0);
-    if (ep.duration > 0) ep.duration = Math.ceil(ep.duration / 60); // 转为分钟
+    // 显式写入的 episodes.duration（如批量导入，单位秒）优先；无分镜聚合时不再覆盖为 0
+    const storyboardDurationSec = ep.storyboards.reduce((sum, s) => sum + (s.duration || 0), 0);
+    if (storyboardDurationSec > 0) {
+      ep.duration = Math.ceil(storyboardDurationSec / 60); // 转为分钟
+    } else if (!(Number(ep.duration) > 0)) {
+      ep.duration = 0;
+    }
     // 本集关联的角色（与 Go Preload("Episodes.Characters") 一致）
     try {
       const epChars = db.prepare(
@@ -243,8 +248,12 @@ function listDramas(db, query) {
           for (const sb of ep.storyboards) sb.prop_ids = spMap[sb.id] || [];
         }
       } catch (_) {}
-      ep.duration = ep.storyboards.reduce((sum, s) => sum + (s.duration || 0), 0);
-      if (ep.duration > 0) ep.duration = Math.ceil(ep.duration / 60);
+      const storyboardDurationSec2 = ep.storyboards.reduce((sum, s) => sum + (s.duration || 0), 0);
+      if (storyboardDurationSec2 > 0) {
+        ep.duration = Math.ceil(storyboardDurationSec2 / 60);
+      } else if (!(Number(ep.duration) > 0)) {
+        ep.duration = 0;
+      }
       return ep;
     });
   }

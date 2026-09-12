@@ -1,0 +1,8 @@
+[0.0s] merge create -> 200 {"success":true,"data":{"merge_id":15,"task_id":"4e4f6ef1-87a1-401c-9bd9-5981a503f1c6","id":15,"episode_id":187,"drama_id":271,"title":"QA-L3 合并配置契约","provider":"ffmpeg","status":"pending","merged_url
+ASSERT PASS: 创建 200 == 200 | actual=200
+ASSERT PASS: 字幕烧录选项持久化 | {"burn_narration_subtitles":true,"burn_dialogue_audio":true,"watermark_text":"QA-L3 水印","bgm_mix":{"enable":true,"gain":0.8},"upscale":{"method":"flash"}}
+ASSERT PASS: 对白混音选项持久化 | 
+ASSERT PASS: 水印文本持久化 | QA-L3 水印
+ASSERT PASS: upscale 选项归一化保留 | {"method":"flash"}
+ASSERT PASS: 状态停在 pending（无 finalize 触发不消费） | pending
+ASSERT PASS: 删除 200 == 200 | actual=200

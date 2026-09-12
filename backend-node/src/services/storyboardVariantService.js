@@ -55,17 +55,20 @@ function validateVariantLinks(db, links) {
       : null;
     if (!variant || variant.character_id !== characterId) {
       const e = new Error('人物状态与人物不匹配，请重新选择');
+      e.status = 400;
       e.code = 'VARIANT_CHARACTER_MISMATCH';
       throw e;
     }
     const sortOrder = link.sort_order;
     if (typeof sortOrder !== 'number' || !Number.isFinite(sortOrder)) {
       const e = new Error('人物状态排序值无效：必须为非空数字');
+      e.status = 400;
       e.code = 'VARIANT_SORT_ORDER_DUPLICATE';
       throw e;
     }
     if (seenSortOrders.has(sortOrder)) {
       const e = new Error('人物状态排序值重复：' + sortOrder);
+      e.status = 400;
       e.code = 'VARIANT_SORT_ORDER_DUPLICATE';
       throw e;
     }

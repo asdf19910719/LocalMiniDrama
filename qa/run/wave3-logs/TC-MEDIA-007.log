@@ -1,0 +1,5 @@
+ASSERT PASS: 逐条删除均 200（前端 MediaLibrary.vue 批量操作即循环单删） | 200,200
+ASSERT PASS: 剩余 0 条 == 0 | actual=0
+ASSERT PASS: 重复删除 404 == 404 | actual=404
+[0.0s] [观察项 INV-13.5] 路由表仅 DELETE /assets/:id 单条端点；「批量删除」为前端顺序循环，无事务性（中途失败会部分删除）——与 inventory PARTIAL 语义一致
+[cleanup] 软删项目 256 -> 200

@@ -1,0 +1,32 @@
+id: TC-ASSET-902
+title: "已知已修 P1 QA-003 不回归：项目素材 API 返回已有数据（列表非空）"
+state: active
+feature_id: F-ASSET-REG
+requirement_ids: [BUG-QA-003]
+level: system
+purpose: regression
+priority: P1
+preconditions:
+  - "项目 10 存在素材(林夏 id=14)"
+test_data:
+  project_id: 10
+steps:
+  - "GET /api/v2/projects/10/assets"
+expected:
+  - "items 非空"
+  - "含 name=林夏 的角色素材"
+assertions:
+  - "data.total >= 1"
+  - "items.some(i => i.name == \"林夏\")"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-regr.js
+  test_id: REGR_902_qa003_assets_listed
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [regression, qa-003]
+notes: ""

@@ -1,0 +1,6 @@
+[0.0s] cancel(uploading) -> 202 {"success":true,"data":{"id":"qa-sim-mask-1789****6620","episode_id":null,"video_merge_id":null,"async_task_id":null,"provider":"zealman","method":"flash","wor
+ASSERT PASS: uploading 可取消 202 == 202 | actual=202
+ASSERT PASS: 取消后状态 cancelled == "cancelled" | actual="cancelled"
+ASSERT PASS: cancel_requested_at 已持久化 | 2026-09-12T03:06:06.670Z
+ASSERT PASS: completed 取消 409 == 409 | actual=409
+ASSERT PASS: 不存在作业取消 404 == 404 | actual=404

@@ -1,0 +1,14 @@
+[0.0s] POST text -> 201 id= 7
+ASSERT PASS: create text status == 201 | actual=201
+[0.0s] POST image -> 201 id= 8
+ASSERT PASS: create image status == 201 | actual=201
+[0.0s] POST storyboard_image -> 201 id= 9
+ASSERT PASS: create storyboard_image status == 201 | actual=201
+[0.1s] POST video -> 201 id= 10
+ASSERT PASS: create video status == 201 | actual=201
+ASSERT PASS: 列表可见 4 条
+ASSERT PASS: cleanup 7 == 200 | actual=200
+ASSERT PASS: cleanup 8 == 200 | actual=200
+ASSERT PASS: cleanup 9 == 200 | actual=200
+ASSERT PASS: cleanup 10 == 200 | actual=200
+ASSERT PASS: 清理后不可见

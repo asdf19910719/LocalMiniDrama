@@ -1,0 +1,32 @@
+id: TC-TASK-007
+title: "取消已完成任务幂等：返回 ok 且 already_done=true 不改状态"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.2]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "TC-TASK-003 任务已 completed"
+test_data:
+steps:
+  - "POST /api/v1/tasks/{id}/cancel"
+  - "GET 确认状态仍 completed"
+expected:
+  - "ok=true 且 already_done=true"
+  - "状态不被改为 failed"
+assertions:
+  - "resp.already_done == true"
+  - "task.status == \"completed\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_007_cancel_terminal_idempotent
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, cancel, idempotent]
+notes: ""

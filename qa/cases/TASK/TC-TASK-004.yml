@@ -1,0 +1,30 @@
+id: TC-TASK-004
+title: "任务详情字段契约完整（id/type/status/progress/message/error/result/resource_id/时间戳）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "TC-TASK-003 已产生完成任务"
+test_data:
+steps:
+  - "GET /api/v1/tasks/{TC-003 的 task_id}"
+expected:
+  - "返回全部契约字段且类型正确"
+assertions:
+  - "has id/type/status/progress/message/resource_id/created_at/updated_at"
+  - "status in [completed,failed] 且 progress 为 number"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_004_task_contract
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, contract]
+notes: ""

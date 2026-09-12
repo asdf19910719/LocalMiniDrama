@@ -1,0 +1,4 @@
+ASSERT PASS: 缺 name 创建成功且落默认名「未命名」 | {"success":true,"data":{"id":240,"drama_id":null,"name":"未命名","type":"image","category":null,"url":"/static/nn.png","loc
+[0.0s] orphan create -> 201 {"success":true,"data":{"id":241,"drama_id":99999999,"name":"QA-L3-MEDIA-1789177604361-孤儿资产","type":"image","category":n
+ASSERT PASS: [观察项] 不存在 drama_id 被接受（assets 无外键，data-model §1「无法由数据库阻止孤儿记录」一致） | 201
+[0.0s] [cleanup 登记] 孤儿行 id=241（无所属项目，无法经项目删除联动清理，仅 DB 层可清——测试数据保留供复核）

@@ -1,0 +1,7 @@
+ASSERT PASS: 创建两个默认变体均 201 == 201 | actual=201
+ASSERT PASS: 同人物默认变体仅 1 个（后者胜出） == 1 | actual=1
+ASSERT PASS: 默认为后创建的状态B == "状态B" | actual="状态B"
+ASSERT PASS: 切回状态A 200 == 200 | actual=200
+ASSERT PASS: 切换后仍仅 1 个默认 == 1 | actual=1
+ASSERT PASS: 默认为状态A == "状态A" | actual="状态A"
+[cleanup] 软删项目 156 -> 200

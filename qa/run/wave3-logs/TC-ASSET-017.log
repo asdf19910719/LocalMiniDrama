@@ -1,0 +1,7 @@
+ASSERT PASS: 空 character_ids 400 == 400 | actual=400
+ASSERT PASS: 超过 10 个 400 == 400 | actual=400
+ASSERT PASS: 提示单次上限 | {"success":false,"error":{"code":"BAD_REQUEST","message":"单次最多生成10个角色"},"timestamp":"2026-09-12T01:21:55.749Z"}
+[0.1s] batch -> 200 {"success":true,"data":{"message":"批量生成任务已提交","count":2},"timestamp":"2026-09-12T01:21:55.812Z"}
+ASSERT PASS: 合法批量受理 200 == 200 | actual=200
+ASSERT PASS: 受理 count=2 == 2 | actual=2
+[cleanup] 软删项目 164 -> 200

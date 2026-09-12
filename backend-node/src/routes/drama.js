@@ -379,6 +379,18 @@ function importDrama(db, cfg, log) {
   };
 }
 
+function isLfsPointerFile(filePath) {
+  try {
+    const fs = require('fs');
+    const stat = fs.statSync(filePath);
+    if (stat.size > 1024) return false;
+    const head = fs.readFileSync(filePath, 'utf8');
+    return head.startsWith('version https://git-lfs');
+  } catch (_) {
+    return false;
+  }
+}
+
 function getExampleDramaDir() {
   const path = require('path');
   const fs = require('fs');
@@ -399,7 +411,8 @@ function listExamples(log) {
       const files = fs.readdirSync(dir).filter(f => f.endsWith('.zip'));
       const items = files.map(f => {
         const name = f.replace(/\.zip$/, '');
-        return { filename: f, name };
+        const isLfsPointer = isLfsPointerFile(path.join(getExampleDramaDir(), f));
+        return { filename: f, name, available: !isLfsPointer, reason: isLfsPointer ? 'GIT_LFS_POINTER' : null };
       });
       response.success(res, items);
     } catch (err) {
@@ -422,12 +435,18 @@ function importExample(db, cfg, log) {
     if (!dir) return response.badRequest(res, '示例目录不存在');
     const filePath = path.join(dir, filename);
     if (!fs.existsSync(filePath)) return response.notFound(res, '示例文件不存在');
+    if (isLfsPointerFile(filePath)) {
+      return response.badRequest(res, '示例文件是 Git LFS 指针而非真实 ZIP，请执行 git lfs pull 后重试');
+    }
     try {
       const buffer = fs.readFileSync(filePath);
       const result = dramaImportService.importDrama(db, cfg, log, buffer);
       response.created(res, result);
     } catch (err) {
       log.error('Import example failed', { error: err.message });
+      const clientError = err.code && /STYLE|PROJECT_|VALIDATION|FORMAT|UNSUPPORTED/.test(String(err.code))
+        || /格式不正确|缺少|不支持|损坏/.test(String(err.message || ''));
+      if (clientError) return response.badRequest(res, err.message || '导入失败');
       response.internalError(res, err.message || '导入示例失败');
     }
   };

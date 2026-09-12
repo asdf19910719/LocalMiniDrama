@@ -1,0 +1,10 @@
+[0.0s] create -> 201
+ASSERT PASS: create status == 201 | actual=201
+[0.0s] dup -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"场景键已存在"},"timestamp":"2026-09-12T00:02:10.073Z"}
+ASSERT PASS: dup status == 400 | actual=400
+ASSERT PASS: update status == 200 | actual=200
+ASSERT PASS: update 后 model_override == "qa-model-y" | actual="qa-model-y"
+ASSERT PASS: get 后回读 == "qa-model-y" | actual="qa-model-y"
+ASSERT PASS: list 含 key
+ASSERT PASS: delete status == 200 | actual=200
+ASSERT PASS: 删除后 get == 404 | actual=404

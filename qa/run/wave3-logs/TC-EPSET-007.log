@@ -1,0 +1,6 @@
+ASSERT PASS: 前置：变体已建 | 201
+ASSERT PASS: 保存选择指针 200 == 200 | actual=200
+ASSERT PASS: 投影 stateId 指向所选变体 == "40" | actual="40"
+ASSERT PASS: 投影 mediaVersionId 指向所选媒体版本 == "/static/characters/qa-l3-sel-61.png" | actual="/static/characters/qa-l3-sel-61.png"
+ASSERT PASS: DB 选择行一致 | {"state_id":"40","media_version_id":"/static/characters/qa-l3-sel-61.png"}
+[cleanup] 软删项目 178 -> 200

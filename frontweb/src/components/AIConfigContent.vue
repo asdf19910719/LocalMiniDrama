@@ -2424,7 +2424,7 @@ async function submitOneKeyAgnes() {
 async function exportConfigs() {
   try {
     const configs = await aiAPI.list()
-    const exportData = configs.map(({ id, created_at, updated_at, ...rest }) => rest)
+    const exportData = configs.map(({ id, api_key, created_at, updated_at, ...rest }) => ({ ...rest, has_api_key: Boolean(api_key) }))
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

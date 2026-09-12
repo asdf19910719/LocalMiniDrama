@@ -1,0 +1,5 @@
+[0.0s] taskKey@L33 pollPromises去重@L260 attachPollIfNeeded@L341
+ASSERT PASS: taskKey 按 drama/episode/resource 合成键 | L33
+ASSERT PASS: 同 taskId 轮询复用已有 promise | L260
+ASSERT PASS: 断线重连 attachPollIfNeeded | L341
+SOURCE: frontweb/src/stores/generationTaskStore.js taskKey@33 pollTask-dedup@260 attachPollIfNeeded@341

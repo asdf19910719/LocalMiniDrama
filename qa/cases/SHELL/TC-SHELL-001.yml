@@ -1,0 +1,33 @@
+id: TC-SHELL-001
+title: "SPA 可服务性：3013 全部顶级路由返回 200 且为 index.html 文档"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "Vite dev server 3013 运行中"
+test_data:
+  routes: ["/projects","/projects/new","/tasks","/library","/settings","/settings/data-tools","/ai-config","/media-library","/quick-create","/projects/import-archive"]
+steps:
+  - "逐路由 curl http://127.0.0.1:3013{route}"
+expected:
+  - "每条路由 200"
+  - "content-type text/html"
+  - "响应体为 SPA index.html（含 /src/main.ts 或 root 挂载点标记）"
+assertions:
+  - "10 条路由全部 status==200"
+  - "body contains <div id=\"app\"> 或等效 index.html 标记"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_001_spa_routes_served
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, spa, smoke]
+notes: ""

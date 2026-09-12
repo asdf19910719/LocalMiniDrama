@@ -1,0 +1,9 @@
+ASSERT PASS: overview status == 200 | actual=200
+ASSERT PASS: hero.title == "QA-L3-PROJ-1789172651073-007" | actual="QA-L3-PROJ-1789172651073-007"
+ASSERT PASS: hero.episodeCount == 1 | actual=1
+ASSERT PASS: style.styleId 非空 | {"styleId":"rh-101-cinematic","appliesTo":"future-generations-only"}
+ASSERT PASS: style.appliesTo=future-generations-only | future-generations-only
+ASSERT PASS: assetsAggregate.objectCount 数字 | {"objectCount":0,"missingImageCount":0}
+ASSERT PASS: stageSummary 含 4 阶段 | ["script","assets","storyboard","cut"]
+ASSERT PASS: 不存在项目 404 == 404 | actual=404
+[cleanup] 软删项目 36 -> 200

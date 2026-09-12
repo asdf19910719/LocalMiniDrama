@@ -1,0 +1,39 @@
+id: TC-AICONF-015
+title: "全局生成设置：并发数越界 400、合法值写读一致、恢复原值"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.8]
+level: system
+purpose: boundary
+priority: P0
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  invalid: 25
+  valid: 5
+steps:
+  - "GET /settings/generation 记录基线"
+  - "PUT concurrency=25"
+  - "PUT concurrency=5"
+  - "GET 确认生效"
+  - "PUT 恢复基线"
+expected:
+  - "越界返回 400 图片并发数需为 1-20 之间的整数"
+  - "合法值写入后 GET 返回 5"
+  - "恢复后与基线一致"
+assertions:
+  - "put(25).status == 400"
+  - "get-after == 5"
+  - "final == baseline"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_015_generation_settings_bounds
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, settings, boundary]
+notes: ""

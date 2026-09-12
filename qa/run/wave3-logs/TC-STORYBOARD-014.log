@@ -1,0 +1,4 @@
+ASSERT PASS: 缺 drama_id 400 缺少必要参数 | {"error":"缺少必要参数"}
+[0.0s] no-video -> 400 {"error":"当前分镜没有可用的本地视频文件"}
+ASSERT PASS: 当前分镜无可用本地视频 400 | {"error":"当前分镜没有可用的本地视频文件"}
+[cleanup] 软删项目 205 -> 200

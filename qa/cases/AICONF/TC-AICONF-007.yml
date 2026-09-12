@@ -1,0 +1,32 @@
+id: TC-AICONF-007
+title: "service_type=text 过滤查询仅返回 text 类型配置"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: boundary
+priority: P1
+preconditions:
+  - "库内同时存在 text/image/video 配置"
+test_data:
+  query: "service_type=text"
+steps:
+  - "GET /api/v1/ai-configs?service_type=text"
+expected:
+  - "每条返回的 service_type 均为 text"
+  - "不少于 1 条(DeepSeek)"
+assertions:
+  - "every(cfg.service_type == \"text\")"
+  - "data.length >= 1"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_007_filter_service_type
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, boundary]
+notes: ""

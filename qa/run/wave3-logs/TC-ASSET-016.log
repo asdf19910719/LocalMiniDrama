@@ -1,0 +1,9 @@
+ASSERT PASS: 携带 style 覆盖被拒绝 400 == 400 | actual=400
+ASSERT PASS: 错误码 PROJECT_STYLE_OVERRIDE_FORBIDDEN == "PROJECT_STYLE_OVERRIDE_FORBIDDEN" | actual="PROJECT_STYLE_OVERRIDE_FORBIDDEN"
+[0.0s] generate-four-view -> 200 {"success":true,"data":{"message":"四视图生成任务已提交","image_generation":{"id":217,"storyboard_id":null,"drama_id":170,"character_id":52,"provider":"openai","prompt":"【角色三/四视图版式】生成横版角色转面设定图，完整展示同一人物的正面、正侧面、背
+ASSERT PASS: 四视图任务受理 200 == 200 | actual=200
+ASSERT PASS: message 为任务已提交 == "四视图生成任务已提交" | actual="四视图生成任务已提交"
+ASSERT PASS: 返回 image_generation 记录 | {"success":true,"data":{"message":"四视图生成任务已提交","image_generation":{"id":217,"storyboard_id":null,"drama_id":170,"character_id":52,"provider":"openai","prompt":"
+ASSERT PASS: image_generations 记录落库且绑定角色 | {"id":217,"character_id":52,"frame_type":null,"status":"processing"}
+[0.0s] [记录] 生成记录初始 status=processing；图像通道 127.0.0.1:18080 离线为真实外部状态，成功路径由 E2E 阶段覆盖，此处只验接口契约
+[cleanup] 软删项目 170 -> 200

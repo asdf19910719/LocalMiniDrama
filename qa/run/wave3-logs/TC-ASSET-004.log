@@ -1,0 +1,7 @@
+ASSERT PASS: PUT image 换主图 200 == 200 | actual=200
+ASSERT PASS: 主图已更新为 new == "/static/characters/qa-l3-new.png" | actual="/static/characters/qa-l3-new.png"
+ASSERT PASS: 仅传 ref_image 200 == 200 | actual=200
+ASSERT PASS: 主图未被清空（仅 ref_image 更新） == "/static/characters/qa-l3-new.png" | actual="/static/characters/qa-l3-new.png"
+ASSERT PASS: DB ref_image 落库 == "/static/characters/qa-l3-ref.png" | actual="/static/characters/qa-l3-ref.png"
+ASSERT PASS: 不存在角色 404 == 404 | actual=404
+[cleanup] 软删项目 167 -> 200

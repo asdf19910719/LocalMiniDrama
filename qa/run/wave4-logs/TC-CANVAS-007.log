@@ -1,0 +1,10 @@
+ASSERT PASS: queue 200 == 200 | actual=200
+ASSERT PASS: 队列快照含 activeJobId/queuedJobIds/queueLength | {"activeJobId":null,"queuedJobIds":[],"queueLength":0}
+[0.0s] job ac392253-1940-4050-95d5-ce358d67b0f1 -> 200
+ASSERT PASS: 真实 job 详情 200 == 200 | actual=200
+ASSERT PASS: job 含状态与 workflow 字段 | {"id":"ac392253-1940-4050-95d5-ce358d67b0f1","status":"succeeded","attempt_number":2,"max_attempts":3,"lease_expires_at":null,"error_code":null,"error_message":null,"input_json":"{\"shotId\":\"2\",\"g
+ASSERT PASS: 不存在 job 404 == 404 | actual=404
+ASSERT PASS: 不存在 artifact content 404 | 404
+[0.1s] 真实 artifact content(unified-video-96) -> 200 bytes=2281610
+ASSERT PASS: 真实 artifact 内容可下载 200 == 200 | actual=200
+ASSERT PASS: 字节非空且与登记大小一致（真实视频文件） | 2281610/2281610

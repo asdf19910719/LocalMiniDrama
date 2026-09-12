@@ -1,0 +1,9 @@
+ASSERT PASS: 批量保存创建 2 个角色 == 2 | actual=2
+ASSERT PASS: 字段落库（role/description/appearance） | {"role":"主角","desc":"QA-L3 角色描述v1"}
+ASSERT PASS: GET /characters/:id == 200 | actual=200
+ASSERT PASS: 详情 name 一致 == "QA-L3-ASSET-1789176101909-林小海" | actual="QA-L3-ASSET-1789176101909-林小海"
+ASSERT PASS: PUT 更新 200 == 200 | actual=200
+ASSERT PASS: 更新后 description/voice_style 回读一致 | QA-L3 角色描述v2
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后读取 404 == 404 | actual=404
+[cleanup] 软删项目 150 -> 200

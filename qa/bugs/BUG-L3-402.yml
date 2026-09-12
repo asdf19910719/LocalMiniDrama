@@ -1,0 +1,16 @@
+id: BUG-L3-402
+case_id: TC-VIDEO-004
+status: fixed-verified
+severity: P1
+title: "删除默认 AI 配置后服务类型无回退：video/image/storyboard_image/tts 四类默认通道全部丢失，核心生成接口 500 VIDEO_CONFIG_MISSING"
+steps: >-
+  1) 一键预设（Agnes）创建 4 类配置并抢占 is_default（clearOtherDefault 清掉原默认标志）；
+  2) 软删除这些预设配置（wave1 TC-AICONF-011 清理路径即触发）；
+  3) 调用 GET /api/v1/videos/capabilities 或 POST /api/v1/videos。
+expected: "默认配置缺失时有确定性回退（如按 priority 选取活跃配置）或明确的用户可修复提示"
+actual: "resolveDefaultVideoConfig 查不到 is_default=1 的活跃配置 → 抛 VIDEO_CONFIG_MISSING → capabilities/视频创建等核心接口 500；image/storyboard_image/tts 同样无活跃默认（tts 则为「未配置 TTS」错误路径）"
+evidence: >-
+  修复前 GET /api/v1/videos/capabilities -> 500 VIDEO_CONFIG_MISSING（qa/run/wave4-logs/TC-VIDEO-004.log [env-repair] 修复前=500）；
+  DB 复核：ai_service_configs 中 video/image/storyboard_image/tts 的活跃行 is_default 全为 0（wave1 清理 Agnes 预设后未恢复，对比 wave1 只恢复了 text id=4）；
+  修复方式：PUT /api/v1/ai-configs/5 {is_default:true}、PUT /api/v1/ai-configs/2 {is_default:true}（应用自身 API，等同用户在 AI 配置页操作），修复后 capabilities 200
+suspected_cause: "clearOtherDefault 把原默认降级后，若新默认被删除则该服务类型永久无默认；删除配置时未做「默认移交」兜底。另：wave1 测试清理仅恢复 text 默认，image/video 遗留未恢复（流程缺陷）"

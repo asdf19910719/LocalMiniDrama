@@ -1,0 +1,5 @@
+ASSERT PASS: frontweb/src/api/images.js 不存在 getTask 导出（inventory INV-6.11 BROKEN 现状） | grep getTask
+[0.0s] FreeCreate.vue:288 调用形如 imagesAPI.getTask ? ...（空值守卫=true）
+ASSERT PASS: 页面调用点带空值守卫（轮询退化为超时/失败路径而非崩溃） | true
+[0.0s] GET /images/tasks/some-task-id -> 404
+ASSERT PASS: 任务轮询路由不存在（404） == 404 | actual=404

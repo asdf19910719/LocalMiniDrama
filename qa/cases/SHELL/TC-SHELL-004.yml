@@ -1,0 +1,34 @@
+id: TC-SHELL-004
+title: "API 未知路径返回 404 JSON 且不回退 index.html（/api/v1 与 /api/v2 一致）"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  paths: ["/api/v1/qa-l3-unknown","/api/v2/qa-l3-unknown"]
+steps:
+  - "curl 两条未知 API 路径"
+expected:
+  - "均 404"
+  - "响应为 JSON 错误（error=API endpoint not found）"
+  - "不返回 HTML"
+assertions:
+  - "status == 404"
+  - "body JSON has error field"
+  - "content-type application/json"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_004_unknown_api_paths
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, api, exception]
+notes: ""

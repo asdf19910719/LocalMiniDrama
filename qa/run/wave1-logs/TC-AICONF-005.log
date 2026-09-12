@@ -1,0 +1,3 @@
+[0.0s] POST(缺字段) -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"缺少必填字段: service_type, name, provider, base_url"},"timestamp":"2026-09-12T00:02:07.810Z"}
+ASSERT PASS: status == 400 | actual=400
+ASSERT PASS: message 提示缺少必填字段

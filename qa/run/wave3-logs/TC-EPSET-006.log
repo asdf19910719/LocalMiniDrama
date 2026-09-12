@@ -1,0 +1,7 @@
+[0.0s] save voice -> 200 {"success":true,"data":{"saved":true},"timestamp":"2026-09-12T01:25:33.419Z"}
+ASSERT PASS: 保存音色指针 200 == 200 | actual=200
+ASSERT PASS: 投影回显音色（抽屉预选数据源） | {"type":"preset","presetId":"male-calm","name":"沉稳男声"}
+ASSERT PASS: DB voice_json 落库 | {"type":"preset","presetId":"male-calm","name":"沉稳男声"}
+ASSERT PASS: 清除音色 200 == 200 | actual=200
+ASSERT PASS: 投影 voice 已清空 == null | actual=null
+[cleanup] 软删项目 177 -> 200

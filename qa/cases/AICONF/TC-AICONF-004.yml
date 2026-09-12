@@ -1,0 +1,35 @@
+id: TC-AICONF-004
+title: "删除 QA-L3 配置后再 GET 返回 404（删除闭环+级联不可见）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "TC-AICONF-002 创建的 QA-L3 配置存在"
+test_data:
+steps:
+  - "DELETE /api/v1/ai-configs/{id}"
+  - "GET /api/v1/ai-configs/{id}"
+  - "GET /api/v1/ai-configs 列表确认不可见"
+expected:
+  - "删除返回 200"
+  - "再查返回 404"
+  - "列表中不再出现该 id"
+assertions:
+  - "del.status == 200"
+  - "get.status == 404"
+  - "list 不含该 id"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_004_delete_closedloop
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, crud]
+notes: ""

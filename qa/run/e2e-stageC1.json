@@ -1,0 +1,30 @@
+{
+ "stage": "C1",
+ "steps": [
+  {
+   "step": "click-create",
+   "status": "PASS",
+   "detail": "分镜已存在（此前真实点击已创建），跳过重复创建",
+   "evidence": null
+  },
+  {
+   "step": "storyboard-created",
+   "status": "PASS",
+   "detail": "storyboards=2 first={\"id\": 156, \"title\": \"夜 古镇街道\", \"description\": \"雨夜，青石板路反着冷光。林晚撑伞快步走过，伞沿滴水发亮。\", \"storyboard_number\": 1}",
+   "evidence": "qa/run/e2e-artifacts/stageC/c-01-after-create.png"
+  }
+ ],
+ "started_at": "2026-09-12T11:44:20",
+ "storyboard_count": 2,
+ "first_storyboard": {
+  "id": 156,
+  "title": "夜 古镇街道",
+  "description": "雨夜，青石板路反着冷光。林晚撑伞快步走过，伞沿滴水发亮。",
+  "storyboard_number": 1
+ },
+ "finished_at": "2026-09-12T11:44:24",
+ "summary": {
+  "passed": 2,
+  "failed": 0
+ }
+}

@@ -1,0 +1,8 @@
+[0.0s] copy-draft -> 201 {"success":true,"data":{"id":41,"dramaId":42,"episodeNumber":2,"title":"母本集（草稿副本）","status":"making","stage":"script","targetDuration":null,
+ASSERT PASS: copy status == 201 | actual=201
+ASSERT PASS: 副本 id 不同于源 | copy=41 src=40
+ASSERT PASS: 副本标题带（草稿副本） | 母本集（草稿副本）
+ASSERT PASS: 副本剧本内容一致（数据流：源→副本，DB 证据） | 内景 街道 夜
+QA-L3 复制源剧本正文。
+ASSERT PASS: 副本剧本版本落库 source=copy-draft | {"content":"内景 街道 夜\nQA-L3 复制源剧本正文。","source":"copy-draft"}
+[cleanup] 软删项目 42 -> 200

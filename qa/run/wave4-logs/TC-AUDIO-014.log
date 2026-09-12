@@ -1,0 +1,5 @@
+[0.0s] finalize(空集) -> 200 {"success":true,"data":{"message":"本集没有可合成的视频片段","merge_id":null,"episode_id":"188","scenes_count":0,"task_id":null},"timestamp":"2026-09-12T03:27:46.149Z"}
+ASSERT PASS: 200 + 明确提示 == 200 | actual=200
+ASSERT PASS: message 说明无可合成片段 | {"success":true,"data":{"message":"本集没有可合成的视频片段","merge_id":null,"episode_id":"188","scenes_count":0,"task_id":null},"timestamp":"2026-09-12T03:27:46.149Z"}
+ASSERT PASS: 不产生 merge 记录 | {"message":"本集没有可合成的视频片段","merge_id":null,"episode_id":"188","scenes_count":0,"task_id":null}
+ASSERT PASS: 剧集状态未被误置 completed | {"s":"draft"}

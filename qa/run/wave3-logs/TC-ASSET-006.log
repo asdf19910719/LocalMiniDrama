@@ -1,0 +1,13 @@
+[0.1s] create v1 -> 201 {"success":true,"data":{"id":36,"character_id":38,"source_key":"default","name":"常服","description":null,"appearance":null,"image_prompt":null,"negative_prompt":
+ASSERT PASS: 创建默认变体 201 == 201 | actual=201
+ASSERT PASS: 首个变体 source_key 自动为 default == "default" | actual="default"
+ASSERT PASS: 创建第二变体 201 == 201 | actual=201
+ASSERT PASS: 变体列表 200 且含 2 条 | ["常服","雨衣"]
+ASSERT PASS: 更新变体 200 == 200 | actual=200
+ASSERT PASS: 更新后 name 生效 == "黄色雨衣" | actual="黄色雨衣"
+ASSERT PASS: 同 source_key 409 VARIANT_KEY_CONFLICT == 409 | actual=409
+ASSERT PASS: 错误码明确 == "VARIANT_KEY_CONFLICT" | actual="VARIANT_KEY_CONFLICT"
+ASSERT PASS: 缺 name 400 == 400 | actual=400
+ASSERT PASS: 删除变体 200 == 200 | actual=200
+ASSERT PASS: 删除后列表仅剩默认变体 | [36]
+[cleanup] 软删项目 155 -> 200

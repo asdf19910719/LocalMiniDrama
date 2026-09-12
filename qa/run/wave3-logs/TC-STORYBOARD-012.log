@@ -1,0 +1,9 @@
+[0.0s] [观察项/缺陷] 缺 sort_order 的变体关联会被 500 INTERNAL_ERROR 拒绝（「人物状态排序值无效」）——校验类错误误用 500，另记 BUG-L3-302
+[0.0s] create slot shot -> 201 {"success":true,"data":{"id":131,"episode_id":173,"scene_id":40,"storyboard_number":1,"title":"槽位镜","description":null,"layout_description":null,"location":null
+ASSERT PASS: reference-slots 200 == 200 | actual=200
+ASSERT PASS: 槽位总数 2（场景+变体） == 2 | actual=2
+ASSERT PASS: 槽位 1 为场景且图可用 | {"index":1,"type":"scene","asset_id":40,"variant_id":null,"name":"QA-L3-槽位场景","reference_role":null,"framing_note":null,"local_path":null,"r
+ASSERT PASS: 槽位 2 为人物状态且图可用 | {"index":2,"type":"character_variant","asset_id":72,"variant_id":46,"name":"常服","reference_role":null,"framing_note":null,"local_path":null,"remote_image_url":"
+ASSERT PASS: 两次解析指纹一致（幂等） == "452ac735a320baa09e98adcc5cf3a7558bfb5f91bc66d30a5f0ee2d4304c408c" | actual="452ac735a320baa09e98adcc5cf3a7558bfb5f91bc66d30a5f0ee2d4304c408c"
+ASSERT PASS: 不存在分镜 404 == 404 | actual=404
+[cleanup] 软删项目 210 -> 200

@@ -1,0 +1,7 @@
+[0.0s] [契约观察] transition 为 AV 契约 JSON 字段：字符串输入会被规范化为结构化对象（storyboardAvContractService），断言按规范化语义
+[0.0s] edit -> 200 {"success":true,"data":{"id":110,"episode_id":156,"scene_id":null,"storyboard_number":1,"title":"编辑镜v2","description":"d
+ASSERT PASS: 行内编辑 200 == 200 | actual=200
+ASSERT PASS: 其余 20 个编辑字段回读一致 | []
+ASSERT PASS: transition 按音画契约规范化（硬切→结构化 type=cut） | {"version":1,"type":"cut","duration":0,"visual_description":null,"audio_bridge":{"mode":"carry","duration_ms":0},"extensions":{}}
+ASSERT PASS: DB 层关键字段一致（transition 已规范化落库） | {"shot_type":"远景","movement":"推镜","emotion_intensity":0.8,"transition":"{\"audio_bridge\":{\"duration_ms\":0,\"mode\":\"carry\"},\"duration\":0,\"extensions\":{},\"type\":\"cut\",\"version\":1,\"visua
+[cleanup] 软删项目 193 -> 200

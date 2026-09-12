@@ -1,0 +1,6 @@
+[0.0s] batch create -> 200 {"success":true,"data":{"id":"cae41181-162f-4a85-9185-003bd445c8f6","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"queued","total_count":1,"completed_count":0,"review_count":0,"failed_count":0,"created_at":"2026-09-12T03:05:12.051
+ASSERT PASS: 批次 id 返回 | {"id":"cae41181-162f-4a85-9185-003bd445c8f6","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"queued","total_count":1,"completed_cou
+ASSERT PASS: 批次落库（drama/scope/计数） | {"id":"cae41181-162f-4a85-9185-003bd445c8f6","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"queued","total_count":1,"completed_count":0,"review_count":0,"failed_count":0,
+ASSERT PASS: 批次下任务行已创建 | count=1
+[0.0s] batch task 通道: api
+[0.0s] 清理: cancel task -> 200

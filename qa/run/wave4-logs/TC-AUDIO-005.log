@@ -1,0 +1,5 @@
+[0.0s] 目录穿越 -> 400 {"success":false,"error":{"code":"EPISODE_AUDIO_PATH_INVALID","message":"BGM 路径必须位于项目媒体存储目录内"},"timestamp":"2026-09-12T03:27:45.801Z"}
+ASSERT PASS: 越界路径 400 == 400 | actual=400
+ASSERT PASS: 错误码 EPISODE_AUDIO_PATH_INVALID == "EPISODE_AUDIO_PATH_INVALID" | actual="EPISODE_AUDIO_PATH_INVALID"
+[0.0s] 存储内不存在文件 -> 200
+ASSERT PASS: 存储内相对路径被接受（存在性不强制，登记语义） | 200

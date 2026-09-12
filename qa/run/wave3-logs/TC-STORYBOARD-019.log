@@ -1,0 +1,7 @@
+ASSERT PASS: 行数=镜头数 2 == 2 | actual=2
+ASSERT PASS: 每行 24 列（与 COLUMNS 一致） | cols=24
+ASSERT PASS: 首行标题/景别/时长/对白/旁白与 API 数据一致（导出数据流：DB→API→导出行） | [1,1,"导出镜一","第1幕","6","特写","固定","","","","","","导出描述A","导出对白A","导出旁白A",""]
+ASSERT PASS: 次行镜二数据一致 | [2,2,"导出镜二","第1幕","7","","","","","","","","导出描述B","导出对白B",""]
+ASSERT PASS: 表头列数 24 == 24 | actual=24
+ASSERT PASS: 导出产物已落盘（qa/run/wave3-artifacts） | E:\project\LocalMiniDrama\qa\run\wave3-artifacts\TC-STORYBOARD-019-storyboard-sheet.xls bytes=1254
+[cleanup] 软删项目 211 -> 200

@@ -1,0 +1,4 @@
+ASSERT PASS: getOne 404 == 404 | actual=404
+ASSERT PASS: PUT 404 == 404 | actual=404
+ASSERT PASS: DELETE 404 == 404 | actual=404
+ASSERT PASS: insert-before 404 == 404 | actual=404

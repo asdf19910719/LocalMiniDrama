@@ -212,6 +212,10 @@ function applyLibraryItemToCharacter(db, log, characterId, libraryItemId) {
 }
 
 function uploadCharacterImage(db, log, characterId, imageUrl, opts = {}) {
+  return uploadCharacterImageWithLocalPath(db, log, characterId, imageUrl, null, opts);
+}
+
+function uploadCharacterImageWithLocalPath(db, log, characterId, imageUrl, localPath, opts = {}) {
   const charRow = db
     .prepare('SELECT id, drama_id, local_path, image_url, seedance2_asset FROM characters WHERE id = ? AND deleted_at IS NULL')
     .get(Number(characterId));
@@ -222,9 +226,11 @@ function uploadCharacterImage(db, log, characterId, imageUrl, opts = {}) {
     seedance2AssetGuards.markStaleOnCharacterMainImageDrift(db, log, charRow, { image_url: imageUrl });
   }
   const now = new Date().toISOString();
-  db.prepare('UPDATE characters SET image_url = ?, updated_at = ? WHERE id = ?').run(imageUrl || null, now, Number(characterId));
+  db.prepare('UPDATE characters SET image_url = ?, local_path = COALESCE(?, local_path), updated_at = ? WHERE id = ?').run(
+    imageUrl || null, localPath || null, now, Number(characterId)
+  );
   log.info('Character image uploaded', { character_id: characterId });
-  return { ok: true };
+  return { ok: true, local_path: localPath || charRow.local_path || null };
 }
 
 /** local_path → image_url 兜底：避免旧库 NOT NULL 约束报错 */
@@ -1108,6 +1114,7 @@ module.exports = {
   deleteLibraryItem,
   applyLibraryItemToCharacter,
   uploadCharacterImage,
+  uploadCharacterImageWithLocalPath,
   addCharacterToLibrary,
   addCharacterToMaterialLibrary,
   updateCharacter,

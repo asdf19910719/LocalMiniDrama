@@ -1,0 +1,34 @@
+id: TC-TASK-012
+title: "前端任务去重与续接源码级核验：taskKey 轮询去重 + 断线重连 attach"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.8]
+level: unit
+purpose: regression
+priority: P2
+preconditions:
+  - "源码可读"
+test_data:
+steps:
+  - "读 frontweb/src/stores/generationTaskStore.js"
+  - "核验 taskKey({dramaId,episodeId,resourceType,resourceId})"
+  - "核验 pollPromises Map 同 taskId 复用"
+  - "核验 attachPollIfNeeded 续接"
+expected:
+  - "taskKey 按 drama:episode:resource 合成键（33 行）"
+  - "pollTask 已有同 taskId promise 时直接复用（255-261 行）"
+  - "attachPollIfNeeded 支持重连后端任务（344 行）"
+assertions:
+  - "三处源码逻辑均存在并有对应行号证据"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_012_frontend_dedup_source
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, source-check]
+notes: ""

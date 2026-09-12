@@ -1,0 +1,7 @@
+ASSERT PASS: 列表 200 == 200 | actual=200
+ASSERT PASS: 列表仅含本项目 | total=2
+ASSERT PASS: 本轮失败记录在历史可见（候选可查） | ["failed","failed"]
+ASSERT PASS: 详情 200 == 200 | actual=200
+ASSERT PASS: 详情 id 回读一致 == 227 | actual=227
+ASSERT PASS: 删除 200 == 200 | actual=200
+ASSERT PASS: 删除后 GET 404 == 404 | actual=404

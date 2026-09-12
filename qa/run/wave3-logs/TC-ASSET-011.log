@@ -1,0 +1,3 @@
+ASSERT PASS: 不存在角色 generate-prompt 404 == 404 | actual=404
+ASSERT PASS: 不存在场景 generate-prompt 404 == 404 | actual=404
+ASSERT PASS: 不存在角色 generate-four-view-image 404 == 404 | actual=404

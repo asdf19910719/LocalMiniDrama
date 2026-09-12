@@ -1,0 +1,6 @@
+[0.0s] no-episode -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"剧集不存在或无权限访问"},"timestamp":"2026-09-12T01:34:20.754Z"}
+ASSERT PASS: 不存在剧集被拒绝且提示剧集不存在 | 500
+[0.0s] empty-script -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"剧本内容为空，请先生成剧集内容"},"timestamp":"2026-09-12T01:34:20.758Z"}
+ASSERT PASS: 空剧本被拒绝且提示剧本内容为空 | 500
+[0.0s] [观察项] 两类业务前置错误均以 500 INTERNAL_ERROR 返回（generateStoryboard service 抛错→internalError），语义应为 400——如实记录
+[cleanup] 软删项目 199 -> 200

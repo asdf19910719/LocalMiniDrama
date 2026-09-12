@@ -1,0 +1,7 @@
+[0.0s] cut/export srt -> 200 {"success":true,"data":{"ok":false,"reason":"尚无已合成的成片版本；请先生成成片。"},"timestamp":"2026-09-12T01:36:13.662Z"}
+ASSERT PASS: 无成片版本时 ok=false + 明确 reason（真实 API 契约） | {"success":true,"data":{"ok":false,"reason":"尚无已合成的成片版本；请先生成成片。"},"timestamp":"2026-09-12T01:36:13.662Z"}
+ASSERT PASS: SRT 含 2 条 cue（按镜头时段） | "1\n00:00:00,000 --> 00:00:05,000\n镜头 1 · SRT镜一\n\n2\n00:00:05,000 --> 00:00:13,000\n镜头 2 · SRT镜二\n"
+ASSERT PASS: 时间戳格式 HH:MM:SS,mmm --> HH:MM:SS,mmm | 1 | 00:00:00,000 --> 00:00:05,000 | 镜头 1 · SRT镜一 | 
+ASSERT PASS: 首条 cue 时段为 0→5s | 00:00:00,000 --> 00:00:05,000
+ASSERT PASS: SRT 产物已落盘 | E:\project\LocalMiniDrama\qa\run\wave3-artifacts\TC-STORYBOARD-020-episode.srt bytes=109
+[cleanup] 软删项目 209 -> 200

@@ -1,0 +1,4 @@
+[0.0s] GET /qa-l3-definitely-not-a-route -> 200 text/html len= 465
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: text/html
+ASSERT PASS: 前端 catch-all -> NotFoundView 存在（404 由前端渲染）

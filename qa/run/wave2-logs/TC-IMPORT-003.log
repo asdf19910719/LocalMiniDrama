@@ -1,0 +1,8 @@
+[0.0s] 非 ZIP 字节 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"ZIP 文件损坏，无法解析"},"timestamp":"2026-09-12T00:32:43.054Z"}
+ASSERT PASS: 非 ZIP 400 == 400 | actual=400
+ASSERT PASS: 错误信息含 损坏/格式 | {"success":false,"error":{"code":"BAD_REQUEST","message":"ZIP 文件损坏，无法解析"},"timestamp":"2026-09-12T00:32:43.054Z"}
+[0.0s] 缺 project.json -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"ZIP 格式不正确：缺少 project.json"},"timestamp":"2026-09-12T00:32:43.0
+ASSERT PASS: 缺 project.json 400 == 400 | actual=400
+ASSERT PASS: 错误信息提到 project.json 缺少 | {"success":false,"error":{"code":"BAD_REQUEST","message":"ZIP 格式不正确：缺少 project.json"},"timestamp":"2026-09-12T00:32:43.056Z"}
+[0.0s] 缺 drama.title -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"project.json 格式不正确：缺少 drama.title 字段"},"timestamp":"2026-09-12
+ASSERT PASS: 缺 drama.title 400 == 400 | actual=400

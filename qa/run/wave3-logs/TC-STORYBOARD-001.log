@@ -1,0 +1,10 @@
+[0.0s] create-from-script -> 201 {"success":true,"data":{"created":2},"timestamp":"2026-09-12T01:30:47.969Z"}
+ASSERT PASS: 结构创建 201 == 201 | actual=201
+ASSERT PASS: created == 场次数 2 == 2 | actual=2
+ASSERT PASS: 镜头列表数量 2 == 2 | actual=2
+ASSERT PASS: 镜头标题来自场次标题 | ["内景 钟表店 日","外景 老街 夜"]
+ASSERT PASS: 每镜 duration=6 秒（DEFAULT_SHOT_SECONDS） | [6,6]
+ASSERT PASS: 镜号连续 1..2 | 1,2
+ASSERT PASS: 每镜含时段结构（seq=1, 0→6s, visual=场次摘要） | [[1,0,6]]
+ASSERT PASS: 数据流：场次来自已确认剧本 story_scenes == 2 | actual=2
+[cleanup] 软删项目 180 -> 200

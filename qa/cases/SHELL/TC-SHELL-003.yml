@@ -1,0 +1,35 @@
+id: TC-SHELL-003
+title: "未知路径 SPA 回退返回 200 index.html，404 渲染由前端 catch-all 路由承担"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.1]
+level: system
+purpose: boundary
+priority: P1
+preconditions:
+  - "Vite dev server 3013 运行中"
+  - "router/index.js:135 存在 /:pathMatch(.*)* -> NotFoundView"
+test_data:
+  path: "/qa-l3-definitely-not-a-route"
+steps:
+  - "curl http://127.0.0.1:3013/qa-l3-definitely-not-a-route"
+  - "源码核验 catch-all 路由"
+expected:
+  - "HTTP 200 + index.html（SPA fallback 标准行为）"
+  - "前端渲染 NotFoundView（P23 404 页）"
+assertions:
+  - "status == 200"
+  - "content-type text/html"
+  - "router has pathMatch catch-all"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_003_unknown_route_fallback
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, spa, boundary]
+notes: ""

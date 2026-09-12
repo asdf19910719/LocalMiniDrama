@@ -1,0 +1,19 @@
+id: BUG-L3-205
+case_id: TC-SCRIPT-006
+status: fixed-verified
+severity: P2
+title: "同步故事生成参数校验错误映射为 500：『请提供故事梗概』不在 400 白名单（未配置/必填/不存在）内"
+module: SCRIPT
+steps:
+  - "POST /api/v1/generation/story {premise:'   '}（同步路径，无 drama_id）"
+expected: "400 BAD_REQUEST，错误信息指向参数问题（空梗概是典型客户端可修正错误）"
+actual: "500 {\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"请提供故事梗概\"}} —— 校验错误被当作服务器内部错误"
+evidence: |
+  - 实测（00:49-00:55 两次）：同步空梗概 → 500；对比异步路径（带 drama_id 无 premise）任务正确以
+    status=failed + error='请提供故事梗概' 反馈（0 次模型调用，行为正确）
+  - 根因：backend-node/src/routes/index.js generation/story catch 分支
+    `if (err.message && (err.message.includes('未配置') || err.message.includes('必填') || err.message.includes('不存在'))) return response.badRequest(...)`
+    —— storyGenerationService.generateStory 抛出的 '请提供故事梗概' 不含这三个子串，落入 response.internalError
+suspected_cause: "错误分类白名单与实际抛出的文案不同步；generateStory 首行校验文案为『请提供故事梗概』（storyGenerationService.js:12-14）"
+regression: "前端同步调用场景下，用户漏填梗概会收到『服务器错误』而非可修正提示；监控侧产生噪声 5xx"
+notes: "修复建议：增加 includes('请提供') 或改为 error.code 分类；一行级修复，未动产品代码"

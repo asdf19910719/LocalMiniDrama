@@ -1,0 +1,8 @@
+ASSERT PASS: 前置事实：应用无活跃 TTS 通道配置 | count=0
+[0.0s] extract -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"未配置 TTS 模型，请在「AI 配置」中添加 service_type=tts 的配置"},"timestamp":"2026-09-12T03:27:45.785Z"}
+ASSERT PASS: 无 TTS 通道时 500（真实错误路径） == 500 | actual=500
+ASSERT PASS: 错误信息明确指出未配置 TTS | {"success":false,"error":{"code":"INTERNAL_ERROR","message":"未配置 TTS 模型，请在「AI 配置」中添加 service_type=tts 的配置"},"timestamp":"2026-09-12T03:27:45.785Z"}
+[0.0s] extract/batch -> 200 {"success":true,"data":[{"storyboard_id":153,"error":"未配置 TTS 模型，请在「AI 配置」中添加 service_type=tts 的配置"},{"storyboard_id":154,"error":"对白为空"},{"storyboard_id":999999999,"error":"对白为空"}],"timestamp":"2026-09-12T03:27:45.786Z"}
+ASSERT PASS: 批量接口 200（逐项报告） == 200 | actual=200
+ASSERT PASS: 返回逐项结果数组（含 error 字段） | [{"storyboard_id":153,"error":"未配置 TTS 模型，请在「AI 配置」中添加 service_type=tts 的配置"},{"storyboard_id":154,"error":"对白为空"},{"storyboard_id":999999999,"error":"对白为空"}]
+[0.0s] [观察项] 当前配置无真实 TTS 通道（MiniMax/OpenAI 协议均未配置 key），成功路径属外部依赖，按真实外部状态记录

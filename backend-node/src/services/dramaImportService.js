@@ -136,13 +136,28 @@ function importDrama(db, cfg, log, zipBuffer) {
   const { data, files } = parseZip(zipBuffer);
 
   const d = data.drama;
-  const styleId = String(d.style_id || '').trim();
+  const registry = createStyleRegistryService({ db });
+  let styleId = String(d.style_id || '').trim();
+  // BUG-L3-404：兼容 v1.3 旧 schema——旧包只有 style 文本字段（如 "ink wash"）。
+  // 先按 id/标签匹配风格目录，命中即用；未命中回落默认写实风格并在 metadata 标注迁移来源。
+  let legacyStyleMigrated = false;
   if (!styleId) {
-    const error = new Error('project.json 格式不正确：缺少 drama.style_id 字段');
-    error.code = 'PROJECT_STYLE_REQUIRED';
-    throw error;
+    const legacy = String(d.style || '').trim();
+    const catalog = registry.listStyles({});
+    const lower = legacy.toLocaleLowerCase();
+    const matched = legacy
+      ? catalog.find((st) => [st.id, st.labelZh, st.labelEn, st.key].some((k) => String(k || '').toLocaleLowerCase() === lower))
+        || catalog.find((st) => [st.labelEn, st.labelZh].some((k) => String(k || '').toLocaleLowerCase().includes(lower) && lower.length >= 3))
+      : null;
+    styleId = (matched || catalog.find((st) => st.id === 'rh-101-cinematic' && st.enabled) || catalog.find((st) => st.enabled) || {}).id;
+    if (!styleId) {
+      const error = new Error('project.json 格式不正确：缺少 drama.style_id 字段');
+      error.code = 'PROJECT_STYLE_REQUIRED';
+      throw error;
+    }
+    legacyStyleMigrated = true;
   }
-  createStyleRegistryService({ db }).requireStyle(styleId);
+  registry.requireStyle(styleId);
   const title = resolveTitle(db, d.title || '导入项目');
   const now = new Date().toISOString();
 
@@ -154,6 +169,7 @@ function importDrama(db, cfg, log, zipBuffer) {
       metadata = {};
     }
   }
+  if (legacyStyleMigrated) metadata.style_migrated_from_legacy = String(d.style || '');
   metadata.storage_folder_label = storageLayout.sanitizeFolderLabel(title);
   const metaStr = JSON.stringify(metadata);
 

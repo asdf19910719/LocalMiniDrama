@@ -1,0 +1,12 @@
+ASSERT PASS: 项目 overview 200 == 200 | actual=200
+ASSERT PASS: overview 含项目标识与结构 | {"success":true,"data":{"hero":{"projectId":269,"title":"QA-L3-CANVAS-1789182603041","genre":null,"aspectRatio":null,"episodeCount":1,"updatedAt":"2026-09-12T03:10:03.084Z","description":"QA-L3 wave4 
+ASSERT PASS: 资产列表 200 == 200 | actual=200
+ASSERT PASS: 资产节点数据非空（上传图计入） | {"success":true,"data":{"items":[],"total":0},"timestamp":"2026-09-12T03:10:03.107Z"}
+ASSERT PASS: 剧集节点 200 == 200 | actual=200
+ASSERT PASS: 剧集节点含本集 | [{"id":184,"episodeNumber":1,"title":"第一集","status":"making","stage":"storyboard","needsAttention":false,"lastWorkedAt":"2026-09-12T03:10:03.086Z","hasImportSource":false,"targetDuration":null,"update
+ASSERT PASS: 分镜节点 200 == 200 | actual=200
+ASSERT PASS: 分镜节点数据含镜头 | {"shots":[{"id":148,"episode_id":184,"storyboard_number":1,"title":"：废弃天文台 夜 内","duration":6,"status":"draft","structure_revision":1,"completion":{"total":1,"adopted":0,"staleShots":[],"missing":[148]
+ASSERT PASS: 脚本节点 200 == 200 | actual=200
+ASSERT PASS: 脚本内容可读（节点编辑数据源） | {"success":true,"data":{"episodeId":184,"projectId":269,"draft":null,"approved":{"revision":1,"approvedAt":"2026-09-12T03:10:03.092Z","content":"第一场：废弃天文台 夜 内\n
+ASSERT PASS: v1 项目详情 200 == 200 | actual=200
+ASSERT PASS: metadata 字段存在（工作流组持久化载体） | id,title,description,genre,style_id,total_episodes,total_duration,status,thumbnail,tags,metadata,created_at,updated_at,episodes,characters,scenes,props

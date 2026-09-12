@@ -202,7 +202,7 @@ function updateConfig(db, log, id, req, options = {}) {
     updates.push('base_url = ?');
     params.push(comfyui ? (req.base_url || COMFYUI_DEFAULT_BASE_URL) : req.base_url);
   }
-  if (req.api_key != null) {
+  if (req.api_key != null && req.api_key !== API_KEY_MASK) {
     updates.push('api_key = ?');
     const st = req.service_type != null ? req.service_type : existing.service_type;
     params.push(normalizeApiKeyForService(st, req.api_key));
@@ -249,10 +249,32 @@ function updateConfig(db, log, id, req, options = {}) {
 
 function deleteConfig(db, log, id) {
   const now = new Date().toISOString();
+  const row = db.prepare('SELECT * FROM ai_service_configs WHERE id = ? AND deleted_at IS NULL').get(id);
   const result = db.prepare('UPDATE ai_service_configs SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL').run(now, id);
   if (result.changes === 0) return false;
+  // 默认配置被删时向同类型剩余配置移交默认身份，避免生成链路落空
+  if (row && row.is_default) {
+    const next = db.prepare(
+      `SELECT id FROM ai_service_configs
+       WHERE deleted_at IS NULL AND service_type = ? AND (is_active = 1 OR is_active IS NULL)
+       ORDER BY priority DESC, created_at DESC LIMIT 1`
+    ).get(row.service_type);
+    if (next) {
+      db.prepare('UPDATE ai_service_configs SET is_default = 1 WHERE id = ?').run(next.id);
+      log.info('AI config default handover', { service_type: row.service_type, from: id, to: next.id });
+    }
+  }
   log.info('AI config deleted', { config_id: id });
   return true;
+}
+
+const API_KEY_MASK = '********';
+
+/** 对外暴露的配置视图：api_key 永不明文（只回掩码与 has_api_key），真实 key 仅限服务端内部调用链使用 */
+function maskConfigApiKey(cfg) {
+  if (!cfg || typeof cfg !== 'object') return cfg;
+  const has = Boolean(String(cfg.api_key || '').trim());
+  return { ...cfg, api_key: has ? API_KEY_MASK : '', has_api_key: has };
 }
 
 function rowToConfig(r) {
@@ -613,6 +635,8 @@ function bulkUpdateApiKey(db, log, newKey) {
 }
 
 module.exports = {
+  API_KEY_MASK,
+  maskConfigApiKey,
   listConfigs,
   getConfig,
   createConfig,

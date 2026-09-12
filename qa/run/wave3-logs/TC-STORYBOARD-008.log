@@ -1,0 +1,5 @@
+ASSERT PASS: 创建带角色绑定分镜 201 == 201 | actual=201
+ASSERT PASS: GET 回读 characters JSON 为角色 ID 数组 | [66,67]
+[0.0s] [观察项 INV-5.4b/INV-15.2] character_ids 同步 storyboard_characters 落了 0 行——syncStoryboardCharacterLinks（storyboardService.js:92-97）按「角色名」去 character_libraries 找同名项并写入**库条目 id**，找不到则静默跳过：真实项目角色（不在库中）不会被记录；即便命中也会把 character_libraries.id 写进名为 character_id 的列（引用语义错表）。与 feature-inventory §15「storyboard_characters 表 LEGACY 实库为空、角色关联以 storyboards.characters JSON 为准」一致，如实记录不判新缺陷
+ASSERT PASS: 解绑后 characters JSON 仅剩 1 个角色（JSON 为权威事实源） | [66]
+[cleanup] 软删项目 194 -> 200

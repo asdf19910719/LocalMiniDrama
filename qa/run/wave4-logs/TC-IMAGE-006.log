@@ -1,0 +1,8 @@
+ASSERT PASS: 前置任务已建 | {"id":"0deda07b-8499-42d2-b5f1-ad98360c1b37","status":"queued"}
+[0.0s] cancel -> 200 {"success":true,"data":{"id":"0deda07b-8499-42d2-b5f1-ad98360c1b37","drama_id":266,"target_type":"storyboard_main","target_id":143,"generati
+ASSERT PASS: cancel 200 == 200 | actual=200
+ASSERT PASS: 任务进入 cancelled == "cancelled" | actual="cancelled"
+[0.0s] skip(cancelled) -> 200 {"success":true,"data":{"id":"0deda07b-8499-42d2-b5f1-ad98360c1b37","drama_id":266,"target_type":"storyboard_main","target_id":143,"generati
+ASSERT PASS: [观察项] cancelled 任务 skip 被 200 接受且状态保持 cancelled（幂等空转，状态机未拒绝——记录为宽松语义） | {"status":"cancelled"}
+[0.0s] retry(cancelled) -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"Only a failed image generation task can retry"},"timestamp":"2026-09-12T03:05:12.0
+ASSERT PASS: cancelled 任务 retry 被拒绝或进入重试（真实语义记录） | 400

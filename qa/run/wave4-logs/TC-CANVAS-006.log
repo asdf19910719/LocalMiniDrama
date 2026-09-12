@@ -1,0 +1,4 @@
+[0.0s] retry-failed -> 200 {"success":true,"data":{"action":"retry-failed","total":0,"results":[]},"timestamp":"2026-09-12T03:10:12.253Z"}
+ASSERT PASS: 结构化响应 | 200
+ASSERT PASS: extract/batch 200（逐项报告） == 200 | actual=200
+ASSERT PASS: 音频遇错记录在逐项 error（不整批中断） | {"storyboard_id":148,"error":"未配置 TTS 模型，请在「AI 配置」中添加 service_type=tts 的配置"}

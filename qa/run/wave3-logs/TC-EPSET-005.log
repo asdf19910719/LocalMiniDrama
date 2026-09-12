@@ -1,0 +1,7 @@
+ASSERT PASS: 未 ready enabled=false == false | actual=false
+ASSERT PASS: readiness=needs-attention == "needs-attention" | actual="needs-attention"
+ASSERT PASS: 恢复入口指向 studio-assets == "studio-assets" | actual="studio-assets"
+ASSERT PASS: 恢复入口带 projectId == 176 | actual=176
+ASSERT PASS: ready 后 enabled=true == true | actual=true
+ASSERT PASS: recoveryTarget 清空 == null | actual=null
+[cleanup] 软删项目 176 -> 200

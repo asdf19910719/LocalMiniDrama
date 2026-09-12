@@ -1,0 +1,10 @@
+ASSERT PASS: needs-attention 也立即放行 navigation=immediate == "immediate" | actual="immediate"
+ASSERT PASS: 但快照为 null（必需项缺失不写快照） == null | actual=null
+ASSERT PASS: DB 无快照行（零部分写入） == 0 | actual=0
+ASSERT PASS: ready 时进入分镜 200 == 200 | actual=200
+ASSERT PASS: navigation=immediate == "immediate" | actual="immediate"
+ASSERT PASS: 快照状态 active == "active" | actual="active"
+ASSERT PASS: 返回快照 id 与 64 位指纹 | {"id":4,"status":"active","fingerprint":"6acce42e42a7169987686059bbc9197c80901c58e65c92b187427a64f4fde635"}
+ASSERT PASS: DB 快照行落库（fingerprint/script_revision 一致） | {"fp":"6acce42e42a7169987686059bbc9197c80901c58e65c92b187427a64f4fde635","st":"active"}
+ASSERT PASS: 快照 items 含全部必需引用（不可变副本） | [{"assetType":"character","assetId":58,"stateId":"","mediaVersionId":"/static/characters/qa-l3-g-58.png","mediaFingerprint":"ace3307557f47006fac870dc20ad4599366
+[cleanup] 软删项目 175 -> 200

@@ -1,0 +1,9 @@
+ASSERT PASS: 前置：图像生成记录已建 | {"success":true,"data":{"id":221,"task_id":"b11e8238-29c5-4cab-917b-801f530b6c16","status":"pending","storyboard_id":nul
+[0.0s] images.create -> 201 {"success":true,"data":{"id":221,"task_id":"b11e8238-29c5-4cab-917b-801f530b6c16","status":"pending","storyboard_id":null,"drama_id":261,"character_id":null,"provider":"openai","prompt":"真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应
+[0.0s] import -> 201 {"success":true,"data":{"id":242,"drama_id":261,"name":"图片 221","type":"image","category":null,"url":"","local_path":null,"duration":null,"image_gen_id":221,"vi
+ASSERT PASS: 导入 201 == 201 | actual=201
+ASSERT PASS: 资产绑定 image_gen_id 且类型 image | {"success":true,"data":{"id":242,"drama_id":261,"name":"图片 221","type":"image","category":null,"url":"","local_path":null,"duration":null,"image_gen_id":221,"vi
+ASSERT PASS: 数据流：媒体库计数 +1（导入项刷新后可见） | before=0 after=1
+ASSERT PASS: 列表含导入项 | 
+ASSERT PASS: 导入不存在的生成记录 404 == 404 | actual=404
+[cleanup] 软删项目 261 -> 200

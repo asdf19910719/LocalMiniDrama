@@ -1,0 +1,32 @@
+id: TC-AICONF-009
+title: "配置测试缺少 api_key 返回 400 不发起外部调用"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.2]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  body: {"base_url":"https://api.deepseek.com","provider":"deepseek"}
+steps:
+  - "POST /api/v1/ai-configs/test 不带 api_key"
+expected:
+  - "返回 400"
+  - "message=缺少 base_url 或 api_key"
+assertions:
+  - "status == 400"
+  - "message contains \"缺少 base_url 或 api_key\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_009_test_missing_key
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, exception]
+notes: ""

@@ -1,0 +1,5 @@
+[0.0s] preview -> 200 {"success":true,"data":{"ok":true,"errors":[],"target":{"mode":"create_new","episodeId":null,"episodeNumber":1,"blank":true,"blankReasons":[]},"source":{"filename":"qa-l3-pkg.json","sha256":""},"script":{"title":"QA-L3 包导入集","summary":"制作包真实校验与导入","scriptPreview":"内景 咖啡店 日\nQA-L3 制作包剧本正文标记。","sceneC
+ASSERT PASS: preview status == 200 | actual=200
+ASSERT PASS: 返回导入计划 | ok,errors,target,source,script,assets,shots,summary
+ASSERT PASS: 计划含目标剧集/集信息 | {"ok":true,"errors":[],"target":{"mode":"create_new","episodeId":null,"episodeNumber":1,"blank":true,"blankReasons":[]},"source":{"filename":"qa-l3-pkg.json","sha256":""},"script":{"title":"QA-L3 包导入集
+[cleanup] 软删项目 98 -> 200

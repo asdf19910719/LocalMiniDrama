@@ -1,0 +1,6 @@
+[2.2s] capabilities -> 200 {"success":true,"data":{"enabled":true,"provider":"zealman","base_url":"https://uu1119133-7885b7b94296.bjb2.seetacloud.com:8443","default_method":"flash","source":{"width":1312,"height":736},"target":{"width":2624,"height":1472},"methods":{"flash":{"workflow_id":"M20-视频高清放大-FlashVSR-2倍-分段工作节点","reco
+ASSERT PASS: capabilities 200（能力面自描述） == 200 | actual=200
+ASSERT PASS: provider 标识（zealman 风格远端） | zealman
+ASSERT PASS: provider_online=false（不可达真实反馈） | false
+ASSERT PASS: 错误信息/错误码明确 | 云端设备不可用：云端转发在线，但目标设备或服务尚未启动/PROVIDER_UNAVAILABLE
+ASSERT PASS: flash/seed 两套工作流方法披露（Flash/Seed 后期选项） | ["flash","seed"]

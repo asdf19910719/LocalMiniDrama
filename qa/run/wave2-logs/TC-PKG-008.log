@@ -1,0 +1,10 @@
+[0.0s] zip download -> 200 ct=application/zip bytes=4473
+ASSERT PASS: zip status == 200 | actual=200
+ASSERT PASS: content-type application/zip | application/zip
+[0.0s] zip 条目: 当前项目资产.json, 返回格式.schema.json, 任务说明.md
+ASSERT PASS: zip 至少 2 个文件 | entries=3
+ASSERT PASS: zip 含任务说明或上下文内容 | 当前项目资产.json,返回格式.schema.json,任务说明.md
+[0.0s] json download -> 500 ct=application/json; charset=utf-8 bytes=76 body={"error":{"code":"INTERNAL_ERROR","message":"db.prepare is not a function"}}
+ASSERT FAIL: 单文件 JSON 下载可用（downloadFormats 宣称的第二种格式） | 500 {"error":{"code":"INTERNAL_ERROR","message":"db.prepare is not a function"}} —— [缺陷 BUG-L3-203] buildDownload json 分支 getTaskBundle 漏传 db 参数
+ASSERT PASS: 非法 format 400 == 400 | actual=400
+[cleanup] 软删项目 105 -> 200

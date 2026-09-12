@@ -1,0 +1,8 @@
+[0.0s] 缺标题 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"标题不能为空"},"timestamp":"2026-09-12
+ASSERT PASS: 缺标题 400 == 400 | actual=400
+ASSERT PASS: 缺 style_id 400 + PROJECT_STYLE_REQUIRED | 400 PROJECT_STYLE_REQUIRED
+ASSERT PASS: 非法 style_id 400 == 400 | actual=400
+ASSERT PASS: 旧 style 字段 400 + PROJECT_STYLE_OVERRIDE_FORBIDDEN | 400 PROJECT_STYLE_OVERRIDE_FORBIDDEN
+ASSERT PASS: v2 空标题 400 == 400 | actual=400
+ASSERT PASS: v2 时长偏好字段 400（已删除字段） | 400 {"error":{"code":"VALIDATION_ERROR","message":"V2.1 项目资料不支持字段 \"video_duration_seconds\"（已
+ASSERT PASS: 不存在项目建剧集 404 == 404 | actual=404

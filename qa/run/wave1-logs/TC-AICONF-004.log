@@ -1,0 +1,4 @@
+[0.0s] DELETE -> 200
+ASSERT PASS: delete status == 200 | actual=200
+ASSERT PASS: 再查 status == 404 | actual=404
+ASSERT PASS: 列表不可见

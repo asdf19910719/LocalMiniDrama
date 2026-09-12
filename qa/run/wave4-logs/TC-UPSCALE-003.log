@@ -1,0 +1,12 @@
+ASSERT PASS: [pending] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [waiting_provider] retry=true skip=true cancel=true | {"retry":true,"skip":true,"cancel":true}
+ASSERT PASS: [uploading] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [queued] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [running] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [downloading] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [stitching] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [validating] retry=false skip=false cancel=true | {"retry":false,"skip":false,"cancel":true}
+ASSERT PASS: [completed] retry=false skip=false cancel=false | {"retry":false,"skip":false,"cancel":false}
+ASSERT PASS: [failed] retry=true skip=true cancel=false | {"retry":true,"skip":true,"cancel":false}
+ASSERT PASS: [skipped] retry=false skip=false cancel=false | {"retry":false,"skip":false,"cancel":false}
+ASSERT PASS: [cancelled] retry=false skip=false cancel=false | {"retry":false,"skip":false,"cancel":false}

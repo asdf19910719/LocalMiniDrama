@@ -1,0 +1,15 @@
+[0.0s] 任务事实: package_id=extai_0145ea55-80bf-4c4f-85b7-d1dc427c1135 digest=0b7c0c094bbe… target_ep=1
+[0.0s] preview -> 200 {"success":true,"data":{"ok":true,"errors":[],"target":{"mode":"create_new","episodeId":null,"episodeNumber":1,"blank":true,"blankReasons":[]},"source":{"filename":"external-ai-result.json","sha256":"
+ASSERT PASS: preview status == 200 | actual=200
+[0.0s] confirm -> 201 {"success":true,"data":{"episodeId":98,"report":{"scenes":1,"shots":1,"segments":1,"mediaTasks":0},"writesApprovedScript":false,"createsMediaTasks":false,"targetEpisodeNumber":1,"opensRoute":{"routeId
+ASSERT PASS: confirm status == 201 | actual=201
+ASSERT PASS: 目标第 1 集已创建（数据流：外部结果→剧集） | ["QA-L3 外部AI结果集"]
+ASSERT PASS: 结果剧本正文落库 | 外景 老街 夜
+QA-L3 外部AI结果剧本正文标记。
+ASSERT PASS: new_assets 人物落库 | {"id":25}
+ASSERT PASS: 任务 imported_at 已标记 | {"imported_at":"2026-09-12T00:40:48.881Z"}
+[0.0s] re-confirm -> 409 PACKAGE_ALREADY_IMPORTED
+ASSERT PASS: 重复导入 409 PACKAGE_ALREADY_IMPORTED | 409 PACKAGE_ALREADY_IMPORTED
+ASSERT PASS: 导入后改备注 409 TASK_IMMUTABLE | 409 TASK_IMMUTABLE
+ASSERT PASS: 导入后取消 409 TASK_IMMUTABLE | 409 TASK_IMMUTABLE
+[cleanup] 软删项目 109 -> 200

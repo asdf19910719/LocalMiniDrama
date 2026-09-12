@@ -1,0 +1,5 @@
+[0.0s] 路径穿越 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"文件名不合法"},"timestamp":"2026-09-12T00:32:43.
+ASSERT PASS: 路径穿越 400 == 400 | actual=400
+ASSERT PASS: 提示文件名不合法 | {"success":false,"error":{"code":"BAD_REQUEST","message":"文件名不合法"},"timestamp":"2026-09-12T00:32:43.
+ASSERT PASS: 未指定文件名 400 == 400 | actual=400
+ASSERT PASS: 不存在示例 404 == 404 | actual=404

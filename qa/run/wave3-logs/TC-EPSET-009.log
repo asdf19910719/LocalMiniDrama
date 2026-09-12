@@ -1,0 +1,5 @@
+ASSERT PASS: 删除前投影包含 | 
+ASSERT PASS: 删除角色 200 == 200 | actual=200
+ASSERT PASS: 删除后投影不再包含（deleted_at 过滤） | []
+[0.0s] [记录] 删除后 readiness=ready（无引用时为 ready 或 script-unapproved 均属合理降级）
+[cleanup] 软删项目 179 -> 200

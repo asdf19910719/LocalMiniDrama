@@ -1,0 +1,123 @@
+{
+  "schema": "local-mini-drama.episode-package",
+  "version": "2.1",
+  "episode": {
+    "episode_number": 1,
+    "title": "QA-L3 包导入集",
+    "summary": "制作包真实校验与导入",
+    "script": "内景 咖啡店 日\nQA-L3 制作包剧本正文标记。",
+    "duration_target_seconds": 90,
+    "notes": "QA-L3 nonce=QA-L3-PKG-1789173648648"
+  },
+  "assets": {
+    "characters": [
+      {
+        "source_key": "qa_l3_hero",
+        "name": "林夏QA",
+        "role": "main",
+        "description": "守时人主角",
+        "personality": "勇敢细心",
+        "appearance": "短发少女，背旧书包",
+        "states": [
+          {
+            "source_key": "qa_l3_hero_default",
+            "name": "默认",
+            "description": "日常状态",
+            "appearance": "校服",
+            "is_default": true
+          },
+          {
+            "source_key": "qa_l3_hero_wet",
+            "name": "雨夜",
+            "description": "淋湿状态",
+            "appearance": "湿发外套",
+            "is_default": false
+          }
+        ]
+      }
+    ],
+    "scene_assets": [
+      {
+        "source_key": "qa_l3_cafe",
+        "name": "街角咖啡店",
+        "state": "日",
+        "description": "老街转角的小店",
+        "atmosphere": "温暖安静"
+      }
+    ],
+    "props": [
+      {
+        "source_key": "qa_l3_key",
+        "name": "黄铜钥匙",
+        "type": "关键道具",
+        "description": "开启座钟的钥匙"
+      }
+    ]
+  },
+  "story_scenes": [
+    {
+      "source_key": "qa_l3_scene_1",
+      "scene_number": 1,
+      "heading": "内景 咖啡店 日",
+      "location_scene_ref": "qa_l3_cafe",
+      "summary": "林夏推门进入咖啡店"
+    }
+  ],
+  "shot_packages": [
+    {
+      "source_key": "qa_l3_shot_1",
+      "shot_number": 1,
+      "story_scene_refs": [
+        "qa_l3_scene_1"
+      ],
+      "planned_duration_seconds": 4,
+      "story_intent": "建立场景与主角登场",
+      "visual": {
+        "shot_size": "全景",
+        "camera_angle": "平视",
+        "camera_movement": "固定",
+        "composition": "三分法",
+        "lighting": "自然光"
+      },
+      "timed_segments": [
+        {
+          "start_seconds": 0,
+          "end_seconds": 4,
+          "action": "林夏推门进入，环顾店内",
+          "scene_asset_refs": [
+            "qa_l3_cafe"
+          ],
+          "character_state_refs": [
+            "qa_l3_hero_default"
+          ],
+          "prop_refs": [
+            "qa_l3_key"
+          ],
+          "dialogue": [
+            {
+              "speaker_ref": "qa_l3_hero",
+              "start_seconds": 1,
+              "end_seconds": 3,
+              "text": "我回来了。",
+              "performance": "平静"
+            }
+          ]
+        }
+      ],
+      "continuity": {
+        "entry": {
+          "description": "门外"
+        },
+        "exit": {
+          "description": "店内"
+        }
+      },
+      "audio": {
+        "dialogue": [],
+        "narration": [],
+        "ambience": [],
+        "sound_effects": []
+      }
+    }
+  ]
+}

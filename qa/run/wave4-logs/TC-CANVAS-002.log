@@ -1,0 +1,7 @@
+[0.0s] canvas-layout PUT -> 200 {"success":true,"data":{"id":269,"title":"QA-L3-CANVAS-1789182603041","description":"QA-L3 wave4 自动化测试项目","genre":null,"style_id":"rh-101-cinematic","total_episodes":1,"total_duration":0,"status":"dra
+ASSERT PASS: 保存 200 == 200 | actual=200
+ASSERT PASS: workflow_groups 落 dramas.metadata（非独立实体，inventory PARTIAL 语义） | [{"id":"g1","name":"QA-L3 图片组","pipeline":"image","nodeIds":["n1","n2"]},{"id":"g2","name":"QA-L3 视频组","pipeline":"video","nodeIds":["n3"]}]
+ASSERT PASS: canvas_layout 同存于一 metadata JSON | {"nodes":[{"id":"n1","type":"storyboard","position":{"x":10,"y":20}}],"edges":[]}
+ASSERT PASS: GET 详情可回读工作流组（数据流：保存→刷新不丢） | [{"id":"g1","name":"QA-L3 图片组","pipeline":"image","nodeIds":["n1","n2"]},{"id":"g2","name":"QA-L3 视频组","pipeline":"video","nodeIds":["n3"]}]
+ASSERT PASS: 二次保存整体替换 workflow_groups | [{"id":"g3","name":"QA-L3 音频组","pipeline":"audio"}]
+ASSERT PASS: 未提供的 canvas_layout 不被清除 | true

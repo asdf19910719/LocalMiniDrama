@@ -1,0 +1,5 @@
+ASSERT PASS: download 200 == 200 | actual=200
+ASSERT PASS: 返回 video_url 与标题 | {"video_url":"projects/0264_20260912_QA-L3-VIDEO-17891810/videos/merged/merged_1789183665951.mp4","title":"第一集","episode_number":1}
+ASSERT PASS: 成片 URL 字节可访问 200 == 200 | actual=200
+ASSERT PASS: 下载字节非空（真实文件） | 507B
+ASSERT PASS: 不存在剧集下载 404 == 404 | actual=404

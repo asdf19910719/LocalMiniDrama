@@ -1,0 +1,12 @@
+[0.0s] confirm -> 201 {"success":true,"data":{"episodeId":91,"report":{"scenes":1,"shots":1,"segments":1,"mediaTasks":0},"writesApprovedScript":false,"createsMediaTasks":false},"timestamp":"2026-09-12T00:40:48.694Z"}
+ASSERT PASS: confirm status == 201 | actual=201
+ASSERT PASS: 新剧集出现在项目列表 | ["QA-L3 包导入集"]
+ASSERT PASS: 人物落库（source_key 可溯源） | characters=1
+ASSERT PASS: 场景落库 | scenes=1
+ASSERT PASS: 道具落库 | props=1
+ASSERT PASS: 分镜落库 | storyboards=1
+[0.0s] [缺陷记录 BUG-L3-204] 导入分镜 source_key=null（characters/scenes/props 均保留 source_key，仅 storyboards 丢弃）
+ASSERT PASS: episode_imports 审计记录（schema/version/report） | {"id":13,"schema_name":"local-mini-drama.episode-package","schema_version":"2.1","import_report":"{\"scenes\":1,\"shots\":1,\"segments\":1,\"mediaTasks\":0}"}
+[0.0s] import-source -> 200 {"success":true,"data":{"packageId":null,"schemaName":"local-mini-drama.episode-package","schemaVersion":"2.1","sourceFilename":"qa-l3-pkg.json","sourceSha256":null,"importedAt":"2026-09-12T00:40:48.694Z","report":{"scen
+ASSERT PASS: import-source 返回制作包来源 | {"success":true,"data":{"packageId":null,"schemaName":"local-mini-drama.episode-package","schemaVersion":"2.1","sourceFilename":"qa-l3-pkg.json","sourceSha256":null,"importedAt":"2026-09-12T00:40:48.6
+[cleanup] 软删项目 99 -> 200

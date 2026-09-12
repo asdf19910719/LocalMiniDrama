@@ -1,0 +1,8 @@
+[0.0s] 创建测试剧集 -> 201 id= 15 {"success":true,"data":{"id":15,"episodeNumber":2,"blank":true},"timestamp":"2026-09-12T00:05:24.650Z"}
+ASSERT PASS: 创建成功 | status=201
+[0.0s] 软删 -> 200 {"success":true,"data":{"deleted":true,"recoverable":true,"impacts":{"scriptRevisions":0,"storyboards":0,"mediaCount":0}
+ASSERT PASS: 删除 status == 200 | actual=200
+[0.0s] archived -> 200 count= 1 ids= 15
+ASSERT PASS: archived status == 200 | actual=200
+ASSERT PASS: 包含刚删除的剧集 | eid=15
+ASSERT PASS: item 带 deletedAt | "2026-09-12T00:05:24.659Z"

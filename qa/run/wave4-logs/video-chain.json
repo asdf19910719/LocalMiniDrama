@@ -1,0 +1,287 @@
+{
+  "projectId": 264,
+  "episodeId": 179,
+  "sceneId": 43,
+  "shotId": 141,
+  "draftId": 48,
+  "groupId": null,
+  "videoId1": 98,
+  "videoId2": 99,
+  "videoAbs": "E:\\project\\LocalMiniDrama\\backend-node\\data\\storage\\projects\\0264_20260912_QA-L3-VIDEO-17891810\\videos\\vg_100_36c2bd58.mp4",
+  "ffprobe": {
+    "duration": 5,
+    "hasVideo": true,
+    "hasAudio": true,
+    "size": 1566851
+  },
+  "v2SubmitStatus": 409,
+  "v2SubmitBody": "{\"error\":{\"code\":\"GENERATION_BLOCKED\",\"message\":\"存在未通过的前置检查：生成描述（H3）\"}}",
+  "videoId": 100,
+  "taskId": "858164d3-712d-4e53-b9ab-4915bcc97450",
+  "finalStatus": "review",
+  "finalBody": {
+    "id": 100,
+    "storyboard_id": 141,
+    "drama_id": 264,
+    "provider": "comfyui",
+    "protocol": "openai",
+    "prompt": "真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\n\nEnglish style direction: Create a Cinematic Hyper-realistic live-action cinematic look with physically believable people, environments, materials, and camera behavior. Treat “cinematic” as a complete art direction, not a loose tag. Carry the same visual language through faces, costumes, props, architecture, atmosphere, color palette, key light, fill light, rim light, lens choice, depth of field, composition, texture, and motion-ready staging. Preserve character identity and production continuity across every reusable short-film asset. Use intentional detail, clean silhouettes, readable focal hierarchy, natural spatial relationships, and high production quality. Avoid malformed anatomy, duplicated body parts, inconsistent facial identity, unreadable text, logos, watermarks, low resolution, and accidental style mixing.\n\nReference continuity: @图片1 is Reference 1 (visual_reference). Preserve identity, costume, geometry, and color relationships.\n\n[00:00-05:00] subject_definitions:\n<Subject 1> is the café interior in <Picture 1>, featuring warm wooden furniture, a wooden door, window seating, and a corner table with soft warm-yellow pendant lighting.\n<Subject 2> is the young woman Lin Wan, with long dark hair, wearing a damp coat, carrying a folded umbrella and a laptop bag.\n<Picture 1> is the environment reference for the café in <Subject 1>, defining its layout, materials, and warm lighting.\n\nsummary:\n[reference generation] The target video shows <Subject 2> entering the café defined by <Subject 1> on a rainy afternoon, shaking water from her umbrella, looking around, walking to the corner table, sitting down, and opening her laptop under warm-yellow light, all within a single continuous 5-second shot.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - the café's wooden interior, door, window seating, corner table, and warm-yellow lighting from <Picture 1> are retained.\n<Subject 2> (appears in [Shot 1]): fully_preserved - Lin Wan's long dark hair, damp coat, umbrella, and laptop bag are retained.\n<Picture 1> ([Shot 1] environment anchor): fully_preserved - the café layout and lighting are reproduced as the shot's setting.\n\ndetailed_description:\nThe target video uses a realistic, softly lit style with a warm interior palette and cool rainy daylight at the windows.\n[Shot 1] A medium-wide shot inside <Subject 1>, the café interior from <Picture 1>, with warm wooden furniture, a wooden door, and a corner table lit by a warm-yellow pendant lamp. Rain streaks the windows. <Subject 2>, Lin Wan, pushes the wooden door open and steps in from the rainy afternoon, her damp coat catching the cool daylight behind her. She folds her umbrella and shakes it once, water droplets scattering onto the floorboards with small audible taps. She pauses, turns her head and scans the room in a slow arc, then walks toward the corner table. The camera follows her in a smooth lateral tracking move, keeping her centered as she passes the window seating. She sets her bag down, sits at the corner table, and opens her laptop; its screen glow mixes with the warm-yellow pendant light falling across her face. She settles, eyes on the screen, as the shot holds on her lit face.\n\noverall_soundscape:\nContinuous rain against the café windows and a low indoor room tone throughout; the wooden door creaks open, the umbrella fabric rustles and shakes off water with light droplet taps on the floor, and a chair scrapes softly as she sits.\n\nnon_diegetic_music:\nN/A. QA-L3 wave4 真实生成分镜\n\nDuration: 5 seconds. Maintain temporal continuity, physically coherent motion, stable subject identity, and cinematic shot discipline.",
+    "negative_prompt": "identity drift, costume drift, geometry warping, temporal flicker, duplicated subjects, text, logo, watermark",
+    "model": "minimax_h3_director_r2v_te_speed",
+    "config_id": 5,
+    "config_snapshot": {
+      "configId": 5,
+      "provider": "comfyui",
+      "protocol": "openai",
+      "model": "minimax_h3_director_r2v_te_speed",
+      "workflowId": "minimax_h3_director_r2v_te_speed",
+      "workflowSha256": "sha256:5dc07486bc02c420813b11048eab15819f52c0162bd190ed05fb1f4870741513",
+      "workflowSnapshotVersion": 1,
+      "workflowStatus": "verified",
+      "workflowFamily": "h3_director",
+      "workflowVariant": "official_sage_te_speed_original_3_3",
+      "adapter": "h3_director_r2v",
+      "adapterVersion": "v2",
+      "workflowExecution": {
+        "promptContract": "h3_director_v1",
+        "requiresPromptDraft": true,
+        "dimensions": {
+          "minWidth": 32,
+          "maxWidth": 4096,
+          "minHeight": 32,
+          "maxHeight": 4096,
+          "multipleOf": 32
+        },
+        "references": {
+          "min": 1,
+          "max": 9
+        },
+        "vramPolicy": "h3_estimate",
+        "defaults": {
+          "width": 1312,
+          "height": 736,
+          "durationSeconds": 5,
+          "frameRate": 24,
+          "seed": 42
+        }
+      },
+      "workflowCapabilities": {
+        "modes": [
+          "single_reference"
+        ],
+        "maxReferenceImages": 9,
+        "supportsContinuity": false,
+        "supportsAudio": true,
+        "supportsSage": true,
+        "supportsTESpeed": true,
+        "approximateAcceleration": true
+      },
+      "effectiveParameters": {
+        "width": 1312,
+        "height": 736,
+        "durationSeconds": 5,
+        "frameRate": 24,
+        "seed": 42
+      },
+      "generationMode": "single_reference",
+      "sage": {
+        "node": "PathchSageAttentionKJ",
+        "attention": "auto",
+        "allowCompile": false
+      },
+      "acceleration": {
+        "kind": "temporal_feature_cache",
+        "implementation": "TE-Speed-MiniMaxH3",
+        "version": "3.3",
+        "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+        "commitSha": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+        "binarySha256": "sha256:84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c",
+        "wrapperSha256": "sha256:305a0afb643f6907fe2742069cca2cea0cc5dae78478c8ec82d761c98f0684aa",
+        "cachePolicy": "te_node_always_changed",
+        "mode": "standard",
+        "device": "auto",
+        "approximate": true
+      },
+      "planHash": "sha256:5d11a48bcca97a227775a527617e9261995d0d7b3564ea1222673f85252b13d8",
+      "baseUrl": "http://127.0.0.1:8188/",
+      "endpoint": null,
+      "queryEndpoint": null,
+      "settings": {
+        "width": 1312,
+        "height": 736,
+        "audio_enabled": true
+      },
+      "styleCompilation": {
+        "finalPrompt": "真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\n\nEnglish style direction: Create a Cinematic Hyper-realistic live-action cinematic look with physically believable people, environments, materials, and camera behavior. Treat “cinematic” as a complete art direction, not a loose tag. Carry the same visual language through faces, costumes, props, architecture, atmosphere, color palette, key light, fill light, rim light, lens choice, depth of field, composition, texture, and motion-ready staging. Preserve character identity and production continuity across every reusable short-film asset. Use intentional detail, clean silhouettes, readable focal hierarchy, natural spatial relationships, and high production quality. Avoid malformed anatomy, duplicated body parts, inconsistent facial identity, unreadable text, logos, watermarks, low resolution, and accidental style mixing.\n\nReference continuity: @图片1 is Reference 1 (visual_reference). Preserve identity, costume, geometry, and color relationships.\n\n[00:00-05:00] QA-L3 wave4 真实生成分镜\n\nDuration: 5 seconds. Maintain temporal continuity, physically coherent motion, stable subject identity, and cinematic shot discipline.",
+        "negativePrompt": "identity drift, costume drift, geometry warping, temporal flicker, duplicated subjects, text, logo, watermark",
+        "sections": {
+          "style": "真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\n\nEnglish style direction: Create a Cinematic Hyper-realistic live-action cinematic look with physically believable people, environments, materials, and camera behavior. Treat “cinematic” as a complete art direction, not a loose tag. Carry the same visual language through faces, costumes, props, architecture, atmosphere, color palette, key light, fill light, rim light, lens choice, depth of field, composition, texture, and motion-ready staging. Preserve character identity and production continuity across every reusable short-film asset. Use intentional detail, clean silhouettes, readable focal hierarchy, natural spatial relationships, and high production quality. Avoid malformed anatomy, duplicated body parts, inconsistent facial identity, unreadable text, logos, watermarks, low resolution, and accidental style mixing.",
+          "continuity": "Reference continuity: @图片1 is Reference 1 (visual_reference). Preserve identity, costume, geometry, and color relationships.",
+          "timeline": "[00:00-05:00] QA-L3 wave4 真实生成分镜",
+          "output": "Duration: 5 seconds. Maintain temporal continuity, physically coherent motion, stable subject identity, and cinematic shot discipline."
+        },
+        "style": {
+          "id": "rh-101-cinematic",
+          "version": 1
+        },
+        "language": "mixed",
+        "duration": 5
+      },
+      "styleCapabilityValidation": {
+        "status": "ok",
+        "errors": [],
+        "warnings": []
+      },
+      "styleGenerationSnapshotId": "3b03abed-18c5-4fb2-b08d-dafe49fb4092"
+    },
+    "routing_snapshot": {
+      "configId": 5,
+      "provider": "comfyui",
+      "protocol": "openai",
+      "model": "minimax_h3_director_r2v_te_speed",
+      "workflowId": "minimax_h3_director_r2v_te_speed",
+      "workflowSha256": "sha256:5dc07486bc02c420813b11048eab15819f52c0162bd190ed05fb1f4870741513",
+      "workflowSnapshotVersion": 1,
+      "workflowStatus": "verified",
+      "workflowFamily": "h3_director",
+      "workflowVariant": "official_sage_te_speed_original_3_3",
+      "adapter": "h3_director_r2v",
+      "adapterVersion": "v2",
+      "workflowExecution": {
+        "promptContract": "h3_director_v1",
+        "requiresPromptDraft": true,
+        "dimensions": {
+          "minWidth": 32,
+          "maxWidth": 4096,
+          "minHeight": 32,
+          "maxHeight": 4096,
+          "multipleOf": 32
+        },
+        "references": {
+          "min": 1,
+          "max": 9
+        },
+        "vramPolicy": "h3_estimate",
+        "defaults": {
+          "width": 1312,
+          "height": 736,
+          "durationSeconds": 5,
+          "frameRate": 24,
+          "seed": 42
+        }
+      },
+      "workflowCapabilities": {
+        "modes": [
+          "single_reference"
+        ],
+        "maxReferenceImages": 9,
+        "supportsContinuity": false,
+        "supportsAudio": true,
+        "supportsSage": true,
+        "supportsTESpeed": true,
+        "approximateAcceleration": true
+      },
+      "effectiveParameters": {
+        "width": 1312,
+        "height": 736,
+        "durationSeconds": 5,
+        "frameRate": 24,
+        "seed": 42
+      },
+      "generationMode": "single_reference",
+      "sage": {
+        "node": "PathchSageAttentionKJ",
+        "attention": "auto",
+        "allowCompile": false
+      },
+      "acceleration": {
+        "kind": "temporal_feature_cache",
+        "implementation": "TE-Speed-MiniMaxH3",
+        "version": "3.3",
+        "repository": "https://github.com/tl2012tl/TE-Speed-MiniMaxH3",
+        "commitSha": "beda0e4be76367625b5e82500b7c4867c3d8bbd6",
+        "binarySha256": "sha256:84bb1ba6f82116c764acfada127c3553b238586a8272315337cea3bcb1d0ee9c",
+        "wrapperSha256": "sha256:305a0afb643f6907fe2742069cca2cea0cc5dae78478c8ec82d761c98f0684aa",
+        "cachePolicy": "te_node_always_changed",
+        "mode": "standard",
+        "device": "auto",
+        "approximate": true
+      },
+      "planHash": "sha256:5d11a48bcca97a227775a527617e9261995d0d7b3564ea1222673f85252b13d8",
+      "baseUrl": "http://127.0.0.1:8188/",
+      "endpoint": null,
+      "queryEndpoint": null,
+      "settings": {
+        "width": 1312,
+        "height": 736,
+        "audio_enabled": true
+      },
+      "styleCompilation": {
+        "finalPrompt": "真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\n\nEnglish style direction: Create a Cinematic Hyper-realistic live-action cinematic look with physically believable people, environments, materials, and camera behavior. Treat “cinematic” as a complete art direction, not a loose tag. Carry the same visual language through faces, costumes, props, architecture, atmosphere, color palette, key light, fill light, rim light, lens choice, depth of field, composition, texture, and motion-ready staging. Preserve character identity and production continuity across every reusable short-film asset. Use intentional detail, clean silhouettes, readable focal hierarchy, natural spatial relationships, and high production quality. Avoid malformed anatomy, duplicated body parts, inconsistent facial identity, unreadable text, logos, watermarks, low resolution, and accidental style mixing.\n\nReference continuity: @图片1 is Reference 1 (visual_reference). Preserve identity, costume, geometry, and color relationships.\n\n[00:00-05:00] QA-L3 wave4 真实生成分镜\n\nDuration: 5 seconds. Maintain temporal continuity, physically coherent motion, stable subject identity, and cinematic shot discipline.",
+        "negativePrompt": "identity drift, costume drift, geometry warping, temporal flicker, duplicated subjects, text, logo, watermark",
+        "sections": {
+          "style": "真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\n\nEnglish style direction: Create a Cinematic Hyper-realistic live-action cinematic look with physically believable people, environments, materials, and camera behavior. Treat “cinematic” as a complete art direction, not a loose tag. Carry the same visual language through faces, costumes, props, architecture, atmosphere, color palette, key light, fill light, rim light, lens choice, depth of field, composition, texture, and motion-ready staging. Preserve character identity and production continuity across every reusable short-film asset. Use intentional detail, clean silhouettes, readable focal hierarchy, natural spatial relationships, and high production quality. Avoid malformed anatomy, duplicated body parts, inconsistent facial identity, unreadable text, logos, watermarks, low resolution, and accidental style mixing.",
+          "continuity": "Reference continuity: @图片1 is Reference 1 (visual_reference). Preserve identity, costume, geometry, and color relationships.",
+          "timeline": "[00:00-05:00] QA-L3 wave4 真实生成分镜",
+          "output": "Duration: 5 seconds. Maintain temporal continuity, physically coherent motion, stable subject identity, and cinematic shot discipline."
+        },
+        "style": {
+          "id": "rh-101-cinematic",
+          "version": 1
+        },
+        "language": "mixed",
+        "duration": 5
+      },
+      "styleCapabilityValidation": {
+        "status": "ok",
+        "errors": [],
+        "warnings": []
+      },
+      "styleGenerationSnapshotId": "3b03abed-18c5-4fb2-b08d-dafe49fb4092"
+    },
+    "duration": 5,
+    "aspect_ratio": null,
+    "resolution": null,
+    "width": 1312,
+    "height": 736,
+    "frame_rate": 24,
+    "seed": 42,
+    "camera_fixed": null,
+    "watermark": 0,
+    "continuity_mode": "none",
+    "anchor_id": null,
+    "candidate_group_id": null,
+    "candidate_group_number": null,
+    "candidate_number": null,
+    "candidate_group_selected": false,
+    "image_url": null,
+    "first_frame_url": null,
+    "last_frame_url": null,
+    "video_url": null,
+    "local_path": "projects/0264_20260912_QA-L3-VIDEO-17891810/videos/vg_100_36c2bd58.mp4",
+    "status": "review",
+    "progress": 100,
+    "message": "视频生成中",
+    "task_id": "858164d3-712d-4e53-b9ab-4915bcc97450",
+    "error_msg": null,
+    "error": null,
+    "skillName": "h3-prompt-writing",
+    "skillSha256": "9d95c78bacdf291f94a5056a17be2cfb16609abad5a49cd6fd39dd46ac210913",
+    "skillProvenance": {
+      "skillName": "h3-prompt-writing",
+      "skillSha256": "9d95c78bacdf291f94a5056a17be2cfb16609abad5a49cd6fd39dd46ac210913",
+      "skillResources": [
+        "SKILL.md",
+        "references/ref-en.txt"
+      ],
+      "toolCallId": "call_00_q3D5CKev84IPMI0AfpEn3114",
+      "model": "deepseek-v4-flash",
+      "configId": 4
+    },
+    "created_at": "2026-09-12T03:05:10.864Z",
+    "started_at": "2026-09-12T03:05:10.920Z",
+    "updated_at": "2026-09-12T03:17:17.658Z",
+    "completed_at": "2026-09-12T03:17:17.190Z",
+    "can_resume_poll": false
+  }
+}

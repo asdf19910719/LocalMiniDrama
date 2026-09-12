@@ -1,0 +1,17 @@
+id: BUG-L3-302
+case_id: TC-STORYBOARD-012
+status: fixed-verified
+severity: P2
+title: "分镜变体关联缺 sort_order 时返回 500 INTERNAL_ERROR（校验类错误误用 500，客户端可修正却被当作服务端故障）"
+module: STORYBOARD
+steps:
+  - "POST /api/v1/storyboards 创建分镜，携带 character_variant_links: [{character_id: X, variant_id: Y}]（缺 sort_order 字段）"
+  - "观察响应"
+expected: "400 BAD_REQUEST（或 422），错误信息指明 character_variant_links[].sort_order 必填且须为非空数字"
+actual: "500 {\"success\":false,\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"人物状态排序值无效：必须为非空数字\"}}——请求合法可修正，却被记为服务端内部错误"
+evidence: |
+  - 复现输出（01:35:28）：POST /api/v1/storyboards -> 500 {"error":{"code":"INTERNAL_ERROR","message":"人物状态排序值无效：必须为非空数字"}}
+  - 携带 sort_order: 1 的同请求 → 201（证明仅缺该字段触发）
+  - 同类模式（本轮观察）：POST /api/v1/episodes/:id/storyboards 对不存在剧集/空剧本也返回 500（「剧集不存在或无权限访问」「剧本内容为空」，TC-STORYBOARD-016 证据）；剧本同步空梗概 500 已由 wave2 记 BUG-L3-205
+  - 位置：分镜创建路由 storyboards.js create → characterVariantsService/storyboardVariantService 校验抛普通 Error → 路由 catch 统一 response.internalError，无业务错误码分流
+suspected_cause: "storyboardVariantService 对变体关联的参数校验抛出无 code 的 Error，路由层只对 STORYBOARD_PATCH_INVALID/AUDIO_PLAN_INVALID 等少数 code 做 400 分流，其余一律 internalError"

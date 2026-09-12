@@ -1,0 +1,30 @@
+id: BUG-L3-404
+case_id: TC-IMPORT-005
+severity: P1
+title: "示例项目导入仍不可用（BUG-L3-202 残留）：随包示例 project.json 为 v1.3 旧 schema 缺 drama.style_id，import-example 校验失败且错误恒映射 500"
+module: IMPORT
+status: OPEN
+found_at: "2026-09-12T14:07:00Z"
+environment: "backend 5679（修复轮工作区代码，Node 22）· Gatekeeper 独立复核 2026-09-12"
+steps:
+  - "GET /api/v1/dramas/examples → available:true（列表宣称可导入）"
+  - "POST /api/v1/dramas/import-example {filename:'衣服设计天才302.zip'}"
+expected: "201，示例导入为独立项目（feature-inventory §2.6 COMPLETE；TC-IMPORT-005 P0 核心断言）"
+actual: "500 {\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"project.json 格式不正确：缺少 drama.style_id 字段\"}}——ZIP 已可解析（LFS 指针问题已修复），但导入在 style_id 校验处失败，且错误被映射为服务器内部错误"
+evidence:
+  - "Gatekeeper 现场重放（2026-09-12T06:06Z）：import-example → 500，消息『project.json 格式不正确：缺少 drama.style_id 字段』"
+  - "example_drama/衣服设计天才302.zip（82,156,132B，PK 头正常）内 project.json：version=1.3，drama 字段=[description,genre,metadata,status,style,tags,title]，无 style_id，旧字段 style='ink wash'"
+  - "SOURCE: backend-node/src/services/dramaImportService.js:135-141 强制要求 drama.style_id（PROJECT_STYLE_REQUIRED）"
+  - "SOURCE: backend-node/src/routes/drama.js importExample catch 分支一律 response.internalError（对照 multipart importDrama handler :377-379 已有 格式/缺少/损坏→400 关键词映射，本 handler 未套用）"
+suspected_cause: |
+  1) 示例包为旧版导出产物（v1.3），未随 style_id 契约（v1.7）重新生成；
+  2) importExample 的 catch 未复用 multipart 导入的 400 关键词映射，校验类错误全部 500。
+  注：BUG-L3-202 的原始根因（LFS 指针文件）已确认修复——文件已物化、PK 头校验通过、
+  LFS 指针检测→400 防御在位、examples 列表 available:true；本缺陷为其下游残留根因。
+regression: "示例项目导入（开箱引导路径）在当前工作区代码下完全不可用；列表 available:true 与实际不可导入构成用户可见的假承诺"
+notes: |
+  Gatekeeper 判定记录：本缺陷为 TC-IMPORT-005（P0）在修复轮后仍失败的直接原因，
+  是当前 L3 判定无法离开 FAIL 的三项残余之一。修复成本低：
+  A) 用当前 schema 重新导出示例包（含 style_id），或 B) 导入侧对 v1.3 旧包的 style 字符串
+  提供映射/兜底（如映射到 rh-101-cinematic 并提示）；并给 importExample catch 套用与
+  multipart 相同的 400 关键词映射。验收标准：import-example → 201 且项目可见。

@@ -1,0 +1,4 @@
+ASSERT PASS: 带 keyword 请求 200 == 200 | actual=200
+ASSERT PASS: documented BROKEN 行为：keyword 被忽略，2 条全部返回（未过滤） | ["QA-L3-MEDIA-1789177604361-完全不相关B","QA-L3-MEDIA-1789177604361-命中needleA"]
+[0.0s] [观察项 INV-13.3] 后端 assetService.list 只处理 drama_id/type（assetService.js:1-19），无 keyword 分支；前端 MediaLibrary.vue:191 已传 keyword——BROKEN 根因在服务端不消费该参数（inventory 措辞归因前端 service 未转发，与当前代码不一致但净效果相同：搜索不可用）
+[cleanup] 软删项目 252 -> 200

@@ -1,0 +1,4 @@
+ASSERT PASS: PUT extra_images 200 == 200 | actual=200
+ASSERT PASS: 项目角色列表回读 extra_images 数组一致 | "[\"/static/characters/qa-l3-e1.png\",\"/static/characters/qa-l3-e2.png\"]"
+ASSERT PASS: DB 层 JSON 可解析且一致 | ["/static/characters/qa-l3-e1.png","/static/characters/qa-l3-e2.png"]
+[cleanup] 软删项目 168 -> 200

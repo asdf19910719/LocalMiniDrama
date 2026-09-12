@@ -1,0 +1,4 @@
+ASSERT PASS: 镜号升序 | [1,2,3,4]
+ASSERT PASS: 镜号无重复 | [1,2,3,4]
+ASSERT PASS: 剩余 4 镜（3 建 + 2 插 - 1 删） == 4 | actual=4
+[cleanup] 软删项目 186 -> 200

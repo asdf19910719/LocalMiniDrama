@@ -1,0 +1,9 @@
+[0.1s] saveDraft -> 200 {"success":true,"data":{"revisionId":57,"revision":1,"status":"draft","saveState":"saved","savedAt":"2026-09-12T00:53:29.625Z"},"timestamp":"2026-09-12T00:53:29
+ASSERT PASS: saveDraft status == 200 | actual=200
+ASSERT PASS: 首次保存 revision=1 == 1 | actual=1
+ASSERT PASS: saveState=saved == "saved" | actual="saved"
+ASSERT PASS: stage model 回读草稿内容一致 | 内景 咖啡店 日
+QA-L3 手工剧本第一版正文。
+ASSERT PASS: DB 版本行落库 | {"content":"内景 咖啡店 日\nQA-L3 手工剧本第一版正文。","revision":1,"status":"draft"}
+ASSERT PASS: 不存在剧集 404 == 404 | actual=404
+[cleanup] 软删项目 129 -> 200

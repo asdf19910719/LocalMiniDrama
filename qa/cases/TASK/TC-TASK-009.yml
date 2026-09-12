@@ -1,0 +1,36 @@
+id: TC-TASK-009
+title: "运行中任务取消：记录被标 failed 但无法中止已发出的模型请求（PARTIAL 语义核验）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.2]
+level: system
+purpose: exception
+priority: P0
+preconditions:
+  - "DeepSeek 真实调用预算：本用例为 TASK 流第 2 次（异常分支）"
+  - "QA-L3 项目存在"
+test_data:
+  premise: "QA-L3 取消语义测试：深夜便利店 last customer…"
+  cancel_reason: "QA-L3 用户取消原因"
+steps:
+  - "POST /generation/story 发起第二次生成"
+  - "立即 POST /tasks/{id}/cancel 携带 reason"
+  - "轮询至终态并记录最终状态"
+expected:
+  - "取消后任务先变 failed 且 error=取消原因"
+  - "观察：若后台生成完成后 result 覆盖为 completed，则证实 cancel 不能中止外部调用（feature-inventory §14.2 PARTIAL 原文语义）"
+assertions:
+  - "cancel 响应 ok=true"
+  - "终态记录（failed 或 completed-overwritten）+ evidence 记录最终状态与时间线"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_009_cancel_active_race
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, cancel, real-deepseek]
+notes: "无论终态为 failed 或被覆盖 completed，均属当前 PARTIAL 行为；若被覆盖则按现状记录（不判缺陷，因需求已声明该边界）"

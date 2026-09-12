@@ -1,0 +1,6 @@
+[0.0s] upscale -> 200 {"success":true,"data":{"local_path":"projects/0266_20260912_QA-L3-IMAGE-17891823/uploads/20260912T030510_ce69eae6-b2f2-4d09-896f-d3763d61d5a1_2x.png","width":400,"height":240},"timestamp":"2026-09-12
+ASSERT PASS: upscale 200 == 200 | actual=200
+ASSERT PASS: 返回 2x 尺寸 400x240 | {"w":400,"h":240}
+ASSERT PASS: 超分文件真实落盘 | E:\project\LocalMiniDrama\backend-node\data\storage\projects\0266_20260912_QA-L3-IMAGE-17891823\uploads\20260912T030510_ce69eae6-b2f2-4d09-896f-d3763d61d5a1_2x.png
+ASSERT PASS: 超分文件大于原图（信息量增加） | 130856
+ASSERT PASS: 分镜 local_path 已切换为超分产物 | {"row":"projects/0266_20260912_QA-L3-IMAGE-17891823/uploads/20260912T030510_ce69eae6-b2f2-4d09-896f-d3763d61d5a1_2x.png","rel":"projects/0266_20260912_QA-L3-IMAGE-17891823/uploads/20260912T030510_ce69eae6-b2f2-4d09-896f-d3763d61d5a1_2x.png"}

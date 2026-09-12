@@ -1,0 +1,8 @@
+ASSERT PASS: 真实生成记录存在且终态 review | {"id":100,"s":"review"}
+ASSERT PASS: 创建即 waiting：INSERT 固定初始态（unifiedVideoGenerationService.js:1141 values.push('waiting', task.id, ...)） | unifiedVideoGenerationService.js:1141
+ASSERT PASS: 轮询实测状态序列 queued→running→review（见本轮执行证据） | 见上方 evidence：状态流转 queued/running/review
+ASSERT PASS: 生命周期时间戳自洽（created→started→completed） | created=2026-09-12T03:05:10.864Z completed=2026-09-12T03:17:17.190Z (726s)
+ASSERT PASS: provider_task_id 已持久化 | 16985086-4f3e-4c14-976b-de6c7d917523
+ASSERT PASS: 视频文件真实存在且 >0 字节 | E:\project\LocalMiniDrama\backend-node\data\storage\projects\0264_20260912_QA-L3-VIDEO-17891810\videos\vg_100_36c2bd58.mp4 (1566851B)
+ASSERT PASS: ffprobe 可解码：时长>0 且含视频/音频流 | {"dur":5,"v":true,"a":true}
+[0.1s] 终局产物: duration=5s size=1566851B path=projects/0264_20260912_QA-L3-VIDEO-17891810/videos/vg_100_36c2bd58.mp4

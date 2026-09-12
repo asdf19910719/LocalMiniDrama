@@ -1,0 +1,7 @@
+ASSERT PASS: 启动时 recoverDueJobs（setImmediate） | index.js
+ASSERT PASS: 60s 周期对账定时器（setInterval 60_000） | index.js setInterval 60_000
+[0.0s] [seed] recover 作业=qa-sim-recover-1789182366689（sim-upscale，source=missing）
+ASSERT PASS: due 作业 API 重试 202 == 202 | actual=202
+[5.0s] 恢复尝试后真实状态: {"status":"waiting_provider","current_stage":"waiting_provider","error_code":"PROVIDER_UNAVAILABLE","error_message":"云端转发在线，但目标设备或服务尚未启动","retry_count":1}
+ASSERT PASS: 恢复轮询对远端真实尝试（状态离开 pending 或 error 记录真实连接失败） | {"status":"waiting_provider","current_stage":"waiting_provider","error_code":"PROVIDER_UNAVAILABLE","error_message":"云端转发在线，但目标设备或服务尚未启动","retry_count":1}
+[5.0s] [说明] Zealman 远端不可达为真实外部状态；作业由 sim-seed 提供（用户已授权），provider 失败路径为真实网络交互

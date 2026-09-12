@@ -1,0 +1,11 @@
+[0.1s] start -> 200 {"success":true,"data":{"task_id":"b0bb6035-8eaa-490e-a316-43e67a251f8e","status":"pending"},"timestamp":"2026-09-12T00:55:00.601Z"}
+ASSERT PASS: start status == 200 | actual=200
+ASSERT PASS: 返回 task_id 与 pending 状态 | {"success":true,"data":{"task_id":"b0bb6035-8eaa-490e-a316-43e67a251f8e","status":"pending"},"timestamp":"2026-09-12T00:
+[5.1s] poll#1 status=processing progress=10 error=null (5s)
+[10.1s] poll#2 status=processing progress=10 error=null (10s)
+[15.1s] poll#3 status=completed progress=100 error=null (15s)
+ASSERT PASS: 任务最终 completed == "completed" | actual="completed"
+ASSERT PASS: 任务结果含 drama_id 与 episode_count | {"drama_id":141,"episode_count":1}
+ASSERT PASS: 数据流：生成结果落库为新剧集（数量增加） | before=0 after=1
+ASSERT PASS: 落库剧集结构完整（episode_number/title/script_content） | {"n":1,"title":"暂停三秒","len":982}
+[15.1s] AI 生成剧集: 第1集《暂停三秒》正文 982 字，预览: 夜雨砸在南浦老街的青石板上，溅起细密的水雾。林小海把电瓶车停歪，拎着最后一份外卖冲进巷口，手机上的倒计时已经跳到"超时2…

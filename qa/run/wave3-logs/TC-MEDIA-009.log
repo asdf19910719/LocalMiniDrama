@@ -1,0 +1,4 @@
+ASSERT PASS: 项目1 可见 1 条 == 1 | actual=1
+ASSERT PASS: 项目2 不可见 == 0 | actual=0
+[cleanup] 软删项目 258 -> 200
+[cleanup] 软删项目 259 -> 200

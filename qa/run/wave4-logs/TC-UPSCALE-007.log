@@ -1,0 +1,6 @@
+ASSERT PASS: 分段数量 == 2 == 2 | actual=2
+ASSERT PASS: segment_index 有序（0,1） | [0,1]
+ASSERT PASS: 每段含 status/progress 字段 | {"id":9,"job_id":"qa-sim-mask-1789****6620","segment_index":0,"start_frame":0,"requested_frame_count":15,"overlap_frames":2,"client_id":"qa-sim-mask-1789****6620:0","prompt_id":null,"filename_prefix":"qa-sim-mask-1789****0000","status":"pending","progress":0,"retry_count":0,"error_code":null,"error_message":null,"created_at":"2026-09-12T03:06:06.624Z","submitted_at":null,"completed_at":null,"updated_at":"2026-09-12T03:06:06.624Z"}
+ASSERT PASS: 分段 client_id/filename 前缀绑定作业 id | ["qa-sim-mask-1789****6620:0","qa-sim-mask-1789****6620:1"]
+ASSERT PASS: 分段状态可独立反映（段0 downloading） | ["downloading","pending"]
+[0.0s] sim-upscale（用户已授权模拟；远端 Zealman 供应商不可达为真实外部状态）

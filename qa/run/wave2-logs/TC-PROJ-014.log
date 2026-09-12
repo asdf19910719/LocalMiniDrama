@@ -1,0 +1,8 @@
+[0.0s] delete -> 200 {"success":true,"data":{"deleted":true,"recoverable":true},"timestamp":"2026-09-12T00:24:11.267Z"}
+ASSERT PASS: delete status == 200 | actual=200
+ASSERT PASS: deleted=true recoverable=true | {"success":true,"data":{"deleted":true,"recoverable":true},"timestamp":"2026-09-
+ASSERT PASS: 软删后 overview 404 == 404 | actual=404
+ASSERT PASS: archived 列表含该项目 | items=32
+ASSERT PASS: restore status == 200 | actual=200
+ASSERT PASS: 恢复后 overview 200 == 200 | actual=200
+[cleanup] 软删项目 43 -> 200

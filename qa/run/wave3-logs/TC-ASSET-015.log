@@ -1,0 +1,7 @@
+[0.0s] create library item -> 201 {"success":true,"data":{"id":3,"drama_id":null,"name":"QA-L3-ASSET-1789176101909-直建库角色","category":"QA-L3","image_url":"/static/library/qa-l
+ASSERT PASS: 直建库条目成功 | 201
+ASSERT PASS: GET 库条目 200 == 200 | actual=200
+ASSERT PASS: PUT 更新成功 | 200
+ASSERT PASS: 更新回读一致 == "QA-L3 直建描述v2" | actual="QA-L3 直建描述v2"
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后读取 404 == 404 | actual=404

@@ -1,0 +1,4 @@
+[0.0s] backgrounds -> 200 {"success":true,"data":[],"timestamp":"2026-09-12T03:05:16.159Z"}
+ASSERT PASS: 空态返回 200 与列表结构 | {"success":true,"data":[],"timestamp":"2026-09-12T03:05:16.159Z"}
+[0.0s] extract -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"episode has no script content"},"timestamp":"2026-09-12T03:05:16.160Z"}
+ASSERT PASS: extract 有明确业务响应（不崩溃） | 400

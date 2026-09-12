@@ -1,0 +1,10 @@
+[0.0s] create_new -> 201 {"success":true,"data":{"taskId":"extai_cc5d3896-ce64-4642-a15b-4af6eb699180","packageId":"extai_cc5d3896-ce64-4642-a15b-4af6eb699180","assetsDigest":"cad0c92c87f65b6961c9e576872dd4a1837df21c2c8805f1a87330cac6494868","co
+ASSERT PASS: create_new status == 201 | actual=201
+ASSERT PASS: 返回 taskId/packageId | {"success":true,"data":{"taskId":"extai_cc5d3896-ce64-4642-a15b-4af6eb699180","packageId":"extai_cc5d3896-ce64-4642-a15b-4af6eb699180","assetsDigest":"cad0c92c8
+ASSERT PASS: assetsDigest 非空 | cad0c92c87f65b6961c9
+ASSERT PASS: contextVersion 非空 | 
+ASSERT PASS: fill_blank status == 201 | actual=201
+ASSERT PASS: fill_blank 绑定目标集 == 95 | actual=95
+ASSERT PASS: 非法模式 400 == 400 | actual=400
+ASSERT PASS: 项目任务列表含 2 个任务 | [{"packageId":"extai_95834016-2dc2-4880-a129-5b41c827616e","targetEpisodeId":95,"targetEpisodeNumber":1,"status":"waiting_external","taskNote":"QA-L3 fill_blank 包","contextVersion":"4ad569b246cfaf8fb1
+[cleanup] 软删项目 103 -> 200

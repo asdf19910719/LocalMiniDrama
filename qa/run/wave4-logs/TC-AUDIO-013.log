@@ -1,0 +1,5 @@
+[0.0s] wav upload -> 200 {"success":true,"data":{"url":"http://localhost:5679/static/uploads/20260912T032746_38864493-67e5-4d43-b31c-32b4a82eb02d.wav","path":"uploads/20260912T032746_38864493-67e5-4d43-b31c-32b4a82eb02d.wav",
+ASSERT PASS: 真实 WAV 上传成功（200/201） | 200
+ASSERT PASS: 音频文件真实落盘且大小一致 | 16044/16044B
+[0.0s] txt upload -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"只支持音频格式 (mp3, wav, m4a, ogg)"},"timestamp":"2026-09-12T03:27:46.147Z"}
+ASSERT PASS: 非音频 MIME 被拒绝 | 500

@@ -1,0 +1,6 @@
+[0.0s] POST(无premise) -> 200 task_id= b332a37a-b6e1-40a5-a434-9437821d3bcd
+ASSERT PASS: start status == 200 | actual=200
+ASSERT PASS: 返回 task_id（入口未校验）
+[0.0s] 终态 status= failed error= 请提供故事梗概
+ASSERT PASS: 终态 failed == "failed" | actual="failed"
+ASSERT PASS: error=请提供故事梗概 | 请提供故事梗概

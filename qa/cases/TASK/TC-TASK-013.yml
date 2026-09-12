@@ -1,0 +1,35 @@
+id: TC-TASK-013
+title: "故事生成缺 premise：任务创建成功但后台失败，终态 failed 且 error=请提供故事梗概（无外部调用）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "QA-L3 项目存在"
+test_data:
+  drama_id: "(TC-003 创建的 QA-L3 项目)"
+steps:
+  - "POST /generation/story {drama_id} 不带 premise"
+  - "轮询该任务至终态"
+expected:
+  - "HTTP 200 且返回 task_id（入口不校验）"
+  - "任务终态 failed"
+  - "error=请提供故事梗概"
+assertions:
+  - "create.status == 200 && task_id 非空"
+  - "task.status == \"failed\""
+  - "task.error contains \"故事梗概\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_013_story_missing_premise
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, exception, async-failure]
+notes: "入口不校验 premise 而由后台失败——属可改进的契约设计，若 error 未正确落库记缺陷"

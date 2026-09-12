@@ -1,0 +1,34 @@
+id: TC-SCRIPT-901
+title: "已知已修 P1 QA-002 不回归：draft=null 时 script 接口返回 approved 正文（API 契约支撑前端修复）"
+state: active
+feature_id: F-SCRIPT-REG
+requirement_ids: [BUG-QA-002]
+level: system
+purpose: regression
+priority: P1
+preconditions:
+  - "剧集 13 存在 approved 剧本修订(305 字)且 draft 为空"
+test_data:
+  episode_id: 13
+steps:
+  - "GET /api/v2/episodes/13/script"
+  - "核验 approved.content 与 draft 状态"
+expected:
+  - "draft=null 时 approved.content 非空(305 字)"
+  - "canConfirm/hasUnconfirmedChanges 字段存在"
+assertions:
+  - "data.draft == null"
+  - "data.approved.content.length == 305"
+  - "has canConfirm field"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-regr.js
+  test_id: REGR_901_qa002_script_approved
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [regression, qa-002]
+notes: ""

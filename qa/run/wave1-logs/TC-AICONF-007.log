@@ -1,0 +1,4 @@
+[0.0s] GET ?service_type=text -> 200 len= 2 types= text
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: 全部为 text
+ASSERT PASS: 至少 1 条 | len=2

@@ -1,0 +1,4 @@
+[0.0s] PUT unknown -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"未知的提示词 key: QA-L3-not-exist"},"timestamp":"2026-09-12T00:02:10
+ASSERT PASS: unknown key status == 400 | actual=400
+ASSERT PASS: empty content status == 400 | actual=400
+ASSERT PASS: delete unknown status == 400 | actual=400

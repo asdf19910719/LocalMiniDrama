@@ -30,7 +30,9 @@ function cancelTaskStatus(db, log) {
       if (!result.ok && result.reason === 'not_found') {
         return response.notFound(res, '任务不存在');
       }
-      response.success(res, result.task || { id: req.params.task_id });
+      const payload = { ...(result.task || { id: req.params.task_id }) };
+      if (result.already_done) payload.already_done = true;
+      response.success(res, payload);
     } catch (err) {
       log.errorw('Cancel task failed', { error: err.message, task_id: req.params.task_id });
       response.internalError(res, err.message);

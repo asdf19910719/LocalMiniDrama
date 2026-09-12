@@ -1,0 +1,25 @@
+id: BUG-L3-401
+case_id: TC-VIDEO-001
+status: fixed-verified
+severity: P1
+title: "V2.1 制作台视频提交恒被 H3 守卫阻塞：ComfyUI H3 配置被误判为非 H3 通道（isMinimaxH3Model 正则边界缺陷）"
+steps: >-
+  1) 环境默认视频通道为 ComfyUI(id=5, provider=comfyui, api_protocol='', default_model=minimax_h3_director_r2v_te_speed)；
+  2) 为分镜编译 H3 草稿成功（POST /api/v1/storyboards/:id/h3-prompt-draft/compile → draft status='valid', video_config_id='5'）；
+  3) 调用 V2.1 制作台提交 POST /api/v2/storyboards/:shotId/video/submit。
+expected: "真实 H3 通道识别成功，守卫通过并创建候选组/提交真实生成任务（或返回与草稿/引用相关的业务校验错误）"
+actual: "409 GENERATION_BLOCKED「存在未通过的前置检查：生成描述（H3）」——jointGuard 的 getH3Draft 在真实通道下查 video_config_id='v21' 的 mock 草稿行，永远查不到真实草稿；守卫恒失败 → 提交不可达，真实视频生成不产生候选组与 director_artifacts"
+evidence: >-
+  qa/run/wave4-logs/TC-VIDEO-001.log（[探针] v2 video/submit -> 409 GENERATION_BLOCKED）；
+  根因链：providerRouter.isH3Video ← videoConfigResolver.resolveVideoProtocol：provider=comfyui → inferVideoProtocol 返回默认 'openai'（comfyui 未列入协议推断）；
+  纠正分支 isMinimaxH3Model(model) 用 /^minimax[-_]?h3\b/ 匹配 'minimax_h3_director_r2v_te_speed'——'3' 与 '_' 均为 word char，\b 永不成立 → 误判为非 H3（videoConfigResolver.js:31,58-60；storyboardService.js isRealH3Channel/h3DraftRow 38,732）；
+  对照：同配置下 V1 统一生命周期（POST /api/v1/videos）按 workflow 注册表正确解析并真实提交成功（provider_task_id 落库，video 98/100）
+suspected_cause: "isMinimaxH3Model 的 \\b 边界对下划线后缀失效 + inferVideoProtocol 未覆盖 comfyui provider；V2.1 通道判定与 V1 工作流注册表解析不一致"
+e2e_addendum: >-
+  2026-09-12 E2E 主链复现（run_20260912_072912，HEAD c9c2bbd，真实浏览器+真实后端）：
+  1) GET /api/v2/storyboards/156/video/quote?count=1 → channel=real, provider=comfyui, model=minimax_h3_director_r2v_te_speed, h3=false（实时误判）；
+  2) POST /api/v2/storyboards/156/h3/generate {video_config_id:5} → draftId=52, status=ai-generated, validation.valid=true（草稿存在且有效）；
+  3) POST /api/v2/storyboards/156/video/submit {candidateCount:1} → 仍被拒 H3_DRAFT_REQUIRED「H3 配置需先生成提示词草稿」（证据 .qa-vsubmit.json）；
+  4) UI 侧守卫显示「生成前联合检查 4/4 通过」与后端拒绝行为矛盾；点击确认后无任何任务产生（ComfyUI /queue running=0 pending=0；
+  video_generations 无新行；GET /api/v2/storyboards/156 → video.candidates=[]）且 UI 无错误反馈=静默失败。
+  结论：V2.1 制作台内真实 ComfyUI 视频生成完全不可用（比 API 层更严重：守卫假绿+静默吞提交）。

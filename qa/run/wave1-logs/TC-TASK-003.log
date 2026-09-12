@@ -1,0 +1,11 @@
+[0.0s] POST /generation/story -> 200 {"success":true,"data":{"task_id":"4557edde-5809-433e-bbe1-3fbdc839d871","status":"pending"},"timestamp":"2026-09-12T00:04:08.594Z"}
+ASSERT PASS: start status == 200 | actual=200
+ASSERT PASS: 返回 task_id | 4557edde-5809-433e-bbe1-3fbdc839d871
+[0.0s] 立即查询 status= processing (期望 pending/processing)
+ASSERT PASS: 初始为未完成态 | processing
+[15.3s] 终态 status= completed progress= 100 result= {"drama_id":12,"episode_count":1}
+ASSERT PASS: 终态 completed == "completed" | actual="completed"
+ASSERT PASS: result.episode_count>=1 | {"drama_id":12,"episode_count":1}
+ASSERT PASS: completed_at 非空 | 2026-09-12T00:04:23.673Z
+[15.3s] GET v2 episodes -> 200 count= 1 titles= 404不存在的订单
+ASSERT PASS: 项目下新增剧集>=1（产出持久化） | count=1

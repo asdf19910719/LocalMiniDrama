@@ -1,0 +1,31 @@
+id: TC-TASK-005
+title: "GET /tasks?resource_id= 返回该资源任务列表且包含刚完成的任务（按资源查询一致）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "TC-TASK-003 已产生任务且 resource_id=QA-L3 项目 id"
+test_data:
+steps:
+  - "GET /api/v1/tasks?resource_id={QA-L3 项目 id}"
+expected:
+  - "列表非空"
+  - "包含 TC-003 任务且状态一致"
+assertions:
+  - "tasks.some(t => t.id == storyTaskId)"
+  - "t.status == \"completed\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_005_list_by_resource
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, query]
+notes: ""

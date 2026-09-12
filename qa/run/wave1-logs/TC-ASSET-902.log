@@ -1,0 +1,4 @@
+[0.0s] GET /api/v2/projects/10/assets -> 200 total= 1 items= 林夏
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: items 非空 | total=1
+ASSERT PASS: 含 林夏 角色素材

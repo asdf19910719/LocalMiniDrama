@@ -1,0 +1,39 @@
+id: TC-AICONF-013
+title: "提示词覆盖：list 展示 10 组定义，update 后 is_customized=true，reset 后还原"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.7]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  key: "story_expansion_system"
+  content: "QA-L3 提示词覆盖测试内容"
+steps:
+  - "GET /settings/prompts"
+  - "PUT /settings/prompts/story_expansion_system"
+  - "GET 确认 current_body/is_customized"
+  - "DELETE 还原"
+  - "GET 确认 current_body=null"
+expected:
+  - "list 含 10 组提示词定义"
+  - "update 后 is_customized=true 且 current_body=新内容"
+  - "reset 后 is_customized=false"
+assertions:
+  - "list.data.prompts.length == 10"
+  - "after update is_customized == true"
+  - "after reset is_customized == false && current_body == null"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_013_prompt_override_cycle
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, prompt]
+notes: ""

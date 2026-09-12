@@ -1,0 +1,9 @@
+ASSERT PASS: 未确认剧本 readiness=script-unapproved == "script-unapproved" | actual="script-unapproved"
+ASSERT PASS: 守卫未启用 == false | actual=false
+ASSERT PASS: 确认剧本后 readiness=needs-attention == "needs-attention" | actual="needs-attention"
+ASSERT PASS: missing 列出全部无图必需项（人物+场景） | ["character:57","scene:34"]
+ASSERT PASS: recovery 入口=去处理 | {"id":"resolve-episode-assets","label":"去处理"}
+ASSERT PASS: 全部必需项有图后 readiness=ready == "ready" | actual="ready"
+ASSERT PASS: readyCount == totalCount | {"status":"ready","text":"本集设定已准备好","missing":[],"readyCount":2,"totalCount":2,"recovery":null}
+ASSERT PASS: 无 blocked 项 == 0 | actual=0
+[cleanup] 软删项目 174 -> 200

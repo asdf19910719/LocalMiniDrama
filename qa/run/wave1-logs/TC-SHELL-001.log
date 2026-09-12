@@ -1,0 +1,40 @@
+[0.0s] /projects -> 200 text/html root=true len=465
+ASSERT PASS: /projects status == 200 | actual=200
+ASSERT PASS: /projects text/html | text/html
+ASSERT PASS: /projects index.html 挂载点
+[0.0s] /projects/new -> 200 text/html root=true len=465
+ASSERT PASS: /projects/new status == 200 | actual=200
+ASSERT PASS: /projects/new text/html | text/html
+ASSERT PASS: /projects/new index.html 挂载点
+[0.0s] /tasks -> 200 text/html root=true len=465
+ASSERT PASS: /tasks status == 200 | actual=200
+ASSERT PASS: /tasks text/html | text/html
+ASSERT PASS: /tasks index.html 挂载点
+[0.1s] /library -> 200 text/html root=true len=465
+ASSERT PASS: /library status == 200 | actual=200
+ASSERT PASS: /library text/html | text/html
+ASSERT PASS: /library index.html 挂载点
+[0.1s] /settings -> 200 text/html root=true len=465
+ASSERT PASS: /settings status == 200 | actual=200
+ASSERT PASS: /settings text/html | text/html
+ASSERT PASS: /settings index.html 挂载点
+[0.1s] /settings/data-tools -> 200 text/html root=true len=465
+ASSERT PASS: /settings/data-tools status == 200 | actual=200
+ASSERT PASS: /settings/data-tools text/html | text/html
+ASSERT PASS: /settings/data-tools index.html 挂载点
+[0.1s] /ai-config -> 200 text/html root=true len=465
+ASSERT PASS: /ai-config status == 200 | actual=200
+ASSERT PASS: /ai-config text/html | text/html
+ASSERT PASS: /ai-config index.html 挂载点
+[0.1s] /media-library -> 200 text/html root=true len=465
+ASSERT PASS: /media-library status == 200 | actual=200
+ASSERT PASS: /media-library text/html | text/html
+ASSERT PASS: /media-library index.html 挂载点
+[0.1s] /quick-create -> 200 text/html root=true len=465
+ASSERT PASS: /quick-create status == 200 | actual=200
+ASSERT PASS: /quick-create text/html | text/html
+ASSERT PASS: /quick-create index.html 挂载点
+[0.1s] /projects/import-archive -> 200 text/html root=true len=465
+ASSERT PASS: /projects/import-archive status == 200 | actual=200
+ASSERT PASS: /projects/import-archive text/html | text/html
+ASSERT PASS: /projects/import-archive index.html 挂载点

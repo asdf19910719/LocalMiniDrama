@@ -327,7 +327,20 @@ function createV21Router({ db, cfg, log }) {
   const { createH3PromptDraftService } = require('../services/h3PromptDraftService.js');
   const realImageExecutor = createRealImageExecutor({ db, log });
   const realVideoExecutor = createRealVideoExecutor({ db, cfg, log, storageRoot: assetStorage });
-  const legacyH3Drafts = createH3PromptDraftService();
+  // BUG-L3-401 修复：编译与提交必须使用同一（带工作流注册表的）H3 服务实例，
+  // 否则编译写入的 videoConfigSnapshot（workflow 字段为 null）与提交侧重建的快照永不一致 → H3_DRAFT_STALE 恒判
+  let legacyH3DraftsDeps = {};
+  try {
+    const directorCfg = cfg?.director || {};
+    const { loadRegistry } = require('../director/workflowRegistry.js');
+    legacyH3DraftsDeps = {
+      workflowRegistry: loadRegistry(directorCfg.workflow_registry_path || './configs/director-workflows.json'),
+      allowExperimental: !!directorCfg.allow_experimental,
+    };
+  } catch (e) {
+    log.errorw && log.errorw('H3 workflow registry load failed, fallback to legacy draft service', { error: e.message });
+  }
+  const legacyH3Drafts = createH3PromptDraftService(legacyH3DraftsDeps);
   const v21ProviderRouter = createProviderRouter({
     db,
     log,

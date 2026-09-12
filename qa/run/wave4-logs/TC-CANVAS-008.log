@@ -1,0 +1,11 @@
+ASSERT PASS: 前置：存在真实 ready artifact（历史真实生成产物） | unified-video-96
+[0.0s] createCandidates -> 201 {"success":true,"data":{"id":"f77a9be4-7f51-49fe-a6c8-51412c304129","shot_id":"141","status":"pending","selected_candidate_id":null,"selected_artifact_id":null,"selected_by":null,"selected_at":null,"s
+ASSERT PASS: 候选组创建 201 == 201 | actual=201
+ASSERT PASS: 候选组可读 200 == 200 | actual=200
+ASSERT PASS: 候选行存在且绑定真实 artifact | {"id":"000da5b2-f608-488c-aed0-d97862c539bc","status":"pending"}
+[0.1s] review -> 200 {"success":true,"data":{"id":"f77a9be4-7f51-49fe-a6c8-51412c304129","shot_id":"141","status":"review","selected_candidate_id":null,"selected_artifact_id":null,"
+ASSERT PASS: 进入评审 200（pending→running→review 状态机推进） | {"success":true,"data":{"id":"f77a9be4-7f51-49fe-a6c8-51412c304129","shot_id":"141","status":"review","selected_candidate_id":null,"selected_artifact_id":null,"
+[0.1s] select -> 200 {"success":true,"data":{"id":"f77a9be4-7f51-49fe-a6c8-51412c304129","shot_id":"141","status":"selected","selected_candidate_id":"000da5b2-f608-488c-aed0-d97862c539bc","selected_artifact_id":"unified-v
+ASSERT PASS: 选片 200 == 200 | actual=200
+ASSERT PASS: 选中候选与原因持久化 | {"selected_candidate_id":"000da5b2-f608-488c-aed0-d97862c539bc","selection_reason":"QA-L3 选片原因：动作连贯性最佳","status":"selected"}
+[0.1s] [观察项→缺陷] v2.1 制作台视频提交路径（providerRouter.isRealH3Channel）将 ComfyUI H3 配置误判为非 H3（isMinimaxH3Model 正则在 minlength 下划线后缀失效），守卫恒阻塞 → 真实生成无候选组/artifact 自动落库

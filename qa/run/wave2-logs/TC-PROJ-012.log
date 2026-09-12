@@ -1,0 +1,9 @@
+[0.0s] 批量导入3集 -> 200 {"success":true,"data":{"message":"保存成功"},"timestamp":"2026-09-12T00:24:11.246Z"
+ASSERT PASS: 批量导入 status == 200 | actual=200
+ASSERT PASS: 剧集数=3 == 3 | actual=3
+ASSERT PASS: 二次导入 status == 200 | actual=200
+ASSERT PASS: 未提交的第 3 集被软删（剩 2 集） == 2 | actual=2
+ASSERT PASS: 第 1 集内容被更新（upsert 保留 id） | 修订后的剧本内容-QA-L3
+[0.0s] ep1 id=37 title=第一集-修订
+ASSERT PASS: episodes 非数组 400 == 400 | actual=400
+[cleanup] 软删项目 41 -> 200

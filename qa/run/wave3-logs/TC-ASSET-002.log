@@ -1,0 +1,5 @@
+ASSERT PASS: GET /dramas/:id/characters == 200 | actual=200
+ASSERT PASS: 创建顺序 C,A,B 被按 name 升序重排为 A,B,C（ORDER BY sort_order ASC, name ASC） | ["QA-L3-ASSET-1789176147212-A-第一","QA-L3-ASSET-1789176147212-B-第二","QA-L3-ASSET-1789176147212-C-第三"]
+ASSERT PASS: DB 层 sort_order 全为 0（无写入口） | [0,0,0]
+[0.1s] [观察项 INV-4.1b] 角色「排序」实为固定 ORDER BY sort_order,name；创建时 sort_order 恒 0，PUT /characters/:id 白名单（characterLibraryService.updateCharacter）不接收 sort_order，无任何 API 可调整顺序——inventory 标注 COMPLETE，实际排序能力不可达。行为如实记录。
+[cleanup] 软删项目 165 -> 200

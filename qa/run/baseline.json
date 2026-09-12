@@ -1,0 +1,85 @@
+{
+  "established_at": "2026-09-12T12:13:56.109559",
+  "established_by": "run_20260912_072912",
+  "total_cases": 236,
+  "by_module": {
+    "SHELL": 10,
+    "AICONF": 18,
+    "TASK": 14,
+    "SCRIPT": 17,
+    "ASSET": 19,
+    "PROJ": 19,
+    "IMPORT": 12,
+    "PKG": 13,
+    "EPSET": 10,
+    "STORYBOARD": 23,
+    "MEDIA": 13,
+    "VIDEO": 16,
+    "IMAGE": 14,
+    "UPSCALE": 11,
+    "CANVAS": 11,
+    "AUDIO": 16
+  },
+  "coverage_matrix": {
+    "SHELL": [
+      "passed"
+    ],
+    "AICONF": [
+      "passed"
+    ],
+    "TASK": [
+      "failed",
+      "passed"
+    ],
+    "SCRIPT": [
+      "failed",
+      "passed"
+    ],
+    "ASSET": [
+      "failed",
+      "passed"
+    ],
+    "PROJ": [
+      "failed",
+      "passed"
+    ],
+    "IMPORT": [
+      "failed",
+      "passed"
+    ],
+    "PKG": [
+      "failed",
+      "passed"
+    ],
+    "EPSET": [
+      "passed"
+    ],
+    "STORYBOARD": [
+      "passed"
+    ],
+    "MEDIA": [
+      "passed"
+    ],
+    "VIDEO": [
+      "failed",
+      "passed"
+    ],
+    "IMAGE": [
+      "blocked",
+      "passed"
+    ],
+    "UPSCALE": [
+      "passed"
+    ],
+    "CANVAS": [
+      "passed"
+    ],
+    "AUDIO": [
+      "passed"
+    ]
+  },
+  "target_coverage": "主流程全覆盖 + 异常/边界 + 容错（L3 全项目，真实测试约束）",
+  "verdict_at_establishment": "FAIL",
+  "pass_rate": "228/236",
+  "history": []
+}

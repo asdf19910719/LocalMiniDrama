@@ -1,0 +1,6 @@
+[0.0s] prop add-to-library -> 200 {"success":true,"data":{"message":"已加入本剧道具库","item":{"id":1,"drama_id":169,"name":"QA-L3-ASSET-1789176147212-入库道具","description":null,"promp
+ASSERT PASS: 本剧道具库入库成功 | {"success":true,"data":{"message":"已加入本剧道具库","item":{"id":1,"drama_id":169,"name":"QA-L3-ASSET-1789176147212-入库道具","description":null,"promp
+[0.0s] prop add-to-material-library -> 200 {"success":true,"data":{"message":"已加入全局素材库","item":{"id":2,"drama_id":null,"name":"QA-L3-ASSET-1789176147212-入库道具","description":null,"prom
+ASSERT PASS: 公共素材库入库成功 | {"success":true,"data":{"message":"已加入全局素材库","item":{"id":2,"drama_id":null,"name":"QA-L3-ASSET-1789176147212-入库道具","description":null,"prom
+ASSERT PASS: 道具库可检索到入库条目 | hits=2
+[cleanup] 软删项目 169 -> 200

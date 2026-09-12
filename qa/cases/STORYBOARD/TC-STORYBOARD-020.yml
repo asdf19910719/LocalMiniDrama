@@ -1,0 +1,32 @@
+id: TC-STORYBOARD-020
+title: "SRT 导出：无成片版本 API 如实拒绝；真实 buildSrt 以本集镜头数据产出合法 SRT 产物"
+state: active
+feature_id: F-STORYBOARD
+requirement_ids: [INV-5.12]
+level: integration
+purpose: functional
+priority: P0
+preconditions:
+  - "后端 http://127.0.0.1:5679 运行中（L3 共享环境）"
+  - "真实数据约束：不 mock 外部服务；测试数据 QA-L3- 前缀"
+test_data:
+  prefix: "QA-L3-"
+  cleanup: "用例自建项目结束后软删（可复核）；导出产物保留 qa/run/wave3-artifacts/"
+steps:
+  - "由 qa/scripts/wave3 自动化脚本真实调用 HTTP API 执行（automation.test_id 对应用例块）"
+expected:
+  - "全部断言通过（状态码/响应结构/DB 副本三层核对；BROKEN/PARTIAL 项按 feature-inventory 文档行为验证并记录观察项）"
+assertions:
+  - "以脚本内 cs.eq/cs.expect 断言为准，逐条断言写入执行日志 evidence"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave3/run-storyboard.js
+  test_id: STORYBOARD_020_srt_export
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave3-designer"
+  generated_at: "2026-09-12"
+regression_tags: [storyboard, wave3, l3]
+notes: "产物 qa/run/wave3-artifacts/TC-STORYBOARD-020-episode.srt；SRT 成功导出的成片前置由 AUDIO/VIDEO 波次覆盖"

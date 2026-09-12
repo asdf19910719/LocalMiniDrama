@@ -1,0 +1,9 @@
+[0.0s] PATCH -> 200 {"success":true,"data":{"id":34,"dramaId":38,"episodeNumber":1,"title":"新标题-QA","status":"blank","stage":null,"targetDuration":95,"updatedAt
+ASSERT PASS: PATCH status == 200 | actual=200
+ASSERT PASS: 回读 title == "新标题-QA" | actual="新标题-QA"
+ASSERT PASS: 回读 targetDuration=95 == 95 | actual=95
+ASSERT PASS: v2 空标题 400 == 400 | actual=400
+ASSERT PASS: v1 回读 description | 本集梗概-QA
+ASSERT FAIL: v1 回读 duration=95 | 0
+ASSERT PASS: 不存在剧集 PATCH 404 == 404 | actual=404
+[cleanup] 软删项目 38 -> 200

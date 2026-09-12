@@ -1,0 +1,6 @@
+[0.0s] proxy -> 200 image/png len=61379
+[0.0s] direct -> 200 image/png len=61379
+ASSERT PASS: proxy status == 200 | actual=200
+ASSERT PASS: direct status == 200 | actual=200
+ASSERT PASS: proxy content-type image/* | image/png
+ASSERT PASS: 字节长度一致 == 61379 | actual=61379

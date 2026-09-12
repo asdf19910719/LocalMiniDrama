@@ -1,0 +1,12 @@
+[0.0s] e1 -> 201 {"success":true,"data":{"id":32,"episodeNumber":1,"blank":true},"timestamp":"2026-09-12T00:24:11.207
+ASSERT PASS: e1 status == 201 | actual=201
+ASSERT PASS: e1 episodeNumber=1 == 1 | actual=1
+ASSERT PASS: e2 status == 201 | actual=201
+ASSERT PASS: e2 episodeNumber=2（自动递增） == 2 | actual=2
+ASSERT PASS: 集号冲突 409 EPISODE_NUMBER_CONFLICT | 409 EPISODE_NUMBER_CONFLICT
+ASSERT PASS: list status == 200 | actual=200
+ASSERT PASS: 列表数量 2 == 2 | actual=2
+ASSERT PASS: 列表含标题 | ["开局","反转"]
+[0.0s] blank 列表 -> 200 {"success":true,"data":{"items":[{"id":32,"episodeNumber":1,"title":"开局"},{"id":33,"episodeNumber":2
+ASSERT PASS: blank 列表 status == 200 | actual=200
+[cleanup] 软删项目 37 -> 200

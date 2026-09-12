@@ -1,0 +1,35 @@
+id: TC-AICONF-008
+title: "配置测试接口对 DeepSeek 真实调用成功（真实外部调用 1 次）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.2]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "DeepSeek 真实 key 已配置(id=4)"
+  - "外网可达 api.deepseek.com"
+test_data:
+  provider: "deepseek"
+  base_url: "https://api.deepseek.com"
+  source: "config id=4 (key 经 API 读取，不落日志)"
+steps:
+  - "GET /api/v1/ai-configs/4 读取 base_url/api_key"
+  - "POST /api/v1/ai-configs/test 携带真实 key"
+expected:
+  - "success=true 且 message=连接测试成功"
+assertions:
+  - "resp.success == true"
+  - "resp.data.message contains \"连接测试成功\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_008_test_connection_real_deepseek
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, real-deepseek, smoke]
+notes: "DeepSeek 真实调用预算：本模块仅此 1 次（l3-context 每功能流≤2 次）"

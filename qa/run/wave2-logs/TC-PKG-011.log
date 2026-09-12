@@ -1,0 +1,8 @@
+[0.0s] 任务事实: package_id=extai_f0af4c93-ea5a-4dd5-853c-b83c64290e96 digest=bbf94c57ee73… target_ep=1
+[0.0s] wrong package_id -> ok=false checks=["package_id"]
+ASSERT PASS: package_id 检查失败 | 
+ASSERT PASS: assets_digest 检查失败 | ["assets_digest"]
+ASSERT PASS: 集号不匹配检查失败 | ["episode"]
+[0.0s] 非 JSON -> 200 false
+ASSERT PASS: 非 JSON 结果 ok=false（schema 检查失败） | {"success":true,"data":{"ok":false,"checks":[{"id":"schema","label":"Schema 协议版本","ok":false,"detail":"结果不是合法 JSON：Unexpected token 'o', \"n
+[cleanup] 软删项目 108 -> 200

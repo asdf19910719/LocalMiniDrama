@@ -1,0 +1,33 @@
+id: TC-SHELL-006
+title: "/health 健康检查契约：status=ok 且返回 app/version 元信息"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.1]
+level: system
+purpose: functional
+priority: P2
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+steps:
+  - "GET http://127.0.0.1:5679/health"
+expected:
+  - "200"
+  - "status=ok"
+  - "app=LocalMiniDrama API，version 非空"
+assertions:
+  - "status == 200"
+  - "body.status == \"ok\""
+  - "body.app non-empty"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_006_health_contract
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, smoke]
+notes: ""

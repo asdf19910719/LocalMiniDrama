@@ -1,0 +1,7 @@
+[0.0s] stale -> 409 {"error":{"code":"REVISION_CONFLICT","message":"expected_revision 6 与当前草稿 1 不匹配"}}
+ASSERT PASS: 过期版本 409 REVISION_CONFLICT | 409 REVISION_CONFLICT
+ASSERT PASS: 匹配锁保存 200 == 200 | actual=200
+ASSERT PASS: 原地更新（revision 不变） == 1 | actual=1
+ASSERT PASS: 未产生新版本行 == 1 | actual=1
+ASSERT PASS: 内容已更新 | 版本B-正确锁
+[cleanup] 软删项目 130 -> 200

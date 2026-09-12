@@ -1,0 +1,5 @@
+[0.0s] POST /characters/1/add-to-team-library -> 404 {"error":"API endpoint not found"}
+ASSERT PASS: 角色 add-to-team-library 404（后端未挂载） | 404
+[0.0s] POST /scenes/1/add-to-team-library -> 404 {"error":"API endpoint not found"}
+ASSERT PASS: 场景 add-to-team-library 404（后端未挂载） | 404
+[0.0s] [观察项 INV-4.17] frontweb/src/api/characters.js:38 与 scenes.js:31 声明 add-to-team-library，后端 index.js 无对应路由——与 inventory「BROKEN：声明了后端不存在的路由」一致，如实记录不判新缺陷

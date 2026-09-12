@@ -1,0 +1,6 @@
+[0.0s] GET /api/v1/ai-configs -> 200 total= 5
+ASSERT PASS: http status == 200 | actual=200
+ASSERT PASS: success==true
+ASSERT PASS: data 是数组且>=5条 | len=5
+ASSERT PASS: 每条含契约字段 | fields=id,service_type,name,provider,base_url,api_key,model,is_default
+ASSERT PASS: 存在默认 text 配置(DeepSeek) | id=4 name=DeepSeek 文本

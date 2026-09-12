@@ -1,0 +1,11 @@
+[0.0s] empty confirm -> 404 {"error":{"code":"NOT_FOUND","message":"尚无草稿可确认"}}
+ASSERT PASS: 无草稿确认 404 == 404 | actual=404
+[0.0s] confirm-preview -> 200 {"success":true,"data":{"check":{"scenes":1,"chars":12,"estimatedSeconds":0,"blockers":0,"suggestions":[]},"assetChanges":{"added":1,"changed":0,"removed":0,"items":{"added":[{"sceneNumber":1,"heading
+ASSERT PASS: confirm-preview status == 200 | actual=200
+[0.0s] confirm -> 200 {"success":true,"data":{"revision":1,"status":"approved","fingerprint":"903cf3ff7bf9f530f872801a9e4df8b97a50664ef3c308fbe6c327d5b067970b"},"timestamp":"2026-09-
+ASSERT PASS: confirm status == 200 | actual=200
+ASSERT PASS: 确认 revision=1 == 1 | actual=1
+ASSERT PASS: 返回指纹 = sha256(正文) == "903cf3ff7bf9f530f872801a9e4df8b97a50664ef3c308fbe6c327d5b067970b" | actual="903cf3ff7bf9f530f872801a9e4df8b97a50664ef3c308fbe6c327d5b067970b"
+ASSERT PASS: DB 修订状态 approved == "approved" | actual="approved"
+ASSERT PASS: 阶段状态 approved == "approved" | actual="approved"
+[cleanup] 软删项目 138 -> 200

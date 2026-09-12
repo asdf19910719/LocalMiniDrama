@@ -1,0 +1,69 @@
+{
+  "run_id": "run_20260912_072912",
+  "mode": "L3",
+  "scope": "全项目",
+  "status": "running",
+  "trigger": {
+    "source": "human",
+    "command": "/qa l3 全项目",
+    "timestamp": "2026-09-12T07:29:12.731759"
+  },
+  "selection": {
+    "total": 0,
+    "by_level": {},
+    "by_priority": {},
+    "case_ids": []
+  },
+  "impact_analysis": {
+    "mode": "full",
+    "diff_files": [
+      "docs/qa/bug-report.md"
+    ],
+    "affected_symbols": []
+  },
+  "execution": {
+    "start_time": "2026-09-12T07:29:12.731763",
+    "end_time": null,
+    "duration_seconds": null,
+    "results_by_phase": {},
+    "failures": []
+  },
+  "repair_loop": {
+    "mode": "manual",
+    "rounds_used": 0,
+    "max_rounds": 5
+  },
+  "gatekeeper_verdict": {
+    "verdict": "FAIL",
+    "round": 2,
+    "reason": "修复轮后 12 项中 11 项经独立复核成立（含双硬阻断 BUG-401 真实出片 6.000s/1312x736 与 BUG-403 通道入口打通）；仍 FAIL 因：①新立 BUG-L3-404（P0 用例 TC-IMPORT-005 仍失败：示例包 project.json v1.3 缺 style_id + importExample 一律 500，现场重放证实）②chatgpt_web 捕获回填未闭环（发送半链已真实验证，作为发版前验收条件，不豁免不 BLOCKED）③修复未提交（19 文件仅在工作区）。完成最小剩余清单后可升至 CONDITIONAL PASS",
+    "uncovered_requirements": [
+      "journey6 已有视频登记",
+      "journey11 重启恢复",
+      "journey12 迁移对账",
+      "journey13 PostRevision门禁",
+      "journey14 manifest溯源",
+      "A-P04 多GB导入",
+      "A-D01 数据工具深项",
+      "桌面/扩展套件纳入",
+      "性能/兼容性等非功能维度",
+      "TTS 真实成功路径",
+      "chatgpt_web 捕获回填闭环（进行中）"
+    ],
+    "requirement_ids_inconsistencies": [],
+    "uncovered_dimensions": [
+      "performance",
+      "compatibility_matrix",
+      "migration",
+      "desktop_electron",
+      "restart_recovery",
+      "chatgpt_capture_backfill"
+    ],
+    "new_bugs": [
+      "BUG-L3-404"
+    ],
+    "judged_at": "2026-09-12T14:09:52.305059+08:00",
+    "report": "qa/release_gate_report.md"
+  },
+  "checksum": "675afcd7a730e678"
+}

@@ -1,0 +1,6 @@
+[0.0s] scene add-to-library -> 200 {"success":true,"data":{"message":"已加入本剧场景库","item":{"id":2,"drama_id":161,"location":"QA-L3-库场景-1789176115378","time":"夜","prompt":"雨夜霓虹街道","description":"雨夜霓虹
+ASSERT PASS: 场景入库成功 | {"success":true,"data":{"message":"已加入本剧场景库","item":{"id":2,"drama_id":161,"location":"QA-L3-库场景-1789176115378","time":"夜","prompt":"雨夜霓虹街道","description":"雨夜霓虹
+ASSERT PASS: 场景库列表可见 | total=n/a
+ASSERT PASS: 库条目 location 与源场景一致 | {"id":2,"drama_id":161,"location":"QA-L3-库场景-1789176115378","time":"夜","prompt":"雨夜霓虹街道","description":"雨夜霓虹街道","image_u
+[0.1s] [cleanup] 已删除场景库条目
+[cleanup] 软删项目 161 -> 200

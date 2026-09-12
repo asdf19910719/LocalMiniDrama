@@ -1,0 +1,5 @@
+ASSERT PASS: episode batch 200 == 200 | actual=200
+ASSERT PASS: 返回空数组（LEGACY 桩） | {"success":true,"data":[],"timestamp":"2026-09-12T03:17:19.938Z"}
+ASSERT PASS: 图像记录创建成功 | 201
+ASSERT PASS: fromImage 200 == 200 | actual=200
+ASSERT PASS: 任务类型 video_generation 落库 | {"type":"video_generation","status":"pending"}

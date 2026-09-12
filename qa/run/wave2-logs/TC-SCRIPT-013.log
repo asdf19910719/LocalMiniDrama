@@ -1,0 +1,7 @@
+[0.0s] extract -> 200 {"success":true,"data":{"task_id":"e909abd5-8a46-4f77-a42e-d95039d3427c"},"timestamp":"2026-09-12T00:53:45.810Z"}
+ASSERT PASS: extract status == 200 | actual=200
+ASSERT PASS: 返回 task_id（异步占位） | {"success":true,"data":{"task_id":"e909abd5-8a46-4f77-a42e-d95039d3427c"},"timestamp":"2026-09-12T00:53:45.810Z"}
+[0.5s] 任务结果: {"characters":[],"count":0}
+ASSERT PASS: 结果为空角色列表（stub 占位真实行为） | {"characters":[],"count":0}
+[0.5s] [观察项 INV-3.5] /episodes/:id/characters/extract 挂载 stub.js 占位处理（routes/stub.js episodeCharactersExtract，setTimeout 100ms 后写空结果）——与 feature-inventory BROKEN 标注一致：公开端点为占位实现，真实能力在 /generation/characters。如实记录，不判新缺陷。
+[cleanup] 软删项目 140 -> 200

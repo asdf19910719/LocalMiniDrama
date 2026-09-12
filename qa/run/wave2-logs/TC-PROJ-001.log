@@ -1,0 +1,15 @@
+[0.0s] keyword 搜索 -> 200 total=2
+ASSERT PASS: keyword 搜索 status == 200 | actual=200
+ASSERT PASS: 含项目 A | ["QA-L3-PROJ-1789172651073-001-B","QA-L3-PROJ-1789172651073-001-A"]
+ASSERT PASS: 含项目 B | ["QA-L3-PROJ-1789172651073-001-B","QA-L3-PROJ-1789172651073-001-A"]
+ASSERT PASS: 分页 page1 status == 200 | actual=200
+ASSERT PASS: page_size=1 返回 1 条 == 1 | actual=1
+ASSERT PASS: pagination.total == 2 == 2 | actual=2
+ASSERT PASS: 超范围页 items 空 == 0 | actual=0
+[0.0s] v2 列表 -> 200 total=2
+ASSERT PASS: v2 列表 status == 200 | actual=200
+ASSERT PASS: v2 命中 2 条 == 2 | actual=2
+ASSERT PASS: v2 sort=title 可用且条数一致 | total=2
+ASSERT PASS: 活跃项目不出现在 archived 列表
+[cleanup] 软删项目 30 -> 200
+[cleanup] 软删项目 31 -> 200

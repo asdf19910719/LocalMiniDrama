@@ -1,0 +1,7 @@
+ASSERT PASS: 创建路径绑定回读 prop_ids | [26]
+ASSERT PASS: associateProps 路径 200 == 200 | actual=200
+ASSERT PASS: associateProps 为「整表替换」语义：传入 [p2] 后仅剩 p2（propService.associateWithStoryboard 先 DELETE 全部再插入） | [{"prop_id":27}]
+ASSERT PASS: 替换为完整集合 200 == 200 | actual=200
+ASSERT PASS: 全量绑定后关系表两行 | [{"prop_id":26},{"prop_id":27}]
+ASSERT PASS: GET prop_ids 含两个道具 | [26,27]
+[cleanup] 软删项目 195 -> 200

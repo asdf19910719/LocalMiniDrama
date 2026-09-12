@@ -1,0 +1,34 @@
+id: TC-AICONF-018
+title: "安全：GET /ai-configs 返回明文 api_key 且前端导出不脱敏（feature-inventory PARTIAL 项复核）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.3, ARCH-9.3]
+level: system
+purpose: exception
+priority: P0
+preconditions:
+  - "后端 5679 运行中"
+  - "AIConfigContent.vue exportConfigs(2424 行) 仅剔除 id/created_at/updated_at"
+test_data:
+steps:
+  - "GET /api/v1/ai-configs 检查 api_key 是否明文"
+  - "源码核验前端导出字段过滤逻辑"
+  - "若明文输出则记缺陷"
+expected:
+  - "理想：API 对 key 脱敏（如 sk-***后4位），导出不携带明文 key"
+  - "实际：若返回明文 key，验证 feature-inventory §11 导出安全边界不合格仍存在"
+assertions:
+  - "记录 api_key 是否完整明文（长度==原始且非掩码）"
+  - "exportConfigs 源码 rest 展开包含 api_key 字段"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_018_plaintext_key_export
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, security]
+notes: "预期发现缺陷：明文 key 经 API 暴露并被导出功能写出（ARCH-9.3 已声明该安全模型，产品边界仍不合格）"

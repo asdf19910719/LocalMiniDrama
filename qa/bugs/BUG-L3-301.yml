@@ -1,0 +1,19 @@
+id: BUG-L3-301
+case_id: TC-ASSET-003
+status: fixed-verified
+severity: P3
+title: "角色主图上传响应返回 local_path，但该值未持久化到 characters.local_path（响应与 DB 读回不一致）"
+module: ASSET
+steps:
+  - "POST /api/v1/dramas 创建项目；PUT /api/v1/dramas/:id/characters 创建角色"
+  - "POST /api/v1/characters/:id/upload-image（multipart，真实 PNG，字段 file）→ 200，响应含 {url, local_path, filename, size}"
+  - "GET /api/v1/characters/:id 与 SQLite 直查 characters.local_path"
+expected: "characters.local_path 与上传响应的 local_path 一致（响应明示返回该字段，客户端与后续读取应一致）"
+actual: "DB characters.local_path 仍为 NULL；仅 image_url 被写入（绝对 URL）。上传响应的 local_path 是一次性信息，任何缓存它的客户端与 DB 读回不一致"
+evidence: |
+  - 复现输出（01:22:41）：upload -> 200 {"url":"http://localhost:5679/static/projects/0171_.../characters/20260912T012241_....png","local_path":"characters/20260912T012241_....png",...}
+  - 同刻直查 SQLite：{"image_url":"http://localhost:5679/static/...","local_path":null}
+  - 根因：backend-node/src/routes/characters.js:167-169 调 characterLibraryService.uploadCharacterImage(db, log, id, url)
+    （services/characterLibraryService.js:214-227）仅 UPDATE characters SET image_url=?，handler 未把 uploadService.uploadFile
+    返回的 local_path 写入 characters.local_path（对照：scenes/分镜等主图路径普遍双写 image_url+local_path）
+suspected_cause: "uploadImage handler 只透传 local_path 给前端展示，落库调用漏传第二返回值；下游以 local_path 优先的逻辑（如素材库 addCharacterToLibrary 的 charRow.local_path）拿到 NULL"

@@ -1,0 +1,31 @@
+id: TC-TASK-001
+title: "GET 不存在的任务 ID 返回 404 任务不存在"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  task_id: "qa-l3-nonexistent-task-id"
+steps:
+  - "GET /api/v1/tasks/qa-l3-nonexistent-task-id"
+expected:
+  - "404 且 message=任务不存在"
+assertions:
+  - "status == 404"
+  - "message contains \"任务不存在\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_001_get_not_found
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, exception]
+notes: ""

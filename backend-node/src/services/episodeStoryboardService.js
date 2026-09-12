@@ -1082,7 +1082,8 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
     'SELECT id, script_content, description, drama_id, audio_plan, production_profile FROM episodes WHERE id = ? AND deleted_at IS NULL'
   ).get(Number(episodeId));
   if (!episode) {
-    throw new Error('剧集不存在或无权限访问');
+    const e = new Error('剧集不存在或无权限访问');
+    e.status = 400;
   }
 
   // 获取剧集风格和比例（如果未指定，则从 drama metadata / style 中获取完整提示词）
@@ -1125,7 +1126,8 @@ function generateStoryboard(db, log, episodeId, model, style, storyboardCount, v
       ? String(episode.description)
       : '';
   if (!scriptContent) {
-    throw new Error('剧本内容为空，请先生成剧集内容');
+    const e = new Error('剧本内容为空，请先生成剧集内容');
+    e.status = 400;
   }
 
   const characters = db.prepare(

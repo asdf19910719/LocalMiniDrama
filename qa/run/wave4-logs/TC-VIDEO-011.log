@@ -1,0 +1,3 @@
+ASSERT PASS: GET 缺 config 400 H3_CONFIG_REQUIRED | {"success":false,"error":{"code":"H3_CONFIG_REQUIRED","message":"缺少 video_config_id,无法定位 H3 提示词草稿"},"timestamp":"2026-09
+ASSERT PASS: GET 缺 workflow 400 H3_WORKFLOW_REQUIRED | {"success":false,"error":{"code":"H3_WORKFLOW_REQUIRED","message":"缺少 workflow_id，无法定位 H3 提示词草稿"},"timestamp":"2026-09-1
+ASSERT PASS: compile 缺 workflow_id 400 | 400

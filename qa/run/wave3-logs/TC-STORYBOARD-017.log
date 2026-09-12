@@ -1,0 +1,5 @@
+ASSERT PASS: v2 storyboard 200 == 200 | actual=200
+ASSERT PASS: shots 数组 + completion 结构 | {"shots":1,"completion":{"total":1,"adopted":0,"staleShots":[],"missing":[116],"blockers":[{"label":"镜头 0 尚未生成","shots":[116]}]}}
+[0.0s] [记录] 手工 v1 创建镜头无段结构（段由 v2.1 结构创建/段编辑维护），completion 基于段计算
+ASSERT PASS: 镜头含 completion 字段 | {"total":1,"adopted":0,"staleShots":[],"missing":[116],"blockers":[{"label":"镜头 0 尚未生成","shots":[116
+[cleanup] 软删项目 200 -> 200

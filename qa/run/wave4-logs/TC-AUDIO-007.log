@@ -1,0 +1,8 @@
+ASSERT PASS: 系统 ffmpeg 可用且合成真实 mp4 | E:\project\LocalMiniDrama\qa\run\wave4-artifacts\synth_1789183665807_2s_aud.mp4 (47230B)
+ASSERT PASS: 合成产物 ffprobe 可解码：时长≈2s 且含音频流 | {"dur":2,"a":true}
+[0.1s] source-video -> 201 {"success":true,"data":{"assetId":244,"episodeId":187,"sha256":null,"fileSize":47230,"mediaInfo":"QA-L3 ffmpeg testsrc 320x240 15fps aac 440Hz","note":"来源媒体已登记；默认只读引用原文件，可进入短片时间线，不自动生成镜头。"},"timestamp
+ASSERT PASS: 登记 201 == 201 | actual=201
+ASSERT PASS: 来源媒体落库 assets（source_meta 关联剧集） | {"id":244}
+ASSERT PASS: 登记引用真实文件（local_path 可读） | E:\project\LocalMiniDrama\qa\run\wave4-artifacts\synth_1789183665807_2s_aud.mp4
+ASSERT PASS: 缺 name 400 == 400 | actual=400
+ASSERT PASS: episodeId 非法 400 == 400 | actual=400

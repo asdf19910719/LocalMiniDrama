@@ -354,7 +354,13 @@
         </div>
         <div class="modal-b">
           <div class="kv"><span class="k">对象</span><span class="v">{{ current.title || '分镜 ' + current.number }}</span></div>
-          <div class="kv"><span class="k">通道 / 模型</span><span class="v">mock 本地通道 · ¥0</span></div>
+          <div class="kv"><span class="k">通道</span><span class="v">
+            <select class="input" style="width:auto; padding:2px 6px" v-model="imageChannel">
+              <option value="api">API 通道（全局默认配置）</option>
+              <option value="chatgpt_web">ChatGPT 网页（浏览器扩展）</option>
+            </select>
+          </span></div>
+          <div class="kv" v-if="imageChannel === 'api'"><span class="k">费用</span><span class="v">{{ sheetDemoDelay ? '演示延迟 ¥0' : '按 Provider 计费' }}</span></div>
           <div class="kv" style="align-items:flex-start"><span class="k">本次使用提示词</span>
             <span class="v" style="white-space:normal; text-align:right; line-height:1.6; max-width:320px">{{ imagePrompt.text || '（将按引用与时段自动拼装）' }}</span>
           </div>
@@ -646,6 +652,7 @@
 import v21 from '@/v21/api.js'
 import StateBlock from '@/components/v21/StateBlock.vue'
 import escMixin from '@/v21/escMixin.js'
+import { useImageGenerationStore } from '@/stores/imageGenerationStore.js'
 
 export default {
   name: 'StoryboardStage',
@@ -658,6 +665,7 @@ export default {
   data() {
     return {
       shots: [], scenes: [], sceneFilter: 'all', currentShotId: null, current: null,
+      imageChannel: 'api', chatGPTPoll: null,
       loading: false, loaded: false, loadError: '',
       references: { characters: [], props: [], scene: {} },
       segments: [], imagePrompt: { text: '', manual: false }, imageCandidates: [],
@@ -814,9 +822,13 @@ export default {
     }
     window.addEventListener('keydown', this.keyHandler)
     this.load().then(() => this.consumeShotQuery())
+    useImageGenerationStore().loadDefault(Number(this.projectId))
+      .then((ch) => { this.imageChannel = ch })
+      .catch(() => {})
   },
   unmounted() {
     window.removeEventListener('keydown', this.keyHandler)
+    this.stopChatGPTPoll()
   },
   methods: {
     // Esc 自上而下关本视图的弹层（z95 的 URL 弹窗最先，其次各 Modal / 抽屉，最后非遮罩浮层）
@@ -1043,7 +1055,54 @@ export default {
     },
     async confirmGenerateImage() {
       this.imageSheetOpen = false
+      if (this.imageChannel === 'chatgpt_web') {
+        await this.generateImageViaChatGPT()
+        return
+      }
       await this.generateImage()
+    },
+    // BUG-L3-403 修复：恢复 chatgpt_web 网页生图通道——复用全局 imageGeneration store
+    // （环境检查 → 创建任务 → 扩展桥接发送 → 捕获回填 image_generations → 候选自动可见）
+    async generateImageViaChatGPT() {
+      const store = useImageGenerationStore()
+      this.generatingImage = true
+      this.notice = ''
+      try {
+        const task = await store.openTask({
+          dramaId: Number(this.projectId),
+          targetType: 'storyboard_main',
+          targetId: Number(this.currentShotId),
+          generationChannel: 'chatgpt_web',
+          count: 1,
+        })
+        await store.sendToChatGPT(task)
+        this.notice = '已发送到 ChatGPT 网页，等待生成结果回填…'
+        this.pollChatGPTTask(store)
+      } catch (e) {
+        this.notice = e?.message || 'ChatGPT 生图失败，请检查浏览器扩展与登录状态'
+      } finally {
+        this.generatingImage = false
+      }
+    },
+    pollChatGPTTask(store) {
+      this.stopChatGPTPoll()
+      this.chatGPTPoll = setInterval(async () => {
+        try {
+          const task = await store.refreshTask()
+          if (!task) return this.stopChatGPTPoll()
+          if (['completed', 'failed', 'needs_review'].includes(task.status)) {
+            this.stopChatGPTPoll()
+            const detail = await v21.getShot(this.currentShotId)
+            this.imageCandidates = detail.imageCandidates
+            this.notice = task.status === 'completed'
+              ? ''
+              : 'ChatGPT 生图未完成：' + (task.error_message || task.status)
+          }
+        } catch (_) { /* 下一轮重试 */ }
+      }, 3000)
+    },
+    stopChatGPTPoll() {
+      if (this.chatGPTPoll) { clearInterval(this.chatGPTPoll); this.chatGPTPoll = null }
     },
     openImageUrl() {
       // C1：分镜图 URL 输入走专用 Modal

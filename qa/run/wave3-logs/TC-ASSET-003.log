@@ -1,0 +1,10 @@
+ASSERT PASS: 测试 PNG 真实生成（签名+CRC+IDAT 自检） | bytes=526
+[0.0s] upload -> 200 {"success":true,"data":{"message":"上传成功","url":"http://localhost:5679/static/projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png","local_pat
+ASSERT PASS: 上传 200 == 200 | actual=200
+ASSERT PASS: 返回 url 与 local_path | {"url":"http://localhost:5679/static/projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png","local_path":"projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png"}
+ASSERT PASS: GET 静态图片 URL 200 == 200 | actual=200
+ASSERT PASS: 字节与上传内容一致（真实文件落盘） | len=526 vs 526
+ASSERT PASS: Content-Type 为图片 | image/png
+ASSERT PASS: characters.image_url 已绑定上传 URL == "http://localhost:5679/static/projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png" | actual="http://localhost:5679/static/projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png"
+ASSERT FAIL: DB 层 image_url/local_path 落库 | {"image_url":"http://localhost:5679/static/projects/0171_20260912_QA-L3-ASSET-17891761/characters/20260912T012241_1b85eff3-7a1b-404c-8c9c-07f381ffddb5.png","local_path":null}
+[cleanup] 软删项目 171 -> 200

@@ -1,0 +1,7 @@
+ASSERT PASS: 保存首帧提示词 200 == 200 | actual=200
+ASSERT PASS: 保存尾帧提示词 200 == 200 | actual=200
+ASSERT PASS: 列表含 first/last 两帧 | ["first","last"]
+ASSERT PASS: 首帧 prompt/layout 回读一致 | [{"id":1,"storyboard_id":114,"frame_type":"first","prompt":"QA-L3 首帧：修表台特写","description":"台灯下","layout":"单主体居中","created_at":"2026-09-12T01:34:20.732Z","update
+ASSERT PASS: 非法 frame_type 400 == 400 | actual=400
+ASSERT PASS: DB frame_prompts 落库 | [{"frame_type":"first","prompt":"QA-L3 首帧：修表台特写"},{"frame_type":"last","prompt":"QA-L3 尾帧：主角走出店门"}]
+[cleanup] 软删项目 197 -> 200

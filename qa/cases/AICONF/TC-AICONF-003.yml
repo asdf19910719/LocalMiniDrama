@@ -1,0 +1,36 @@
+id: TC-AICONF-003
+title: "更新 QA-L3 配置 base_url/model 后 GET 返回新值（改后查一致）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "TC-AICONF-002 创建的 QA-L3 配置存在"
+test_data:
+  update_base_url: "http://127.0.0.1:10/v1"
+  update_model: ["qa-model-a","qa-model-b"]
+steps:
+  - "PUT /api/v1/ai-configs/{id} 更新 base_url 与 model"
+  - "GET /api/v1/ai-configs/{id} 回读"
+expected:
+  - "更新返回 200"
+  - "回读 base_url 为新值"
+  - "回读 model 含 qa-model-a/qa-model-b"
+assertions:
+  - "update.status == 200"
+  - "get.data.base_url == \"http://127.0.0.1:10/v1\""
+  - "get.data.model includes \"qa-model-a\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_003_update_readback
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, crud]
+notes: ""

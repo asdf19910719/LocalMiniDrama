@@ -1,0 +1,8 @@
+[0.0s] delete -> 200 {"success":true,"data":{"deleted":true,"recoverable":true,"impacts":{"scriptRevisions":0,"storyboards":0,"mediaCount":0}},"timestamp":"2026-
+ASSERT PASS: delete status == 200 | actual=200
+ASSERT PASS: deleted=true == true | actual=true
+ASSERT PASS: 活跃列表不含已删集
+ASSERT PASS: 归档列表含已删集 | [35]
+ASSERT PASS: restore status == 200 | actual=200
+ASSERT PASS: 恢复后回到活跃列表
+[cleanup] 软删项目 39 -> 200

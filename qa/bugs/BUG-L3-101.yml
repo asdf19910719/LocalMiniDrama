@@ -1,0 +1,24 @@
+id: BUG-L3-101
+case_id: TC-AICONF-018
+severity: P1
+title: AI 服务配置 API 返回明文 api_key 且前端导出功能将明文 key 写出（安全边界不合格，feature-inventory §11.3 PARTIAL 复核仍存在）
+module: AICONF
+status: fixed-verified
+found_at: "2026-09-12T00:02:00Z"
+environment: "backend 5679 (run_20260912_072912 L3 Wave1) · 分支 codex/v2-1-implementation"
+steps:
+  - "GET http://127.0.0.1:5679/api/v1/ai-configs"
+  - "观察任意配置项的 api_key 字段（如 id=4 DeepSeek 文本）"
+  - "打开前端 AI 配置页 -> 导出配置（frontweb/src/components/AIConfigContent.vue exportConfigs）"
+expected: "列表/详情接口对 api_key 脱敏（如 sk-49a****xxxx），导出 JSON 不携带可用明文密钥"
+actual: "API 返回 35 字符完整明文 key（sk-49a... 前缀可读）；前端 exportConfigs 以 ({ id, created_at, updated_at, ...rest }) 解构仅剔除 3 个字段，api_key 随 rest 进入导出文件 ai-configs-YYYY-MM-DD.json"
+evidence:
+  - "HTTP: GET /api/v1/ai-configs -> 200, id=4 配置 api_key len=35, 前6位=sk-49a, 掩码=false（qa/run/wave1-logs/TC-AICONF-018.log）"
+  - "SOURCE: frontweb/src/components/AIConfigContent.vue:2424-2441 exportConfigs 保留 ...rest（含 api_key）"
+  - "SOURCE: backend-node/src/routes/aiConfig.js list 直接返回 aiConfigService.listConfigs 全字段（无脱敏投影）"
+  - "docs/current/architecture.md §9.3 自认：『AI 配置接口返回完整 API key』，安全模型仅为可信本机服务"
+suspected_cause: "aiConfigService.listConfigs/getConfig 未做密钥脱敏投影；前端导出复用列表原始数据。修复需后端响应脱敏 + 导出时单独走可授权的明文通道（或完全剔除），前端显示用掩码字段"
+notes: |
+  复核结论：docs/current/feature-inventory.md §11.3『配置导入/导出 PARTIAL：导出包含明文 API Key，安全边界不合格』在当前源码与运行环境仍成立。
+  影响范围：任何能访问 5679 端口的本机进程/局域网调用者可直接读取全部供应商密钥；导出文件被同步/分享时泄露。
+  本缺陷为已知 PARTIAL 项确认，非新增回归；建议发版说明中标注该边界，或在本版本内将导出改为剔除 api_key。

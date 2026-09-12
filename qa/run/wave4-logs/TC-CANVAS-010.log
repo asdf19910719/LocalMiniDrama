@@ -1,0 +1,6 @@
+ASSERT PASS: storage 200 == 200 | actual=200
+[0.0s] usage: {"artifactCount":82,"totalBytes":87714276,"quotaBytes":214748364800,"remainingBytes":214660650524,"overQuota":false}
+ASSERT PASS: usage 含配额/用量口径 | ["artifactCount","totalBytes","quotaBytes","remainingBytes","overQuota"]
+[0.0s] cleanup(dryRun) -> 200 {"success":true,"data":{"archivedArtifactIds":[],"reclaimedBytes":0,"projectedBytes":87714276,"dryRun":true},"timestamp":"2026-09-12T03:10:12.419Z"}
+ASSERT PASS: dryRun 清理 200 == 200 | actual=200
+ASSERT PASS: dryRun 不破坏真实 artifact（引用中产物保留） | before=82 after=82

@@ -1,0 +1,5 @@
+[0.0s] [env-repair] 修复前 GET /videos/capabilities -> 200（VIDEO_CONFIG_MISSING=500）
+ASSERT PASS: capabilities 200 == 200 | actual=200
+ASSERT PASS: 返回能力对象（provider/protocol 可辨识） | {"success":true,"data":{"provider":"comfyui","protocol":"openai","model":"minimax_h3_director_r2v_te_speed","workflow":{"id":"minimax_h3_director_r2v_te_speed","label":"官方多参考图（Sage + TE-Speed 实验）","st
+[0.0s] capabilities 响应: {"success":true,"data":{"provider":"comfyui","protocol":"openai","model":"minimax_h3_director_r2v_te_speed","workflow":{"id":"minimax_h3_director_r2v_te_speed","label":"官方多参考图（Sage + TE-Speed 实验）","status":"verified","variant":"official_sage_te_speed_original_3_3","sha256":"sha256:5dc07486bc02c420813b11048eab15819f52c0162bd190ed05fb1f4870741513","execution":{"promptContract":"h3_director_v1","requ
+ASSERT PASS: 默认视频配置为 ComfyUI 且 default_model=te_speed | {"id":5,"provider":"comfyui","default_model":"minimax_h3_director_r2v_te_speed","model":"[\"minimax_h3_director_r2v_te_speed\",\"minimax_h3_director_r2v\"]"}

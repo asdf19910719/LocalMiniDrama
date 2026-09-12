@@ -1,0 +1,6 @@
+[0.0s] 非法字段 -> 400 {"success":false,"error":{"code":"STORYBOARD_AV_CONTRACT_INVALID","message":"不能解锁音频策略字段 bgm.非法字段!"},"timestamp":"2026-09-12T03:27:45.804Z"}
+ASSERT PASS: 非法字段 400 == 400 | actual=400
+ASSERT PASS: 错误码 STORYBOARD_AV_CONTRACT_INVALID == "STORYBOARD_AV_CONTRACT_INVALID" | actual="STORYBOARD_AV_CONTRACT_INVALID"
+ASSERT PASS: 合法解锁 200 == 200 | actual=200
+ASSERT PASS: 解锁后 field_state.locked=false 且 revision+1 | {"locked":false,"revision":2,"source":"manual","updated_at":"2026-09-12T03:27:45.805Z"}
+ASSERT PASS: unlock_fields 非数组 400 == 400 | actual=400

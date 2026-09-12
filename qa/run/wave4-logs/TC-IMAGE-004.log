@@ -1,0 +1,7 @@
+ASSERT PASS: summary 200 == 200 | actual=200
+[0.0s] summary: {"drama_id":266,"total":1,"draft":0,"queued":0,"preparing":0,"submitted":0,"generating":0,"needs_review":0,"completed":0,"failed":0,"cancelled":1,"active_task_id":null}
+ASSERT PASS: summary 含状态聚合字段 | 空对象
+ASSERT PASS: environment 200 == 200 | actual=200
+[0.0s] environment: {"canProceed":true,"channel":"api","checkedAt":"2026-09-12T03:05:12.058Z","checks":[{"key":"backend","status":"ok","code":null,"message":"后端服务可用"},{"key":"api_config","status":"ok","code":null,"message":"默认生图服务配置可用"}]}
+ASSERT PASS: default 200 == 200 | actual=200
+ASSERT PASS: 默认通道可辨识 | {"channel":"api","configured_channel":"api"}

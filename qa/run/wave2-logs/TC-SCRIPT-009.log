@@ -1,0 +1,7 @@
+[0.0s] diff -> 200 {"success":true,"data":{"fromRevision":1,"toRevision":2,"scenes":[{"no":1,"heading":"内景 店内 日","status":"changed","lines":[{"type":"same","text":"这是共同的行。"},{"type":"del","text":"旧台词将被删除。"},{"type":"add","text":"新增台词在这里。"}]}],"summary":{"changed":1,"added":0,"re
+ASSERT PASS: diff status == 200 | actual=200
+ASSERT PASS: 包含删除行标记 | {"success":true,"data":{"fromRevision":1,"toRevision":2,"scenes":[{"no":1,"heading":"内景 店内 日","status":"changed","lines":[{"type":"same","text":"这是共同的行。"},{"type":"del","text":"旧台词将被删除。"},{"type":"add
+ASSERT PASS: 包含新增行标记 | 
+ASSERT PASS: 含 del/add 类型字段 | 
+ASSERT PASS: 不存在版本 404 == 404 | actual=404
+[cleanup] 软删项目 136 -> 200

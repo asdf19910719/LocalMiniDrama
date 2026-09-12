@@ -1,0 +1,40 @@
+id: TC-AICONF-011
+title: "一键预设等价创建：按 Agnes 预设契约经 API 一次建 4 类配置并可见（预设=前端组合创建的 API 复现）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.4]
+level: integration
+purpose: functional
+priority: P1
+preconditions:
+  - "vendor lock 未启用"
+  - "前端 AIConfigContent.vue 一键预设为纯前端多次 aiAPI.create（源码 2380-2419 行）"
+test_data:
+  name_prefix: "QA-L3-Agnes预设-"
+  base_url: "https://api.agnes.ai/v1"
+  api_key: "sk-qa-l3-agnes"
+  types: ["text","image","storyboard_image","video"]
+steps:
+  - "按前端 submitOneKeyAgnes 的 4 条 payload 依次 POST /api/v1/ai-configs"
+  - "GET 列表确认 4 条可见"
+  - "DELETE 全部清理"
+expected:
+  - "4 条均 201"
+  - "列表可见且 service_type 正确"
+  - "清理后不可见"
+assertions:
+  - "4x create.status == 201"
+  - "list contains all 4 names"
+  - "after delete none visible"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_011_onekey_preset_equiv
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, preset]
+notes: "一键预设本身是前端组合逻辑，本用例在 API 层复现其创建契约"

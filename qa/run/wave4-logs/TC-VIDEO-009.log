@@ -1,0 +1,9 @@
+ASSERT PASS: 前置：#98 为真实 cancelled 记录（第 1 次生成的中断产物） | {"s":"cancelled"}
+ASSERT PASS: cancelled 任务再取消 409 == 409 | actual=409
+ASSERT PASS: 错误码 VIDEO_NOT_CANCELLABLE == "VIDEO_NOT_CANCELLABLE" | actual="VIDEO_NOT_CANCELLABLE"
+ASSERT PASS: cancelled 任务重试 409（仅 failed/interrupted 可重试） == 409 | actual=409
+ASSERT PASS: 错误码 VIDEO_NOT_RETRYABLE == "VIDEO_NOT_RETRYABLE" | actual="VIDEO_NOT_RETRYABLE"
+ASSERT PASS: resume-poll 对终态任务同样 409（严格快照重试语义） == 409 | actual=409
+ASSERT PASS: 不存在任务 404/409 | 404
+[0.0s] 恢复轮生成状态: review
+ASSERT PASS: review 任务取消 409 == 409 | actual=409

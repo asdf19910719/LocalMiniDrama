@@ -1,0 +1,21 @@
+id: BUG-L3-102
+case_id: TC-TASK-007
+severity: P3
+title: 取消终态任务的接口响应丢失 already_done 标志（routes/task.js 丢弃 service 层返回的幂等语义）
+module: TASK
+status: fixed-verified
+found_at: "2026-09-12T00:04:23Z"
+environment: "backend 5679 (run_20260912_072912 L3 Wave1) · 分支 codex/v2-1-implementation"
+steps:
+  - "对任一 status=completed 的任务调用 POST /api/v1/tasks/{task_id}/cancel"
+  - "观察响应 JSON data 字段"
+expected: "响应 data 含 already_done=true（taskService.cancelTask 对终态任务专门构造该标志，供客户端区分幂等命中），且任务状态保持 completed 不被误改"
+actual: "HTTP 200 但 data 为任务完整对象，无 already_done 字段；服务层返回值 { ok:true, already_done:true, task } 在路由层被降维为 result.task"
+evidence:
+  - "HTTP: POST /api/v1/tasks/4557edde.../cancel -> 200 {\"success\":true,\"data\":{\"id\":\"4557edde...\",\"status\":\"completed\",...}} 无 already_done（qa/run/wave1-logs/TC-TASK-007.log）"
+  - "SOURCE: backend-node/src/services/taskService.js:86-88 —— cancelTask 对 completed/failed 返回 { ok:true, already_done:true, task }"
+  - "SOURCE: backend-node/src/routes/task.js:33 —— response.success(res, result.task || { id: req.params.task_id }) 只透传 task，丢弃 already_done"
+suspected_cause: "路由层响应封装时未透传 service 层的 already_done 标志；修复为一行：result.already_done 时返回 { ...result.task, already_done: true } 或独立字段"
+notes: |
+  影响：前端任务中心/轮询方无法从响应判断"取消命中已完成任务（幂等）"还是"真实取消执行"，只能再发一次 GET 查询补判。
+  状态未被破坏（completed 保持），故定级 P3 契约完整性问题。

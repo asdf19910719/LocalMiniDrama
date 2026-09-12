@@ -167,7 +167,7 @@ function routes(db, cfg, log, uploadService) {
           'characters',
           projectSubdir
         );
-        const out = characterLibraryService.uploadCharacterImage(db, log, req.params.id, url);
+        const out = characterLibraryService.uploadCharacterImageWithLocalPath(db, log, req.params.id, url, local_path);
         if (!out.ok) {
           if (out.error === 'character not found') return response.notFound(res, '角色不存在');
           return response.badRequest(res, out.error);

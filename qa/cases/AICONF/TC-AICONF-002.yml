@@ -1,0 +1,41 @@
+id: TC-AICONF-002
+title: "创建 QA-L3 文本配置返回 201 且 GET 回读字段一致（CRUD 创建+读闭环）"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "后端 5679 运行中"
+  - "vendor lock 未启用(默认)"
+test_data:
+  name: "QA-L3-文本配置"
+  service_type: "text"
+  provider: "openai"
+  base_url: "http://127.0.0.1:9/v1"
+  api_key: "sk-qa-l3-fake-key"
+steps:
+  - "POST /api/v1/ai-configs 创建 QA-L3 配置"
+  - "GET /api/v1/ai-configs/{id} 回读"
+expected:
+  - "创建返回 201/created"
+  - "回读 name/base_url/provider 与请求一致"
+  - "model 为数组"
+assertions:
+  - "create.status == 201"
+  - "get.data.name == \"QA-L3-文本配置\""
+  - "get.data.base_url == \"http://127.0.0.1:9/v1\""
+  - "Array.isArray(get.data.model)"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_002_create_read
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, crud]
+notes: ""

@@ -1,0 +1,8 @@
+ASSERT PASS: 前置：TC-004 已真实生成 | project=132 episode=121
+ASSERT PASS: 项目 API 可读取生成结果所在项目 == 200 | actual=200
+ASSERT PASS: 生成剧集正文经 API 读取一致（LLM 输出→DB→API 数据流闭合） | len=673
+[0.0s] 在 AI 生成集上保存草稿 -> 200 {"success":true,"data":{"revisionId":59,"revision":1,"status":"draft","saveState":"saved","savedAt":"2026-09-12T00:53:44
+ASSERT PASS: 草稿保存成功 == 200 | actual=200
+ASSERT PASS: 产生剧本修订 revision=1 == 1 | actual=1
+ASSERT PASS: 生成集进入剧本版本工作流 | items=1
+[cleanup] 软删项目 132 -> 200

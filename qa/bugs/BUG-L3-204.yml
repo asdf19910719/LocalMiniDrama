@@ -1,0 +1,18 @@
+id: BUG-L3-204
+case_id: TC-PKG-002
+status: fixed-verified
+severity: P2
+title: "制作包导入不落 storyboards.source_key：分镜在包协议内的溯源标识被静默丢弃（人物/场景/道具均保留）"
+module: PKG
+steps:
+  - "构造合规 episode-package@2.1（shot_packages[0].source_key='qa_l3_shot_1'），POST /api/v2/projects/:id/episodes/import-v21/confirm（201）"
+  - "查询 DB：SELECT source_key FROM storyboards WHERE episode_id=（新导入集）"
+expected: "导入分镜保留包内 source_key（与 characters/scenes/props 一致，支撑来源记录与后续幂等/更新）"
+actual: "storyboards.source_key = NULL；同一次导入中 characters.source_key='qa_l3_hero'、scenes.source_key='qa_l3_cafe'、props.source_key='qa_l3_key' 均正确保留"
+evidence: |
+  - DB 实测（00:36-00:40 两次导入）：id IN (71..78) storyboards.source_key 均为 NULL，storyboard_number=1, title 正确
+  - 根因：backend-node/src/v21/import/episodeImportV21.js insertStoryboards 的
+    INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, duration, action, image_prompt, characters, status, created_at, updated_at)
+    —— 列清单不含 source_key（表存在该列，见 docs/current/data-model.md storyboards 字段）
+suspected_cause: "导入引擎为分镜建行时未透传包内 source_key；变体关联（storyboard_character_variants）不受影响（实测已正确关联），但分镜级溯源断链"
+regression: "episode-package@2.1 以 source_key 为跨系统对账主键；分镜丢失标识后无法按包幂等更新/定位分镜，与『来源记录』能力（feature-inventory §2.11）不完整"

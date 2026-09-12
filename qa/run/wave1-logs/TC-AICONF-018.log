@@ -1,0 +1,7 @@
+[0.0s] api_key 呈现: len=35 前6位=sk-49a 是否掩码=false
+OBSERVATION: GET /ai-configs 对 id=4 返回完整明文 api_key（35 字符，未脱敏）
+ASSERT PASS: API 返回完整明文 key（安全缺陷确认=预期发现） | len=35
+[0.0s] exportConfigs 源码: 仅剔除 id/created_at/updated_at = true ; rest 展开保留 api_key = true
+SOURCE: AIConfigContent.vue exportConfigs 使用 ({ id, created_at, updated_at, ...rest }) 解构，api_key 随 rest 进入导出 JSON
+ASSERT PASS: 前端导出未对 api_key 脱敏（缺陷确认=预期发现）
+[0.0s] 结论：feature-inventory §11.3 导出明文 key 问题仍存在 -> 记 BUG-L3-101

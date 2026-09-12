@@ -1,0 +1,4 @@
+ASSERT PASS: inputs 非数组 400 == 400 | actual=400
+[0.0s] 批量(含 H3 缺草稿项) -> 400 {"success":false,"error":{"code":"PROJECT_STYLE_OVERRIDE_FORBIDDEN","message":"项目内视频生成不能覆盖项目风格"},"timestamp":"2026-09-12T02:58:02.163Z"}
+ASSERT PASS: 批量请求有结构化响应（不 5xx 崩溃） | 400
+ASSERT PASS: 错误结构含 code | {"success":false,"error":{"code":"PROJECT_STYLE_OVERRIDE_FORBIDDEN","message":"项目内视频生成不能覆盖项目风格"},"timestamp":"2026-09-12T02:58:02.163Z"}

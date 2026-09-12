@@ -45,18 +45,29 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
   function referenceUrlsForImage(shotId) {
     const rows = getReferenceRows(shotId);
     const urls = [];
+    // BUG-L3-401 修复：local_path 相对存储根（data/storage），真实视频通道的参考图 staging
+    // 需要进程 cwd 可解析的本地路径（拒绝 http URL），统一前缀存储根
+    const pathMod = require('path');
+    const storageRoot = cfg?.storage?.local_path || './data/storage';
+    const toLocal = (localPath, fallbackUrl) => {
+      if (localPath) return pathMod.isAbsolute(localPath) ? localPath : pathMod.join(storageRoot, localPath);
+      // 本站 /static/ URL 即本地存储文件，还原为可 staging 的本地路径
+      const m = fallbackUrl && /\/static\/(.+)$/.exec(String(fallbackUrl));
+      if (m) return pathMod.join(storageRoot, m[1]);
+      return fallbackUrl || null;
+    };
     const sb = db.prepare('SELECT scene_id FROM storyboards WHERE id = ?').get(shotId);
     if (sb && sb.scene_id) {
       const scene = db.prepare('SELECT image_url, local_path FROM scenes WHERE id = ? AND deleted_at IS NULL').get(sb.scene_id);
-      if (scene) urls.push(scene.local_path || scene.image_url);
+      if (scene) urls.push(toLocal(scene.local_path, scene.image_url));
     }
     for (const ch of rows.characters) {
       const variant = db.prepare('SELECT image_url, local_path FROM character_variants WHERE id = ?').get(ch.variantId);
-      if (variant) urls.push(variant.local_path || variant.image_url);
+      if (variant) urls.push(toLocal(variant.local_path, variant.image_url));
     }
     for (const prop of rows.props) {
       const row = db.prepare('SELECT image_url, local_path, ref_image FROM props WHERE id = ? AND deleted_at IS NULL').get(prop.assetId);
-      if (row) urls.push(row.ref_image || row.local_path || row.image_url);
+      if (row) urls.push(row.ref_image || toLocal(row.local_path, row.image_url));
     }
     return urls.filter(Boolean);
   }
@@ -746,12 +757,31 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
   }
 
   /** 真实通道草稿的过期判定：完整编译行交给 legacy 新鲜度评估；不完整（测试替身）行不判过期 */
+  // BUG-L3-401 修复：守卫侧过期判定必须与编译/提交使用同一（带工作流注册表的）服务实例，
+  // 否则快照 workflow 字段口径不一致 → 守卫与提交行为互相矛盾
+  let sharedH3Drafts = null;
+  function sharedH3DraftService() {
+    if (!sharedH3Drafts) {
+      const { createH3PromptDraftService } = require('../../services/h3PromptDraftService.js');
+      let deps = {};
+      try {
+        const directorCfg = cfg?.director || {};
+        const { loadRegistry } = require('../../director/workflowRegistry.js');
+        deps = {
+          workflowRegistry: loadRegistry(directorCfg.workflow_registry_path || './configs/director-workflows.json'),
+          allowExperimental: !!directorCfg.allow_experimental,
+        };
+      } catch (_) {}
+      sharedH3Drafts = createH3PromptDraftService(deps);
+    }
+    return sharedH3Drafts;
+  }
+
   function realDraftStale(row) {
     try {
       const params = row.generation_params ? JSON.parse(row.generation_params) : null;
       if (!params || params.durationSeconds == null) return false;
-      const { createH3PromptDraftService } = require('../../services/h3PromptDraftService.js');
-      return !!createH3PromptDraftService().evaluateDraftFreshness(db, row).stale;
+      return !!sharedH3DraftService().evaluateDraftFreshness(db, row).stale;
     } catch (_) {
       return false;
     }
@@ -1080,6 +1110,8 @@ function createStoryboardService(db, { log = console, mockProvider = null, provi
         count: quote.count,
         prompt: getH3Draft(shotId)?.text || '',
         duration: Math.max(0.5, Number(shot.duration) || 1),
+        // BUG-L3-401 修复：真实 H3 工作流要求 1-9 张参考图，提交时按镜头引用解析传入（与守卫'引用素材'口径一致）
+        referenceUrls: isRealH3Channel() ? referenceUrlsForImage(shotId) : undefined,
         h3PromptDraftId: isRealH3Channel() ? (h3DraftRow(shotId)?.id ?? null) : null,
         groupId: ensureCandidateGroup(shotId),
         channelOptions,

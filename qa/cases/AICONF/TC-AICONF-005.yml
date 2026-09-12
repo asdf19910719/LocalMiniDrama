@@ -1,0 +1,32 @@
+id: TC-AICONF-005
+title: "创建配置缺少必填字段返回 400 及中文错误信息"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  body: {"name":"QA-L3-缺字段"}
+steps:
+  - "POST /api/v1/ai-configs 只带 name"
+expected:
+  - "返回 400"
+  - "错误信息提示缺少必填字段 service_type/name/provider/base_url"
+assertions:
+  - "status == 400"
+  - "error message contains \"缺少必填字段\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_005_create_missing_fields
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, exception]
+notes: ""

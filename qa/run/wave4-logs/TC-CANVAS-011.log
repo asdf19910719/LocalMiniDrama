@@ -1,0 +1,7 @@
+ASSERT PASS: 分镜节点存在 | 148
+ASSERT PASS: v2 分镜详情 200（节点数据） == 200 | actual=200
+[0.0s] 画布级 segment 编辑（不存在段）-> 200 {"success":true,"data":{"segments":[{"id":98,"storyboard_id":148,"seq":1,"start_seconds":0,"end_seconds":6,"visual":"研究员调出尘封的观测记录，屏幕上的星图开始自行
+[0.0s] [观察项] 不存在 segment 的编辑请求返回 200（静默空转/宽松语义，未报 404）——作为画布与制作台等价性 PARTIAL 的佐证记录
+ASSERT PASS: 静默 200 不破坏分镜数据（分镜仍可读） | 
+ASSERT PASS: 主制作台创建分镜 201（画布缺省能力对照） == 201 | actual=201
+[0.0s] [观察项] inventory INV-10.8：画布提供全局编排，编辑字段与高级操作未完全覆盖主制作台——本次以接口抽样佐证 PARTIAL 标注

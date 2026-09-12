@@ -1,0 +1,3 @@
+[0.0s] GET 999999 -> 404 {"success":false,"error":{"code":"NOT_FOUND","message":"配置不存在"},"timestamp":"2026-09-12T00:02:07.826Z"}
+ASSERT PASS: status == 404 | actual=404
+ASSERT PASS: message=配置不存在

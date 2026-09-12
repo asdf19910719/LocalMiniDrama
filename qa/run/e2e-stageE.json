@@ -1,0 +1,42 @@
+{
+ "stage": "E",
+ "steps": [
+  {
+   "step": "storyboard-refresh-recovery",
+   "status": "PASS",
+   "detail": "结构恢复=True H3区可见=True",
+   "evidence": "qa/run/e2e-artifacts/stageE/e-01-storyboard-refresh.png"
+  },
+  {
+   "step": "cut-gate-list",
+   "status": "PASS",
+   "detail": "剧 QA-L3-E2E-主链-113428 / 第 1 集 · 第 1 集 更改实时生效 任务 1 剧本 已确认 v1 2 设定 未开始 3 分镜 0/2 已采用 2 4 成片 未开始 本集完成度 35% · 基于已确认剧本 v1 生成成片前需完成 2 项 · 可提前审片，逐项处理见右侧门禁清单 0/2 已完成 连续播放 生成成片 2 镜未完成 该镜头尚未生成视频 · 可回分镜修复 镜头 01 未",
+   "evidence": "qa/run/e2e-artifacts/stageE/e-02-cut-gate.png"
+  },
+  {
+   "step": "route-404",
+   "status": "PASS",
+   "detail": "剧 页面不存在 404  链接可能已失效，或该页面已迁移  返回项目列表",
+   "evidence": "qa/run/e2e-artifacts/stageE/e-03-404.png"
+  },
+  {
+   "step": "tasks-page",
+   "status": "PASS",
+   "detail": "剧 任务中心 跨项目恢复 · 上次同步 11:55:26 进行中 0 需要处理 128 刷新 进行中 0 需要处理 128 历史 128 全部类型 图片 视频 外部协作 整集合成 自由创作 全部项目  此分组暂无任务  共 0 项 百分比仅来自任务可信进度；无法确认时只显示状态与已用时间。",
+   "evidence": "qa/run/e2e-artifacts/stageE/e-04-tasks.png"
+  },
+  {
+   "step": "projects-list-shows-new",
+   "status": "PASS",
+   "detail": "found=True",
+   "evidence": "qa/run/e2e-artifacts/stageE/e-05-projects-list.png"
+  }
+ ],
+ "started_at": "2026-09-12T11:55:12",
+ "finished_at": "2026-09-12T11:55:33",
+ "summary": {
+  "passed": 5,
+  "failed": 0,
+  "warn": 0
+ }
+}

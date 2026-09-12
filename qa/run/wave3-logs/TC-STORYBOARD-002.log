@@ -1,0 +1,4 @@
+[0.0s] no-approved -> 409 {"error":{"code":"SCRIPT_NOT_APPROVED","message":"需要已确认的剧本版本"}}
+ASSERT PASS: 未确认剧本 409 == 409 | actual=409
+ASSERT PASS: 错误码 SCRIPT_NOT_APPROVED == "SCRIPT_NOT_APPROVED" | actual="SCRIPT_NOT_APPROVED"
+[cleanup] 软删项目 181 -> 200

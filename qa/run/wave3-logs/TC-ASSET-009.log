@@ -1,0 +1,10 @@
+ASSERT PASS: 缺 name 400 == 400 | actual=400
+[0.0s] create prop -> 201 {"success":true,"data":{"id":20,"drama_id":158,"name":"QA-L3-ASSET-1789176101909-黄铜怀表","type":"关键道具","description":"QA-L3 道具描述","prompt":"黄铜
+ASSERT PASS: 创建道具 201 == 201 | actual=201
+ASSERT PASS: 字段回读 | {"success":true,"data":{"prop":{"id":20,"drama_id":158,"name":"QA-L3-ASSET-1789176101909-黄铜怀表","type":"关键道具","description":"QA-L3 道具描述","pro
+ASSERT PASS: PUT 更新 200 == 200 | actual=200
+ASSERT PASS: 更新回读 | {"success":true,"data":{"id":20,"drama_id":158,"name":"QA-L3-ASSET-1789176101909-黄铜怀表","type":"关键道具","description":"QA-L3 道具描述v2","prompt":"黄铜怀表，表盖刻着花纹","negati
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后读取 404 == 404 | actual=404
+ASSERT PASS: 删除不存在道具 404 == 404 | actual=404
+[cleanup] 软删项目 158 -> 200

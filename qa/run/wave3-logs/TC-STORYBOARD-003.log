@@ -1,0 +1,7 @@
+ASSERT PASS: structure-diff 200 == 200 | actual=200
+ASSERT PASS: preview 标记 1 条 added == 1 | actual=1
+ASSERT PASS: added 内容为新场次标题 | [{"title":"内景 地下工作室 夜","description":"QA-L3主角发现秘密图纸。","action":"QA-L3主角发现秘密图纸。","duration":6,"visual":"QA-L3主角发现秘密图纸。","storyboardNumber":3}
+ASSERT PASS: apply-structure-diff 200 == 200 | actual=200
+ASSERT PASS: 应用后镜头数 3 == 3 | actual=3
+ASSERT PASS: 新镜头标题落库 | 内景 地下工作室 夜
+[cleanup] 软删项目 182 -> 200

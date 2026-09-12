@@ -1,0 +1,4 @@
+[0.0s] GET -> 200 count= 1 ids= 4557edde
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: 包含 story 任务
+ASSERT PASS: 该项 status=completed

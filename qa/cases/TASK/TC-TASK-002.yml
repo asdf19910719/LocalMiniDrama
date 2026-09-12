@@ -1,0 +1,30 @@
+id: TC-TASK-002
+title: "GET /tasks 缺少 resource_id 参数返回 400"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+steps:
+  - "GET /api/v1/tasks（不带 resource_id）"
+expected:
+  - "400 且 message=缺少resource_id参数"
+assertions:
+  - "status == 400"
+  - "message contains \"缺少resource_id\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_002_list_missing_param
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, exception]
+notes: ""

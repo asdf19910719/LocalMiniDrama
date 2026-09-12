@@ -1,0 +1,10 @@
+[0.0s] outline -> 200 {"success":true,"data":{"message":"保存成功"},"timestamp":"2026-09-12T00:24:11.189Z"
+ASSERT PASS: outline status == 200 | actual=200
+ASSERT PASS: summary 写入 description | 大纲简介-新
+ASSERT PASS: tags 含 QA-L3-标签1 | ["QA-L3-标签1","标签2"]
+ASSERT PASS: metadata 保留 aspect_ratio（合并不覆盖） == "9:16" | actual="9:16"
+ASSERT PASS: metadata 保留 folder_label == "QA-L3 文件夹B" | actual="QA-L3 文件夹B"
+ASSERT PASS: metadata 合入 canvas_layout | ["aspect_ratio","folder_label","storage_folder_label","canvas_layout"]
+ASSERT PASS: DB tags JSON 列落库 | ["QA-L3-标签1","标签2"]
+[0.0s] [观察项 INV-2.13] 标签/文件夹语义存于 dramas.tags(JSON 字符串) 与 dramas.metadata(JSON)：无独立结构与一致约束，与 feature-inventory PARTIAL 描述一致
+[cleanup] 软删项目 35 -> 200

@@ -1,0 +1,8 @@
+[0.0s] deleteProjectPermanently 位于 projectDeletionService.js:367
+ASSERT PASS: 先执行 DB 事务删除 | db.transaction(() => deleteProjectRows...)
+ASSERT PASS: 后执行目录清理 cleanupProjectDirectory | cleanupProjectDirectory
+ASSERT PASS: 清理失败仅记日志（无回滚/补偿） | log?.error only
+ASSERT PASS: 正常路径删除 status == 200 | actual=200
+[0.0s] 正常路径 storage 返回: {"success":true,"data":{"deleted":true,"counts":{"dramas":1,"episodes":0,"storyboards":0,"storyboard_characters":0,"storyboard_props":0,"storyboard_character_variants":0,"storyboard_h3_prompt_drafts":
+ASSERT PASS: 正常路径无残留（cleanup ok/missing 且目录不存在） | {"directory":"E:\\project\\LocalMiniDrama\\backend-node\\data\\storage\\projects\\0045_20260912_QA-L3-PROJ-178917265","relative_path":"projects/0045_20260912_QA-L3-PROJ-178917265","exists":false,"file_count":0,"bytes":0,"cleanup_status":"missing"}
+[0.0s] [观察项 INV-2.3] 部分成功风险与 feature-inventory「数据库删除成功、文件清理失败时可能形成部分成功」一致：当前实现先删库后清文件，失败仅记日志（projectDeletionService.js deleteProjectPermanently），无补偿事务。按文档口径记录为已知边界，不判缺陷。

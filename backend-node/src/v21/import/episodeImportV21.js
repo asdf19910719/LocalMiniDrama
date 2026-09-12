@@ -340,8 +340,8 @@ function createEpisodeImportV21(db, { log = console } = {}) {
       const primaryCharacters = [];
       const info = db
         .prepare(
-          `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, duration, action, image_prompt, characters, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+          `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, duration, action, image_prompt, characters, status, source_key, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
         )
         .run(
           episodeId,
@@ -353,6 +353,7 @@ function createEpisodeImportV21(db, { log = console } = {}) {
           (shot.timed_segments || []).map((s) => s.action).join('；'),
           '',
           JSON.stringify([]),
+          shot.source_key ?? null,
           nowIso(),
           nowIso()
         );

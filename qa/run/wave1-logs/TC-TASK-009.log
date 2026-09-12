@@ -1,0 +1,11 @@
+[0.0s] start -> 200 task_id= ddab2300-d07f-4161-a158-be6c8fea7888
+ASSERT PASS: 新任务 id（不同于 TC-003）
+[0.0s] 立即 cancel -> 200 {"success":true,"data":{"id":"ddab2300-d07f-4161-a158-be6c8fea7888","type":"story_generation","status":"failed","progress":0,"message":"正在生成剧本...","error":"QA-L
+ASSERT PASS: cancel status == 200 | actual=200
+[1.5s] 取消后 1.5s status= failed error= QA-L3 用户取消原因
+ASSERT PASS: 标为 failed == "failed" | actual="failed"
+ASSERT PASS: error=取消原因 | QA-L3 用户取消原因
+[1.5s] 进入观察窗口（最多 180s）验证外部调用是否被中止…
+[1.6s] 最终 status= failed result= null
+OBSERVATION: 取消后任务保持 failed（后台调用随后失败或被拒绝），未观察到覆盖
+ASSERT PASS: 到达终态 | failed

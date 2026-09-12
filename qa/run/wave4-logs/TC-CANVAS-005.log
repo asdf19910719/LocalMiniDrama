@@ -1,0 +1,4 @@
+[0.0s] missing-videos -> 200 {"success":true,"data":{"action":"missing-videos","total":1,"results":[{"shotId":148,"ok":false,"error":"生成描述（H3）"}]},"timestamp":"2026-09-12T03:10:09.238Z"}
+ASSERT PASS: 结构化响应（不崩溃） | 200
+ASSERT PASS: 未提交任何真实视频生成（守卫生效，不消耗 ComfyUI） | before=undefined after=undefined
+[3.0s] [说明] 缺少参考图/H3 草稿的分镜被前置检查拦截——与工作流组「默认遇错停止」语义一致

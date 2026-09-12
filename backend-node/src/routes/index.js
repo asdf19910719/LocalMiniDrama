@@ -238,7 +238,7 @@ function setupRouter(cfg, db, log) {
       response.success(res, result);
     } catch (err) {
       log.error('generation/story', { error: err.message });
-      if (err.message && (err.message.includes('未配置') || err.message.includes('必填') || err.message.includes('不存在'))) {
+      if (err.message && (err.message.includes('未配置') || err.message.includes('必填') || err.message.includes('不存在') || err.message.includes('请提供'))) {
         return response.badRequest(res, err.message);
       }
       response.internalError(res, err.message || '故事生成失败');

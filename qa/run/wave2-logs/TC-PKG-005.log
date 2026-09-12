@@ -1,0 +1,9 @@
+ASSERT PASS: confirm status == 201 | actual=201
+ASSERT PASS: 人物存在 | {"id":24}
+[0.0s] variants: [{"id":29,"source_key":"qa_l3_hero_default","is_default":1},{"id":30,"source_key":"qa_l3_hero_wet","is_default":0}]
+ASSERT PASS: 2 个人物状态变体落库 == 2 | actual=2
+ASSERT PASS: 含默认状态 | [{"id":29,"source_key":"qa_l3_hero_default","is_default":1},{"id":30,"source_key":"qa_l3_hero_wet","is_default":0}]
+ASSERT PASS: 导入分镜存在 | {"id":82,"source_key":null}
+[0.0s] storyboard_character_variants: [{"id":73,"storyboard_id":82,"character_id":24,"variant_id":29,"reference_role":"primary","sort_order":1,"framing_note":null}]
+ASSERT PASS: 分镜与人物状态变体已关联（引用 qa_l3_hero_default） | links=1
+[cleanup] 软删项目 102 -> 200

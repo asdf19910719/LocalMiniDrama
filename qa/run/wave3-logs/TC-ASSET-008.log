@@ -1,0 +1,9 @@
+[0.0s] create scene -> 201 {"success":true,"data":{"id":31,"drama_id":157,"location":"QA-L3-钟表店-1789176102731","time":"日","state":null,"description":"QA-L3 场景描述","prompt":"老式钟表店内部，齿轮与挂钟",
+ASSERT PASS: 创建场景 201 | 201
+ASSERT PASS: GET 场景 200 == 200 | actual=200
+ASSERT PASS: 字段回读（location/time/atmosphere/description） | {"loc":"QA-L3-钟表店-1789176102731","time":"日"}
+ASSERT PASS: PUT 更新 200 | 200
+ASSERT PASS: 更新后回读一致（atmosphere/description） | {"a":"深夜幽蓝","de":"QA-L3 场景描述v2"}
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后读取 404 == 404 | actual=404
+[cleanup] 软删项目 157 -> 200

@@ -1,0 +1,6 @@
+[0.0s] 任务事实: package_id=extai_a431c4ef-ea2f-4a97-a9e3-99fe99ddd809 digest=df654e3b09e8… target_ep=2
+[0.0s] validate -> 200 {"success":true,"data":{"ok":true,"checks":[{"id":"schema","label":"Schema 协议版本","ok":true,"detail":"schema=local-mini-drama.external-ai-result version=2.1"},{"id":"package_id","label":"任务包 ID 匹配","ok":true,"detail":"结果 extai_a431c4ef-ea2f-4a97-a9e3-99fe99ddd809 vs 任务 extai_a431c4ef-ea2f-4a97-a9e3-99fe99ddd809"},{"id":"project","label":"目标项目匹配","ok":true,"detail":"任务绑定项目 #107"},{"id":"episode","la
+ASSERT PASS: validate status == 200 | actual=200
+ASSERT PASS: ok=true == true | actual=true
+ASSERT PASS: 全部检查项通过 | [["schema",true],["package_id",true],["project",true],["episode",true],["assets_digest",true],["asset-mapping",true],["nonempty-target",true]]
+[cleanup] 软删项目 107 -> 200

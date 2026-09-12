@@ -1,0 +1,34 @@
+id: TC-SHELL-005
+title: "静态资源代理：3013 经 /static 代理取得后端存储文件，与 5679 直连一致"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.2]
+level: integration
+purpose: functional
+priority: P1
+preconditions:
+  - "3013 与 5679 均运行"
+  - "存在已知静态文件（QA-003 资产头图 /static/v21-mock/15da54e6-*.png）"
+test_data:
+  file: "/static/v21-mock/15da54e6-ca71-4d95-9dd3-9a242b181e0c.png"
+steps:
+  - "GET http://127.0.0.1:3013{file}（走 Vite 代理）"
+  - "GET http://127.0.0.1:5679{file}（直连）"
+expected:
+  - "两者均 200 且 content-type 为 image/*"
+  - "字节一致（长度相同）"
+assertions:
+  - "proxy.status == 200 && direct.status == 200"
+  - "content-length equal && image/*"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_005_static_proxy
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, proxy]
+notes: ""

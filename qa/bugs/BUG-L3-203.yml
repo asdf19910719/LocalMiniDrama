@@ -1,0 +1,22 @@
+id: BUG-L3-203
+case_id: TC-PKG-008
+status: fixed-verified
+severity: P1
+title: "外部 AI 任务包『单文件任务.json』下载格式恒 500：buildDownload json 分支调用 getTaskBundle 漏传 db 参数"
+module: PKG
+steps:
+  - "POST /api/v2/projects/:id/external-ai/package {mode:'create_new'} 创建任务包（201，downloadFormats 宣称 ['任务包.zip','单文件任务.json']）"
+  - "GET /api/v2/external-ai/tasks/:taskId/download?format=zip → 200 application/zip（正常）"
+  - "GET /api/v2/external-ai/tasks/:taskId/download?format=json"
+expected: "200 application/json，返回 {schema:'local-mini-drama.external-ai-task', version:'2.1', package_id, assets_digest, target_episode_number, instructions, context, asset_manifest, response_schema}"
+actual: "500 {\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"db.prepare is not a function\"}}"
+evidence: |
+  - 实测（00:36-00:53 多次）：format=zip → 200 bytes=4472；format=json → 500 bytes=76 "db.prepare is not a function"
+  - 根因：backend-node/src/v21/wizard/externalAiWizardService.js:218（buildDownload json 分支）
+    `const task = getTaskBundle(row.package_id);` —— 漏传 db；
+    对照 zip 分支（:206）正确写法 `getTaskBundle(db, row.package_id)`；
+    getTaskBundle 首参即 db（services/externalAiTaskBundleService.js:397-399），字符串无可调 prepare 方法
+suspected_cause: "json 分支为后补代码，复制 zip 分支时遗漏 db 实参；该端点无任何测试覆盖（无参数自检），上线即坏"
+regression: |
+  外部 AI 协作闭环中『下载单文件任务.json』动作完全不可用（feature-inventory §2.12 标注 COMPLETE）；
+  外部协作者只能拿 zip；同故障还阻断依赖该端点获取 response_schema/manifest 的自动化流程

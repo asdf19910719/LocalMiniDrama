@@ -1,0 +1,8 @@
+[0.0s] /api/v1/qa-l3-unknown -> 404 ct=application/json; charset=utf-8 body={"error":"API endpoint not found"}
+ASSERT PASS: /api/v1/qa-l3-unknown status == 404 | actual=404
+ASSERT PASS: /api/v1/qa-l3-unknown JSON 错误体 | {"error":"API endpoint not found"}
+ASSERT PASS: /api/v1/qa-l3-unknown 不返回 HTML
+[0.0s] /api/v2/qa-l3-unknown -> 404 ct=application/json; charset=utf-8 body={"error":"API endpoint not found"}
+ASSERT PASS: /api/v2/qa-l3-unknown status == 404 | actual=404
+ASSERT PASS: /api/v2/qa-l3-unknown JSON 错误体 | {"error":"API endpoint not found"}
+ASSERT PASS: /api/v2/qa-l3-unknown 不返回 HTML

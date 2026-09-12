@@ -1,0 +1,21 @@
+ASSERT PASS: [pending] GET 反映 stage=pending progress=0 | {"s":"pending","p":0}
+ASSERT PASS: [pending] DB 持久化一致且 updated_at 刷新 | {"status":"pending","current_stage":"pending","progress":0,"updated_at":"2026-09-12T03:06:06.678Z"}
+ASSERT PASS: [waiting_provider] GET 反映 stage=waiting_provider progress=10 | {"s":"waiting_provider","p":10}
+ASSERT PASS: [waiting_provider] DB 持久化一致且 updated_at 刷新 | {"status":"waiting_provider","current_stage":"waiting_provider","progress":10,"updated_at":"2026-09-12T03:06:06.679Z"}
+ASSERT PASS: [starting_provider] GET 反映 stage=starting_provider progress=31 | {"s":"starting_provider","p":31}
+ASSERT PASS: [starting_provider] DB 持久化一致且 updated_at 刷新 | {"status":"starting_provider","current_stage":"starting_provider","progress":31,"updated_at":"2026-09-12T03:06:06.680Z"}
+ASSERT PASS: [uploading] GET 反映 stage=uploading progress=35 | {"s":"uploading","p":35}
+ASSERT PASS: [uploading] DB 持久化一致且 updated_at 刷新 | {"status":"uploading","current_stage":"uploading","progress":35,"updated_at":"2026-09-12T03:06:06.681Z"}
+ASSERT PASS: [queued] GET 反映 stage=queued progress=45 | {"s":"queued","p":45}
+ASSERT PASS: [queued] DB 持久化一致且 updated_at 刷新 | {"status":"queued","current_stage":"queued","progress":45,"updated_at":"2026-09-12T03:06:06.682Z"}
+ASSERT PASS: [running] GET 反映 stage=running progress=60 | {"s":"running","p":60}
+ASSERT PASS: [running] DB 持久化一致且 updated_at 刷新 | {"status":"running","current_stage":"running","progress":60,"updated_at":"2026-09-12T03:06:06.683Z"}
+ASSERT PASS: [downloading] GET 反映 stage=downloading progress=80 | {"s":"downloading","p":80}
+ASSERT PASS: [downloading] DB 持久化一致且 updated_at 刷新 | {"status":"downloading","current_stage":"downloading","progress":80,"updated_at":"2026-09-12T03:06:06.684Z"}
+ASSERT PASS: [stitching] GET 反映 stage=stitching progress=86 | {"s":"stitching","p":86}
+ASSERT PASS: [stitching] DB 持久化一致且 updated_at 刷新 | {"status":"stitching","current_stage":"stitching","progress":86,"updated_at":"2026-09-12T03:06:06.685Z"}
+ASSERT PASS: [validating] GET 反映 stage=validating progress=93 | {"s":"validating","p":93}
+ASSERT PASS: [validating] DB 持久化一致且 updated_at 刷新 | {"status":"validating","current_stage":"validating","progress":93,"updated_at":"2026-09-12T03:06:06.686Z"}
+ASSERT PASS: [completed] GET 反映 stage=completed progress=100 | {"s":"completed","p":100}
+ASSERT PASS: [completed] DB 持久化一致且 updated_at 刷新 | {"status":"completed","current_stage":"completed","progress":100,"updated_at":"2026-09-12T03:06:06.687Z"}
+[0.0s] sim-upscale（用户已授权模拟；远端 Zealman 供应商不可达为真实外部状态）

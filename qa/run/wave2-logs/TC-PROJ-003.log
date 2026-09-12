@@ -1,0 +1,12 @@
+[0.0s] create -> 201 id=33
+ASSERT PASS: create status == 201 | actual=201
+ASSERT PASS: 回读 title == "QA-L3-PROJ-1789172651073-003" | actual="QA-L3-PROJ-1789172651073-003"
+ASSERT PASS: 回读 description == "QA-L3 全字段项目简介" | actual="QA-L3 全字段项目简介"
+ASSERT PASS: 回读 genre == "都市" | actual="都市"
+ASSERT PASS: 回读 style_id == "rh-101-cinematic" | actual="rh-101-cinematic"
+ASSERT PASS: 回读 status=draft == "draft" | actual="draft"
+ASSERT PASS: metadata.aspect_ratio == "9:16" | actual="9:16"
+ASSERT PASS: metadata.target_duration_seconds == 120 | actual=120
+ASSERT PASS: metadata.folder_label == "QA-L3 文件夹A" | actual="QA-L3 文件夹A"
+ASSERT PASS: DB metadata JSON 落库 | {"aspect_ratio":"9:16","target_duration_seconds":120,"folder_label":"QA-L3 文件夹A","storage_folder_label":"QA-L3-PROJ-1789
+[cleanup] 软删项目 33 -> 200

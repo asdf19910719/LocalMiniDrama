@@ -1,0 +1,21 @@
+id: BUG-L3-201
+case_id: TC-PROJ-009
+status: fixed-verified
+severity: P2
+title: "剧集 duration 写读不一致：批量脚本导入写入的时长在 v1 读取路径恒被分镜聚合覆盖（无分镜时读回 0，且单位在秒/分间漂移）"
+module: PROJ
+steps:
+  - "POST /api/v1/dramas 创建项目（style_id 合法）"
+  - "PUT /api/v1/dramas/:id/episodes 提交 episodes=[{episode_number:1, title:'t', description:'d', duration:95}]（返回 200）"
+  - "GET /api/v1/dramas/:id 读取该剧集"
+expected: "读取路径返回 duration=95（与写入一致；data-model.md episodes.duration 语义）"
+actual: "API 返回 duration=0（description 同请求写读正常），但 DB episodes.duration=95 已正确落库——写成功、读丢失"
+evidence: |
+  - 复现脚本输出（00:25:44）：PUT 200 {"message":"保存成功"} → GET episodes[0] = {"duration":0,"description":"d",...}
+  - 同一时刻直查 SQLite：SELECT duration FROM episodes WHERE drama_id=? → 95（写入成功）
+  - 根因：backend-node/src/services/dramaService.js:126-127（getDrama 内）无条件下沉
+    `ep.duration = ep.storyboards.reduce((sum,s)=>sum+(s.duration||0),0); if (ep.duration>0) ep.duration = Math.ceil(ep.duration/60);`
+    —— 读取路径用分镜时长聚合覆盖 DB 持久值；无分镜时恒为 0；有分镜时单位从秒变为分钟，与写入单位（秒）漂移
+  - 写入路径证据：dramaService.js:651-658（saveEpisodes UPDATE/INSERT 均写 duration 列，值正确）
+suspected_cause: "getDrama 为兼容旧版 Go 端『时长=分镜和』展示逻辑遗留的聚合覆盖，未与批量导入写入的 episodes.duration 字段语义对齐"
+regression: "批量脚本导入（feature-inventory §2.9 COMPLETE）与剧集编辑（§2.8）的时长字段往返不一致；前端编辑后再读取显示 0"

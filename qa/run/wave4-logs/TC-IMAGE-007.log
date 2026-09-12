@@ -1,0 +1,6 @@
+[0.0s] image_proxy_cache 列: id,cache_key,proxy_url,created_at
+ASSERT PASS: 缓存表含 cache_key/proxy_url | id,cache_key,proxy_url,created_at
+ASSERT PASS: imageClient 存在缓存读路径（imageClient.js） | grep SELECT proxy_url
+ASSERT PASS: imageClient 存在缓存写路径（imageClient.js） | grep INSERT OR REPLACE
+ASSERT PASS: 失败生成不产生缓存写入 | before=0 after=0
+[4.0s] [观察项] 「远程图片代理并缓存」为服务层能力（即梦素材/图床链路），无独立 HTTP 路由；HTTP 级成功路径依赖真实图床配置，由观察项记录，不算 blocked（E2E 阶段可覆盖）

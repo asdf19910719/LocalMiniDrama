@@ -1,0 +1,13 @@
+[0.0s] 未知协议 -> preview ok=false codes=PACKAGE_SCHEMA_UNSUPPORTED
+ASSERT PASS: 未知协议 校验不通过且含 PACKAGE_SCHEMA_UNSUPPORTED | ok=false codes=PACKAGE_SCHEMA_UNSUPPORTED
+[0.0s] 版本 2.0 -> preview ok=false codes=PACKAGE_VERSION_UNSUPPORTED
+ASSERT PASS: 版本 2.0 校验不通过且含 PACKAGE_VERSION_UNSUPPORTED | ok=false codes=PACKAGE_VERSION_UNSUPPORTED
+[0.0s] 数值版本 -> preview ok=false codes=PACKAGE_SCHEMA_INVALID
+ASSERT PASS: 数值版本 校验不通过且含 PACKAGE_SCHEMA_INVALID | ok=false codes=PACKAGE_SCHEMA_INVALID
+[0.0s] 未知字段 -> preview ok=false codes=PACKAGE_SCHEMA_INVALID
+ASSERT PASS: 未知字段 校验不通过且含 PACKAGE_SCHEMA_INVALID | ok=false codes=PACKAGE_SCHEMA_INVALID
+[0.0s] 缺 shot_packages -> preview ok=false codes=PACKAGE_SCHEMA_INVALID
+ASSERT PASS: 缺 shot_packages 校验不通过且含 PACKAGE_SCHEMA_INVALID | ok=false codes=PACKAGE_SCHEMA_INVALID
+[0.0s] confirm 非法包 -> 400 PACKAGE_INVALID
+ASSERT PASS: confirm 非法包 400 PACKAGE_INVALID | 400 PACKAGE_INVALID
+[cleanup] 软删项目 100 -> 200

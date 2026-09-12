@@ -1,0 +1,7 @@
+ASSERT PASS: 前置：V2.1 原生流程未写 episode_characters（匹配纯按名） == 0 | actual=0
+ASSERT PASS: GET /episodes/:id/assets == 200 | actual=200
+ASSERT PASS: 投影包含剧本引用的人物（按名命中） | ["QA-L3-EPSET-1789176333279-林小海"]
+ASSERT PASS: 未在剧本出现的人物不入投影 | ["QA-L3-EPSET-1789176333279-林小海"]
+ASSERT PASS: 投影字段完整（assetId/stateId/required/blocked） | {"assetType":"character","assetId":54,"name":"QA-L3-EPSET-1789176333279-林小海","description":"","stateId":"","mediaVersionId":null,"currentImage":null,"voice":null,"blocked":true,"required":true}
+ASSERT PASS: blocked=true 因无 image_url | {"img":null}
+[cleanup] 软删项目 172 -> 200

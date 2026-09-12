@@ -1,0 +1,21 @@
+id: BUG-L3-403
+case_id: TC-IMAGE-003
+status: fixed-verified
+severity: P1
+title: "chatgpt_web 网页生图通道在 V2.1 产品中不可达：唯一驱动入口随旧画布路由删除，V2.1 分镜图生成硬编码 mock 通道"
+steps: >-
+  1) 当前 HEAD（c9c2bbd）路由表 frontweb/src/router/index.js 无任何 /film、旧 Canvas 路由；
+  2) 访问历史工作台入口 /film/272?episode=189 → 404 页面（截图 e2e-artifacts/film-canvas.png）；
+  3) 全源码检索：ImageGenerateSplitButton.vue / imageGenerationEnvironment.js / CanvasAssetPanel / CanvasStoryboardPanel /
+     CharacterVariantStudio（chatgpt_web 通道的统一图片按钮、零费用环境检查、画布面板）不被任何路由/视图引用，成为不可达代码；
+  4) V2.1 分镜图生成：POST /api/v2/storyboards/:id/image/generate 由 StoryboardStage.vue confirmGenerateImage 以空 body 调用，
+     后端 v21/providerRouter.resolveImageChannel 仅支持 storyboard_image/image 的 API 配置，无 chatgpt_web 分支；
+  5) V2.1 生成确认 Sheet（StoryboardStage.vue:357）硬编码文案「通道 / 模型 mock 本地通道 · ¥0」，无通道选择。
+expected: "按用户预期与 docs/统一ChatGPT图片生成设计.md：生图默认走 chatgpt_web（浏览器扩展+真实 ChatGPT 网页），设置页 chatgpt_web_* 全局配置有实际消费方"
+actual: "E2E 真实提交分镜图生成 → 前端 Sheet 标注 mock 本地通道；后端实际按真实 shim 配置发起请求并失败（image_generations#232 status=failed ECONNREFUSED 127.0.0.1:18080，v2 候选为空，无 mock 候选产生——Gatekeeper 复核更正）；chatgpt_web 链路（扩展 service worker 运行中、ChatGPT 已登录、
+  content bundle 桥接 data-aistory-chatgpt-bridge=v1 就绪）在产品 UI 中无任何入口可触发"
+evidence: >-
+  frontweb/src/router/index.js（无 /film|canvas 旧路由）；qa/run/e2e-artifacts/film-canvas.png（404）；
+  StoryboardStage.vue:357,770（硬编码 mock 文案）；backend-node/src/v21/providerRouter.js:74-87（resolveImageChannel 无 chatgpt_web）；
+  qa/run/e2e-stageC2.json（真实提交走 mock 通道记录）；扩展与登录态就绪证据见会话 CDP 探针（service worker + bridge v1 + 已登录）
+suspected_cause: "V2.1 重构删除旧画布路由时未迁移统一图片通道（chatgpt_web）入口；V2.1 分镜图走新 v21 provider 路由但只实现了 API/mock 两通道"

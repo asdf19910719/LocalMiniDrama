@@ -1,0 +1,9 @@
+[0.0s] getTask -> 200 {"success":true,"data":{"taskId":"extai_a46d2bf9-7684-4e41-87f9-9e3c7f311cf4","packageId":"extai_a46d2bf9-7684-4e41-87f9-9e3c7f311cf4","projectId":104,"targetEpisodeId":null,"targetEpisodeNumber":2,"assetsDigest":"d29783d974a5b7bf1d84f2e7c8166bff5b4745fd48d881
+ASSERT PASS: getTask status == 200 | actual=200
+ASSERT PASS: packageId 回读 == "extai_a46d2bf9-7684-4e41-87f9-9e3c7f311cf4" | actual="extai_a46d2bf9-7684-4e41-87f9-9e3c7f311cf4"
+ASSERT PASS: context 上下文非空 | len=446
+ASSERT PASS: instructions 说明非空 | len=778
+ASSERT PASS: status 字段存在（waiting 类） | waiting
+ASSERT PASS: downloadFormats 双格式 | ["任务包.zip","单文件任务.json"]
+ASSERT PASS: 不存在任务 404 == 404 | actual=404
+[cleanup] 软删项目 104 -> 200

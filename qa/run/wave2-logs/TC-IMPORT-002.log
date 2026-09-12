@@ -1,0 +1,14 @@
+ASSERT PASS: export status == 200 | actual=200
+[0.0s] import -> 201 {"success":true,"data":{"drama_id":62,"title":"QA-L3-IMPORT-1789173162990-RT 导入1"},"timestamp":"2026-09-12T00:32:43.048Z"}
+ASSERT PASS: import status == 201 | actual=201
+ASSERT PASS: 返回新项目 id 且不同于源 | new=62 src=61
+ASSERT PASS: 往返 title 保留（导入端追加 去重后缀） | QA-L3-IMPORT-1789173162990-RT 导入1
+[0.0s] 导入后标题: QA-L3-IMPORT-1789173162990-RT 导入1（导入器对同名标题追加 " 导入N" 后缀）
+ASSERT PASS: 往返 description 一致 == "往返测试简介" | actual="往返测试简介"
+ASSERT PASS: 往返 genre 一致 == "悬疑" | actual="悬疑"
+ASSERT PASS: 往返剧集数 = 2 == 2 | actual=2
+ASSERT PASS: 往返第 1 集正文一致（数据流闭合） | 内景 钟表店 夜
+往返第一集正文。
+ASSERT PASS: 往返 style_id 一致 | src=rh-101-cinematic dst=rh-101-cinematic
+[cleanup] 软删项目 61 -> 200
+[cleanup] 软删项目 62 -> 200

@@ -1,0 +1,5 @@
+ASSERT PASS: total=3 == 3 | actual=3
+ASSERT PASS: page_size=2 生效 == 2 | actual=2
+ASSERT PASS: 两页并集不重不漏（3 个唯一 id） | unique=3
+ASSERT PASS: 超范围页为空 == 0 | actual=0
+[cleanup] 软删项目 257 -> 200

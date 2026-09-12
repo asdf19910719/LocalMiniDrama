@@ -1,0 +1,7 @@
+ASSERT PASS: 不存在 404 == 404 | actual=404
+ASSERT PASS: 错误码 UPSCALE_JOB_NOT_FOUND == "UPSCALE_JOB_NOT_FOUND" | actual="UPSCALE_JOB_NOT_FOUND"
+ASSERT PASS: sim 作业 GET 200 == 200 | actual=200
+ASSERT PASS: 顶层内部字段已脱敏（快照/源路径/远端输入名） | {"leaked":[]}
+ASSERT PASS: 分段内部字段已脱敏（远端结果/本地输出路径） | {"leaked":[]}
+ASSERT PASS: 脱敏不误伤业务字段（status/progress/segments） | {"s":"running"}
+[0.0s] [seed] jobA=qa-sim-mask-1789****6620（sim-upscale）

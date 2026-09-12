@@ -1,0 +1,4 @@
+[0.0s] 读取默认 DeepSeek 配置 id= 4 (api_key 不落日志)
+[2.0s] POST /ai-configs/test -> 200 2021ms {"success":true,"data":{"message":"连接测试成功"},"timestamp":"2026-09-12T00:02:09.864Z"}
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: message=连接测试成功 | 连接测试成功

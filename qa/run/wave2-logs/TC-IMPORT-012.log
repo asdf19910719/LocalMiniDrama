@@ -1,0 +1,9 @@
+[0.0s] import#1 -> 201, import#2 -> 201
+ASSERT PASS: 第一次导入 201 == 201 | actual=201
+ASSERT PASS: 第二次导入 201 == 201 | actual=201
+ASSERT PASS: 两次导入产生不同项目 | 68 vs 69
+ASSERT PASS: 两次导入标题可区分（追加 导入N 后缀，不互相覆盖） | QA-L3-IMPORT-1789173162990-DUP 导入1 vs QA-L3-IMPORT-1789173162990-DUP 导入2
+[0.0s] [观察] 重复导入产生独立项目，导入器以 " 导入N" 后缀区分同名标题——无合并、无去重提示但也不会静默覆盖，记录为真实行为。
+[cleanup] 软删项目 67 -> 200
+[cleanup] 软删项目 68 -> 200
+[cleanup] 软删项目 69 -> 200

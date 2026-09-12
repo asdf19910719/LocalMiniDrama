@@ -1,0 +1,4 @@
+ASSERT PASS: 创建带变体绑定分镜 201 == 201 | actual=201
+ASSERT PASS: storyboard_character_variants 落库（variant/reference_role/framing_note） | {"id":75,"storyboard_id":103,"character_id":65,"variant_id":41,"reference_role":"主体","sort_order":1,"framing_note":"半身"}
+ASSERT PASS: GET 投影回读变体关联 | [{"id":75,"storyboard_id":103,"character_id":65,"variant_id":41,"reference_role":"主体","sort_order":1,"framing_note":"半身","variant_name":"战损","character_name":"Q
+[cleanup] 软删项目 189 -> 200

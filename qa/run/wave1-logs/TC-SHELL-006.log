@@ -1,0 +1,5 @@
+[0.0s] GET /health -> 200 {"status":"ok","app":"LocalMiniDrama API","version":"1.0.0"}
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: body.status == "ok" | actual="ok"
+ASSERT PASS: app 非空 | LocalMiniDrama API
+ASSERT PASS: version 非空 | 1.0.0

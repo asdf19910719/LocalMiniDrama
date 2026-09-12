@@ -1,0 +1,6 @@
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后 GET 404 == 404 | actual=404
+ASSERT PASS: 列表不再包含（软删过滤） | total=0
+ASSERT PASS: documented PARTIAL 行为：物理文件仍可访问（未随软删回收） | status=200
+ASSERT PASS: DB 行保留且带 deleted_at | 
+[cleanup] 软删项目 255 -> 200

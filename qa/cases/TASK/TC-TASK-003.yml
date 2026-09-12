@@ -1,0 +1,42 @@
+id: TC-TASK-003
+title: "真实故事生成任务完整状态机：pending→processing→completed 且产出写回项目（数据流交接点）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1, INV-14.4]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "QA-L3 项目已创建"
+  - "DeepSeek 默认文本配置可用"
+  - "DeepSeek 真实调用预算：本用例 1 次"
+test_data:
+  project: "QA-L3-任务验证项目"
+  premise: "QA-L3 测试梗概：外卖骑手在雨夜送错了…"
+  episode_count: 1
+steps:
+  - "POST /api/v1/dramas 创建 QA-L3 项目"
+  - "POST /api/v1/generation/story {drama_id, premise}"
+  - "轮询 GET /tasks/{task_id} 至终态"
+  - "GET /api/v1/dramas/{id} 确认剧集写回"
+expected:
+  - "创建即返回 task_id 且 status=pending"
+  - "终态为 completed"
+  - "result 含 drama_id/episode_count>=1"
+  - "项目下真实新增剧集（A 的产出被持久化并可见）"
+assertions:
+  - "task.status == \"completed\""
+  - "task.result.episode_count >= 1"
+  - "drama episodes count >= 1（经 API 复核）"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_003_story_task_lifecycle
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, real-deepseek, data-flow, smoke]
+notes: ""

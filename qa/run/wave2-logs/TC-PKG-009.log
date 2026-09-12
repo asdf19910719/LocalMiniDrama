@@ -1,0 +1,9 @@
+[0.0s] task-note -> 200 {"success":true,"data":{"taskId":"extai_2e752ebf-c466-4eca-9654-f47ce4f58339","packageId":"extai_2e752ebf-c466-4eca-9654
+ASSERT PASS: task-note status == 200 | actual=200
+ASSERT PASS: 备注回读一致 | QA-L3 备注补充：注意第二场的光线
+[0.0s] cancel -> 200 {"success":true,"data":{"taskId":"extai_2e752ebf-c466-4eca-9654-f47ce4f58339","packageId":"extai_2e752ebf-c466-4eca-9654
+ASSERT PASS: cancel status == 200 | actual=200
+ASSERT PASS: cancelledAt 已标记 | 2026-09-12T00:40:48.827Z
+[0.0s] import after cancel -> 409 TASK_CANCELLED
+ASSERT PASS: 取消后导入 409 TASK_CANCELLED | 409 TASK_CANCELLED
+[cleanup] 软删项目 106 -> 200

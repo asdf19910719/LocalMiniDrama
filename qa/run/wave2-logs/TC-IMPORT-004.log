@@ -1,0 +1,11 @@
+[0.0s] validate -> 200 {"success":true,"data":{"overall":"unsupported","archiveVersion":"1.7","supportedVersion":"2.1","summary":{"projectName":"QA-L3-IMPORT-1789173162990-ARCH","episodeCount":0,"characterCount":0,"entryCount":1,"mediaCount":0,"estimatedSizeBytes":400,"zipSizeBytes"
+ASSERT PASS: validate status == 200 | actual=200
+ASSERT PASS: 返回检查矩阵 | checks=7
+ASSERT PASS: overall=unsupported == "unsupported" | actual="unsupported"
+ASSERT PASS: archiveVersion=1.7（如实识别） == "1.7" | actual="1.7"
+ASSERT PASS: supportedVersion=2.1 == "2.1" | actual="2.1"
+ASSERT PASS: 版本检查项 status=unsupported（不冒充可用） | {"id":"version","label":"协议版本","status":"unsupported","detail":"检测到归档版本 1.7，当前仅支持 2.1"}
+[0.0s] 不存在路径 -> 400 {"error":{"code":"ARCHIVE_UNREADABLE","message":"无法读取该归档文件"}}
+ASSERT PASS: 不存在路径 4xx | 400
+ASSERT PASS: 缺 path 参数 4xx | 400
+[cleanup] 软删项目 63 -> 200

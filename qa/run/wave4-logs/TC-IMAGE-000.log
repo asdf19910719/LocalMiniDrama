@@ -1,0 +1,4 @@
+[0.0s] 默认图像通道: {"id":2,"provider":"openai","name":"Local Shim Image","base_url":"http://127.0.0.1:18080/v1","is_default":1}
+ASSERT PASS: 默认图像通道为 Local Shim（18080 离线，真实外部状态） | {"id":2,"provider":"openai","name":"Local Shim Image","base_url":"http://127.0.0.1:18080/v1","is_default":1}
+[0.1s] project=266 episode=181 create-from-script=201
+ASSERT PASS: 前置搭建完成 | {"shot":143}

@@ -1,0 +1,7 @@
+ASSERT PASS: list 200 == 200 | actual=200
+ASSERT PASS: 列表含 finalize 产出记录 | count=10
+ASSERT PASS: 详情 200 == 200 | actual=200
+ASSERT PASS: 详情 id 回读 == 14 | actual=14
+ASSERT PASS: 不存在 404 == 404 | actual=404
+ASSERT PASS: 删除 200 == 200 | actual=200
+ASSERT PASS: 删除后 404 == 404 | actual=404

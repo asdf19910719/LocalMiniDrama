@@ -1,0 +1,30 @@
+id: TC-TASK-006
+title: "同资源进行中任务去重：任务未完成期间重复发起返回同一 task_id"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "TC-TASK-003 任务仍处于 pending/processing（创建后立即复测）"
+test_data:
+steps:
+  - "TC-003 发起后立刻再次 POST /generation/story 同 drama_id"
+  - "比较两次 task_id"
+expected:
+  - "第二次返回相同 task_id（storyGenerationService.js:161-170 in-flight 去重）"
+assertions:
+  - "second.task_id == first.task_id"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_006_inflight_dedup
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, dedup]
+notes: ""

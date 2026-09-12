@@ -1,0 +1,11 @@
+[0.0s] GET task -> 200 {"id":"4557edde-5809-433e-bbe1-3fbdc839d871","type":"story_generation","status":"completed","progress":100,"message":"正在保存剧本...","error":null,"result":"{\"drama_id\":12,\"episode_count\":1}","resource_id":"12","created_at":"2026-09-12T00:04:08.594Z","updated_at":"2026-09-12T00:04:23.673Z","completed
+ASSERT PASS: 字段 id 存在
+ASSERT PASS: 字段 type 存在
+ASSERT PASS: 字段 status 存在
+ASSERT PASS: 字段 progress 存在
+ASSERT PASS: 字段 message 存在
+ASSERT PASS: 字段 resource_id 存在
+ASSERT PASS: 字段 created_at 存在
+ASSERT PASS: 字段 updated_at 存在
+ASSERT PASS: type == "story_generation" | actual="story_generation"
+ASSERT PASS: progress 为数值 | 100

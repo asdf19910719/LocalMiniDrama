@@ -1,0 +1,37 @@
+id: TC-SHELL-002
+title: "前端路由表完整性：router 路由定义与视图文件一一存在且覆盖 test-map 页面清单"
+state: active
+feature_id: F-SHELL
+requirement_ids: [INV-1.1, INV-1.2]
+level: unit
+purpose: regression
+priority: P0
+preconditions:
+  - "源码可读"
+test_data:
+  router: "frontweb/src/router/index.js"
+  map: "docs/qa/product-test-map.md"
+steps:
+  - "解析 router/index.js 全部 path/component"
+  - "核验每个 component 文件存在"
+  - "对照 product-test-map P01-P23"
+expected:
+  - "每条路由的视图文件真实存在"
+  - "P01-P23 页面在路由表中可对应（P20 自由创作等保留路由存在）"
+  - "404 catch-all 存在"
+assertions:
+  - "路由数 >= 20"
+  - "missing files == 0"
+  - "has /:pathMatch(.*)* -> NotFoundView"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-shell.js
+  test_id: SHELL_002_router_integrity
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [shell, source-check]
+notes: ""

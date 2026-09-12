@@ -1,0 +1,4 @@
+[0.0s] POST cancel -> 200 {"success":true,"data":{"id":"4557edde-5809-433e-bbe1-3fbdc839d871","type":"story_generation","status":"completed","progress":100,"message":"正在保存剧本...","error":null,"result":"{\"drama_id\":12,\"episod
+ASSERT PASS: status == 200 | actual=200
+ASSERT FAIL: already_done == true | actual=undefined
+ASSERT PASS: 状态仍 completed == "completed" | actual="completed"

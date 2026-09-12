@@ -1,0 +1,30 @@
+id: TC-TASK-008
+title: "取消不存在的任务返回 404"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.2]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  task_id: "qa-l3-nonexistent-task-id"
+steps:
+  - "POST /api/v1/tasks/qa-l3-nonexistent-task-id/cancel"
+expected:
+  - "404 任务不存在"
+assertions:
+  - "status == 404"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_008_cancel_not_found
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, exception]
+notes: ""

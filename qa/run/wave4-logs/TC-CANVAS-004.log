@@ -1,0 +1,6 @@
+[6.0s] missing-images -> 200 {"success":true,"data":{"action":"missing-images","total":1,"results":[{"shotId":148,"ok":false,"error":"图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080"}]},"timestamp":"2026-09-12T03:10:09.191Z"}
+ASSERT PASS: 编排接口结构化响应 | 200
+[6.0s] 编排结果: {"action":"missing-images","total":1,"results":[{"shotId":148,"ok":false,"error":"图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080"}]}
+ASSERT PASS: 逐 shot 结果结构（遇错可见：ok=false + error 明确） | [{"shotId":148,"ok":false,"error":"图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080"}]
+[6.1s] image_generations 落库: [{"id":230,"status":"failed","err":"图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080"}]
+ASSERT PASS: 编排触发的生成记录已落库（同步路径，v1 imageService） | count=1

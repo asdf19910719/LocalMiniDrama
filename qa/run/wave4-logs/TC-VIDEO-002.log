@@ -1,0 +1,7 @@
+ASSERT PASS: provider_task_id 已持久化 | 16985086-4f3e-4c14-976b-de6c7d917523
+ASSERT PASS: config_snapshot 含 workflow/model | {"w":"minimax_h3_director_r2v_te_speed","m":"minimax_h3_director_r2v_te_speed"}
+ASSERT PASS: config_snapshot.provider=comfyui | comfyui
+ASSERT PASS: 终态 review 落库 | review
+ASSERT PASS: duration 落库（草稿编译口径） | 5
+ASSERT PASS: [数据流] local_path 写回（下游 finalize 可消费） | projects/0264_20260912_QA-L3-VIDEO-17891810/videos/vg_100_36c2bd58.mp4
+ASSERT PASS: async_task 收口 completed | {"s":"completed"}

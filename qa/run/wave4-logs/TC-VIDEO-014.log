@@ -1,0 +1,9 @@
+ASSERT PASS: 列表 200 == 200 | actual=200
+ASSERT PASS: 列表仅含本项目记录 | total=undefined
+ASSERT PASS: 真实生成记录在列表中可见（含 candidate_group_id） | want=98
+ASSERT PASS: 不存在 404 == 404 | actual=404
+[0.0s] DELETE 取消记录#99 -> 200
+ASSERT PASS: DELETE 200 == 200 | actual=200
+ASSERT PASS: 删除后 GET 404 == 404 | actual=404
+ASSERT PASS: 软删标记已落库（数据可复核） | 2026-09-12T02:58:02.208Z
+[0.0s] [数据保留说明] #2（取消）已软删供删除链路验证；#1（review）保留供 AUDIO finalize 真实合成；文件产物存档 wave4-artifacts

@@ -1,0 +1,13 @@
+[0.0s] cancel -> 200 {"success":true,"data":{"id":"f00b321d-9b69-4c88-91d1-6b40d6a80806","type":"story_generation","status":"failed","progress":0,"message":"正在生成剧本...","error":"请提供故
+ASSERT PASS: cancel 200 == 200 | actual=200
+[0.0s] 最终任务状态: failed error=请提供故事梗概
+ASSERT PASS: 任务终结且状态如实（failed=取消落败于执行，或取消原因已写入） | {"status":"failed","error":"请提供故事梗概"}
+[0.0s] 重复取消 -> 200 {"success":true,"data":{"id":"f00b321d-9b69-4c88-91d1-6b40d6a80806","type":"story_generation","status":"failed","progress":0,"message":"正在生成剧本...","error":"请提供故
+ASSERT PASS: 对已结束任务重复取消 200 且保留原始错误（不被改写为取消） | status=200 error=请提供故事梗概
+[0.0s] [观察] 服务层 cancelTask 已返回 already_done 标志，但路由 response.success(result.task) 将其丢弃——客户端无法区分"本次取消"与"早已结束"，记录为轻微契约观察项。
+ASSERT PASS: 取消不存在任务 404 == 404 | actual=404
+ASSERT PASS: cancelTask 注释明示无法中断执行中的 AI 调用 | taskService.js:83
+ASSERT PASS: 重启将遗留 pending/processing 任务标记失败 | taskService.js:98
+ASSERT PASS: 孤儿任务消息即「服务重启后任务中断」 | ORPHAN_ASYNC_TASK_MSG
+[0.0s] [观察项 INV-3.3] 与 feature-inventory「故事生成任务反馈 PARTIAL：重启将未完成任务标记失败，取消不能中止已发出的模型请求」一致——本轮执行中已实际观察到该中断消息（TC-SCRIPT-004 首次尝试被外部代码修改触发的服务重启打断），行为与文档相符，不判缺陷。
+[cleanup] 软删项目 143 -> 200

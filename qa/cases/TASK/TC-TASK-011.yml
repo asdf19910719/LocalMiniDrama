@@ -1,0 +1,34 @@
+id: TC-TASK-011
+title: "重启恢复语义核验（不重启服务）：源码启动清扫逻辑存在 + DB 无遗留 pending/processing"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.3]
+level: integration
+purpose: regression
+priority: P1
+preconditions:
+  - "禁止重启服务（用户约束）"
+  - "DB 只读查询允许"
+test_data:
+steps:
+  - "源码核验 app.js 启动链调用 failOrphanedAsyncTasksOnStartup"
+  - "python sqlite3 只读查询 async_tasks 状态分布"
+  - "记录孤儿标记消息计数"
+expected:
+  - "当前行为=启动时把遗留 pending/processing 标为 failed（非续跑），与 feature-inventory §14.3 PARTIAL 描述一致"
+  - "当前 DB 无 pending/processing 遗留"
+assertions:
+  - "taskService.js:98 failOrphanedAsyncTasksOnStartup 存在且被启动链调用"
+  - "DB pending+processing == 0"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_011_restart_recovery_semantics
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, recovery]
+notes: "受\"禁止重启服务\"约束，仅核验当前行为与源码语义，不做重启实验"

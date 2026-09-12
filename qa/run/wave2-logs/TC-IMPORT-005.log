@@ -1,0 +1,7 @@
+[0.0s] examples -> 200 {"success":true,"data":[{"filename":"衣服设计天才302.zip","name":"衣服设计天才302"}],"timestamp":"2026-09-12T00:32:43.072Z"}
+ASSERT PASS: examples status == 200 | actual=200
+ASSERT PASS: 示例列表非空（example_drama 目录存在） | [{"filename":"衣服设计天才302.zip","name":"衣服设计天才302"}]
+[0.0s] import-example -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"ZIP 文件损坏，无法解析"},"timestamp":"2026-09-12T00:32:43.073Z"}
+[0.0s] 示例文件头 16 字节: 76657273696f6e2068747470733a2f2f ("version http")
+ASSERT FAIL: 示例文件为真实 ZIP（PK 头） | 76657273696f6e2068747470733a2f2f
+ASSERT FAIL: 示例项目导入成功（当前：随包示例文件损坏 → 500 失败） | 500 ZIP 文件损坏，无法解析

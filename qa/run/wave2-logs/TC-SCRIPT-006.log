@@ -1,0 +1,10 @@
+[0.0s] 同步空梗概 -> 500 {"success":false,"error":{"code":"INTERNAL_ERROR","message":"请提供故事梗概"},"timestamp":"2026-09-12T00:55
+ASSERT FAIL: 同步空梗概 400 == 400 | actual=500
+[0.0s] 不存在项目 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"项目不存在"},"timestamp":"2026-09-12T00:55:15.6
+ASSERT PASS: 不存在项目 400 + 项目不存在 | 400
+[0.0s] 异步空梗概 start -> 200 {"success":true,"data":{"task_id":"a30e200c-c5ab-483e-95cd-78174fe7a579","status":"pending"},"timestamp":"2026-09-12T00:
+ASSERT PASS: 异步空梗概任务仍受理 200 == 200 | actual=200
+ASSERT PASS: 失败任务状态=failed == "failed" | actual="failed"
+ASSERT PASS: 错误信息回填（请提供故事梗概） | {"error":"请提供故事梗概","message":"正在生成剧本..."}
+ASSERT PASS: 未知任务 404 == 404 | actual=404
+[cleanup] 软删项目 142 -> 200

@@ -1,0 +1,6 @@
+[0.0s] copy -> 201 {"success":true,"data":{"revisionId":67,"revision":3,"status":"draft","saveState":"saved","savedAt":"2026-09-12T00:53:45.780Z","content":"第一版原文-QA-L3-不可磨灭的标记。"}
+ASSERT PASS: copy status == 201 | actual=201
+ASSERT PASS: 复制产生新修订 revision=3 == 3 | actual=3
+ASSERT PASS: 内容还原为第 1 版 | 第一版原文-QA-L3-不可磨灭的标记。
+ASSERT PASS: 不存在修订 404 == 404 | actual=404
+[cleanup] 软删项目 137 -> 200

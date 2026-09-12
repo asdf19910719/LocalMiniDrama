@@ -1,0 +1,7 @@
+[0.0s] create storyboard -> 201 {"success":true,"data":{"id":91,"episode_id":147,"scene_id":null,"storyboard_number":1,"title":"QA-L3-SB-1789176739291-镜一","description":"主角
+ASSERT PASS: 创建分镜 201 == 201 | actual=201
+[0.0s] [观察项 INV-5.2b] POST /storyboards 不传 storyboard_number 时默认写 0（storyboardCanonicalRepository.js:358）——前端画布创建时自行计算 max+1 传入，API 层不自动编号，调用方漏传会产生重复镜号，如实记录
+ASSERT PASS: 镜号自动为 1 == 1 | actual=1
+ASSERT PASS: v1 列表可见且字段回读 | [["QA-L3-SB-1789176739291-镜一","特写",8]]
+ASSERT PASS: DB 对白/旁白/氛围/动作落库 | {"dialogue":"这块表，停在三点。","narration":"旁白：钟表店的一天开始了","atmosphere":"怀旧","action":"指尖转动发条"}
+[cleanup] 软删项目 184 -> 200

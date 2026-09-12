@@ -1,0 +1,7 @@
+[0.0s] reorder -> 200 {"success":true,"data":{"updated":3},"timestamp":"2026-09-12T00:24:11.305Z"}
+ASSERT PASS: reorder status == 200 | actual=200
+[0.0s] 重排后列表: [[1,"丙"],[2,"乙"],[3,"甲"]]
+ASSERT PASS: 重排后第1集是丙 == "丙" | actual="丙"
+ASSERT PASS: 重排后第3集是甲 == "甲" | actual="甲"
+ASSERT PASS: order 不完整 409 EPISODE_ORDER_CONFLICT | 409 EPISODE_ORDER_CONFLICT
+[cleanup] 软删项目 46 -> 200

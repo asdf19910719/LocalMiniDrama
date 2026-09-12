@@ -1,0 +1,15 @@
+[0.1s] generate -> 200 {"success":true,"data":{"task_id":"0b28f1e3-8a6e-423b-adbc-3998c247e765","status":"pending","message":"分镜生成任务已创建，正在后台处理..."},"timestamp":"20
+ASSERT PASS: 生成受理 200 == 200 | actual=200
+ASSERT PASS: 返回异步任务 ID | {"success":true,"data":{"task_id":"0b28f1e3-8a6e-423b-adbc-3998c247e765","status":"pending","message":"分镜生成任务已创建，正在后台处理.
+[5.1s] poll#1 status=processing progress=10 (5s)
+[10.1s] poll#2 status=processing progress=10 (10s)
+[15.1s] poll#3 status=processing progress=30 (15s)
+[20.1s] poll#4 status=processing progress=30 (20s)
+[25.1s] poll#5 status=completed progress=100 (25s)
+ASSERT PASS: 任务最终 completed == "completed" | actual="completed"
+ASSERT PASS: 数据流：生成产生新分镜（数量增加） | before=0 after=3
+ASSERT PASS: 镜头结构完整（storyboard_number/description/duration） | {"n":1,"d":"【镜头类型】中景\n【运镜】手持 + 推镜（handheld、push）\n【动作】主角与钟叔隔着木质工作台对峙争吵，两人同时伸手抓向台面上的一只黄铜怀表。镜头1：中景，手持轻微晃动，主角猛地前倾，手掌拍在台面上，钟叔亦探身按住怀表。切镜到镜头2：特写，怀表从两人指缝间滑脱，在空中翻转着飞出画面
+[25.1s] [AI 产出] 共 3 镜；首镜：【镜头类型】中景
+【运镜】手持 + 推镜（handheld、push）
+【动作】主角与钟叔隔着木质工作台对峙争吵，两人同时伸手抓向台面上的一只黄铜怀表。镜头1：
+[cleanup] 软删项目 213 -> 200

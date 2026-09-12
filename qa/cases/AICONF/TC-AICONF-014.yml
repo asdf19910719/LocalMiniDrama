@@ -1,0 +1,36 @@
+id: TC-AICONF-014
+title: "提示词覆盖异常：未知 key 400、空 content 400"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.7]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  unknown_key: "QA-L3-not-exist"
+  empty_content: "   "
+steps:
+  - "PUT /settings/prompts/QA-L3-not-exist"
+  - "PUT /settings/prompts/story_expansion_system 空 content"
+  - "DELETE 未知 key"
+expected:
+  - "两次 PUT 均 400"
+  - "DELETE 未知 key 400"
+assertions:
+  - "put(unknown).status == 400"
+  - "put(empty).status == 400"
+  - "del(unknown).status == 400"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_014_prompt_override_errors
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, exception]
+notes: ""

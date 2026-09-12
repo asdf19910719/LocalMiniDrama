@@ -1,0 +1,44 @@
+id: TC-AICONF-012
+title: "场景模型映射 CRUD 闭环 + 重复 key 创建被拒"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.6]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  key: "QA-L3-scene-key"
+  service_type: "text"
+  model_override: "qa-model-x"
+steps:
+  - "POST /scene-model-map 创建"
+  - "重复 POST 同 key"
+  - "GET /scene-model-map/{key}"
+  - "PUT 更新 model_override"
+  - "GET 列表含该 key"
+  - "DELETE"
+  - "GET 确认 404"
+expected:
+  - "创建 201"
+  - "重复创建 400 场景键已存在"
+  - "更新后回读新值"
+  - "删除后再查 404"
+assertions:
+  - "create.status == 201"
+  - "dup.status == 400"
+  - "update.data.model_override == \"qa-model-x\""
+  - "del后再查 status == 404"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_012_scene_model_map_crud
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, crud, mapping]
+notes: ""

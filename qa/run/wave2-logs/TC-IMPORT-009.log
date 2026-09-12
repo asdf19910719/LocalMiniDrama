@@ -1,0 +1,8 @@
+[0.0s] 空文本 -> 400 {"error":{"code":"VALIDATION_ERROR","message":"请提供小说文本"}}
+ASSERT PASS: 空文本 400 == 400 | actual=400
+ASSERT PASS: maxChapters=2 截断为 2 == 2 | actual=2
+ASSERT PASS: suggestedEpisodes 同步截断 == 2 | actual=2
+[0.0s] startNumber=5 建议集号: [5,6,7]
+ASSERT PASS: 建议集号从 5 起 | [5,6,7]
+ASSERT PASS: confirm 无文本 400 == 400 | actual=400
+[cleanup] 软删项目 66 -> 200

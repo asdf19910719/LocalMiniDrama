@@ -1,0 +1,43 @@
+{
+ "stage": "B",
+ "steps": [
+  {
+   "step": "script-loaded",
+   "status": "PASS",
+   "detail": "草稿 v1 回显（截图证据，Stage A2 的 FAIL 为断言时机误判）",
+   "evidence": "qa/run/e2e-artifacts/stageB/b-01-script-loaded.png"
+  },
+  {
+   "step": "confirm-script",
+   "status": "PASS",
+   "detail": "确认后状态可见",
+   "evidence": "qa/run/e2e-artifacts/stageB/b-03-after-confirm.png"
+  },
+  {
+   "step": "enter-settings-stage",
+   "status": "PASS",
+   "detail": "http://127.0.0.1:3013/projects/272/episodes/189/assets",
+   "evidence": "qa/run/e2e-artifacts/stageB/b-04-settings-stage.png"
+  },
+  {
+   "step": "settings-snapshot",
+   "status": "PASS",
+   "detail": "剧 QA-L3-E2E-主链-113428 / 第 1 集 · 第 1 集 更改实时生效 任务 1 剧本 已确认 v1 2 设定 未开始 3 分镜 未开始 4 成片 未开始 本集完成度 25% · 基于已确认剧本 v1 本集设定已准备好 重新检查 角色 0 场景 0 道具 0 仅显示本集剧本引用的素",
+   "evidence": "qa/run/e2e-artifacts/stageB/b-05-settings-state.png"
+  },
+  {
+   "step": "enter-storyboard",
+   "status": "PASS",
+   "detail": "http://127.0.0.1:3013/projects/272/episodes/189/storyboard| CTA点击",
+   "evidence": "qa/run/e2e-artifacts/stageB/b-06-storyboard-entry.png"
+  }
+ ],
+ "started_at": "2026-09-12T11:42:15",
+ "settings_body_snippet": "剧\nQA-L3-E2E-主链-113428\n/\n第 1 集 · 第 1 集\n更改实时生效\n任务\n1\n剧本\n已确认 v1\n2\n设定\n未开始\n3\n分镜\n未开始\n4\n成片\n未开始\n本集完成度 25% · 基于已确认剧本 v1\n本集设定已准备好\n重新检查\n角色\n0\n场景\n0\n道具\n0\n仅显示本集剧本引用的素材 · 完整资料在「项目素材」维护\n进入分镜\n\n本集剧本没有引用角色",
+ "finished_at": "2026-09-12T11:42:31",
+ "summary": {
+  "passed": 5,
+  "failed": 0,
+  "blocked": 0
+ }
+}

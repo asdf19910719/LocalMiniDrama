@@ -1,0 +1,9 @@
+ASSERT PASS: 三个分镜创建 | [201,201,201]
+ASSERT PASS: 在 C 前插入 201 == 201 | actual=201
+ASSERT PASS: 新分镜占用 C 原镜号 3 == 3 | actual=3
+ASSERT PASS: C 被挤到 4，A/B 不变 | {"A":1,"B":2,"null":3,"C":4}
+ASSERT PASS: 删除插入镜 200 == 200 | actual=200
+ASSERT PASS: 删除后列表不含该镜 | total=3
+ASSERT PASS: DB 软删标记（deleted_at 非空） | 2026-09-12T01:34:20.631Z
+ASSERT PASS: 活跃分镜剩 3 == 3 | actual=3
+[cleanup] 软删项目 192 -> 200

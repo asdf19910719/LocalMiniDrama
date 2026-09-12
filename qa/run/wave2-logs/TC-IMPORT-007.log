@@ -1,0 +1,9 @@
+[0.0s] preview -> 200 {"success":true,"data":{"chapterCount":3,"suggestedEpisodes":3,"existingEpisodes":0,"startNumber":1,"preview":[{"index":1,"title":"第一章 夜雨入城","chars":52,"suggestedEpisodeNumber":1,"conflict":false},{"index":2,"title":"第二章 旧钟表店","chars":56,"suggestedEpisodeNumbe
+ASSERT PASS: preview status == 200 | actual=200
+[0.0s] 章节数=3 首章={"index":1,"title":"第一章 夜雨入城","chars":52,"suggestedEpisodeNumber":1,"conflict":false}
+ASSERT PASS: 拆出 3 章 == 3 | actual=3
+ASSERT PASS: 章节带标题 | 第一章 夜雨入城
+ASSERT PASS: 章节带字数 | {"index":1,"title":"第一章 夜雨入城","chars":52,"suggestedEpisodeNumber":1,"conflict":false}
+ASSERT PASS: 已占用集号在 preview 中标注 conflict=true | {"index":1,"title":"第一章 夜雨入城","chars":52,"suggestedEpisodeNumber":1,"conflict":true}
+[0.0s] 冲突标注字段: {"index":1,"title":"第一章 夜雨入城","chars":52,"suggestedEpisodeNumber":1,"conflict":true}
+[cleanup] 软删项目 64 -> 200

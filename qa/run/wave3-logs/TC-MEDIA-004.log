@@ -1,0 +1,5 @@
+ASSERT PASS: 上传本身成功 200 == 200 | actual=200
+ASSERT PASS: documented BROKEN 行为：assets 表计数不变（上传项不入库） | before=0 after=0
+ASSERT PASS: 文件已真实落盘且可访问（文件成功、入库缺失＝半截功能） | status=200
+[0.0s] [观察项 INV-13.4] routes/upload.js uploadImage 只调 uploadService.uploadFile 落盘，无 assets INSERT——与 inventory「刷新后上传项不会出现在媒体库」一致
+[cleanup] 软删项目 253 -> 200

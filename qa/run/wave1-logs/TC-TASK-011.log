@@ -1,0 +1,9 @@
+ASSERT PASS: failOrphanedAsyncTasksOnStartup 存在
+ASSERT PASS: 孤儿消息常量存在
+[0.0s] app.js 引用 failOrphanedAsyncTasksOnStartup = true ; routes/index.js = false
+ASSERT PASS: 启动链调用该函数
+[0.1s] DB 只读统计: pending= 0 processing= 0 orphan_marked= 0
+ASSERT PASS: 无遗留 pending | pending=0
+ASSERT PASS: 无遗留 processing | processing=0
+SOURCE: taskService.js:98-149 启动时将遗留 pending/processing 标记为失败（非续跑）；video_generation/video_merge 有 config_snapshot 可恢复例外分支（:113-135）
+CONSTRAINT: 用户禁止重启服务，仅核验当前行为与源码语义

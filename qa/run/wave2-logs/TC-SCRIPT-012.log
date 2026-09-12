@@ -1,0 +1,8 @@
+[0.0s] parse-scenes -> 200 {"success":true,"data":{"scenes":[{"heading":"内景 咖啡店 日","interiorExterior":"内景","location":"咖啡店","timeOfDay":"日","summary":"林夏推门进来。"},{"heading":"外景 老街 夜","interiorExterior":"外景","location":"老街","timeOfDay":"夜","summary":"钟表店的灯亮着。"}]},"timestamp":"2026-09-12T00:53:45.801Z"}
+ASSERT PASS: parse-scenes status == 200 | actual=200
+ASSERT PASS: 解析出 2 场 == 2 | actual=2
+ASSERT PASS: 场次地点解析 | {"heading":"内景 咖啡店 日","interiorExterior":"内景","location":"咖啡店","timeOfDay":"日","summary":"林夏推门进来。"}
+[0.0s] scene-stats -> 200 {"success":true,"data":{"scenes":[{"no":"1","heading":"内景 咖啡店 日","interiorExterior":"内景","chars":7,"dialogueCount":0,"suggestion":null},{"no":"2","heading":"外景 老街 夜","interiorExterior":"外景","chars":8,
+ASSERT PASS: scene-stats status == 200 | actual=200
+ASSERT PASS: 统计场次=2 | {"success":true,"data":{"scenes":[{"no":"1","heading":"内景 咖啡店 日","interiorExterior":"内景","chars":7,"dialogueCount":0,"suggestion":null},{"no":"2","heading":"外景 
+[cleanup] 软删项目 139 -> 200

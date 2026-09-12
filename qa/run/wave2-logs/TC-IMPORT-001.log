@@ -1,0 +1,11 @@
+[0.0s] export -> 200 ct=application/zip bytes=568
+ASSERT PASS: export status == 200 | actual=200
+ASSERT PASS: content-type application/zip | application/zip
+[0.0s] zip 条目: project.json
+ASSERT PASS: 含 project.json | project.json
+ASSERT PASS: project.json drama.title == "QA-L3-IMPORT-1789173162990-EXP" | actual="QA-L3-IMPORT-1789173162990-EXP"
+ASSERT PASS: project.json 含 style_id | rh-101-cinematic
+ASSERT PASS: project.json 含 2 集数据 | keys=version,exported_at,drama,episodes,characters,scenes,props
+ASSERT PASS: 剧本正文进入导出包 | episode script content
+ASSERT PASS: 导出版本号存在 | {"version":"1.7"}
+[cleanup] 软删项目 60 -> 200

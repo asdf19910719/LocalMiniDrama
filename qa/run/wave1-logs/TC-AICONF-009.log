@@ -1,0 +1,3 @@
+[0.0s] POST(缺key) -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"缺少 base_url 或 api_key"},"timestamp":"2026-09-12T00:02:09.870Z"}
+ASSERT PASS: status == 400 | actual=400
+ASSERT PASS: message 提示缺少 base_url 或 api_key

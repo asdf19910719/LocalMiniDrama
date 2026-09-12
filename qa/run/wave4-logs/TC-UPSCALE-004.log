@@ -1,0 +1,7 @@
+[0.0s] retry(failed) -> 202 status=pending stage=retrying
+ASSERT PASS: failed 可重试 202 == 202 | actual=202
+ASSERT PASS: 重试受理：作业已离开 failed（pending/retrying 或恢复线程已推进到上传段） | {"s":"pending","st":"retrying"}
+ASSERT PASS: [真实发现] 重试被恢复线程真实接管（状态持续演进，60s 对账与即时推进并存） | {"status":"uploading","current_stage":"provider_check","retry_count":0}
+[0.0s] retry(running) -> 409 {"success":false,"error":{"code":"UPSCALE_STATE_CONFLICT","message":"当前状态不能重试"},"timestamp":"2026-09-12T03:06:06.665Z"}
+ASSERT PASS: running 重试 409 == 409 | actual=409
+ASSERT PASS: 错误码 UPSCALE_STATE_CONFLICT == "UPSCALE_STATE_CONFLICT" | actual="UPSCALE_STATE_CONFLICT"

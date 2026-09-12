@@ -1,0 +1,8 @@
+ASSERT PASS: workflows 200 == 200 | actual=200
+[0.0s] workflow ids: ["minimax_h3_director_r2v","minimax_h3_director_r2v_te_speed","h3-continuity-v1"]
+ASSERT PASS: 包含工作流 minimax_h3_director_r2v | minimax_h3_director_r2v,minimax_h3_director_r2v_te_speed,h3-continuity-v1
+ASSERT PASS: 包含工作流 minimax_h3_director_r2v_te_speed | minimax_h3_director_r2v,minimax_h3_director_r2v_te_speed,h3-continuity-v1
+ASSERT PASS: 包含工作流 h3-continuity-v1 | minimax_h3_director_r2v,minimax_h3_director_r2v_te_speed,h3-continuity-v1
+ASSERT PASS: te_speed 标注 supportsTESpeed=true | {"modes":["single_reference"],"maxReferenceImages":9,"supportsContinuity":false,"supportsAudio":true,"supportsSage":true,"supportsTESpeed":true,"approximateAcceleration":true}
+ASSERT PASS: te_speed 为实验能力（approximateAcceleration） | true
+ASSERT PASS: API 目录 ⊆ 配置文件注册表 | {"api":["minimax_h3_director_r2v","minimax_h3_director_r2v_te_speed","h3-continuity-v1"],"file":["minimax_h3_director_r2v","minimax_h3_director_r2v_te_speed","h3-continuity-v1"]}

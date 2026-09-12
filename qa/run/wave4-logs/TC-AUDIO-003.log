@@ -1,0 +1,9 @@
+ASSERT PASS: PATCH 200 == 200 | actual=200
+ASSERT PASS: 响应含 episode + storyboards 投影 | ["episode","storyboards"]
+ASSERT PASS: bgm.mode 落库 episode_track == "episode_track" | actual="episode_track"
+ASSERT PASS: bgm.prompt 落库 | QA-L3 全集 BGM：舒缓钢琴
+ASSERT PASS: 手动修改被 field_state 锁定（source=manual locked=true） | {"locked":true,"revision":1,"source":"manual","updated_at":"2026-09-12T03:27:45.793Z"}
+ASSERT PASS: provenance.source=manual | {"source":"manual","updated_at":"2026-09-12T03:27:45.793Z"}
+ASSERT PASS: 分镜 music_cue 被 reconcile 为 mute | {"end":null,"intensity":0,"mode":"mute","prompt":null,"start":null}
+ASSERT PASS: 投影来源可追溯（provenance.source=episode_audio_plan） | {"source":"episode_audio_plan"}
+ASSERT PASS: 空 PATCH 不破坏既有计划（mode 保持 episode_track） == "episode_track" | actual="episode_track"

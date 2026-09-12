@@ -1,0 +1,4 @@
+ASSERT PASS: ttsService.js 存在打印 api_key 的 console.log（inventory INV-8.5 记录的严重问题，现状未修复） | ttsService.js:148
+ASSERT PASS: 协议覆盖仅 minimax/openai 两类（PARTIAL） | minimax,openai
+ASSERT PASS: 其余 provider 抛「不支持的 TTS provider」 | grep
+[0.0s] [观察项] 运行时未触发该日志路径：当前无 TTS 配置（TC-AUDIO-001 已验证错误路径先于 provider 分支）

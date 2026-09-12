@@ -1,0 +1,6 @@
+[0.0s] 不存在剧集 plan -> 400 {"success":false,"error":{"code":"EPISODE_AUDIO_PLAN_INVALID","message":"EPISODE_AUDIO_PLAN_INVALID: episode not found"},"timestamp":"2026-09-12T03:27:45.798Z"}
+ASSERT PASS: 不存在剧集有明确错误（4xx/5xx 均非崩溃） | 400
+[0.0s] 空剧集 plan -> 200 {"success":true,"data":{"episode":{"id":188,"drama_id":271,"episode_number":2,"title":"空集","script_content":null,"description":null,"duration":0,"status":"draft","video_url":null,"thumbnail":null,"aud
+ASSERT PASS: [真实行为] bgm.mode 非 per_segment 时 plan 为无操作（早退返回当前计划，不调 LLM、不校验分镜） | {"success":true,"data":{"episode":{"id":188,"drama_id":271,"episode_number":2,"title":"空集","script_content":null,"description":null,"duration":0,"status":"draft
+[0.0s] [观察项] LLM 音频规划仅在 bgm.mode=per_segment 且 planning=ai 时触发；本 wave DeepSeek 预算 0 次，未真实触发（wave2/3 已覆盖文本链路）
+[0.0s] [观察项] plan(force=true) LLM 生成主路径依赖 DeepSeek，本 wave 文本预算 0 次，未真实触发（wave2/wave3 已覆盖文本链路）

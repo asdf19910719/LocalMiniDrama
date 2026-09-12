@@ -1,0 +1,4 @@
+[0.0s] baseline language = zh
+[0.0s] PUT fr -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"语言参数错误，只支持 zh 或 en"},"timestamp":"2026-09-12T00:02:10.385Z"}
+ASSERT PASS: 非法值 status == 400 | actual=400
+ASSERT PASS: 当前值不变 == "zh" | actual="zh"

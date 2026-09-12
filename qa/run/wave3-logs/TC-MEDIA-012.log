@@ -1,0 +1,4 @@
+ASSERT PASS: 上传 200 == 200 | actual=200
+ASSERT PASS: local_path 位于 projects/ 项目子目录（storageLayout 聚合） | projects/0260_20260912_QA-L3-MEDIA-17891776/uploads/20260912T014644_9fc6e56a-dadb-44d7-9966-8272c930d2e1.png
+ASSERT PASS: URL 可访问 == 200 | actual=200
+[cleanup] 软删项目 260 -> 200

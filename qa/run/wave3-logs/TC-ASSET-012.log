@@ -1,0 +1,8 @@
+[0.0s] add-to-library -> 200 {"success":true,"data":{"message":"已加入本剧角色库","item":{"id":2,"drama_id":160,"name":"QA-L3-ASSET-1789176101909-入库角色","category":"QA-L3-分类","image_url":"/static/ch
+ASSERT PASS: 角色入库成功 | {"success":true,"data":{"message":"已加入本剧角色库","item":{"id":2,"drama_id":160,"name":"QA-L3-ASSET-1789176101909-入库角色","category":"QA-L3-分类","image_url":"/static/ch
+ASSERT PASS: 库列表可见该条目 | total=n/a
+ASSERT PASS: image-from-library 应用 200 == 200 | actual=200
+ASSERT PASS: 目标角色主图=库条目图（库→项目数据流闭合） == "/static/characters/qa-l3-lib.png" | actual="/static/characters/qa-l3-lib.png"
+ASSERT PASS: 不存在库条目 404 == 404 | actual=404
+ASSERT PASS: 清理库条目 200 == 200 | actual=200
+[cleanup] 软删项目 160 -> 200

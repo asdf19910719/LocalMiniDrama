@@ -1,0 +1,10 @@
+[0.0s] first confirm -> 201
+ASSERT PASS: 首次导入 201 == 201 | actual=201
+[0.0s] re-confirm same sha -> 409 PACKAGE_ALREADY_IMPORTED
+ASSERT PASS: 同 sha 重复导入 409 PACKAGE_ALREADY_IMPORTED | 409 PACKAGE_ALREADY_IMPORTED
+[0.0s] confirm same episode number -> 201 {"success":true,"data":{"episodeId":93,"report":{"scenes":1,"shots":1,"segments":1,"mediaTasks":0},"writesApprovedScript":false,"createsMediaTasks":false},"time
+ASSERT PASS: create_new 自动落位下一空闲集（201，不写死包内集号） | 201 
+ASSERT PASS: 项目内共 2 集（第2集来自第二次导入） == 2 | actual=2
+[0.0s] fill_blank on non-blank -> 409 TARGET_NOT_BLANK
+ASSERT PASS: 非空白目标集 409 TARGET_NOT_BLANK | 409 TARGET_NOT_BLANK
+[cleanup] 软删项目 101 -> 200

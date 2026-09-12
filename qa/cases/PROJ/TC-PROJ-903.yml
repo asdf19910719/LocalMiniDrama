@@ -1,0 +1,35 @@
+id: TC-PROJ-903
+title: "已知已修 P1 QA-004 不回归：归档（回收站）剧集列表 API 真实返回已删除剧集"
+state: active
+feature_id: F-PROJ-REG
+requirement_ids: [BUG-QA-004]
+level: system
+purpose: regression
+priority: P1
+preconditions:
+  - "QA-L3 项目存在"
+  - "可在 QA-L3 项目内创建并软删 1 个测试剧集"
+test_data:
+  title: "QA-L3-回收站剧集"
+steps:
+  - "POST /api/v2/projects/{id}/episodes 创建 QA-L3 剧集"
+  - "DELETE /api/v2/episodes/{eid} 软删"
+  - "GET /api/v2/projects/{id}/episodes?status=archived"
+expected:
+  - "归档列表包含刚删除的剧集"
+  - "item 带 deletedAt 字段"
+assertions:
+  - "archived.items.some(i => i.id == eid)"
+  - "item.deletedAt 非空"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-regr.js
+  test_id: REGR_903_qa004_archived_listed
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [regression, qa-004]
+notes: ""

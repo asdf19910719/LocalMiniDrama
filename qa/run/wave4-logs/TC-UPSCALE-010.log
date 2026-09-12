@@ -1,0 +1,3 @@
+ASSERT PASS: provider 客户端仅 zealman 一类实现（PARTIAL） | upscaleErrors.js,videoUpscaleConfig.js,videoUpscaleJobService.js,videoUpscaleMedia.js,videoUpscalePlanner.js,videoUpscaleRepository.js,videoUpscaleRuntime.js,zealmanUpscaleClient.js
+ASSERT PASS: 配置默认 provider 为 zealman 风格远端 | grep zealman in videoUpscaleConfig.js
+ASSERT PASS: capabilities.provider 与实现一致 | zealman

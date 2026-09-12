@@ -1,0 +1,7 @@
+[0.0s] POST /ai-configs -> 201 {"success":true,"data":{"id":6,"service_type":"text","provider":"openai","api_protocol":"","name":"QA-L3-文本配置","base_url":"http://127.0.0.1:9/v1","api_key":"sk-qa-l****-key","model":["qa-model-1"],"
+ASSERT PASS: create status == 201 | actual=201
+ASSERT PASS: 返回 id | id=6
+ASSERT PASS: get status == 200 | actual=200
+ASSERT PASS: 回读 name == "QA-L3-文本配置" | actual="QA-L3-文本配置"
+ASSERT PASS: 回读 base_url == "http://127.0.0.1:9/v1" | actual="http://127.0.0.1:9/v1"
+ASSERT PASS: model 是数组

@@ -1,0 +1,7 @@
+ASSERT PASS: stats status == 200 | actual=200
+ASSERT PASS: 新建后 total +1 == 9 | actual=9
+ASSERT PASS: by_status 含 draft 计数 | [{"status":"draft","count":9}]
+ASSERT PASS: v2 overview status == 200 | actual=200
+ASSERT PASS: overview.hero.episodeCount == 0 | actual=0
+[0.0s] overview hero: {"projectId":32,"title":"QA-L3-PROJ-1789172651073-002","genre":null,"aspectRatio":null,"episodeCount":0,"updatedAt":"2026-09-12T00:24:11.135Z","description":"QA-L3 wave2 自动化测试项目","thumbnail":null}
+[cleanup] 软删项目 32 -> 200

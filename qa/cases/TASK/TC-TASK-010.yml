@@ -1,0 +1,31 @@
+id: TC-TASK-010
+title: "对不存在项目发起故事生成返回 400 项目不存在（无外部调用）"
+state: active
+feature_id: F-TASK
+requirement_ids: [INV-14.1]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 5679 运行中"
+test_data:
+  drama_id: 99999999
+steps:
+  - "POST /generation/story {drama_id:99999999, premise:...}"
+expected:
+  - "400 且 message=项目不存在"
+assertions:
+  - "status == 400"
+  - "message contains \"项目不存在\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-task.js
+  test_id: TASK_010_story_missing_drama
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [task, exception]
+notes: ""

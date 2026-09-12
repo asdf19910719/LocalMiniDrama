@@ -1,0 +1,5 @@
+ASSERT PASS: 空 body 400 == 400 | actual=400
+ASSERT PASS: 提示提供 canvas_layout 或 workflow_groups | {"success":false,"error":{"code":"BAD_REQUEST","message":"请提供 canvas_layout 或 workflow_groups"},"timestamp":"2026-09-12T03:10:03.150Z"}
+ASSERT PASS: workflow_groups 非数组 400 == 400 | actual=400
+ASSERT PASS: canvas_layout 非对象 400 == 400 | actual=400
+ASSERT PASS: 不存在项目 404/400 | 404

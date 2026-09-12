@@ -1,0 +1,3 @@
+[0.0s] anchors(不存在 artifact) -> 200 {"success":true,"data":[],"timestamp":"2026-09-12T02:58:02.186Z"}
+ASSERT PASS: 不存在 artifact 的锚点列表有明确响应 | 200
+[0.0s] [观察项] 无可用真实 artifact，锚点/分析仅验证不存在分支

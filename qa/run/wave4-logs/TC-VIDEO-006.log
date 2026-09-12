@@ -1,0 +1,4 @@
+ASSERT PASS: H3 缺分镜 → 400 H3_STORYBOARD_REQUIRED | {"success":false,"error":{"code":"H3_STORYBOARD_REQUIRED","message":"H3 生成必须绑定项目分镜","details":{}},"timestamp":"2026-09-12T03:24:45.415Z"}
+ASSERT PASS: H3 缺草稿 → 400 H3_DRAFT_REQUIRED | {"success":false,"error":{"code":"H3_DRAFT_REQUIRED","message":"H3 配置需先生成提示词草稿,再提交候选生成","details":{}},"timestamp":"2026-09-12T03:24:45.426Z"
+ASSERT PASS: 草稿跨分镜 → 400 H3_DRAFT_STORYBOARD_MISMATCH | {"success":false,"error":{"code":"H3_DRAFT_STORYBOARD_MISMATCH","message":"提示词草稿属于其他分镜,请重新生成","details":{"draftId":48,"storyboardId":1000140}},"timestamp":"2026
+ASSERT PASS: 门禁全部先于 Provider 提交（ComfyUI 队列未新增任务） | POST 校验失败即返回，无真实提交

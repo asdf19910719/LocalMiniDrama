@@ -1,0 +1,7 @@
+[12.2s] generate-prompt -> 200 {"success":true,"data":{"message":"提示词已生成","polished_prompt":"【画风·最高优先级】四格统一：真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原\nMANDATORY ART STYLE (all 4 panels
+ASSERT PASS: 润色 200 == 200 | actual=200
+ASSERT PASS: 返回非空 polished_prompt（真实模型输出） | len=5628
+ASSERT PASS: 输出为中文四视图提示词结构（含角色相关关键词） | 【画风·最高优先级】四格统一：真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应，真实景深虚化，细腻原生材质，轻微自然噪点，真人实拍质感，色彩自然还原
+MANDATORY ART ST
+ASSERT PASS: polished_prompt 已落库并与响应一致 | db_len=5628
+[cleanup] 软删项目 159 -> 200

@@ -1,0 +1,7 @@
+[0.0s] batch-infer -> 200 {"success":true,"data":{"total":2,"updated":1},"timestamp":"2026-09-12T01:34:20.802Z"}
+ASSERT PASS: 批量推理 200 == 200 | actual=200
+ASSERT PASS: total=2 且 updated>=1 | {"total":2,"updated":1}
+ASSERT PASS: 镜A 被回填推断参数 | {"movement":null,"lighting_style":"night","depth_of_field":null}
+ASSERT PASS: overwrite=false 保留镜B 已有 movement == "已手工指定" | actual="已手工指定"
+ASSERT PASS: 缺 episode_id 400 == 400 | actual=400
+[cleanup] 软删项目 202 -> 200

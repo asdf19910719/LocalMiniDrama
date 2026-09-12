@@ -1,0 +1,7 @@
+ASSERT PASS: 缺参 400 == 400 | actual=400
+[0.0s] 空对白分镜 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"分镜对白为空，无法合成语音"},"timestamp":"2026-09-12T03:27:45.789Z"}
+ASSERT PASS: 空对白 400 == 400 | actual=400
+ASSERT PASS: 错误信息提及对白为空 | {"success":false,"error":{"code":"BAD_REQUEST","message":"分镜对白为空，无法合成语音"},"timestamp":"2026-09-12T03:27:45.789Z"}
+[0.0s] narration kind -> 500
+ASSERT PASS: narration 类型同样到达 TTS 配置检查（500） == 500 | actual=500
+ASSERT PASS: 批量空数组 400 == 400 | actual=400

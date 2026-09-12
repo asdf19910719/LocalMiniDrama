@@ -1,0 +1,8 @@
+ASSERT PASS: 前置批次已建 | {"success":true,"data":{"id":"92842958-c2a6-49a9-bc6b-6bdb02aafd6a","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"queued","total_
+[0.0s] pause -> 200 {"success":true,"data":{"id":"92842958-c2a6-49a9-bc6b-6bdb02aafd6a","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"paused","total_
+ASSERT PASS: pause 200 == 200 | actual=200
+ASSERT PASS: 批次进入 paused/queue_paused 状态 | {"status":"paused"}
+[0.0s] resume -> 200 {"success":true,"data":{"id":"92842958-c2a6-49a9-bc6b-6bdb02aafd6a","drama_id":266,"resource_scope":"mixed","generation_channel":"api","status":"queued","total_
+ASSERT PASS: resume 200 == 200 | actual=200
+ASSERT PASS: resume 后退出 paused | {"status":"queued"}
+ASSERT PASS: 不存在批次 pause 400/404 | 400

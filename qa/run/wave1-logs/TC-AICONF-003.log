@@ -1,0 +1,4 @@
+[0.0s] PUT -> 200
+ASSERT PASS: update status == 200 | actual=200
+ASSERT PASS: 回读 base_url == "http://127.0.0.1:10/v1" | actual="http://127.0.0.1:10/v1"
+ASSERT PASS: model 含 qa-model-a | ["qa-model-a","qa-model-b"]

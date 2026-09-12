@@ -1,0 +1,3 @@
+ASSERT PASS: assets 404 == 404 | actual=404
+ASSERT PASS: enter-storyboard 404 == 404 | actual=404
+ASSERT PASS: media-guard 404 == 404 | actual=404

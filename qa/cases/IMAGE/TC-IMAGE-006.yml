@@ -1,0 +1,33 @@
+id: TC-IMAGE-006
+title: "图像任务 retry/skip/cancel 状态语义：cancel 后状态机约束"
+state: active
+feature_id: F-IMAGE
+requirement_ids: [INV-6.4]
+level: system
+purpose: exception
+priority: P1
+preconditions:
+  - "后端 http://127.0.0.1:5679 / ComfyUI 8188 在线（L3 共享环境，由主会话管理）"
+  - "真实测试约束：不 mock 外部服务；UPSCALE 状态机模拟为用户唯一授权例外（evidence 标注 sim-upscale）"
+  - "前置：qa/scripts/wave4/run-video.js 已执行（image/video 默认通道已修复；video-chain.json 可用）"
+test_data:
+  prefix: "QA-L3-"
+  cleanup: "用例自建项目结束后软删（可复核）；真实生成视频/音频产物保留 qa/run/wave4-artifacts/"
+steps:
+  - "由 qa/scripts/wave4 自动化脚本真实调用 HTTP API 执行（automation.test_id 对应用例块）"
+expected:
+  - "全部断言通过（状态码/响应结构/DB 副本/文件系统四层核对；BROKEN/PARTIAL/EXPERIMENTAL 项按 feature-inventory 文档行为验证并记录观察项）"
+assertions:
+  - "以脚本内 cs.eq/cs.expect 断言为准，逐条断言写入执行日志 evidence"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave4/run-image.js
+  test_id: TC_IMAGE_006
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave4-designer"
+  generated_at: "2026-09-12"
+regression_tags: [image, wave4, l3]
+notes: ""

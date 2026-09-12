@@ -1,0 +1,27 @@
+[0.0s] 解析到 21 条路由
+[0.0s]   /projects -> @/views/productionStudio/ProjectsView.vue
+[0.0s]   /projects/new -> @/views/productionStudio/ProjectNewView.vue
+[0.0s]   /projects/:projectId -> @/views/productionStudio/ProjectOverviewView.vue
+[0.0s]   /projects/:projectId/episodes -> @/views/productionStudio/ProjectEpisodesView.vue
+[0.0s]   /projects/:projectId/episodes/external-ai -> @/views/productionStudio/ExternalAiWizardView.vue
+[0.0s]   /projects/:projectId/episodes/import-package -> @/views/productionStudio/EpisodePackageImportView.vue
+[0.0s]   /projects/:projectId/episodes/import-novel -> @/views/productionStudio/NovelImportView.vue
+[0.0s]   /projects/:projectId/episodes/import-video -> @/views/productionStudio/SourceVideoView.vue
+[0.0s]   /projects/import-archive -> @/views/productionStudio/ArchiveImportView.vue
+[0.0s]   /projects/:projectId/assets -> @/views/productionStudio/ProjectAssetsView.vue
+[0.0s]   /projects/:projectId/episodes/:episodeId/:stage -> @/views/productionStudio/studio/StudioShell.vue
+[0.0s]   /tasks -> @/views/productionStudio/TasksView.vue
+[0.0s]   /library -> @/views/productionStudio/LibraryView.vue
+[0.0s]   /settings -> @/views/productionStudio/SettingsView.vue
+[0.0s]   /settings/data-tools -> @/views/productionStudio/DataToolsView.vue
+[0.0s]   /quick-create -> @/views/productionStudio/QuickCreateView.vue
+[0.0s]   /projects/:projectId/episodes/:episodeId/canvas -> @/views/productionStudio/AdvancedCanvasView.vue
+[0.0s]   /ai-config -> @/views/productionStudio/AiConfigV21View.vue
+[0.0s]   /ai-config/advanced -> @/views/AiConfig.vue
+[0.0s]   /media-library -> @/views/productionStudio/MediaLibraryView.vue
+[0.0s]   /:pathMatch(.*)* -> @/views/productionStudio/NotFoundView.vue
+ASSERT PASS: 路由数>=20 | count=21
+ASSERT PASS: 视图文件缺失数 == 0 | actual=0
+ASSERT PASS: 404 catch-all 存在
+[0.0s] test-map P01-P23 对应路径缺口 = []
+ASSERT PASS: test-map 路径缺口数 == 0 | actual=0

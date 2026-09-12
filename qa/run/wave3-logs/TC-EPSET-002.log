@@ -1,0 +1,7 @@
+ASSERT PASS: 前置：场景已建（绑定本集） | 201
+ASSERT PASS: 前置：分镜已建并绑定道具 | {"success":true,"data":{"id":84,"episode_id":136,"scene_id":null,"storyboard_number":0,"title":"QA-L3 投影镜","description":null,"layout_descri
+ASSERT PASS: GET assets 200 == 200 | actual=200
+ASSERT PASS: scenes Tab 含本集场景（location 为名） | ["QA-L3-投影场景-1789176333355"]
+ASSERT PASS: props Tab 含分镜绑定道具 | [23]
+ASSERT PASS: 道具 required=false（可稍后处理） == false | actual=false
+[cleanup] 软删项目 173 -> 200

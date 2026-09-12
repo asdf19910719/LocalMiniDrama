@@ -1,0 +1,9 @@
+[0.0s] images.create -> 201 {"success":true,"data":{"id":226,"task_id":"745c3bec-11c8-4397-96f2-59172ae60a79","status":"pending","storyboard_id":null,"drama_id":266,"character_id":null,"provider":"openai","prompt":"真人电影写实摄影，原生相机直出，无 AI 塑料感，自然真实皮肤肌理，原生环境光影，柔和自然明暗，丁达尔效应
+ASSERT PASS: 创建受理 201（pending） == 201 | actual=201
+ASSERT PASS: 返回 task_id（任务抽屉可跟踪） | 745c3bec-11c8-4397-96f2-59172ae60a79
+[2.0s] 终态: failed error=图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080
+ASSERT PASS: 离线通道任务进入失败态（不静默） | failed
+ASSERT PASS: 错误信息包含连接失败细节（ECONNREFUSED/18080/fetch） | 图片生成网络请求失败: connect ECONNREFUSED 127.0.0.1:18080
+ASSERT PASS: 失败状态已持久化到 image_generations | {"s":"failed"}
+[2.0s] async_task: {"status":"failed"}
+ASSERT PASS: 任务层同样记录失败（抽屉数据源可见） | failed

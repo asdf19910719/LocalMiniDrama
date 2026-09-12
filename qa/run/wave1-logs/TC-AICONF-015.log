@@ -1,0 +1,9 @@
+[0.0s] baseline = {"concurrency":3,"video_concurrency":3,"video_generation_timeout_minutes":30}
+ASSERT PASS: get status == 200 | actual=200
+[0.0s] PUT 25 -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"图片并发数需为 1-20 之间的整数"},"timestamp":"2026-09-12T00:02:10.307Z"}
+ASSERT PASS: 越界 status == 400 | actual=400
+ASSERT PASS: 合法 status == 200 | actual=200
+ASSERT PASS: 生效值 == 5 | actual=5
+ASSERT PASS: 恢复 status == 200 | actual=200
+ASSERT PASS: 恢复后与基线一致 == 3 | actual=3
+[0.1s] final = {"concurrency":3,"video_concurrency":3,"video_generation_timeout_minutes":30}

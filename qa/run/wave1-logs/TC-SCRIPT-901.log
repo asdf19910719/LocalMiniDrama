@@ -1,0 +1,8 @@
+[0.0s] GET /api/v2/episodes/13/script -> 200 keys= episodeId,projectId,draft,approved,scenes,canConfirm,hasUnconfirmedChanges,confirmLabel,history
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: draft 为空 == null | actual=null
+[0.0s] approved.content len = 305 | 开头: 第一场 内景·青城巡逻站·夜
+值班室的灯管闪烁。
+ASSERT PASS: approved 正文非空(305 字) | len=305
+ASSERT PASS: canConfirm 字段存在
+API 契约支撑前端修复（无草稿时返回已确认正文），UI 展示由主会话 E2E 复核

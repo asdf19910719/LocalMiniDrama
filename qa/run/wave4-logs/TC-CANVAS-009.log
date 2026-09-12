@@ -1,0 +1,3 @@
+ASSERT PASS: 不存在时间线 404（空态真实行为） == 404 | actual=404
+[0.0s] create(clips=[]) -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"Timeline must contain clips"},"timestamp":"2026-09-12T03:10:12.376Z"}
+ASSERT PASS: 空 clips 被真实校验拒绝（记录 EXPERIMENTAL 当前约束） | 400

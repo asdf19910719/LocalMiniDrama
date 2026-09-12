@@ -1,0 +1,2 @@
+[0.0s] POST cancel -> 404 {"success":false,"error":{"code":"NOT_FOUND","message":"任务不存在"},"timestamp":"2026-09-12T00:04:23.953Z"}
+ASSERT PASS: status == 404 | actual=404

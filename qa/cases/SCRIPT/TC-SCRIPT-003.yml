@@ -1,0 +1,32 @@
+id: TC-SCRIPT-003
+title: "分集大纲/描述：项目 summary 与剧集 description 落库回读"
+state: active
+feature_id: F-SCRIPT
+requirement_ids: [INV-3.4]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "后端 http://127.0.0.1:5679 运行中（L3 共享环境）"
+  - "真实数据约束：不 mock 外部服务；测试数据 QA-L3- 前缀"
+test_data:
+  prefix: "QA-L3-SCRIPT-"
+  cleanup: "用例结束对自建项目执行 v2 软删（可复核），ZIP/JSON 产物保留于 qa/scripts/wave2/artifacts/"
+steps:
+  - "由 qa/scripts/wave2 自动化脚本真实调用 HTTP API 执行（见 automation.file 内 test_id 对应用例块）"
+expected:
+  - "全部断言通过（状态码/响应结构/DB 副本三层核对）"
+assertions:
+  - "以脚本内 cs.eq/cs.expect 断言为准，逐条断言写入执行日志 evidence"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave2/run-script.js
+  test_id: SCRIPT_003_outline_fields
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave2-designer"
+  generated_at: "2026-09-12"
+regression_tags: [script, wave2, l3]
+notes: ""

@@ -1,0 +1,15 @@
+[0.0s] finalize 前音频计划 bgm.mode=none -> 200
+ASSERT PASS: 前置：VIDEO 波次真实生成记录为 review（合成输入就绪） | {"id":100,"s":"review"}
+[0.0s] finalize -> 200 {"success":true,"data":{"message":"视频合成任务已创建，正在后台处理","merge_id":14,"episode_id":"179","scenes_count":1,"task_id":"c7c638a8-6dbd-4959-b638-20278da56d37"},"timestamp":"2026-09-12T03:27:45.949Z"}
+ASSERT PASS: finalize 200（任务受理） == 200 | actual=200
+ASSERT PASS: 返回 merge_id 与 task_id | {"success":true,"data":{"message":"视频合成任务已创建，正在后台处理","merge_id":14,"episode_id":"179","scenes_count":1,"task_id":"c7c638a8-6dbd-4959-b638-20278da56d37"},"timestamp":"2026-09-12T03:27:45.949Z"}
+[0.1s] merge 终态: completed merged_url=projects/0264_20260912_QA-L3-VIDEO-17891810/videos/merged/merged_1789183665951.mp4 err=
+ASSERT PASS: 合并任务 completed | completed
+ASSERT PASS: merged_url 已产出 | projects/0264_20260912_QA-L3-VIDEO-17891810/videos/merged/merged_1789183665951.mp4
+ASSERT PASS: episodes.video_url 回写（数据流交接点：成片 → 剧集） | projects/0264_20260912_QA-L3-VIDEO-17891810/videos/merged/merged_1789183665951.mp4
+ASSERT PASS: 剧集状态 completed == "completed" | actual="completed"
+ASSERT PASS: 合并时长落库 | 5
+ASSERT PASS: 成片文件真实存在 | E:\project\LocalMiniDrama\backend-node\data\storage\projects\0264_20260912_QA-L3-VIDEO-17891810\videos\merged\merged_1789183665951.mp4
+ASSERT PASS: 成片 ffprobe 可解码且时长 > 0 | {"dur":5.032}
+ASSERT PASS: 成片含视频流 | true
+[0.2s] 成片元数据: duration=5.032s size=1550870B

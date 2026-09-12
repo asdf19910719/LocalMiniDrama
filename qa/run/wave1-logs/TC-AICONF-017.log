@@ -1,0 +1,6 @@
+[0.0s] GET vendor-lock -> 200 {"enabled":false,"config_file":"ai-configs-qudao.json"}
+ASSERT PASS: status == 200 | actual=200
+ASSERT PASS: 含 enabled+config_file
+[0.0s] PUT bulk-update-key -> 400 {"success":false,"error":{"code":"BAD_REQUEST","message":"批量换Key仅在厂商锁定模式下可用"},"timestamp":"2026-09-12T00:02:10.415Z"}
+ASSERT PASS: 非锁定模式 status == 400 | actual=400
+ASSERT PASS: message 提示厂商锁定

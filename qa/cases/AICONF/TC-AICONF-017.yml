@@ -1,0 +1,34 @@
+id: TC-AICONF-017
+title: "Vendor Lock 状态可读；非锁定模式下 bulk-update-key 被拒 400"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.9]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "当前环境 vendor lock 未启用（enabled=false）"
+test_data:
+  api_key: "sk-qa-l3-bulk"
+steps:
+  - "GET /ai-configs/vendor-lock"
+  - "PUT /ai-configs/bulk-update-key"
+expected:
+  - "返回 {enabled, config_file} 结构"
+  - "非锁定模式返回 400 批量换Key仅在厂商锁定模式下可用"
+assertions:
+  - "lock.data has enabled+config_file"
+  - "bulk.status == 400"
+  - "message contains \"厂商锁定\""
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_017_vendor_lock_guard
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, vendor-lock]
+notes: ""

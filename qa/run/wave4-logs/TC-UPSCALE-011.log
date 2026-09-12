@@ -1,0 +1,5 @@
+ASSERT PASS: videoMergeService 存在 normalizeUpscaleOptions | grep
+ASSERT PASS: flash 工作流配置存在 | grep flash/seed
+ASSERT PASS: flash workflow_id 与 capabilities 披露一致 | M20-视频高清放大-FlashVSR-2倍-分段工作节点
+[0.0s] merge(upscale opts) -> 200
+ASSERT PASS: upscale.method=flash 保留 | {"method":"flash","enabled":true}

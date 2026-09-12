@@ -1,0 +1,38 @@
+id: TC-AICONF-001
+title: "GET /ai-configs 返回标准 success 包且字段契约完整、含默认 DeepSeek 文本配置"
+state: active
+feature_id: F-AICONF
+requirement_ids: [INV-11.1]
+level: system
+purpose: functional
+priority: P0
+preconditions:
+  - "后端 5679 运行中"
+  - "库内已存在 DeepSeek 文本配置(id=4)"
+test_data:
+  endpoint: "GET /api/v1/ai-configs"
+steps:
+  - "GET /api/v1/ai-configs"
+  - "校验响应包与字段"
+  - "定位默认 text 配置"
+expected:
+  - "success=true 且 data 为数组"
+  - "每条含 id/service_type/name/provider/base_url/api_key/model 字段"
+  - "存在 is_default=true 且 service_type=text 的配置(DeepSeek)"
+assertions:
+  - "resp.success == true"
+  - "Array.isArray(resp.data) && resp.data.length >= 5"
+  - "every(cfg => has id/service_type/name/provider/base_url)"
+  - "exists(cfg.service_type=text && cfg.is_default && cfg.provider=deepseek)"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave1/run-aiconf.js
+  test_id: AICONF_001_list_contract
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave1-designer"
+  generated_at: "2026-09-12"
+regression_tags: [aiconf, crud, smoke]
+notes: ""

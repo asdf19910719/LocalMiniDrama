@@ -1,0 +1,10 @@
+[0.0s] PUT -> 200
+ASSERT PASS: PUT status == 200 | actual=200
+ASSERT PASS: PUT 返回新标题 == "QA-L3-PROJ-1789172651073-005-改" | actual="QA-L3-PROJ-1789172651073-005-改"
+ASSERT PASS: 回读 status=producing == "producing" | actual="producing"
+ASSERT PASS: 回读 genre=悬疑 == "悬疑" | actual="悬疑"
+ASSERT PASS: v2 PATCH status == 200 | actual=200
+ASSERT PASS: v2 PATCH 后 hero.title == "QA-L3-PROJ-1789172651073-005-v2改" | actual="QA-L3-PROJ-1789172651073-005-v2改"
+ASSERT PASS: v2 PATCH 后 hero.aspectRatio == "16:9" | actual="16:9"
+ASSERT PASS: v2 PATCH 不存在项目 404 == 404 | actual=404
+[cleanup] 软删项目 34 -> 200

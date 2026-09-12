@@ -208,7 +208,7 @@ function createExternalAiWizardService(db, { log = console } = {}) {
       };
     }
     if (format === 'json') {
-      const task = getTaskBundle(row.package_id);
+      const task = getTaskBundle(db, row.package_id);
       const payload = {
         schema: 'local-mini-drama.external-ai-task',
         version: '2.1',

@@ -1,0 +1,9 @@
+[0.0s] GET prompts -> 200 count= 10 keys= story_expansion_system,storyboard_system,character_extraction...
+ASSERT PASS: 定义数量 == 10 | actual=10
+[0.0s] PUT -> 200
+ASSERT PASS: update status == 200 | actual=200
+ASSERT PASS: is_customized == true | actual=true
+ASSERT PASS: current_body == "QA-L3 提示词覆盖测试内容" | actual="QA-L3 提示词覆盖测试内容"
+ASSERT PASS: reset status == 200 | actual=200
+ASSERT PASS: reset 后 is_customized == false | actual=false
+ASSERT PASS: reset 后 current_body == null | actual=null

@@ -30,7 +30,8 @@ function inferVideoProtocol(provider) {
 
 function isMinimaxH3Model(name) {
   const model = String(name || '').trim().toLowerCase();
-  return model === 'minimax-h3' || model === 'minimax_h3' || /^minimax[-_]?h3\b/.test(model);
+  // 下划线后缀（如 minimax_h3_director_r2v_te_speed）中 '_' 是 word char，\b 永不成立；用负向字符类断言
+  return model === 'minimax-h3' || model === 'minimax_h3' || /^minimax[-_]?h3(?![a-z0-9])/.test(model);
 }
 
 function resolveVideoProtocol(config, modelHint) {

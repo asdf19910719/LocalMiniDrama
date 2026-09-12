@@ -1,0 +1,32 @@
+id: TC-STORYBOARD-008
+title: "绑定角色：character_ids 写入 JSON 投影（权威事实源）；storyboard_characters 同步异常记录为观察"
+state: active
+feature_id: F-STORYBOARD
+requirement_ids: [INV-5.4, INV-15.2]
+level: system
+purpose: functional
+priority: P1
+preconditions:
+  - "后端 http://127.0.0.1:5679 运行中（L3 共享环境）"
+  - "真实数据约束：不 mock 外部服务；测试数据 QA-L3- 前缀"
+test_data:
+  prefix: "QA-L3-"
+  cleanup: "用例自建项目结束后软删（可复核）；导出产物保留 qa/run/wave3-artifacts/"
+steps:
+  - "由 qa/scripts/wave3 自动化脚本真实调用 HTTP API 执行（automation.test_id 对应用例块）"
+expected:
+  - "全部断言通过（状态码/响应结构/DB 副本三层核对；BROKEN/PARTIAL 项按 feature-inventory 文档行为验证并记录观察项）"
+assertions:
+  - "以脚本内 cs.eq/cs.expect 断言为准，逐条断言写入执行日志 evidence"
+automation:
+  status: implemented
+  framework: node
+  file: qa/scripts/wave3/run-storyboard.js
+  test_id: STORYBOARD_008_bind_characters
+targets:
+  files: []
+  symbols: []
+  generated_by: "wave3-designer"
+  generated_at: "2026-09-12"
+regression_tags: [storyboard, wave3, l3]
+notes: "观察项：syncStoryboardCharacterLinks 写库条目 id/跳过真实角色（表 LEGACY，与 §15 一致）"

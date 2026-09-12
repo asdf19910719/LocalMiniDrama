@@ -1,0 +1,7 @@
+ASSERT PASS: 前置：真实 PNG 上传成功 == 200 | actual=200
+ASSERT PASS: 创建资产 201 == 201 | actual=201
+ASSERT PASS: 列表包含新资产 | total=1
+ASSERT PASS: 详情字段回读（name/type/url） | {"success":true,"data":{"id":227,"drama_id":250,"name":"QA-L3-MEDIA-1789177604361-图A","type":"image","category":null,"url":"http://localhost:5679/static/project
+ASSERT PASS: /static 预览字节一致（真实文件） | status=200 len=317
+ASSERT PASS: DB file_size/width 落库 | {"fs":317,"w":12}
+[cleanup] 软删项目 250 -> 200

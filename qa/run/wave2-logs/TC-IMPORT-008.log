@@ -1,0 +1,13 @@
+[0.0s] confirm -> 201 {"success":true,"data":{"episodes":[{"episodeId":69,"episodeNumber":1,"title":"第一章 夜雨入城"},{"episodeId":70,"episodeNumber":2,"title":"第二章 旧钟表店"},{"episodeId":71,"episodeNumber":3,"title":"第三章 第一次校准"}],
+ASSERT PASS: confirm status == 201 | actual=201
+[0.0s] created=3 skipped=[]
+ASSERT PASS: 创建 3 集 == 3 | actual=3
+ASSERT PASS: 项目剧集列表 3 条 == 3 | actual=3
+ASSERT PASS: 第 1 集标题来自章节 | 第一章 夜雨入城
+ASSERT PASS: 剧集有剧本草稿版本（≥1） | revisions=1
+ASSERT PASS: 零媒体：无分镜任务 == 0 | actual=0
+[0.0s] async_tasks 关联项目数=0
+[0.0s] import-source -> 200 {"success":true,"data":null,"timestamp":"2026-09-12T00:32:43.113Z"}
+ASSERT PASS: import-source 可用 == 200 | actual=200
+[0.0s] [观察] 小说拆集导入未写入 episode_imports 溯源记录（import-source 返回 null），溯源仅覆盖制作包导入路径——记录为真实行为。
+[cleanup] 软删项目 65 -> 200

@@ -1,0 +1,9 @@
+[0.0s] import-novel -> 200 {"success":true,"data":{"chapters":[{"index":1,"title":"第一章 夜雨入城","content":"雨水顺着屋檐落下，林夏抱着旧书包跑进城隍庙。她不知道，这一夜会改变她的一生。\n庙里的老人抬起头：你来了。","script":"雨水顺着屋檐落下，林夏抱着旧书包跑进城隍庙。她不知道，这一夜会改变她的一生。\n庙里的老人抬起头：你来了。"},{"index":2,"title":"第二
+ASSERT PASS: import-novel status == 200 | actual=200
+ASSERT PASS: 解析出 3 章 == 3 | actual=3
+ASSERT PASS: 章节标题来自正文 | 第一章 夜雨入城
+ASSERT PASS: 章节含剧本化内容 | 雨水顺着屋檐落下，林夏抱着旧书包跑进城隍庙。她不知道，这一夜会改变她的一生。
+庙里的老人抬起头：你来了。
+ASSERT PASS:  dramas 总数不变（纯解析、不创建项目） == 61 | actual=61
+[0.0s] [观察 INV-2.7] inventory 称「小说导入 COMPLETE：后端支持从文本建立项目/内容」。实际 v1 端点仅解析返回章节、不落任何库；
+[0.0s] v2 import-novel/confirm 也只向「已存在项目」（或回退第一个项目，无项目时 404）创建剧集——后端不存在"从文本直接建立新项目"的路径，"建项目"由前端拼装。记录为文档与实现的口径差异。

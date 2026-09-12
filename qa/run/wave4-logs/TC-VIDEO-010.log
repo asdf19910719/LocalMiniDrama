@@ -1,0 +1,3 @@
+[0.0s] h3-preview -> 400 {"success":false,"error":{"code":"PROJECT_STYLE_REQUIRED","message":"自由视频生成必须选择 style_id"},"timestamp":"2026-09-12T02:58:02.178Z"}
+ASSERT PASS: 非 200 时为明确业务错误码（EXPERIMENTAL 现状如实记录） | {"success":false,"error":{"code":"PROJECT_STYLE_REQUIRED","message":"自由视频生成必须选择 style_id"},"timestamp":"2026-09-12T02:58:02.178Z"}
+[0.0s] [观察项] h3-preview 当前真实行为：PROJECT_STYLE_REQUIRED

@@ -1,0 +1,4 @@
+ASSERT PASS: image 过滤仅含图片 | total=1
+ASSERT PASS: video 过滤仅含视频 | total=1
+ASSERT PASS: audio 过滤为空 == 0 | actual=0
+[cleanup] 软删项目 251 -> 200

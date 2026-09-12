@@ -3,7 +3,7 @@ const response = require('../response');
 
 function list(db) {
   return (req, res) => {
-    const list = aiConfigService.listConfigs(db, req.query.service_type);
+    const list = aiConfigService.listConfigs(db, req.query.service_type).map(aiConfigService.maskConfigApiKey);
     response.success(res, list);
   };
 }
@@ -14,7 +14,7 @@ function get(db) {
     if (isNaN(id)) return response.badRequest(res, '无效的配置ID');
     const config = aiConfigService.getConfig(db, id);
     if (!config) return response.notFound(res, '配置不存在');
-    response.success(res, config);
+    response.success(res, aiConfigService.maskConfigApiKey(config));
   };
 }
 

@@ -322,6 +322,7 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
         response.created(res, sb);
       } catch (err) {
         log.error('storyboards create', { error: err.message });
+        if (err.status === 400) return response.badRequest(res, err.message);
         response.internalError(res, err.message);
       }
     },
@@ -473,6 +474,7 @@ function routes(db, log, { workflowRegistry = null, h3DraftCompileFn = undefined
         response.success(res, { task_id: taskId, status: 'pending', message: '分镜头生成任务已创建，正在后台处理...' });
       } catch (err) {
         log.error('episode storyboards generate', { error: err.message });
+        if (err.status === 400) return response.badRequest(res, err.message);
         response.internalError(res, err.message);
       }
     },

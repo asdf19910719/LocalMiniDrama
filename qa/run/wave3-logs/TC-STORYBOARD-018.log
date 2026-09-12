@@ -1,0 +1,7 @@
+ASSERT PASS: 镜头详情 200 == 200 | actual=200
+ASSERT PASS: 详情含段结构 | [{"id":89,"storyboard_id":124,"seq":1,"start_seconds":0,"end_seconds":6,"visual":"QA-L3主角低头修表，齿轮声细密。","dialogue":"","sound":"","asset_refs_j
+[0.0s] patch segment -> 200 {"success":true,"data":{"segments":[{"id":89,"storyboard_id":124,"seq":1,"start_seconds":0,"end_seconds":6,"visual":"主角推
+ASSERT PASS: 段编辑 200 == 200 | actual=200
+ASSERT PASS: 段编辑回读一致 | {"id":89,"storyboard_id":124,"seq":1,"start_seconds":0,"end_seconds":6,"visual":"主角推门而入（QA-L3 改）","dialogue":"我来取表。","sound":"","asset_refs_json":"[]","created_
+ASSERT PASS: DB 段行一致 | {"visual":"主角推门而入（QA-L3 改）","dialogue":"我来取表。"}
+[cleanup] 软删项目 206 -> 200
