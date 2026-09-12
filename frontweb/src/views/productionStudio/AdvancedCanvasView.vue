@@ -5,10 +5,11 @@
       <h1>高级画布</h1>
       <span class="sub">只读关系视图 · 引用实线 / 生成蓝 / 过期虚线 · 所有修改回到标准页执行</span>
       <div class="spacer"></div>
-      <span class="badge outline">只读 · 标准页数据的投影</span>
+      <span class="badge outline" title="当前画布为关系结构示意，节点与连线内容为示例数据；真实制作数据请以剧本/分镜页为准">只读 · 示例投影</span>
     </header>
     <div class="page-body" style="display:flex; gap:14px; overflow:auto">
       <div class="card grow cv-canvas">
+        <div class="cv-note">图中节点与连线为示例数据，展示关系结构</div>
         <svg style="width:100%; height:100%" viewBox="0 0 900 480" preserveAspectRatio="xMidYMid meet">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -106,6 +107,7 @@ export default {
     radial-gradient(circle at 1px 1px, #1c2230 1px, transparent 0) 0 0 / 26px 26px,
     var(--bg);
 }
+.cv-note { position: absolute; left: 12px; top: 10px; z-index: 2; font-size: 11px; color: var(--muted); }
 .leg { display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); }
 .ls { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--muted); }
 .ls-gen { border-top-color: var(--info); }

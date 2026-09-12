@@ -59,3 +59,10 @@ test('剧集来源标签：按 importSchema 区分小说拆集/制作包/外部 
   assert.match(view, /制作包导入/, '提供制作包导入标签')
   assert.match(view, /importSchemaLabel/, '导入来源抽屉协议行用用户语言')
 })
+
+test('高级画布：页头与画布内明示节点为示例投影，不再暗示真实数据', () => {
+  const cv = read('src/views/productionStudio/AdvancedCanvasView.vue')
+  assert.match(cv, /示例投影/, '页头徽标明示示例投影')
+  assert.match(cv, /示例数据/, '画布内说明节点与连线为示例数据')
+  assert.doesNotMatch(cv, /标准页数据的投影/, '移除含混的「数据投影」口径')
+})
