@@ -430,7 +430,8 @@ export default {
         await v21.generateAssetCandidate(this.projectId, {
           type: this.detail.assetType,
           assetId: this.detail.id,
-          prompt: this.detail.name,
+          // 默认提示词优先素材已保存的生图提示词，回退素材名
+          prompt: this.detail.prompt || this.detail.name,
         })
         this.detail = await v21.getAssetDetail(this.detail.assetType, this.detail.id)
         this.load()

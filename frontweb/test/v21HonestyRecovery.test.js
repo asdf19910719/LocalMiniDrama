@@ -95,3 +95,15 @@ test('外部 AI 上下文步：目标/素材/上下文版本/生成时间接真�
   assert.match(view, /创建任务包时/, '未建任务时说明数值冻结时点，不伪造')
   assert.doesNotMatch(view, /上下文由系统自动编译，生成时间与版本将冻结/, '移除静态占位文案')
 })
+
+test('项目素材创建：表单含生图提示词与负向提示词，创建失败呈现错误、成功切换到对应类型筛选', () => {
+  const view = read('src/views/productionStudio/ProjectAssetsView.vue')
+  assert.match(view, /生图提示词/, '创建表单提供生图提示词输入（对齐旧版）')
+  assert.match(view, /负向提示词/, '创建表单提供负向提示词输入')
+  assert.match(view, /prompt: this\.createForm\.prompt/, '创建请求携带生图提示词')
+  assert.match(view, /negativePrompt: this\.createForm\.negativePrompt/, '创建请求携带负向提示词')
+  const createFn = view.match(/async create\(\) \{[\s\S]*?\n    \},/)
+  assert.ok(createFn, 'create 方法应存在')
+  assert.match(createFn[0], /catch/, '创建失败应有 catch 呈现，不得静默')
+  assert.match(createFn[0], /this\.type = this\.createForm\.type|this\.type = 'all'/, '创建成功后筛选切换到新素材类型，避免列表看不到')
+})

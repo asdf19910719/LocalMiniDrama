@@ -104,11 +104,14 @@
             </label>
             <label class="col" style="gap:4px"><span class="xs muted">名称</span><input class="input" style="width:100%" v-model="createForm.name"></label>
             <label class="col" style="gap:4px"><span class="xs muted">描述</span><textarea class="input" style="width:100%; height:64px; padding:8px" v-model="createForm.description"></textarea></label>
+            <label class="col" style="gap:4px"><span class="xs muted">生图提示词（可选）</span><textarea class="input" style="width:100%; height:64px; padding:8px" v-model="createForm.prompt" placeholder="描述这个素材的视觉形象，生成候选时优先使用；留空则用素材名"></textarea></label>
+            <label class="col" style="gap:4px"><span class="xs muted">负向提示词（可选）</span><textarea class="input" style="width:100%; height:48px; padding:8px" v-model="createForm.negativePrompt" placeholder="生成时要避免的元素"></textarea></label>
+            <div v-if="createError" class="notice-card danger"><svg><use href="#i-warn"/></svg><span>{{ createError }}</span></div>
           </div>
         </div>
         <div class="modal-f">
           <button class="btn ghost" @click="createOpen = false">取消</button>
-          <button class="btn primary" :disabled="!createForm.name" @click="create">创建素材</button>
+          <button class="btn primary" :disabled="!createForm.name || creating" @click="create">{{ creating ? '创建中…' : '创建素材' }}</button>
         </div>
       </div>
     </div>
@@ -419,7 +422,7 @@ export default {
       // 回收站视图：view=recycled 时列表走回收站口径并提供恢复动作
       view: 'active', restoringId: null,
       loading: false, loaded: false, loadError: '',
-      createOpen: false, createForm: { type: 'character', name: '', description: '' },
+      createOpen: false, createForm: { type: 'character', name: '', description: '', prompt: '', negativePrompt: '' }, creating: false, createError: '',
       detailOpen: false, detail: null, generating: false, projectTitle: '', expandedRecordId: null,
       notice: '',
       removeOpen: false, removing: false, removeError: '',
@@ -598,10 +601,30 @@ export default {
       return typeof t === 'string' ? t.slice(0, 16).replace('T', ' ') : ''
     },
     async create() {
-      await v21.createAsset(this.projectId, { type: this.createForm.type, fields: { name: this.createForm.name, description: this.createForm.description } })
-      this.createOpen = false
-      this.createForm = { type: this.createForm.type, name: '', description: '' }
-      this.load()
+      if (this.creating) return
+      this.creating = true
+      this.createError = ''
+      try {
+        await v21.createAsset(this.projectId, {
+          type: this.createForm.type,
+          fields: {
+            name: this.createForm.name,
+            description: this.createForm.description,
+            prompt: this.createForm.prompt,
+            negativePrompt: this.createForm.negativePrompt,
+          },
+        })
+        this.createOpen = false
+        this.createForm = { type: this.createForm.type, name: '', description: '', prompt: '', negativePrompt: '' }
+        // 新素材可能与当前类型筛选不符导致"看不到"：切到所建类型再刷新
+        if (this.type !== 'all' && this.type !== this.createForm.type) this.type = this.createForm.type
+        v21Toast('素材已创建')
+        await this.load()
+      } catch (e) {
+        this.createError = e.message || '创建失败，请重试'
+      } finally {
+        this.creating = false
+      }
     },
     async openDetail(item) {
       this.detail = await v21.getAssetDetail(item.assetType, item.id)
@@ -693,7 +716,8 @@ export default {
       if (!this.detail) return
       this.genStateId = null
       this.genStateName = ''
-      this.genPrompt = this.detail.name || ''
+      // 默认提示词优先素材已保存的生图提示词，回退素材名
+      this.genPrompt = this.detail.prompt || this.detail.name || ''
       // 画布尺寸按素材类型的展示比例取默认值（人物 3:4 · 场景 16:9 · 道具 1:1）
       this.genSize = { character: '720x960', scene: '1280x720', prop: '720x720' }[this.detail.assetType] || '720x480'
       this.genError = ''
@@ -704,7 +728,7 @@ export default {
       if (!this.detail || !s) return
       this.genStateId = s.id
       this.genStateName = s.name
-      this.genPrompt = `${this.detail.name || ''}，状态：${s.name}`
+      this.genPrompt = `${this.detail.prompt || this.detail.name || ''}，状态：${s.name}`
       this.genSize = { character: '720x960', scene: '1280x720', prop: '720x720' }[this.detail.assetType] || '720x480'
       this.genError = ''
       this.genSheetOpen = true

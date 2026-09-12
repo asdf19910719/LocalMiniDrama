@@ -58,3 +58,13 @@ test('listAssets recycled：回收站口径与类型筛选、搜索组合生效'
   const binSearched = assets.listAssets(1, { recycled: true, q: '林' });
   assert.deepEqual(binSearched.items.map((i) => i.id), [c1.id]);
 });
+
+test('listAssets recycled：HTTP query 字符串口径安全——"false" 不得被误判为回收站（回归防护）', () => {
+  const { assets } = setup();
+  assets.createAsset(1, { type: 'character', fields: { name: '林夏' } });
+  // routes 透传 req.query，recycled 以字符串到达：'false' 必须等同默认口径，'true' 才是回收站
+  assert.equal(assets.listAssets(1, { recycled: 'false' }).items.length, 1, "字符串 'false' 是 truthy，必须显式按 'true' 判定");
+  assert.equal(assets.listAssets(1, { recycled: 'true' }).items.length, 0);
+  assert.equal(assets.listAssets(1, { recycled: false }).items.length, 1);
+  assert.equal(assets.listAssets(1, {}).items.length, 1);
+});

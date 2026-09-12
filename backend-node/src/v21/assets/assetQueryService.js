@@ -35,12 +35,14 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
   }
 
   function listAssets(dramaId, { type = 'all', q = '', onlyBlocked = false, recycled = false } = {}) {
+    // HTTP query 透传时 recycled 是字符串："false" 是 truthy，必须显式按 'true' 判定回收站口径
+    const wantRecycled = recycled === true || recycled === 'true';
     const out = [];
     const types = type === 'all' ? ['character', 'scene', 'prop'] : [type];
     for (const t of types) {
       const table = TABLE_BY_TYPE[t];
       const rows = db
-        .prepare(`SELECT * FROM ${table} WHERE drama_id = ? AND deleted_at IS ${recycled ? 'NOT NULL' : 'NULL'} ORDER BY deleted_at DESC, id`)
+        .prepare(`SELECT * FROM ${table} WHERE drama_id = ? AND deleted_at IS ${wantRecycled ? 'NOT NULL' : 'NULL'} ORDER BY deleted_at DESC, id`)
         .all(Number(dramaId));
       for (const row of rows) {
         const name = row.name || row.location || '';
@@ -58,7 +60,7 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
           description,
           currentImage: imageUrl,
           blocked,
-          ...(recycled ? { deletedAt: row.deleted_at || null } : {}),
+          ...(wantRecycled ? { deletedAt: row.deleted_at || null } : {}),
         });
       }
     }
@@ -67,31 +69,32 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
 
   function createAsset(dramaId, { type, fields = {} } = {}) {
     const now = nowIso();
+    // 生图提示词对齐旧版 v1 创建输入：characters 落 polished_prompt，scenes/props 落 prompt
     if (type === 'character') {
       if (!fields.name) throw httpError('VALIDATION_ERROR', 400, '角色需要名称');
       const info = db
         .prepare(
-          `INSERT INTO characters (drama_id, name, role, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO characters (drama_id, name, role, description, polished_prompt, negative_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(dramaId, fields.name, fields.role || null, fields.description || null, now, now);
+        .run(dramaId, fields.name, fields.role || null, fields.description || null, fields.prompt || null, fields.negativePrompt || null, now, now);
       return { id: Number(info.lastInsertRowid), type };
     }
     if (type === 'scene') {
       if (!fields.name) throw httpError('VALIDATION_ERROR', 400, '场景需要名称');
       const info = db
         .prepare(
-          `INSERT INTO scenes (drama_id, location, time, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO scenes (drama_id, location, time, description, prompt, negative_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(dramaId, fields.name, fields.time || null, fields.description || null, now, now);
+        .run(dramaId, fields.name, fields.time || null, fields.description || null, fields.prompt || null, fields.negativePrompt || null, now, now);
       return { id: Number(info.lastInsertRowid), type };
     }
     if (type === 'prop') {
       if (!fields.name) throw httpError('VALIDATION_ERROR', 400, '道具需要名称');
       const info = db
         .prepare(
-          `INSERT INTO props (drama_id, name, type, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO props (drama_id, name, type, description, prompt, negative_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(dramaId, fields.name, fields.type || null, fields.description || null, now, now);
+        .run(dramaId, fields.name, fields.type || null, fields.description || null, fields.prompt || null, fields.negativePrompt || null, now, now);
       return { id: Number(info.lastInsertRowid), type };
     }
     throw httpError('VALIDATION_ERROR', 400, `未知素材类型: ${type}`);
@@ -332,6 +335,9 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
       id: row.id,
       name: row.name || row.location || '',
       description: row.description || null,
+      // 已保存的生图提示词（characters 落在 polished_prompt，scenes/props 落在 prompt）
+      prompt: row.polished_prompt || row.prompt || null,
+      negativePrompt: row.negative_prompt || null,
       voice: parseVoice(row.voice_json),
       currentImage: currentImageOf(type, row),
       states,
@@ -366,9 +372,11 @@ function createAssetQueryService(db, { log = console, mockProvider = null } = {}
   /** 生成候选：mock 通道（无 Key 可运行），产出真实文件 + 候选记录；绝不改当前图。
    *  stateId 有值时（人物）提示词前缀注入状态名——仅影响提示词组装，不改任何表。 */
   async function generateCandidate(dramaId, { type, assetId, prompt = '', size = '720x480', stateId = null } = {}) {
-    requireAsset(type, assetId);
+    const row = requireAsset(type, assetId);
     if (!mockProvider) throw httpError('PROVIDER_UNAVAILABLE', 503, '生成通道不可用');
-    let composedPrompt = String(prompt || '');
+    // 提示词回退链：调用方传入 → 素材已保存的生图提示词 → 素材名
+    const savedPrompt = row.polished_prompt || row.prompt || '';
+    let composedPrompt = String(prompt || '').trim() || String(savedPrompt).trim() || String(row.name || row.location || '');
     if (stateId != null && stateId !== '' && type === 'character') {
       const variant = db
         .prepare('SELECT * FROM character_variants WHERE id = ? AND character_id = ? AND deleted_at IS NULL')
