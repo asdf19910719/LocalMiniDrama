@@ -13,6 +13,7 @@
       <div class="save-state"><span class="dot" :style="saveState.error ? 'background:var(--danger)' : ''"></span>{{ saveState.text }}</div>
       <div class="spacer"></div>
       <div class="topbar-right">
+        <span class="chip" title="当前生成为本地通道执行，不产生 API 费用；接入外部付费通道后此处显示真实费用口径">费用 · 本地 ¥0</span>
         <router-link to="/tasks" class="btn sm" style="text-decoration:none">
           <svg><use href="#i-tasks"/></svg>任务<span v-if="runningTasks" class="badge info">{{ runningTasks }}</span>
         </router-link>
@@ -127,8 +128,22 @@ export default {
       this.saveState.text = '更改实时生效'
     }
   },
-  mounted() { this.loadEpisode(); this.loadNav() },
+  mounted() {
+    this.loadEpisode(); this.loadNav()
+    this.loadRunningTasks()
+    this.tasksTimer = setInterval(() => this.loadRunningTasks(), 30000)
+  },
+  unmounted() {
+    clearInterval(this.tasksTimer)
+  },
   methods: {
+    async loadRunningTasks() {
+      // 制作头任务徽标接真实运行任务数（进行中口径与任务中心一致）；失败保留上次计数
+      try {
+        const data = await v21.listV21Tasks({ status: 'in_progress', page_size: 1 })
+        this.runningTasks = data.total || 0
+      } catch { /* 徽标为 0 时不渲染，不伪造数字 */ }
+    },
     async loadEpisode() {
       try {
         const ep = await v21.getEpisode(this.episodeId)
